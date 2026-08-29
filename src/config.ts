@@ -3,12 +3,13 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { ResolvedProject, TodoistProjectMapping } from "./types.ts";
 
-export const DEFAULT_CONFIG_PATH = join(
-	homedir(),
-	".pi",
-	"agent",
-	"pi-todo-gate.json",
-);
+export function defaultConfigPath(): string {
+	const agentDir =
+		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+	return join(agentDir, "pi-todo-gate.json");
+}
+
+export const DEFAULT_CONFIG_PATH = defaultConfigPath();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,7 +37,7 @@ export function parseConfig(raw: string): TodoistProjectMapping {
 }
 
 export async function loadConfig(
-	path = DEFAULT_CONFIG_PATH,
+	path = defaultConfigPath(),
 ): Promise<TodoistProjectMapping> {
 	try {
 		return parseConfig(await readFile(path, "utf8"));

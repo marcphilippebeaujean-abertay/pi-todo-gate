@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	defaultConfigPath,
 	loadConfig,
 	parseConfig,
 	resolveConfiguredProject,
@@ -77,6 +78,13 @@ describe("resolveConfiguredProject", () => {
 });
 
 describe("loadConfig", () => {
+	it("uses the configured Pi agent directory when provided", () => {
+		const previous = process.env.PI_CODING_AGENT_DIR;
+		process.env.PI_CODING_AGENT_DIR = "/tmp/pi-agent";
+		expect(defaultConfigPath()).toBe("/tmp/pi-agent/pi-todo-gate.json");
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+	});
 	it("loads a configured file", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "pi-todo-gate-config-"));
 		const path = join(directory, "config.json");
