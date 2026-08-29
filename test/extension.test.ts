@@ -422,6 +422,7 @@ describe("pi_todo_gate_state", () => {
 			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
 			claimTask: async (ref: string) => ({
 				id: ref,
+				content: "Add dialog controls",
 				webUrl: `https://app.todoist.com/app/task/${ref}`,
 				projectId: "project-1",
 			}),
@@ -458,6 +459,7 @@ describe("pi_todo_gate_state", () => {
 			type: "pi-todo-gate-state",
 			data: {
 				taskRef: "new-parent",
+				taskName: "Add dialog controls",
 				taskUrl: "https://app.todoist.com/app/task/new-parent",
 			},
 		});

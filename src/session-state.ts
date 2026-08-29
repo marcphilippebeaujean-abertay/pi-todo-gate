@@ -4,6 +4,7 @@ const STATE_KEYS: readonly (keyof WorkState)[] = [
 	"prUrl",
 	"taskUrl",
 	"taskRef",
+	"taskName",
 	"inheritedFrom",
 	"mergeCompletedAt",
 	"todoistCompletionAttemptedAt",

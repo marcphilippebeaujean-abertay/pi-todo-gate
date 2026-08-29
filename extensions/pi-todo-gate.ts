@@ -211,7 +211,11 @@ export default function extension(
 		);
 		session.context.ui.setStatus(
 			"pi-todo-gate-task",
-			renderTaskStatus(session.state.taskUrl, session.context.ui.theme),
+			renderTaskStatus(
+				session.state.taskUrl,
+				session.context.ui.theme,
+				session.state.taskName,
+			),
 		);
 	};
 
@@ -322,6 +326,7 @@ export default function extension(
 					const taskChanged = session.state.taskRef !== claimed.id;
 					session.state = applyStatePatch(session.state, {
 						taskRef: claimed.id,
+						taskName: claimed.content,
 						taskUrl: claimed.webUrl ?? claimed.url,
 						...(taskChanged
 							? {
@@ -340,6 +345,7 @@ export default function extension(
 					cancelScheduledSync(session);
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
+						taskName: undefined,
 						taskUrl: undefined,
 						mergeCompletedAt: undefined,
 						todoistCompletionAttemptedAt: undefined,

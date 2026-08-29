@@ -23,12 +23,14 @@ describe("renderFooterLine", () => {
 		const task = renderTaskStatus(
 			"https://app.todoist.com/app/task/7",
 			styledTheme,
+			"Implement feature",
 		);
 		expect(pr).toContain("<muted>| PR Link: </muted>");
 		expect(pr).toContain("<text>#42</text>");
 		expect(pr).toContain("<muted> |</muted>");
 		expect(task).toContain("<muted>Task: </muted>");
-		expect(task).toContain("<text>#7</text>");
+		expect(task).toContain("<text>Implement feature</text>");
+		expect(task).not.toContain("#7");
 	});
 
 	it("renders clickable PR and task labels", () => {
@@ -36,6 +38,7 @@ describe("renderFooterLine", () => {
 			{
 				prUrl: "https://github.com/owner/repo/pull/42",
 				taskUrl: "https://app.todoist.com/app/task/7",
+				taskName: "Implement feature",
 				branch: "feature/auth",
 			},
 			120,
@@ -44,6 +47,7 @@ describe("renderFooterLine", () => {
 		);
 		expect(line).toContain("PR #42");
 		expect(line).toContain("Task");
+		expect(line).toContain("Implement feature");
 		expect(line).toContain("feature/auth");
 		expect(line).toContain("\u001b]8;;https://github.com/owner/repo/pull/42");
 		expect(line).toContain("\u001b]8;;https://app.todoist.com/app/task/7");

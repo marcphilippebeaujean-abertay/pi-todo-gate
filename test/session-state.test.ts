@@ -23,10 +23,10 @@ describe("session state", () => {
 				{
 					type: "custom",
 					customType: "pi-todo-gate-state",
-					data: { taskRef: "new" },
+					data: { taskRef: "new", taskName: "New task" },
 				},
 			]),
-		).toEqual({ taskRef: "new" });
+		).toEqual({ taskRef: "new", taskName: "New task" });
 	});
 
 	it("treats an explicit empty state as a clear", () => {

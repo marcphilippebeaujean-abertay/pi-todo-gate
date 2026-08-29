@@ -8,6 +8,7 @@ import { githubPrUrl } from "./pr-detection.ts";
 export interface FooterState {
 	prUrl?: string;
 	taskUrl?: string;
+	taskName?: string;
 	branch?: string | null;
 }
 
@@ -45,13 +46,15 @@ function prLabel(url: string | undefined): string {
 	return hyperlink(`PR #${boundedNumber}`, normalized);
 }
 
-function taskLabel(url: string | undefined): string {
+function taskLabel(url: string | undefined, taskName?: string): string {
 	if (!url) return "Task: none";
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
 			return "Task: none";
-		return hyperlink("Task", url);
+		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
+		const name = taskName?.replace(/\s+/g, " ").trim();
+		return `Task: ${hyperlink(name || (id ? `#${id}` : "open"), url)}`;
 	} catch {
 		return "Task: none";
 	}
@@ -73,6 +76,7 @@ export function renderPrStatus(
 export function renderTaskStatus(
 	url: string | undefined,
 	theme?: FooterTheme,
+	taskName?: string,
 ): string {
 	const muted = (text: string) => theme?.fg("muted", text) ?? text;
 	const value = (text: string) => theme?.fg("text", text) ?? text;
@@ -82,7 +86,8 @@ export function renderTaskStatus(
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
 			return `${muted("Task: ")}${value("none")}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${muted("Task: ")}${hyperlink(value(id ? `#${id}` : "open"), url)}`;
+		const name = taskName?.replace(/\s+/g, " ").trim();
+		return `${muted("Task: ")}${hyperlink(value(name || (id ? `#${id}` : "open")), url)}`;
 	} catch {
 		return `${muted("Task: ")}${value("none")}`;
 	}
@@ -95,7 +100,10 @@ export function renderFooterLine(
 	statuses: ReadonlyMap<string, string>,
 ): string {
 	if (width <= 0) return "";
-	const parts = [prLabel(state.prUrl), taskLabel(state.taskUrl)];
+	const parts = [
+		prLabel(state.prUrl),
+		taskLabel(state.taskUrl, state.taskName),
+	];
 	if (state.branch) parts.push(`branch: ${state.branch}`);
 	for (const status of statuses.values()) {
 		if (status) parts.push(status);
