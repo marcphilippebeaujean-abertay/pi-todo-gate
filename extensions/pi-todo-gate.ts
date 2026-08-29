@@ -170,7 +170,7 @@ function appendState(
 
 function taskPath(active: ActiveSession): string {
 	return sessionTaskPath(
-		active.project.codingRoot,
+		active.context.cwd,
 		active.context.sessionManager.getSessionId(),
 	);
 }

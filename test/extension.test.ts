@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
-import { readPiTaskStore, sessionTaskPath } from "../src/pi-tasks-sync.ts";
+import {
+	readPiTaskStore,
+	sessionTaskPath,
+	writePiTaskStore,
+} from "../src/pi-tasks-sync.ts";
 
 function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<
@@ -88,6 +92,60 @@ describe("lazy activation", () => {
 			{ key: "pi-todo-gate-pr", text: "| PR Link: none |" },
 			{ key: "pi-todo-gate-task", text: "Task: none" },
 		]);
+	});
+});
+
+describe("task synchronization", () => {
+	it("reads the task store from the active worktree", async () => {
+		const configuredRoot = await mkdtemp(
+			join(tmpdir(), "pi-todo-gate-project-"),
+		);
+		const worktree = join(configuredRoot, ".worktrees", "dialog-edit");
+		const h = harness(worktree, [
+			{
+				type: "custom",
+				customType: "pi-todo-gate-state",
+				data: {
+					taskRef: "parent",
+					taskUrl: "https://app.todoist.com/app/task/parent",
+				},
+			},
+		]);
+		const created: string[] = [];
+		const client: any = {
+			listDescendants: async () => [],
+			deleteDescendants: async () => {},
+			createSubtask: async (parent: string, task: { content: string }) => {
+				created.push(`${parent}:${task.content}`);
+			},
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [configuredRoot]: "merge-td" }),
+			createTodoistClient: () => client,
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+		await writePiTaskStore(sessionTaskPath(worktree, "session-current"), {
+			nextId: 2,
+			tasks: [
+				{
+					id: "1",
+					subject: "Worktree task",
+					description: "",
+					status: "pending",
+					metadata: {},
+					blocks: [],
+					blockedBy: [],
+					createdAt: 1,
+					updatedAt: 1,
+				},
+			],
+		});
+		await h.handlers.get("agent_settled")?.({ type: "agent_settled" }, h.ctx);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(created).toEqual(["parent:[ ] Worktree task"]);
 	});
 });
 
