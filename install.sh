@@ -59,12 +59,16 @@ elif [ "$#" -eq 1 ]; then
 fi
 
 source_path="$repo_dir/extensions/pi-todo-gate.ts"
-target_path="$agent_dir/extensions/pi-todo-gate"
+target_path="$agent_dir/extensions/pi-todo-gate.ts"
+legacy_target_path="$agent_dir/extensions/pi-todo-gate"
 if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
 fi
 mkdir -p "$(dirname -- "$target_path")"
+if [ -L "$legacy_target_path" ] && [ "$(readlink "$legacy_target_path")" = "$source_path" ]; then
+  rm -- "$legacy_target_path"
+fi
 if [ -e "$target_path" ] || [ -L "$target_path" ]; then
   if [ ! -L "$target_path" ] && [ "$force" = false ]; then
     printf 'refusing to replace non-symlink: %s (use --force)\n' "$target_path" >&2

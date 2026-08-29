@@ -26,7 +26,7 @@ describe("install.sh", () => {
 	it("derives the target from PI_CODING_AGENT_DIR and creates a symlink", async () => {
 		const agentDir = await mkdtemp(join("/tmp", "pi-todo-gate-agent-"));
 		await execute([], { PI_CODING_AGENT_DIR: agentDir });
-		const target = join(agentDir, "extensions", "pi-todo-gate");
+		const target = join(agentDir, "extensions", "pi-todo-gate.ts");
 		await expect(readFile(target, "utf8")).resolves.toContain(
 			"export default function extension",
 		);
@@ -34,7 +34,7 @@ describe("install.sh", () => {
 
 	it("does not replace an unrelated non-symlink without --force", async () => {
 		const agentDir = await mkdtemp(join("/tmp", "pi-todo-gate-agent-"));
-		const target = join(agentDir, "extensions", "pi-todo-gate");
+		const target = join(agentDir, "extensions", "pi-todo-gate.ts");
 		await mkdir(dirname(target), { recursive: true });
 		await writeFile(target, "unrelated", "utf8");
 		await expect(
