@@ -11,6 +11,11 @@ const ok = (value: unknown): CommandResult => ({
 	stderr: "",
 	code: 0,
 });
+const okText = (stdout: string): CommandResult => ({
+	stdout,
+	stderr: "",
+	code: 0,
+});
 const fail = (stderr: string): CommandResult => ({
 	stdout: "",
 	stderr,
@@ -108,8 +113,8 @@ describe("TodoistClient", () => {
 					url: "https://todoist.com/showTask?id=42",
 				}),
 			),
-			"task move 42 --section In Progress --project id:project-1 --json": ok(
-				{},
+			"task move 42 --section In Progress --project id:project-1": okText(
+				"Task moved successfully",
 			),
 		});
 		await expect(
@@ -122,9 +127,7 @@ describe("TodoistClient", () => {
 	it("accepts the already claimed task and moves a valid task", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(task({ sectionName: "Todo" })),
-			"task move 42 --section In Progress --project id:project-1 --json": ok(
-				{},
-			),
+			"task move 42 --section In Progress --project id:project-1": ok({}),
 		});
 		await expect(
 			new TodoistClient(fake.exec).claimTask("42", {
@@ -142,7 +145,6 @@ describe("TodoistClient", () => {
 				"In Progress",
 				"--project",
 				"id:project-1",
-				"--json",
 			],
 		]);
 	});

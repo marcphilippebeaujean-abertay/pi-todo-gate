@@ -104,13 +104,18 @@ function childList(value: unknown): unknown[] {
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}
 
-	private async run(args: readonly string[]): Promise<unknown> {
+	private async run(
+		args: readonly string[],
+		parseJson = true,
+	): Promise<unknown> {
 		const result = await this.exec.run(args);
 		if (result.code !== 0) {
 			const family = args.slice(0, 2).join(" ");
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
-		return parsePayload(result.stdout, args.slice(0, 2).join(" "));
+		return parseJson
+			? parsePayload(result.stdout, args.slice(0, 2).join(" "))
+			: result.stdout;
 	}
 
 	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
@@ -168,16 +173,18 @@ export class TodoistClient {
 			throw new TodoistError("task claim", "task is already in progress");
 		}
 		if (sectionName !== "In Progress") {
-			await this.run([
-				"task",
-				"move",
-				ref,
-				"--section",
-				"In Progress",
-				"--project",
-				`id:${project.id}`,
-				"--json",
-			]);
+			await this.run(
+				[
+					"task",
+					"move",
+					ref,
+					"--section",
+					"In Progress",
+					"--project",
+					`id:${project.id}`,
+				],
+				false,
+			);
 			sectionName = "In Progress";
 		}
 		return {
