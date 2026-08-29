@@ -97,7 +97,8 @@ function taskFromPayload(value: unknown): TodoistTask {
 function childList(value: unknown): unknown[] {
 	if (Array.isArray(value)) return value;
 	const data = record(value);
-	return Array.isArray(data.tasks) ? data.tasks : [];
+	if (Array.isArray(data.tasks)) return data.tasks;
+	return Array.isArray(data.results) ? data.results : [];
 }
 
 export class TodoistClient {

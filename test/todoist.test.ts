@@ -48,18 +48,18 @@ const task = (overrides: Record<string, unknown> = {}) => ({
 describe("TodoistClient", () => {
 	it("resolves projects by name and id", async () => {
 		const byName = fakeTodoist({
-			"project list --json": ok([{ id: "1", name: "merge-td" }]),
+			"project list --json": ok({ results: [{ id: "1", name: "Merge TD" }] }),
 		});
 		await expect(
-			new TodoistClient(byName.exec).resolveProject("merge-td"),
-		).resolves.toEqual({ id: "1", name: "merge-td" });
+			new TodoistClient(byName.exec).resolveProject("Merge TD"),
+		).resolves.toEqual({ id: "1", name: "Merge TD" });
 
 		const byId = fakeTodoist({
-			"project list --json": ok([{ id: "1", name: "merge-td" }]),
+			"project list --json": ok({ results: [{ id: "1", name: "Merge TD" }] }),
 		});
 		await expect(
 			new TodoistClient(byId.exec).resolveProject("id:1"),
-		).resolves.toEqual({ id: "1", name: "merge-td" });
+		).resolves.toEqual({ id: "1", name: "Merge TD" });
 	});
 
 	it("rejects a task outside the configured project", async () => {
