@@ -2,69 +2,93 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseConfig, resolveConfiguredProject, loadConfig } from "../src/config.ts";
+import {
+	loadConfig,
+	parseConfig,
+	resolveConfiguredProject,
+} from "../src/config.ts";
 
 describe("parseConfig", () => {
-  it("accepts project mappings", () => {
-    expect(parseConfig('{"projects":{"/repo":"merge-td"}}')).toEqual({
-      projects: { "/repo": "merge-td" },
-    });
-  });
+	it("accepts project mappings", () => {
+		expect(parseConfig('{"projects":{"/repo":"merge-td"}}')).toEqual({
+			projects: { "/repo": "merge-td" },
+		});
+	});
 
-  it("returns empty configuration for malformed input", () => {
-    expect(parseConfig("not json")).toEqual({ projects: {} });
-    expect(parseConfig('{"projects":["/repo"]}')).toEqual({ projects: {} });
-  });
+	it("returns empty configuration for malformed input", () => {
+		expect(parseConfig("not json")).toEqual({ projects: {} });
+		expect(parseConfig('{"projects":["/repo"]}')).toEqual({ projects: {} });
+	});
 
-  it("drops empty keys and values", () => {
-    expect(parseConfig('{"projects":{"":"merge-td","/repo":""}}')).toEqual({ projects: {} });
-  });
+	it("drops empty keys and values", () => {
+		expect(parseConfig('{"projects":{"":"merge-td","/repo":""}}')).toEqual({
+			projects: {},
+		});
+	});
 });
 
 describe("resolveConfiguredProject", () => {
-  it("resolves an exact coding root", () => {
-    expect(resolveConfiguredProject("/repo", { projects: { "/repo": "merge-td" } })).toEqual({
-      codingRoot: resolve("/repo"),
-      todoistProjectRef: "merge-td",
-    });
-  });
+	it("resolves an exact coding root", () => {
+		expect(
+			resolveConfiguredProject("/repo", { projects: { "/repo": "merge-td" } }),
+		).toEqual({
+			codingRoot: resolve("/repo"),
+			todoistProjectRef: "merge-td",
+		});
+	});
 
-  it("resolves the nearest configured parent", () => {
-    expect(resolveConfiguredProject("/repo/packages/app", {
-      projects: {
-        "/repo": "parent-project",
-        "/repo/packages": "packages-project",
-      },
-    })).toEqual({
-      codingRoot: resolve("/repo/packages"),
-      todoistProjectRef: "packages-project",
-    });
-  });
+	it("resolves the nearest configured parent", () => {
+		expect(
+			resolveConfiguredProject("/repo/packages/app", {
+				projects: {
+					"/repo": "parent-project",
+					"/repo/packages": "packages-project",
+				},
+			}),
+		).toEqual({
+			codingRoot: resolve("/repo/packages"),
+			todoistProjectRef: "packages-project",
+		});
+	});
 
-  it("does not match a distant sibling", () => {
-    expect(resolveConfiguredProject("/repo-other/app", { projects: { "/repo": "merge-td" } })).toBeNull();
-  });
+	it("does not match a distant sibling", () => {
+		expect(
+			resolveConfiguredProject("/repo-other/app", {
+				projects: { "/repo": "merge-td" },
+			}),
+		).toBeNull();
+	});
 
-  it("returns null for an unconfigured directory", () => {
-    expect(resolveConfiguredProject("/repo/app", { projects: { "/other": "merge-td" } })).toBeNull();
-  });
+	it("returns null for an unconfigured directory", () => {
+		expect(
+			resolveConfiguredProject("/repo/app", {
+				projects: { "/other": "merge-td" },
+			}),
+		).toBeNull();
+	});
 
-  it("normalizes configured paths", () => {
-    expect(resolveConfiguredProject("/repo/packages/app", {
-      projects: { "/repo/./packages/": "merge-td" },
-    })?.codingRoot).toBe(resolve("/repo/packages"));
-  });
+	it("normalizes configured paths", () => {
+		expect(
+			resolveConfiguredProject("/repo/packages/app", {
+				projects: { "/repo/./packages/": "merge-td" },
+			})?.codingRoot,
+		).toBe(resolve("/repo/packages"));
+	});
 });
 
 describe("loadConfig", () => {
-  it("loads a configured file", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "pi-todo-gate-config-"));
-    const path = join(directory, "config.json");
-    await writeFile(path, '{"projects":{"/repo":"merge-td"}}', "utf8");
-    await expect(loadConfig(path)).resolves.toEqual({ projects: { "/repo": "merge-td" } });
-  });
+	it("loads a configured file", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "pi-todo-gate-config-"));
+		const path = join(directory, "config.json");
+		await writeFile(path, '{"projects":{"/repo":"merge-td"}}', "utf8");
+		await expect(loadConfig(path)).resolves.toEqual({
+			projects: { "/repo": "merge-td" },
+		});
+	});
 
-  it("returns empty configuration for a missing file", async () => {
-    await expect(loadConfig("/missing/pi-todo-gate.json")).resolves.toEqual({ projects: {} });
-  });
+	it("returns empty configuration for a missing file", async () => {
+		await expect(loadConfig("/missing/pi-todo-gate.json")).resolves.toEqual({
+			projects: {},
+		});
+	});
 });
