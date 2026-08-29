@@ -65,9 +65,9 @@ export function renderPrStatus(
 	const value = (text: string) => theme?.fg("text", text) ?? text;
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (!number) return `${muted("PR Link: ")}${value("none")}${muted(" |")}`;
+	if (!number) return `${muted("| PR Link: ")}${value("none")}${muted(" |")}`;
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted("PR Link: ")}${hyperlink(value(`#${boundedNumber}`), normalized)}${muted(" |")}`;
+	return `${muted("| PR Link: ")}${hyperlink(value(`#${boundedNumber}`), normalized)}${muted(" |")}`;
 }
 
 export function renderTaskStatus(

@@ -85,7 +85,7 @@ describe("lazy activation", () => {
 		await start(h, { "/configured": "merge-td" });
 		expect(h.footerCalls).toEqual([undefined]);
 		expect(h.statusCalls).toEqual([
-			{ key: "pi-todo-gate-pr", text: "PR Link: none |" },
+			{ key: "pi-todo-gate-pr", text: "| PR Link: none |" },
 			{ key: "pi-todo-gate-task", text: "Task: none" },
 		]);
 	});

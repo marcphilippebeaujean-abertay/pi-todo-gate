@@ -24,7 +24,7 @@ describe("renderFooterLine", () => {
 			"https://app.todoist.com/app/task/7",
 			styledTheme,
 		);
-		expect(pr).toContain("<muted>PR Link: </muted>");
+		expect(pr).toContain("<muted>| PR Link: </muted>");
 		expect(pr).toContain("<text>#42</text>");
 		expect(pr).toContain("<muted> |</muted>");
 		expect(task).toContain("<muted>Task: </muted>");
