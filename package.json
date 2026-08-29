@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check extensions src test"
+    "lint": "biome check extensions src test",
+    "install-local": "bash install.sh",
+    "configure": "bash install.sh configure"
   },
   "keywords": [
     "pi-package",
