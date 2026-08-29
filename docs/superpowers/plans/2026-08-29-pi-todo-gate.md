@@ -71,9 +71,9 @@
 - Produces npm scripts `test`, `typecheck`, and `lint` for later tasks.
 - Produces strict compiler settings that accept extension `.ts` imports used by Pi’s jiti loader.
 
-- [ ] **Step 1: Write failing harness test**
+- [ ] **Step 1: Create passing harness smoke test**
 
-Create one test proving the test runner works and asserting a future exported helper is not yet present through a placeholder-free test fixture. Use a temporary test-only `assert.equal(1 + 1, 2)` smoke test, then replace it with the first real configuration test in Task 2.
+Create one test proving the test runner works with `assert.equal(1 + 1, 2)`. This setup test is intentionally passing because Task 1 creates no production behavior; Task 2 replaces it with the first behavior test.
 
 - [ ] **Step 2: Run harness test**
 
@@ -614,7 +614,7 @@ Scan session branch message text during startup and finalized message events. On
 
 - [ ] **Step 6: Implement agent state tool**
 
-Use `Type.Object` plus `StringEnum` for action schema. `status` returns current PR/task and activation root. `set_pr` validates GitHub URL and persists override. `clear_pr` clears only PR. `set_task` calls Todoist claim validation, persists canonical task, clears local Pi tasks, and performs inbound sync from new parent. `clear_task` clears association and local Pi tasks without touching Todoist. `clear_all` clears both local associations and local Pi task store without changing remote Todoist subtasks.
+Use `Type.Object` plus `StringEnum` for action schema. `status` returns current PR/task and activation root. `set_pr` validates GitHub URL and persists override. `clear_pr` clears only PR. `set_task` validates and claims the new Todoist task, fetches its subtasks, and only after all inbound work succeeds atomically replaces the local active task association and Pi task store. If validation or inbound sync fails, preserve the previous task association and local Pi tasks. `clear_task` clears association and local Pi tasks without touching Todoist. `clear_all` clears both local associations and local Pi task store without changing remote Todoist subtasks.
 
 Tool output may describe state mutation but must not describe hidden synchronization internals.
 

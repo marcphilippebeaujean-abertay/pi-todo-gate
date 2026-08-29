@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Runtime secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+.tmp/
+
+# Local Pi project state
+.pi/
+
+# SDD scratch workspace
+.superpowers/
+
+# macOS
+.DS_Store
