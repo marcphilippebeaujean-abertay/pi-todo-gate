@@ -207,11 +207,11 @@ export default function extension(
 	const refreshFooterStatuses = (session: ActiveSession): void => {
 		session.context.ui.setStatus(
 			"pi-todo-gate-pr",
-			renderPrStatus(session.state.prUrl),
+			renderPrStatus(session.state.prUrl, session.context.ui.theme),
 		);
 		session.context.ui.setStatus(
 			"pi-todo-gate-task",
-			renderTaskStatus(session.state.taskUrl),
+			renderTaskStatus(session.state.taskUrl, session.context.ui.theme),
 		);
 	};
 

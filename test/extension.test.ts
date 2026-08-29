@@ -24,6 +24,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 		cwd,
 		mode: "print",
 		ui: {
+			theme: { fg: (_color: string, text: string) => text },
 			notify: (message: string) => notifications.push(message),
 			setFooter: (factory: unknown) => footerCalls.push(factory),
 			setStatus: (key: string, text: string | undefined) =>
@@ -84,7 +85,7 @@ describe("lazy activation", () => {
 		await start(h, { "/configured": "merge-td" });
 		expect(h.footerCalls).toEqual([undefined]);
 		expect(h.statusCalls).toEqual([
-			{ key: "pi-todo-gate-pr", text: "PR: none" },
+			{ key: "pi-todo-gate-pr", text: "PR Link: none |" },
 			{ key: "pi-todo-gate-task", text: "Task: none" },
 		]);
 	});
@@ -198,7 +199,7 @@ describe("pi_todo_gate_state", () => {
 		});
 		expect(result.content[0].text).toContain("42");
 		expect(h.statusCalls.slice(-2)).toEqual([
-			{ key: "pi-todo-gate-pr", text: expect.stringContaining("PR #42") },
+			{ key: "pi-todo-gate-pr", text: expect.stringContaining("PR Link:") },
 			{ key: "pi-todo-gate-task", text: "Task: none" },
 		]);
 	});

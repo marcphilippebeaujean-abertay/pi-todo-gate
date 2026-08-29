@@ -4,12 +4,33 @@ import {
 	createFooterFactory,
 	type FooterTheme,
 	renderFooterLine,
+	renderPrStatus,
+	renderTaskStatus,
 } from "../src/footer.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);
+const styledTheme: FooterTheme = {
+	fg: (color, text) => `<${color}>${text}</${color}>`,
+};
 
 describe("renderFooterLine", () => {
+	it("styles footer labels separately from clickable values", () => {
+		const pr = renderPrStatus(
+			"https://github.com/owner/repo/pull/42",
+			styledTheme,
+		);
+		const task = renderTaskStatus(
+			"https://app.todoist.com/app/task/7",
+			styledTheme,
+		);
+		expect(pr).toContain("<muted>PR Link: </muted>");
+		expect(pr).toContain("<text>#42</text>");
+		expect(pr).toContain("<muted> |</muted>");
+		expect(task).toContain("<muted>Task: </muted>");
+		expect(task).toContain("<text>#7</text>");
+	});
+
 	it("renders clickable PR and task labels", () => {
 		const line = renderFooterLine(
 			{
