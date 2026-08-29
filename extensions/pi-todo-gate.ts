@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	type ExtensionAPI,
@@ -209,19 +208,24 @@ export default function extension(
 		if (!parentRef || !session.syncAvailable) return;
 		cancelScheduledSync(session);
 		const generation = session.syncGeneration;
+		const isCurrent = (): boolean =>
+			active === session &&
+			generation === session.syncGeneration &&
+			session.syncAvailable;
 		session.syncTimer = setTimeout(async () => {
 			session.syncTimer = undefined;
-			if (generation !== session.syncGeneration || !session.syncAvailable)
-				return;
+			if (!isCurrent()) return;
 			try {
 				const store = await readPiTaskStore(taskPath(session));
 				await syncPiTasksToTodoist(
 					createClient(session.context, dependencies),
 					parentRef,
 					store ?? { nextId: 1, tasks: [] },
+					isCurrent,
 				);
 			} catch {
-				session.context.ui.notify("Todoist task update failed", "warning");
+				if (isCurrent())
+					session.context.ui.notify("Todoist task update failed", "warning");
 			}
 		}, 25);
 	};
@@ -311,6 +315,8 @@ export default function extension(
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
 						taskUrl: undefined,
+						mergeCompletedAt: undefined,
+						todoistCompletionAttemptedAt: undefined,
 					});
 					await clearLocalTasks(session);
 					appendState(pi, session.state, !session.allowPrDiscovery);
@@ -352,10 +358,12 @@ export default function extension(
 			const previous: SessionReader =
 				dependencies.openSession?.(event.previousSessionFile) ??
 				SessionManager.open(event.previousSessionFile);
-			const previousCwd = resolve(previous.getCwd());
+			const previousProject = resolveConfiguredProject(
+				previous.getCwd(),
+				config,
+			);
 			const sameCodingProject =
-				previousCwd === project.codingRoot ||
-				previousCwd.startsWith(`${project.codingRoot}/`);
+				previousProject?.codingRoot === project.codingRoot;
 			const inherited = sameCodingProject
 				? extractInheritedState(previous.getBranch())
 				: null;

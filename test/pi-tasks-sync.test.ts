@@ -190,6 +190,41 @@ describe("synchronization order", () => {
 		).rejects.toThrow("delete failed");
 	});
 
+	it("stops creating subtasks when the association is invalidated", async () => {
+		let releaseDelete!: () => void;
+		const deleteFinished = new Promise<void>((resolve) => {
+			releaseDelete = resolve;
+		});
+		let deleteStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			deleteStarted = resolve;
+		});
+		let current = true;
+		let creates = 0;
+		const client = {
+			listDescendants: async () => [task()],
+			deleteDescendants: async () => {
+				deleteStarted();
+				await deleteFinished;
+			},
+			createSubtask: async () => {
+				creates += 1;
+				return task();
+			},
+		} as unknown as TodoistClient;
+		const sync = syncPiTasksToTodoist(
+			client,
+			"parent",
+			{ nextId: 2, tasks: [piTask()] },
+			() => current,
+		);
+		await started;
+		current = false;
+		releaseDelete();
+		await expect(sync).rejects.toThrow("synchronization cancelled");
+		expect(creates).toBe(0);
+	});
+
 	it("fetches inbound data before replacing the local store", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "pi-todo-gate-tasks-"));
 		const path = join(directory, "tasks.json");

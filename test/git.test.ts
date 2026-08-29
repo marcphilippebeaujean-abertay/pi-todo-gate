@@ -98,15 +98,16 @@ describe("mergeCommand", () => {
 		});
 	});
 
-	it("handles quoted arguments and chained commands", () => {
+	it("rejects compound commands so failed merges cannot be masked", () => {
 		expect(
 			mergeCommand('echo "git merge ignored" && git merge "feature/auth"'),
-		).toEqual({ kind: "git", args: ["feature/auth"] });
+		).toBeNull();
 		expect(
 			mergeCommand("printf '%s' 'gh pr merge 42'; gh pr merge 43"),
-		).toEqual({ kind: "gh", args: ["43"] });
+		).toBeNull();
 		expect(mergeCommand("git status && printf 'git merge no'")).toBeNull();
 		expect(mergeCommand("git merge feature/a; git merge feature/b")).toBeNull();
+		expect(mergeCommand("git merge feature/a; true")).toBeNull();
 	});
 
 	it("ignores unrelated commands", () => {
@@ -142,6 +143,30 @@ describe("matchesPinnedPr", () => {
 				"https://github.com/o/r/pull/42",
 			),
 		).resolves.toBe(true);
+	});
+
+	it("rejects ambiguous or repository-selected gh merge targets", async () => {
+		const exec = fakeExec({
+			"gh pr view 42 --json url,headRefName": ok(
+				'{"url":"https://github.com/o/r/pull/42","headRefName":"feature/auth"}',
+			),
+		});
+		await expect(
+			matchesPinnedPr(
+				exec,
+				"/repo",
+				"gh pr merge 42 43",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(false);
+		await expect(
+			matchesPinnedPr(
+				exec,
+				"/repo",
+				"gh pr merge --repo other/repo 42",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(false);
 	});
 
 	it("validates gh number and branch targets against the pinned repository", async () => {

@@ -255,14 +255,28 @@ export function piTasksToTodoistSubtasks(
 	}));
 }
 
+class SyncCancelledError extends Error {
+	constructor() {
+		super("synchronization cancelled");
+	}
+}
+
 export async function syncPiTasksToTodoist(
 	client: TodoistClient,
 	parentRef: string,
 	store: PiTaskStoreData,
+	isCurrent?: () => boolean,
 ): Promise<void> {
+	const assertCurrent = (): void => {
+		if (isCurrent && !isCurrent()) throw new SyncCancelledError();
+	};
+	assertCurrent();
 	const descendants = await client.listDescendants(parentRef);
+	assertCurrent();
 	await client.deleteDescendants(descendants);
+	assertCurrent();
 	for (const subtask of piTasksToTodoistSubtasks(store.tasks)) {
+		assertCurrent();
 		await client.createSubtask(parentRef, subtask);
 	}
 }

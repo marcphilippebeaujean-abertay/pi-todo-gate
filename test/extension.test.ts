@@ -187,9 +187,10 @@ describe("pi_todo_gate_state", () => {
 	});
 
 	it("does not inherit state from another coding project", async () => {
-		const h = harness("/configured/project");
+		const h = harness("/configured");
 		extension(h.pi, {
-			loadConfig: async () => config({ "/configured": "merge-td" }),
+			loadConfig: async () =>
+				config({ "/configured": "parent", "/configured/project": "child" }),
 			openSession: () => ({
 				getBranch: () => [
 					{
@@ -199,7 +200,7 @@ describe("pi_todo_gate_state", () => {
 					},
 				],
 				getSessionId: () => "previous",
-				getCwd: () => "/other-project",
+				getCwd: () => "/configured/project",
 			}),
 		});
 		await h.handlers.get("session_start")?.(
@@ -211,6 +212,40 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		expect(h.appended).toHaveLength(0);
+	});
+
+	it("clearing a task clears its completion metadata", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-extension-"));
+		const h = harness(root, [
+			{
+				type: "custom",
+				customType: "pi-todo-gate-state",
+				data: {
+					taskRef: "task-1",
+					mergeCompletedAt: "old",
+					todoistCompletionAttemptedAt: "old",
+				},
+			},
+		]);
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: "merge-td" }),
+			createTodoistClient: () => ({ listDescendants: async () => [] }) as any,
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+		await h.tools[0].execute(
+			"call",
+			{ action: "clear_task" },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todo-gate-state",
+			data: {},
+		});
 	});
 
 	it("does not run a pending old-parent sync after switching tasks", async () => {

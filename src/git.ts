@@ -225,8 +225,10 @@ function executableName(value: string): string {
 export function mergeCommand(
 	command: string,
 ): { kind: "git" | "gh"; args: string[] } | null {
+	const segments = shellSegments(command);
+	if (segments.length !== 1) return null;
 	let parsed: { kind: "git" | "gh"; args: string[] } | null = null;
-	for (const segment of shellSegments(command)) {
+	for (const segment of segments) {
 		const words = shellWords(segment);
 		let candidate: { kind: "git" | "gh"; args: string[] } | null = null;
 		if (
@@ -253,6 +255,40 @@ export function mergeCommand(
 
 function positionalArgs(args: string[]): string[] {
 	return args.filter((arg) => arg !== "--" && !arg.startsWith("-"));
+}
+
+const GH_MERGE_VALUE_OPTIONS = new Set([
+	"--author-email",
+	"--body",
+	"--body-file",
+	"--match-head-commit",
+	"--subject",
+	"--repo",
+	"-R",
+]);
+
+function ghMergeTargets(args: string[]): string[] | null {
+	const targets: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === "--") {
+			targets.push(...args.slice(index + 1));
+			break;
+		}
+		if (arg === "--repo" || arg === "-R" || arg.startsWith("--repo="))
+			return null;
+		if (GH_MERGE_VALUE_OPTIONS.has(arg)) {
+			index += 1;
+			continue;
+		}
+		if (arg.startsWith("-")) {
+			if (index + 1 < args.length && !args[index + 1].startsWith("-"))
+				return null;
+			continue;
+		}
+		targets.push(arg);
+	}
+	return targets;
 }
 
 function normalizedUrl(value: string): string | null {
@@ -316,10 +352,10 @@ export async function matchesPinnedPr(
 	if (!parsed || !pinned) return false;
 
 	if (parsed.kind === "gh") {
-		if (parsed.args.some((arg) => normalizedUrl(arg) === pinned)) return true;
-		const targets = positionalArgs(parsed.args);
-		if (targets.length !== 1) return false;
+		const targets = ghMergeTargets(parsed.args);
+		if (targets?.length !== 1) return false;
 		const target = targets[0];
+		if (normalizedUrl(target) === pinned) return true;
 		const currentPr = await queryCurrentPr(exec, cwd, target);
 		if (currentPr === null || normalizedUrl(currentPr.url) !== pinned)
 			return false;
