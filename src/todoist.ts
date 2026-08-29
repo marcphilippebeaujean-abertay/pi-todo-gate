@@ -176,6 +176,7 @@ export class TodoistClient {
 				"In Progress",
 				"--project",
 				`id:${project.id}`,
+				"--json",
 			]);
 			sectionName = "In Progress";
 		}
