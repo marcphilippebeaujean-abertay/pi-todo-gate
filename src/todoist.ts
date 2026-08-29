@@ -151,12 +151,20 @@ export class TodoistClient {
 		}
 		let sectionName = task.sectionName;
 		if (!sectionName && task.sectionId) {
-			const section = record(
-				await this.run(["section", "view", task.sectionId, "--json"]),
-			);
-			sectionName = stringValue(section.name) || null;
+			const sections = await this.run([
+				"section",
+				"list",
+				"--project",
+				`id:${project.id}`,
+				"--json",
+			]);
+			const section = childList(sections)
+				.map(record)
+				.find((item) => stringValue(item.id) === task.sectionId);
+			sectionName = section ? stringValue(section.name) || null : null;
 		}
-		if (sectionName === "In Progress" && task.id !== project.currentTaskId) {
+		const isInProgress = sectionName?.trim().toLowerCase() === "in progress";
+		if (isInProgress && task.id !== project.currentTaskId) {
 			throw new TodoistError("task claim", "task is already in progress");
 		}
 		if (sectionName !== "In Progress") {

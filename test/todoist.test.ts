@@ -83,6 +83,23 @@ describe("TodoistClient", () => {
 		).rejects.toThrow("already in progress");
 	});
 
+	it("resolves section names through supported td section list", async () => {
+		const fake = fakeTodoist({
+			"task view 42 --json": ok(
+				task({ sectionName: undefined, sectionId: "section-1" }),
+			),
+			"section list --project id:project-1 --json": ok({
+				results: [{ id: "section-1", name: "In progress" }],
+			}),
+		});
+		await expect(
+			new TodoistClient(fake.exec).claimTask("42", {
+				id: "project-1",
+				currentTaskId: "99",
+			}),
+		).rejects.toThrow("already in progress");
+	});
+
 	it("prefers webUrl when returning a canonical claimed-task URL", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(
