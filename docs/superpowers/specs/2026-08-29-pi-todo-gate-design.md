@@ -110,6 +110,7 @@ clear_all
 5. Reject a task already in progress unless it was claimed by this session.
 6. Move a valid task to `In Progress` using `td task move`.
 7. Store canonical task URL and task reference.
+8. If replacing an existing active task, immediately refresh the current session's Pi task list from the new Todoist parent before the next agent turn. This task-switch refresh is mandatory, not only a session-restore behavior.
 
 When no active task exists, every real user prompt receives this hidden agent-context warning:
 
@@ -199,15 +200,16 @@ On `session_start` and session inheritance:
 4. Recreate local Pi tasks from Todoist subtasks.
 5. Refresh the normal Pi task widget without adding context messages.
 
-When the agent changes the active Todoist task through `set_task`:
+When the agent changes the active Todoist task through `set_task`, the current session's Pi task list must be refreshed immediately:
 
 1. Detach the old parent without modifying or deleting its Todoist subtasks.
 2. Clear the current session's local Pi task list.
 3. Fetch the new parent's descendants.
 4. Recreate the local Pi task list from the new parent's subtasks.
 5. Leave the local Pi task list empty when the new Todoist task has no subtasks.
+6. Ensure all later Pi task updates sync only to the new parent.
 
-This supports: “Task X is selected; switch to Todoist task Y.” The old Todoist task remains unchanged. Future outbound sync applies only to task Y. If Todoist lookup fails, preserve local state and report synchronization failure.
+This supports: “Task X is selected; switch to Todoist task Y.” The old Todoist task remains unchanged. If Todoist lookup fails, preserve the previous local state and active task association, then report synchronization failure.
 
 Default file-backed session scope is supported first. `PI_TASKS=off`, memory scope, or incompatible custom paths must be detected and reported as unavailable; the extension must not silently overwrite unrelated files.
 
