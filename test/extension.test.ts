@@ -144,8 +144,175 @@ describe("task synchronization", () => {
 			],
 		});
 		await h.handlers.get("agent_settled")?.({ type: "agent_settled" }, h.ctx);
-		await new Promise((resolve) => setTimeout(resolve, 50));
-		expect(created).toEqual(["parent:[ ] Worktree task"]);
+		await vi.waitFor(() => {
+			expect(created).toEqual(["parent:[ ] Worktree task"]);
+		});
+	});
+});
+
+describe("automatic Todoist task linking", () => {
+	it("links a claimed task from session history and refreshes the footer", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-auto-link-"));
+		const h = harness(root, [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: "Claimed Todoist task https://app.todoist.com/app/task/42",
+						},
+					],
+				},
+			},
+		]);
+		const client: any = {
+			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+			listDescendants: async () => [],
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: "merge-td" }),
+			createTodoistClient: () => client,
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todo-gate-state",
+			data: {
+				taskRef: "42",
+				taskName: "Implement feature",
+				taskUrl: "https://app.todoist.com/app/task/42",
+			},
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-task",
+			text: expect.stringContaining("Implement featu..."),
+		});
+	});
+
+	it("links a task URL from history when the current prompt confirms the claim", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-prompt-link-"));
+		const h = harness(root, [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "Todoist task URL: https://app.todoist.com/app/task/42",
+				},
+			},
+		]);
+		const client: any = {
+			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+			listDescendants: async () => [],
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: "merge-td" }),
+			createTodoistClient: () => client,
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+		expect(h.appended).toHaveLength(0);
+
+		await h.handlers.get("before_agent_start")?.(
+			{
+				type: "before_agent_start",
+				prompt: "Claimed Todoist task for this session.",
+			},
+			h.ctx,
+		);
+
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todo-gate-state",
+			data: {
+				taskRef: "42",
+				taskName: "Implement feature",
+				taskUrl: "https://app.todoist.com/app/task/42",
+			},
+		});
+	});
+
+	it("links a successfully moved task as soon as its tool result arrives", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-tool-link-"));
+		const h = harness(root);
+		const client: any = {
+			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+			listDescendants: async () => [],
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: "merge-td" }),
+			createTodoistClient: () => client,
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+
+		await h.handlers.get("tool_result")?.(
+			{
+				type: "tool_result",
+				toolName: "bash",
+				input: { command: "td task view 42" },
+				content: [{ type: "text", text: "Todoist task is claimed: 42" }],
+				isError: false,
+			},
+			h.ctx,
+		);
+
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todo-gate-state",
+			data: {
+				taskRef: "42",
+				taskName: "Implement feature",
+				taskUrl: "https://app.todoist.com/app/task/42",
+			},
+		});
+		expect(h.statusCalls.at(-1)?.text).toContain("Implement featu...");
+	});
+
+	it("does not treat the missing-task warning as a claim", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-negative-link-"));
+		const h = harness(root, [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "Todoist task URL: https://app.todoist.com/app/task/42",
+				},
+			},
+		]);
+		await start(h, { [root]: "merge-td" });
+		await h.handlers.get("before_agent_start")?.(
+			{
+				type: "before_agent_start",
+				prompt: "You have no claimed a Todoist task yet!",
+			},
+			h.ctx,
+		);
+		expect(h.appended).toHaveLength(0);
 	});
 });
 
