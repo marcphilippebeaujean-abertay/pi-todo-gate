@@ -326,6 +326,13 @@ describe("hidden lifecycle context", () => {
 			h.ctx,
 		);
 		expect(result.message.content).toContain(
+			"# Todoist Task Gate (MANDATORY — before any code change on a new branch/worktree)",
+		);
+		expect(result.message.content).toContain(
+			"td task list --project id:6RVXQ9x8qfhxHr4f",
+		);
+		expect(result.message.content).not.toContain("herdr");
+		expect(result.message.content).not.toContain(
 			"you have no claimed a todoist task yet!",
 		);
 
