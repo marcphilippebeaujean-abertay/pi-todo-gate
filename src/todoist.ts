@@ -129,7 +129,11 @@ export class TodoistClient {
       await this.run(["task", "move", ref, "--section", "In Progress", "--project", `id:${project.id}`]);
       sectionName = "In Progress";
     }
-    return { ...task, sectionName, url: task.url ?? `https://app.todoist.com/app/task/${task.id}` };
+    return {
+      ...task,
+      sectionName,
+      url: task.webUrl ?? task.url ?? `https://app.todoist.com/app/task/${task.id}`,
+    };
   }
 
   async completeTask(ref: string): Promise<void> {

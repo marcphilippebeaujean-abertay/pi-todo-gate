@@ -47,6 +47,16 @@ describe("TodoistClient", () => {
     await expect(new TodoistClient(fake.exec).claimTask("42", { id: "project-1", currentTaskId: "99" })).rejects.toThrow("already in progress");
   });
 
+  it("prefers webUrl when returning a canonical claimed-task URL", async () => {
+    const fake = fakeTodoist({
+      "task view 42 --json": ok(task({ webUrl: "https://app.todoist.com/app/task/42", url: "https://todoist.com/showTask?id=42" })),
+      "task move 42 --section In Progress --project id:project-1": ok({}),
+    });
+    await expect(new TodoistClient(fake.exec).claimTask("42", { id: "project-1" })).resolves.toMatchObject({
+      url: "https://app.todoist.com/app/task/42",
+    });
+  });
+
   it("accepts the already claimed task and moves a valid task", async () => {
     const fake = fakeTodoist({
       "task view 42 --json": ok(task({ sectionName: "Todo" })),
