@@ -38,23 +38,40 @@ export type FooterFactory = (
 	footerData: FooterData,
 ) => FooterComponent;
 
-function prLabel(url: string | undefined): string {
+function linkText(text: string, theme?: FooterTheme): string {
+	const colored = theme?.fg("accent", text) ?? `\u001b[34m${text}\u001b[39m`;
+	return `\u001b[4m${colored}\u001b[24m`;
+}
+
+function prLabel(url: string | undefined, theme?: FooterTheme): string {
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (!number) return "PR: none";
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return hyperlink(`PR #${boundedNumber}`, normalized);
+	return hyperlink(linkText(`PR #${boundedNumber}`, theme), normalized);
 }
 
-function taskLabel(url: string | undefined, taskName?: string): string {
+function displayTaskName(
+	taskName: string | undefined,
+	id: string | undefined,
+): string {
+	const name = taskName?.replace(/\s+/g, " ").trim();
+	if (name) return name.length > 15 ? `${name.slice(0, 15)}...` : name;
+	return id ? `#${id}` : "open";
+}
+
+function taskLabel(
+	url: string | undefined,
+	taskName?: string,
+	theme?: FooterTheme,
+): string {
 	if (!url) return "Task: none";
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
 			return "Task: none";
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		const name = taskName?.replace(/\s+/g, " ").trim();
-		return `Task: ${hyperlink(name || (id ? `#${id}` : "open"), url)}`;
+		return `Task: ${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
 		return "Task: none";
 	}
@@ -70,7 +87,7 @@ export function renderPrStatus(
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (!number) return `${muted("| PR Link: ")}${value("none")}${muted(" |")}`;
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted("| PR Link: ")}${hyperlink(value(`#${boundedNumber}`), normalized)}${muted(" |")}`;
+	return `${muted("| PR Link: ")}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(" |")}`;
 }
 
 export function renderTaskStatus(
@@ -86,8 +103,7 @@ export function renderTaskStatus(
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
 			return `${muted("Task: ")}${value("none")}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		const name = taskName?.replace(/\s+/g, " ").trim();
-		return `${muted("Task: ")}${hyperlink(value(name || (id ? `#${id}` : "open")), url)}`;
+		return `${muted("Task: ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
 		return `${muted("Task: ")}${value("none")}`;
 	}
@@ -101,8 +117,8 @@ export function renderFooterLine(
 ): string {
 	if (width <= 0) return "";
 	const parts = [
-		prLabel(state.prUrl),
-		taskLabel(state.taskUrl, state.taskName),
+		prLabel(state.prUrl, theme),
+		taskLabel(state.taskUrl, state.taskName, theme),
 	];
 	if (state.branch) parts.push(`branch: ${state.branch}`);
 	for (const status of statuses.values()) {

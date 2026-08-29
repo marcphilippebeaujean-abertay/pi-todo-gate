@@ -26,11 +26,23 @@ describe("renderFooterLine", () => {
 			"Implement feature",
 		);
 		expect(pr).toContain("<muted>| PR Link: </muted>");
-		expect(pr).toContain("<text>#42</text>");
+		expect(pr).toContain("\u001b[4m<accent>#42</accent>\u001b[24m");
 		expect(pr).toContain("<muted> |</muted>");
 		expect(task).toContain("<muted>Task: </muted>");
-		expect(task).toContain("<text>Implement feature</text>");
+		expect(task).toContain(
+			"\u001b[4m<accent>Implement featu...</accent>\u001b[24m",
+		);
 		expect(task).not.toContain("#7");
+	});
+
+	it("truncates long task names after 15 characters", () => {
+		const task = renderTaskStatus(
+			"https://app.todoist.com/app/task/7",
+			styledTheme,
+			"12345678901234567890",
+		);
+		expect(task).toContain("123456789012345...");
+		expect(task).not.toContain("12345678901234567890");
 	});
 
 	it("renders clickable PR and task labels", () => {
@@ -47,7 +59,7 @@ describe("renderFooterLine", () => {
 		);
 		expect(line).toContain("PR #42");
 		expect(line).toContain("Task");
-		expect(line).toContain("Implement feature");
+		expect(line).toContain("Implement featu...");
 		expect(line).toContain("feature/auth");
 		expect(line).toContain("\u001b]8;;https://github.com/owner/repo/pull/42");
 		expect(line).toContain("\u001b]8;;https://app.todoist.com/app/task/7");
