@@ -68,6 +68,17 @@ describe("findOpenPr", () => {
 		});
 	});
 
+	it("returns open with no URL when there is no open pull request", async () => {
+		const exec = fakeExec({
+			"gh pr list --head feature --state open --json url,state --limit 1":
+				ok("[]"),
+		});
+		await expect(findOpenPr(exec, "/repo", "feature")).resolves.toEqual({
+			url: null,
+			state: "OPEN",
+		});
+	});
+
 	it("returns unknown rather than throwing on unavailable gh", async () => {
 		await expect(findOpenPr(fakeExec({}), "/repo", "feature")).resolves.toEqual(
 			{ url: null, state: "UNKNOWN" },
@@ -95,6 +106,7 @@ describe("mergeCommand", () => {
 			mergeCommand("printf '%s' 'gh pr merge 42'; gh pr merge 43"),
 		).toEqual({ kind: "gh", args: ["43"] });
 		expect(mergeCommand("git status && printf 'git merge no'")).toBeNull();
+		expect(mergeCommand("git merge feature/a; git merge feature/b")).toBeNull();
 	});
 
 	it("ignores unrelated commands", () => {

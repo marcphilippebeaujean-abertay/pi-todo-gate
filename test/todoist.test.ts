@@ -125,6 +125,17 @@ describe("TodoistClient", () => {
 		]);
 	});
 
+	it("rejects unsafe URL schemes from CLI data", async () => {
+		const fake = fakeTodoist({
+			"task view 42 --json": ok(
+				task({ url: "javascript:alert(1)", webUrl: "\u001b]8;;evil" }),
+			),
+		});
+		const result = await new TodoistClient(fake.exec).getTask("42");
+		expect(result.url).toBe("https://app.todoist.com/app/task/42");
+		expect(result.webUrl).toBeUndefined();
+	});
+
 	it("uses webUrl before url and constructs a fallback URL", async () => {
 		const web = fakeTodoist({
 			"task view 42 --json": ok(

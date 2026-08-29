@@ -60,6 +60,18 @@ function stringValue(value: unknown, fallback = ""): string {
 	return typeof value === "string" ? value : fallback;
 }
 
+function safeHttpUrl(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	try {
+		const url = new URL(value);
+		return url.protocol === "http:" || url.protocol === "https:"
+			? value
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function nullableString(value: unknown): string | null | undefined {
 	if (value === null) return null;
 	return typeof value === "string" ? value : undefined;
@@ -77,8 +89,8 @@ function taskFromPayload(value: unknown): TodoistTask {
 		sectionId: nullableString(data.sectionId ?? data.section_id),
 		sectionName: nullableString(data.sectionName ?? data.section_name),
 		parentId: nullableString(data.parentId ?? data.parent_id),
-		url: stringValue(data.url) || undefined,
-		webUrl: stringValue(data.webUrl ?? data.web_url) || undefined,
+		url: safeHttpUrl(data.url),
+		webUrl: safeHttpUrl(data.webUrl ?? data.web_url),
 	};
 }
 

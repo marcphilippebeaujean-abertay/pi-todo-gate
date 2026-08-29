@@ -125,12 +125,9 @@ export async function findOpenPr(
 	if (result.code !== 0) return { url: null, state: "UNKNOWN" };
 	try {
 		const rows: unknown = JSON.parse(result.stdout);
-		if (
-			!Array.isArray(rows) ||
-			rows.length === 0 ||
-			typeof rows[0] !== "object" ||
-			rows[0] === null
-		) {
+		if (!Array.isArray(rows)) return { url: null, state: "UNKNOWN" };
+		if (rows.length === 0) return { url: null, state: "OPEN" };
+		if (typeof rows[0] !== "object" || rows[0] === null) {
 			return { url: null, state: "UNKNOWN" };
 		}
 		const row = rows[0] as { url?: unknown; state?: unknown };
@@ -228,14 +225,16 @@ function executableName(value: string): string {
 export function mergeCommand(
 	command: string,
 ): { kind: "git" | "gh"; args: string[] } | null {
+	let parsed: { kind: "git" | "gh"; args: string[] } | null = null;
 	for (const segment of shellSegments(command)) {
 		const words = shellWords(segment);
+		let candidate: { kind: "git" | "gh"; args: string[] } | null = null;
 		if (
 			words.length >= 2 &&
 			executableName(words[0]) === "git" &&
 			words[1] === "merge"
 		) {
-			return { kind: "git", args: words.slice(2) };
+			candidate = { kind: "git", args: words.slice(2) };
 		}
 		if (
 			words.length >= 3 &&
@@ -243,10 +242,13 @@ export function mergeCommand(
 			words[1] === "pr" &&
 			words[2] === "merge"
 		) {
-			return { kind: "gh", args: words.slice(3) };
+			candidate = { kind: "gh", args: words.slice(3) };
 		}
+		if (!candidate) continue;
+		if (parsed) return null;
+		parsed = candidate;
 	}
-	return null;
+	return parsed;
 }
 
 function positionalArgs(args: string[]): string[] {

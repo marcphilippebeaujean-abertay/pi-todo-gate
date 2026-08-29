@@ -46,7 +46,15 @@ function prLabel(url: string | undefined): string {
 }
 
 function taskLabel(url: string | undefined): string {
-	return url ? hyperlink("Task", url) : "Task: none";
+	if (!url) return "Task: none";
+	try {
+		const parsed = new URL(url);
+		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+			return "Task: none";
+		return hyperlink("Task", url);
+	} catch {
+		return "Task: none";
+	}
 }
 
 export function renderFooterLine(

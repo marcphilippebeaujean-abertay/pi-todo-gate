@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	type ExtensionAPI,
@@ -69,7 +70,11 @@ const stateParameters = Type.Object({
 	url: Type.Optional(Type.String()),
 	task: Type.Optional(Type.String()),
 });
-type SessionReader = { getBranch(): unknown[]; getSessionId(): string };
+type SessionReader = {
+	getBranch(): unknown[];
+	getSessionId(): string;
+	getCwd(): string;
+};
 
 interface ActiveSession {
 	context: ExtensionContext;
@@ -78,6 +83,8 @@ interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
+	syncAvailable: boolean;
+	syncGeneration: number;
 	syncTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -91,6 +98,9 @@ function textOf(value: unknown): string {
 					: "",
 			)
 			.join(" ");
+	if (typeof value === "object" && value !== null && "content" in value) {
+		return textOf((value as { content?: unknown }).content);
+	}
 	return "";
 }
 
@@ -186,12 +196,23 @@ export default function extension(
 		await writePiTaskStore(taskPath(session), { nextId: 1, tasks: [] });
 	};
 
+	const cancelScheduledSync = (session: ActiveSession): void => {
+		session.syncGeneration += 1;
+		if (session.syncTimer) {
+			clearTimeout(session.syncTimer);
+			session.syncTimer = undefined;
+		}
+	};
+
 	const scheduleSync = (session: ActiveSession): void => {
 		const parentRef = session.state.taskRef;
-		if (!parentRef) return;
-		if (session.syncTimer) clearTimeout(session.syncTimer);
+		if (!parentRef || !session.syncAvailable) return;
+		cancelScheduledSync(session);
+		const generation = session.syncGeneration;
 		session.syncTimer = setTimeout(async () => {
 			session.syncTimer = undefined;
+			if (generation !== session.syncGeneration || !session.syncAvailable)
+				return;
 			try {
 				const store = await readPiTaskStore(taskPath(session));
 				await syncPiTasksToTodoist(
@@ -231,13 +252,26 @@ export default function extension(
 					const url = githubPrUrl(params.url ?? "");
 					if (!url)
 						throw new Error("set_pr requires a valid GitHub pull request URL");
-					session.state = applyStatePatch(session.state, { prUrl: url });
+					const prChanged = session.state.prUrl !== url;
+					session.state = applyStatePatch(session.state, {
+						prUrl: url,
+						...(prChanged
+							? {
+									mergeCompletedAt: undefined,
+									todoistCompletionAttemptedAt: undefined,
+								}
+							: {}),
+					});
 					session.allowPrDiscovery = false;
 					appendState(pi, session.state);
 					return extensionResult(`Pinned PR ${url}`);
 				}
 				if (params.action === "clear_pr") {
-					session.state = applyStatePatch(session.state, { prUrl: undefined });
+					session.state = applyStatePatch(session.state, {
+						prUrl: undefined,
+						mergeCompletedAt: undefined,
+						todoistCompletionAttemptedAt: undefined,
+					});
 					session.allowPrDiscovery = false;
 					appendState(pi, session.state, true);
 					return extensionResult("Cleared the pinned PR");
@@ -245,6 +279,7 @@ export default function extension(
 				if (params.action === "set_task") {
 					if (!params.task)
 						throw new Error("set_task requires a Todoist task reference");
+					cancelScheduledSync(session);
 					const client = createClient(ctx, dependencies);
 					const project = await client.resolveProject(
 						session.project.todoistProjectRef,
@@ -254,9 +289,17 @@ export default function extension(
 						currentTaskId: session.state.taskRef,
 					});
 					await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
+					session.syncAvailable = true;
+					const taskChanged = session.state.taskRef !== claimed.id;
 					session.state = applyStatePatch(session.state, {
 						taskRef: claimed.id,
 						taskUrl: claimed.webUrl ?? claimed.url,
+						...(taskChanged
+							? {
+									mergeCompletedAt: undefined,
+									todoistCompletionAttemptedAt: undefined,
+								}
+							: {}),
 					});
 					appendState(pi, session.state, !session.allowPrDiscovery);
 					return extensionResult(
@@ -264,6 +307,7 @@ export default function extension(
 					);
 				}
 				if (params.action === "clear_task") {
+					cancelScheduledSync(session);
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
 						taskUrl: undefined,
@@ -272,6 +316,7 @@ export default function extension(
 					appendState(pi, session.state, !session.allowPrDiscovery);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
+				cancelScheduledSync(session);
 				session.state = {};
 				session.allowPrDiscovery = false;
 				await clearLocalTasks(session);
@@ -285,6 +330,15 @@ export default function extension(
 		const config = await (dependencies.loadConfig ?? loadConfig)();
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (!project) {
+			if (active) {
+				cancelScheduledSync(active);
+				active.context.ui.setFooter(undefined);
+				if (pi.getActiveTools && pi.setActiveTools) {
+					pi.setActiveTools(
+						pi.getActiveTools().filter((name) => name !== "pi_todo_gate_state"),
+					);
+				}
+			}
 			active = null;
 			return;
 		}
@@ -298,7 +352,13 @@ export default function extension(
 			const previous: SessionReader =
 				dependencies.openSession?.(event.previousSessionFile) ??
 				SessionManager.open(event.previousSessionFile);
-			const inherited = extractInheritedState(previous.getBranch());
+			const previousCwd = resolve(previous.getCwd());
+			const sameCodingProject =
+				previousCwd === project.codingRoot ||
+				previousCwd.startsWith(`${project.codingRoot}/`);
+			const inherited = sameCodingProject
+				? extractInheritedState(previous.getBranch())
+				: null;
 			if (inherited) {
 				state = { ...inherited, inheritedFrom: previous.getSessionId() };
 				appendState(pi, state);
@@ -313,8 +373,16 @@ export default function extension(
 			allowPrDiscovery,
 			handoffContext,
 			workChanged: false,
+			syncAvailable: true,
+			syncGeneration: 0,
 		};
 		installTool();
+		if (registered && pi.getActiveTools && pi.setActiveTools) {
+			const activeTools = pi.getActiveTools();
+			if (!activeTools.includes("pi_todo_gate_state")) {
+				pi.setActiveTools([...activeTools, "pi_todo_gate_state"]);
+			}
+		}
 		if (ctx.mode === "tui") {
 			const footerFactory = createFooterFactory(() => ({
 				prUrl: active?.state.prUrl,
@@ -338,6 +406,7 @@ export default function extension(
 					taskPath(active),
 				);
 			} catch {
+				active.syncAvailable = false;
 				ctx.ui.notify("Todoist task restore failed", "warning");
 			}
 		}
@@ -425,6 +494,10 @@ export default function extension(
 						appendState(pi, active.state);
 						ctx.ui.notify("Merged PR detected; Todoist task completed", "info");
 					} catch {
+						active.state = applyStatePatch(active.state, {
+							todoistCompletionAttemptedAt: new Date().toISOString(),
+						});
+						appendState(pi, active.state);
 						ctx.ui.notify(
 							"Merged PR detected, but Todoist task completion failed",
 							"warning",
@@ -442,7 +515,7 @@ export default function extension(
 
 	pi.on("session_shutdown", () => {
 		if (!active) return;
-		if (active.syncTimer) clearTimeout(active.syncTimer);
+		cancelScheduledSync(active);
 		active.context.ui.setFooter(undefined);
 		active = null;
 	});
