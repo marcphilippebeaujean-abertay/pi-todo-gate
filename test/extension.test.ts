@@ -14,6 +14,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const appended: unknown[] = [];
 	const notifications: string[] = [];
 	const footerCalls: unknown[] = [];
+	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
 	const pi: any = {
 		on: (event: string, handler: any) => handlers.set(event, handler),
 		registerTool: (tool: any) => tools.push(tool),
@@ -25,6 +26,8 @@ function harness(cwd: string, branch: unknown[] = []) {
 		ui: {
 			notify: (message: string) => notifications.push(message),
 			setFooter: (factory: unknown) => footerCalls.push(factory),
+			setStatus: (key: string, text: string | undefined) =>
+				statusCalls.push({ key, text }),
 		},
 		sessionManager: {
 			getBranch: () => branch,
@@ -34,7 +37,16 @@ function harness(cwd: string, branch: unknown[] = []) {
 		},
 		exec: async () => ({ stdout: "", stderr: "", code: 0 }),
 	};
-	return { pi, ctx, handlers, tools, appended, notifications, footerCalls };
+	return {
+		pi,
+		ctx,
+		handlers,
+		tools,
+		appended,
+		notifications,
+		footerCalls,
+		statusCalls,
+	};
 }
 
 const config = (projects: Record<string, string>) => ({ projects });
@@ -64,6 +76,17 @@ describe("lazy activation", () => {
 		const h = harness("/configured/project");
 		await start(h, { "/configured": "merge-td" });
 		expect(h.tools.map((tool) => tool.name)).toEqual(["pi_todo_gate_state"]);
+	});
+
+	it("keeps native footer and publishes PR/task statuses", async () => {
+		const h = harness("/configured/project");
+		h.ctx.mode = "tui";
+		await start(h, { "/configured": "merge-td" });
+		expect(h.footerCalls).toEqual([undefined]);
+		expect(h.statusCalls).toEqual([
+			{ key: "pi-todo-gate-pr", text: "PR: none" },
+			{ key: "pi-todo-gate-task", text: "Task: none" },
+		]);
 	});
 });
 
@@ -174,6 +197,10 @@ describe("pi_todo_gate_state", () => {
 			data: { prUrl: "https://github.com/o/r/pull/42" },
 		});
 		expect(result.content[0].text).toContain("42");
+		expect(h.statusCalls.slice(-2)).toEqual([
+			{ key: "pi-todo-gate-pr", text: expect.stringContaining("PR #42") },
+			{ key: "pi-todo-gate-task", text: "Task: none" },
+		]);
 	});
 
 	it("cleans up configured UI when a session becomes inactive", async () => {

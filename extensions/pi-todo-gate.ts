@@ -6,7 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { loadConfig, resolveConfiguredProject } from "../src/config.ts";
-import { createFooterFactory } from "../src/footer.ts";
+import { renderPrStatus, renderTaskStatus } from "../src/footer.ts";
 import {
 	type Exec,
 	findOpenPr,
@@ -189,6 +189,7 @@ export default function extension(
 		active.state = applyStatePatch(active.state, { prUrl: url });
 		active.allowPrDiscovery = false;
 		appendState(pi, active.state);
+		refreshFooterStatuses(active);
 	};
 
 	const clearLocalTasks = async (session: ActiveSession): Promise<void> => {
@@ -201,6 +202,28 @@ export default function extension(
 			clearTimeout(session.syncTimer);
 			session.syncTimer = undefined;
 		}
+	};
+
+	const refreshFooterStatuses = (session: ActiveSession): void => {
+		session.context.ui.setStatus(
+			"pi-todo-gate-pr",
+			renderPrStatus(session.state.prUrl),
+		);
+		session.context.ui.setStatus(
+			"pi-todo-gate-task",
+			renderTaskStatus(session.state.taskUrl),
+		);
+	};
+
+	const clearFooterStatuses = (session: ActiveSession): void => {
+		session.context.ui.setStatus("pi-todo-gate-pr", undefined);
+		session.context.ui.setStatus("pi-todo-gate-task", undefined);
+	};
+
+	const deactivate = (session: ActiveSession): void => {
+		cancelScheduledSync(session);
+		clearFooterStatuses(session);
+		session.context.ui.setFooter(undefined);
 	};
 
 	const scheduleSync = (session: ActiveSession): void => {
@@ -268,6 +291,7 @@ export default function extension(
 					});
 					session.allowPrDiscovery = false;
 					appendState(pi, session.state);
+					refreshFooterStatuses(session);
 					return extensionResult(`Pinned PR ${url}`);
 				}
 				if (params.action === "clear_pr") {
@@ -278,6 +302,7 @@ export default function extension(
 					});
 					session.allowPrDiscovery = false;
 					appendState(pi, session.state, true);
+					refreshFooterStatuses(session);
 					return extensionResult("Cleared the pinned PR");
 				}
 				if (params.action === "set_task") {
@@ -306,6 +331,7 @@ export default function extension(
 							: {}),
 					});
 					appendState(pi, session.state, !session.allowPrDiscovery);
+					refreshFooterStatuses(session);
 					return extensionResult(
 						`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
 					);
@@ -320,6 +346,7 @@ export default function extension(
 					});
 					await clearLocalTasks(session);
 					appendState(pi, session.state, !session.allowPrDiscovery);
+					refreshFooterStatuses(session);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
 				cancelScheduledSync(session);
@@ -327,6 +354,7 @@ export default function extension(
 				session.allowPrDiscovery = false;
 				await clearLocalTasks(session);
 				appendState(pi, session.state, true);
+				refreshFooterStatuses(session);
 				return extensionResult("Cleared session PR and task links");
 			},
 		});
@@ -337,8 +365,7 @@ export default function extension(
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (!project) {
 			if (active) {
-				cancelScheduledSync(active);
-				active.context.ui.setFooter(undefined);
+				deactivate(active);
 				if (pi.getActiveTools && pi.setActiveTools) {
 					pi.setActiveTools(
 						pi.getActiveTools().filter((name) => name !== "pi_todo_gate_state"),
@@ -348,6 +375,7 @@ export default function extension(
 			active = null;
 			return;
 		}
+		if (active) deactivate(active);
 		const branch = ctx.sessionManager.getBranch();
 		const stateEntry = latestStateData(branch);
 		let state = latestState(branch);
@@ -391,19 +419,8 @@ export default function extension(
 				pi.setActiveTools([...activeTools, "pi_todo_gate_state"]);
 			}
 		}
-		if (ctx.mode === "tui") {
-			const footerFactory = createFooterFactory(() => ({
-				prUrl: active?.state.prUrl,
-				taskUrl: active?.state.taskUrl,
-			}));
-			ctx.ui.setFooter((tui, theme, footerData) =>
-				footerFactory(tui, theme, {
-					getExtensionStatuses: () => footerData.getExtensionStatuses(),
-					getGitBranch: () => footerData.getGitBranch(),
-					onBranchChange: (listener) => footerData.onBranchChange(listener),
-				}),
-			);
-		}
+		if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
+		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
 			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
 		if (state.taskRef) {
@@ -523,8 +540,7 @@ export default function extension(
 
 	pi.on("session_shutdown", () => {
 		if (!active) return;
-		cancelScheduledSync(active);
-		active.context.ui.setFooter(undefined);
+		deactivate(active);
 		active = null;
 	});
 }

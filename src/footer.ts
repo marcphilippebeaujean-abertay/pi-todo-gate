@@ -37,7 +37,7 @@ export type FooterFactory = (
 	footerData: FooterData,
 ) => FooterComponent;
 
-function prLabel(url: string | undefined): string {
+export function renderPrStatus(url: string | undefined): string {
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (!number) return "PR: none";
@@ -45,7 +45,7 @@ function prLabel(url: string | undefined): string {
 	return hyperlink(`PR #${boundedNumber}`, normalized);
 }
 
-function taskLabel(url: string | undefined): string {
+export function renderTaskStatus(url: string | undefined): string {
 	if (!url) return "Task: none";
 	try {
 		const parsed = new URL(url);
@@ -64,7 +64,7 @@ export function renderFooterLine(
 	statuses: ReadonlyMap<string, string>,
 ): string {
 	if (width <= 0) return "";
-	const parts = [prLabel(state.prUrl), taskLabel(state.taskUrl)];
+	const parts = [renderPrStatus(state.prUrl), renderTaskStatus(state.taskUrl)];
 	if (state.branch) parts.push(`branch: ${state.branch}`);
 	for (const status of statuses.values()) {
 		if (status) parts.push(status);
