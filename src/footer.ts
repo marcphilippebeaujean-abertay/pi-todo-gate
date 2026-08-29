@@ -65,15 +65,15 @@ function taskLabel(
 	taskName?: string,
 	theme?: FooterTheme,
 ): string {
-	if (!url) return "Task: none";
+	if (!url) return "Todoist Task: none";
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-			return "Task: none";
+			return "Todoist Task: none";
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `Task: ${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
+		return `Todoist Task: ${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
-		return "Task: none";
+		return "Todoist Task: none";
 	}
 }
 
@@ -97,15 +97,15 @@ export function renderTaskStatus(
 ): string {
 	const muted = (text: string) => theme?.fg("muted", text) ?? text;
 	const value = (text: string) => theme?.fg("text", text) ?? text;
-	if (!url) return `${muted("Task: ")}${value("none")}`;
+	if (!url) return `${muted("Todoist Task: ")}${value("none")}`;
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-			return `${muted("Task: ")}${value("none")}`;
+			return `${muted("Todoist Task: ")}${value("none")}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${muted("Task: ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
+		return `${muted("Todoist Task: ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
-		return `${muted("Task: ")}${value("none")}`;
+		return `${muted("Todoist Task: ")}${value("none")}`;
 	}
 }
 

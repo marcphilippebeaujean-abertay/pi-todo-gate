@@ -90,7 +90,7 @@ describe("lazy activation", () => {
 		expect(h.footerCalls).toEqual([undefined]);
 		expect(h.statusCalls).toEqual([
 			{ key: "pi-todo-gate-pr", text: "| PR Link: none |" },
-			{ key: "pi-todo-gate-task", text: "Task: none" },
+			{ key: "pi-todo-gate-task", text: "Todoist Task: none" },
 		]);
 	});
 });
@@ -258,7 +258,7 @@ describe("pi_todo_gate_state", () => {
 		expect(result.content[0].text).toContain("42");
 		expect(h.statusCalls.slice(-2)).toEqual([
 			{ key: "pi-todo-gate-pr", text: expect.stringContaining("PR Link:") },
-			{ key: "pi-todo-gate-task", text: "Task: none" },
+			{ key: "pi-todo-gate-task", text: "Todoist Task: none" },
 		]);
 	});
 

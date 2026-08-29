@@ -28,7 +28,7 @@ describe("renderFooterLine", () => {
 		expect(pr).toContain("<muted>| PR Link: </muted>");
 		expect(pr).toContain("\u001b[4m<accent>#42</accent>\u001b[24m");
 		expect(pr).toContain("<muted> |</muted>");
-		expect(task).toContain("<muted>Task: </muted>");
+		expect(task).toContain("<muted>Todoist Task: </muted>");
 		expect(task).toContain(
 			"\u001b[4m<accent>Implement featu...</accent>\u001b[24m",
 		);
@@ -58,7 +58,7 @@ describe("renderFooterLine", () => {
 			statuses,
 		);
 		expect(line).toContain("PR #42");
-		expect(line).toContain("Task");
+		expect(line).toContain("Todoist Task");
 		expect(line).toContain("Implement featu...");
 		expect(line).toContain("feature/auth");
 		expect(line).toContain("\u001b]8;;https://github.com/owner/repo/pull/42");
@@ -69,7 +69,7 @@ describe("renderFooterLine", () => {
 	it("renders explicit missing values", () => {
 		const line = renderFooterLine({}, 80, theme, new Map());
 		expect(line).toContain("PR: none");
-		expect(line).toContain("Task: none");
+		expect(line).toContain("Todoist Task: none");
 	});
 
 	it("keeps labels bounded for long URLs and narrow widths", () => {
