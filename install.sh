@@ -58,15 +58,20 @@ elif [ "$#" -eq 1 ]; then
   exit 2
 fi
 
-source_path="$repo_dir/extensions/pi-todo-gate.ts"
-target_path="$agent_dir/extensions/pi-todo-gate.ts"
+source_dir="$repo_dir/extensions"
+source_path="$source_dir/index.ts"
+target_path="$agent_dir/extensions/pi-todo-gate"
+legacy_file_path="$agent_dir/extensions/pi-todo-gate.ts"
 legacy_target_path="$agent_dir/extensions/pi-todo-gate"
 if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
 fi
 mkdir -p "$(dirname -- "$target_path")"
-if [ -L "$legacy_target_path" ] && [ "$(readlink "$legacy_target_path")" = "$source_path" ]; then
+if [ -L "$legacy_file_path" ] && [ "$(readlink "$legacy_file_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
+  rm -- "$legacy_file_path"
+fi
+if [ -L "$legacy_target_path" ] && [ "$(readlink "$legacy_target_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
   rm -- "$legacy_target_path"
 fi
 if [ -e "$target_path" ] || [ -L "$target_path" ]; then
@@ -76,5 +81,5 @@ if [ -e "$target_path" ] || [ -L "$target_path" ]; then
   fi
   rm -rf -- "$target_path"
 fi
-ln -s "$source_path" "$target_path"
-printf 'installed %s -> %s\n' "$target_path" "$source_path"
+ln -s "$source_dir" "$target_path"
+printf 'installed %s -> %s\n' "$target_path" "$source_dir"
