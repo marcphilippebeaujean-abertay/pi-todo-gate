@@ -258,7 +258,7 @@ export default function extension(
 						taskRef: claimed.id,
 						taskUrl: claimed.webUrl ?? claimed.url,
 					});
-					appendState(pi, session.state);
+					appendState(pi, session.state, !session.allowPrDiscovery);
 					return extensionResult(
 						`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
 					);
@@ -269,7 +269,7 @@ export default function extension(
 						taskUrl: undefined,
 					});
 					await clearLocalTasks(session);
-					appendState(pi, session.state);
+					appendState(pi, session.state, !session.allowPrDiscovery);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
 				session.state = {};
@@ -292,7 +292,8 @@ export default function extension(
 		const stateEntry = latestStateData(branch);
 		let state = latestState(branch);
 		let handoffContext = false;
-		let allowPrDiscovery = stateEntry === null;
+		let allowPrDiscovery =
+			stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
 		if (stateEntry === null && event.previousSessionFile) {
 			const previous: SessionReader =
 				dependencies.openSession?.(event.previousSessionFile) ??
@@ -305,7 +306,6 @@ export default function extension(
 				allowPrDiscovery = false;
 			}
 		}
-		if (stateEntry?.prDiscoveryDisabled === true) allowPrDiscovery = false;
 		active = {
 			context: ctx,
 			project,
