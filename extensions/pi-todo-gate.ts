@@ -50,7 +50,36 @@ export interface ExtensionDependencies {
 }
 
 const STATE_TYPE = "pi-todo-gate-state";
-const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
+const DEFAULT_TODOIST_INSTRUCTIONS = `# Todoist Task Gate (MANDATORY — before any code change on a new branch/worktree)
+
+Every code change on a new branch or worktree must be tracked in the Todoist **Merge TD** project (ID
+\`6RVXQ9x8qfhxHr4f\`). Before touching any code:
+
+1. **Find or create the task** in Merge TD:
+   \`\`\`bash
+   td task list --project id:6RVXQ9x8qfhxHr4f
+   \`\`\`
+    - Match by name against what you're about to do. If a matching task exists, use it.
+    - If no task matches, create one: \`td task add "<description>" --project id:6RVXQ9x8qfhxHr4f\`
+
+2. **Check if already claimed:**
+   \`\`\`bash
+   td task view "<task-ref>"
+   \`\`\`
+    - If the task is in the **In progress** section → **STOP and alert.** Another agent may be working on it. Do not proceed until the task is free.
+
+3. **Claim the task** by moving it to the **In progress** section:
+   \`\`\`bash
+   td task move "<task-ref>" --section "In progress" --project id:6RVXQ9x8qfhxHr4f
+   \`\`\`
+
+4. **After the PR merges**, complete the task:
+   \`\`\`bash
+   td task complete "<task-ref>"
+   \u0060\u0060\u0060
+`;
+const ACTIVE_TASK_CONTEXT =
+	"We are tracking tasks with Todoist and you are currently working on task";
 const taskToolNames = new Set([
 	"TaskCreate",
 	"TaskUpdate",
@@ -560,7 +589,11 @@ export default function extension(
 			);
 			active.handoffContext = false;
 		}
-		if (!active.state.taskRef) messages.push(MISSING_TASK_WARNING);
+		if (active.state.taskRef) {
+			messages.push(`${ACTIVE_TASK_CONTEXT} ${active.state.taskRef}`);
+		} else {
+			messages.push(DEFAULT_TODOIST_INSTRUCTIONS);
+		}
 		if (active.workChanged) {
 			const worktree = await inspectWorktree(
 				dependencies.exec ?? spawnExec,

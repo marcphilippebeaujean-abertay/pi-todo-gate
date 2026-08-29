@@ -8,6 +8,7 @@ import {
 	sessionTaskPath,
 	writePiTaskStore,
 } from "../src/pi-tasks-sync.ts";
+import type { TodoistClient } from "../src/todoist.ts";
 
 function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<
@@ -317,7 +318,7 @@ describe("automatic Todoist task linking", () => {
 });
 
 describe("hidden lifecycle context", () => {
-	it("warns on every prompt only when no task is active", async () => {
+	it("uses mandatory instructions without a task and task tracking context with one", async () => {
 		const h = harness("/configured/project");
 		await start(h, { "/configured": "merge-td" });
 		const result = await h.handlers.get("before_agent_start")?.(
@@ -325,6 +326,13 @@ describe("hidden lifecycle context", () => {
 			h.ctx,
 		);
 		expect(result.message.content).toContain(
+			"# Todoist Task Gate (MANDATORY — before any code change on a new branch/worktree)",
+		);
+		expect(result.message.content).toContain(
+			"td task list --project id:6RVXQ9x8qfhxHr4f",
+		);
+		expect(result.message.content).not.toContain("herdr");
+		expect(result.message.content).not.toContain(
 			"you have no claimed a todoist task yet!",
 		);
 
@@ -340,7 +348,55 @@ describe("hidden lifecycle context", () => {
 			{ type: "before_agent_start", prompt: "work" },
 			withTask.ctx,
 		);
-		expect(second).toBeUndefined();
+		expect(second).toEqual(
+			expect.objectContaining({
+				message: expect.objectContaining({
+					content:
+						"We are tracking tasks with Todoist and you are currently working on task 42",
+				}),
+			}),
+		);
+	});
+
+	it("keeps inherited Todoist task context across /new", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-new-context-"));
+		const h = harness(root);
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: "merge-td" }),
+			openSession: () => ({
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todo-gate-state",
+						data: { taskRef: "previous-task" },
+					},
+				],
+				getSessionId: () => "previous-session",
+				getCwd: () => root,
+			}),
+			createTodoistClient: () =>
+				({ listDescendants: async () => [] }) as unknown as TodoistClient,
+		});
+		await h.handlers.get("session_start")?.(
+			{
+				type: "session_start",
+				reason: "new",
+				previousSessionFile: "/sessions/previous.jsonl",
+			},
+			h.ctx,
+		);
+
+		const result = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "work" },
+			h.ctx,
+		);
+
+		expect(result.message.content).toContain(
+			"We are tracking tasks with Todoist and you are currently working on task previous-task",
+		);
+		expect(result.message.content).not.toContain(
+			"you have no claimed a todoist task yet!",
+		);
 	});
 
 	it("discovers the first PR URL and ignores later URLs", async () => {
