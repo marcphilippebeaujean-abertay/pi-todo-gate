@@ -8,13 +8,19 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check extensions src test"
   },
-  "keywords": ["pi-package", "pi-extension", "todoist", "git"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "todoist",
+    "git"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
+    "@earendil-works/pi-ai": "^0.84.2",
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@earendil-works/pi-tui": "0.84.2",
     "@types/node": "^25.0.0",
@@ -23,6 +29,8 @@
     "vitest": "^4.1.5"
   },
   "pi": {
-    "extensions": ["./extensions/pi-todo-gate.ts"]
+    "extensions": [
+      "./extensions/pi-todo-gate.ts"
+    ]
   }
 }
