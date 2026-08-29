@@ -51,6 +51,8 @@ export interface ExtensionDependencies {
 
 const STATE_TYPE = "pi-todo-gate-state";
 const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
+const ACTIVE_TASK_CONTEXT =
+	"We are tracking tasks with Todoist and you are currently working on task";
 const taskToolNames = new Set([
 	"TaskCreate",
 	"TaskUpdate",
@@ -560,7 +562,11 @@ export default function extension(
 			);
 			active.handoffContext = false;
 		}
-		if (!active.state.taskRef) messages.push(MISSING_TASK_WARNING);
+		if (active.state.taskRef) {
+			messages.push(`${ACTIVE_TASK_CONTEXT} ${active.state.taskRef}`);
+		} else {
+			messages.push(MISSING_TASK_WARNING);
+		}
 		if (active.workChanged) {
 			const worktree = await inspectWorktree(
 				dependencies.exec ?? spawnExec,
