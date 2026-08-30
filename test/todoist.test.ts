@@ -67,6 +67,22 @@ describe("TodoistClient", () => {
 		).resolves.toEqual({ id: "1", name: "Merge TD" });
 	});
 
+	it("rejects malformed list and task payloads", async () => {
+		const malformedList = fakeTodoist({
+			"project list --json": ok({ unexpected: [] }),
+		});
+		await expect(
+			new TodoistClient(malformedList.exec).resolveProject("Merge TD"),
+		).rejects.toThrow("expected a list payload");
+
+		const malformedTask = fakeTodoist({
+			"task view 42 --json": ok({ id: "42", description: "missing fields" }),
+		});
+		await expect(
+			new TodoistClient(malformedTask.exec).getTask("42"),
+		).rejects.toThrow("missing required fields");
+	});
+
 	it("rejects a task outside the configured project", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(task({ projectId: "other" })),
@@ -176,6 +192,15 @@ describe("TodoistClient", () => {
 		await expect(
 			new TodoistClient(fallback.exec).getTask("42"),
 		).resolves.toMatchObject({ url: "https://app.todoist.com/app/task/42" });
+	});
+
+	it("completes tasks from human-readable CLI output", async () => {
+		const fake = fakeTodoist({
+			"task complete id:42": okText("Task completed successfully"),
+		});
+		await expect(
+			new TodoistClient(fake.exec).completeTask("id:42"),
+		).resolves.toBeUndefined();
 	});
 
 	it("completes tasks with separate arguments", async () => {

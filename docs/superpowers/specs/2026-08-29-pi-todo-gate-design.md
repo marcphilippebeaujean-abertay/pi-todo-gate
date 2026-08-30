@@ -150,12 +150,13 @@ Inspect successful `bash` `tool_result` events. Candidate commands:
 
 A command must succeed before completion is attempted. The extension must conservatively verify that the merge target corresponds to the pinned PR. Ambiguous targets produce a diagnostic and do not complete Todoist.
 
-On a verified merge:
+On a verified merge, or when a pinned PR is found externally to be merged:
 
 1. Run `td task complete <taskUrl>`.
 2. Record completion attempt/idempotency state.
-3. Notify the agent of success or failure.
-4. Keep PR/task links pinned until the agent explicitly changes them.
+3. On success, clear the pinned PR while retaining the Todoist task link.
+4. Notify the agent of success or failure.
+5. On Todoist failure, retain the pinned PR for diagnostic visibility.
 
 No task completion occurs when no task or PR is active.
 
