@@ -165,6 +165,20 @@ describe("TodoistClient", () => {
 		]);
 	});
 
+	it("accepts an id-prefixed ref for a task already in progress", async () => {
+		const fake = fakeTodoist({
+			"task view id:42 --json": ok(task({ sectionName: "In progress" })),
+		});
+
+		await expect(
+			new TodoistClient(fake.exec).claimTask("id:42", {
+				id: "project-1",
+				currentTaskId: "id:42",
+			}),
+		).resolves.toMatchObject({ id: "42", sectionName: "In progress" });
+		expect(fake.calls).toEqual([["task", "view", "id:42", "--json"]]);
+	});
+
 	it("rejects unsafe URL schemes from CLI data", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(

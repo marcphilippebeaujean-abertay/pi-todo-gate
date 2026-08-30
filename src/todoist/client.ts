@@ -67,6 +67,10 @@ function safeHttpUrl(value: unknown): string | undefined {
 	}
 }
 
+function canonicalTaskId(ref: string): string {
+	return ref.trim().replace(/^id:/, "");
+}
+
 function nullableString(value: unknown): string | null | undefined {
 	if (value === null) return null;
 	return typeof value === "string" ? value : undefined;
@@ -167,10 +171,13 @@ export class TodoistClient {
 			sectionName = section ? stringValue(section.name) || null : null;
 		}
 		const isInProgress = sectionName?.trim().toLowerCase() === "in progress";
-		if (isInProgress && task.id !== project.currentTaskId) {
+		const currentTaskId = project.currentTaskId
+			? canonicalTaskId(project.currentTaskId)
+			: undefined;
+		if (isInProgress && task.id !== currentTaskId) {
 			throw new TodoistError("task claim", "task is already in progress");
 		}
-		if (sectionName !== "In Progress") {
+		if (!isInProgress) {
 			await this.run(
 				[
 					"task",
