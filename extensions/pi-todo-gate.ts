@@ -102,7 +102,7 @@ export default function extension(
 
 	pi.on("message_end", async (event, ctx) => {
 		await forwardSafely(ctx, "PR", async () => {
-			pr.messageEnd(textOf(event.message));
+			await pr.messageEnd(textOf(event.message));
 		});
 	});
 

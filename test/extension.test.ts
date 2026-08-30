@@ -95,7 +95,20 @@ describe("extension activation", () => {
 				},
 			},
 		]);
-		await start(h, {});
+		await start(
+			h,
+			{},
+			{
+				exec: async (command: string) =>
+					command === "gh"
+						? {
+								stdout: '{"state":"OPEN","mergedAt":""}',
+								stderr: "",
+								code: 0,
+							}
+						: { stdout: "", stderr: "unavailable", code: 1 },
+			},
+		);
 		expect(h.tools.map((tool) => tool.name)).toEqual(["pi_pr_gate_state"]);
 		expect(h.appended.at(-1)).toEqual({
 			type: "pi-pr-gate-state",
@@ -315,6 +328,56 @@ describe("merge reminder", () => {
 			},
 		);
 		expect(completions).toBe(0);
+	});
+});
+
+describe("PR link validation", () => {
+	it("rejects a syntactically valid PR URL that GitHub cannot resolve", async () => {
+		const h = harness("/repo");
+		const exec = async () => ({
+			stdout: "",
+			stderr: "not found",
+			code: 1,
+		});
+		await start(h, {}, { exec });
+
+		const prTool = h.tools.find((tool) => tool.name === "pi_pr_gate_state");
+		expect(prTool).toBeDefined();
+		if (!prTool) throw new Error("PR tool was not registered");
+		await expect(
+			prTool.execute(
+				"call",
+				{
+					action: "set_pr",
+					url: "https://github.com/o/r/pull/42",
+				},
+				undefined,
+				undefined,
+				h.ctx,
+			),
+		).rejects.toThrow("existing GitHub pull request");
+		expect(h.appended).toHaveLength(0);
+	});
+
+	it("does not auto-pin an unresolved PR URL from session history", async () => {
+		const h = harness("/repo", [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "https://github.com/o/r/pull/42",
+				},
+			},
+		]);
+		const exec = async () => ({
+			stdout: "",
+			stderr: "not found",
+			code: 1,
+		});
+
+		await start(h, {}, { exec });
+
+		expect(h.appended).toHaveLength(0);
 	});
 });
 

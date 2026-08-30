@@ -42,7 +42,7 @@ export interface PrModule {
 		event: { previousSessionFile?: string },
 		ctx: ExtensionContext,
 	): Promise<void>;
-	messageEnd(text: string): void;
+	messageEnd(text: string): Promise<void>;
 	beforeAgentStart(): Promise<string[]>;
 	toolResult(input: {
 		toolName: string;
@@ -123,7 +123,15 @@ export function createPrModule(
 		);
 	};
 
-	const setDiscoveredPr = (url: string): void => {
+	const setDiscoveredPr = async (url: string): Promise<void> => {
+		if (
+			(await findPrState(
+				dependencies.exec ?? spawnExec,
+				context?.cwd ?? "",
+				url,
+			)) === "UNKNOWN"
+		)
+			return;
 		state = { ...state, prUrl: url, discoveryDisabled: false };
 		allowDiscovery = false;
 		appendState();
@@ -171,6 +179,14 @@ export function createPrModule(
 					const url = githubPrUrl(params.url ?? "");
 					if (!url)
 						throw new Error("set_pr requires a valid GitHub pull request URL");
+					if (
+						(await findPrState(
+							dependencies.exec ?? spawnExec,
+							context.cwd,
+							url,
+						)) === "UNKNOWN"
+					)
+						throw new Error("set_pr requires an existing GitHub pull request");
 					state = removeMergedPr({ ...state, prUrl: url }, url);
 					state = { ...state, prUrl: url, discoveryDisabled: true };
 					allowDiscovery = false;
@@ -227,16 +243,16 @@ export function createPrModule(
 					branchTexts(nextContext.sessionManager.getBranch()),
 					mergedUrls(state),
 				);
-				if (url) setDiscoveredPr(url);
+				if (url) await setDiscoveredPr(url);
 			}
 			registerTool();
 			refreshStatus();
 			await checkExternalMerge();
 		},
-		messageEnd(text) {
+		async messageEnd(text) {
 			if (!allowDiscovery || state.prUrl) return;
 			const url = firstUnmergedGithubPrUrl([text], mergedUrls(state));
-			if (url) setDiscoveredPr(url);
+			if (url) await setDiscoveredPr(url);
 		},
 		async beforeAgentStart() {
 			if (!context) return [];
