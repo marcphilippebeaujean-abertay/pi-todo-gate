@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CommandResult } from "../src/git.ts";
+import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	createTaskClaimWorker,
 	type TaskClaimWorkerInput,
-} from "../src/task-claim-worker.ts";
+} from "../../src/todoist/claim-worker.ts";
 
 const input: TaskClaimWorkerInput = {
 	prompt: "Implement feature",
 	history: ["initial user request", "assistant response"],
 	cwd: "/repo/.worktrees/feature",
-	projectRef: "merge-td",
+	projectRef: "Pi Extensions",
 	worktree: {
 		isWorktree: true,
 		root: "/repo/.worktrees/feature",
@@ -17,12 +17,14 @@ const input: TaskClaimWorkerInput = {
 	},
 };
 
-function result(stdout: string, code = 0): CommandResult {
-	return { stdout, stderr: "", code };
-}
+const result = (stdout: string, code = 0): CommandResult => ({
+	stdout,
+	stderr: "",
+	code,
+});
 
-describe("task claim worker", () => {
-	it("runs isolated pi process with claim input and parses claimed result", async () => {
+describe("Todoist task claim worker", () => {
+	it("runs isolated pi process with claim input and parses result", async () => {
 		const exec = vi.fn(
 			async (
 				command: string,

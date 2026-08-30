@@ -1,12 +1,13 @@
-import type { Exec, WorktreeInfo } from "./git.ts";
-import { spawnExec } from "./git.ts";
+import type { Exec } from "../shared/command.ts";
+import { spawnExec } from "../shared/command.ts";
+import type { ProjectInfo } from "../shared/project.ts";
 
 export interface TaskClaimWorkerInput {
 	prompt: string;
 	history: string[];
 	cwd: string;
 	projectRef: string;
-	worktree: WorktreeInfo;
+	worktree: ProjectInfo;
 }
 
 export type TaskClaimWorkerResult =

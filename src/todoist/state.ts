@@ -22,33 +22,6 @@ export function isTodoistState(value: unknown): value is TodoistState {
 	);
 }
 
-export function todoistContext(
-	state: TodoistState,
-	projectRef: string,
-): string {
-	if (state.taskRef) {
-		const details = [state.taskName, state.taskUrl]
-			.filter((value): value is string => Boolean(value))
-			.join(" — ");
-		return [
-			`We are tracking tasks with Todoist and you are currently working on task ${state.taskRef}.`,
-			"Continue working on and tracking this task in Todoist.",
-			details ? `Task details: ${details}` : "",
-		]
-			.filter(Boolean)
-			.join("\n");
-	}
-
-	return `# Todoist Task Gate (MANDATORY)
-
-Configured Todoist project: ${projectRef}
-
-Before code changes:
-1. Find or create a Todoist task matching this work in the configured project.
-2. Assign it through pi_todoist_gate_state using set_task.
-3. Do not proceed until task is claimed and tracked.`;
-}
-
 export function applyTodoistStatePatch(
 	state: TodoistState,
 	patch: Partial<TodoistState>,

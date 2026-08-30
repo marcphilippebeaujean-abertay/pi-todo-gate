@@ -4,6 +4,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { createPrModule, type PrModuleDependencies } from "../src/pr/module.ts";
 import type { Exec } from "../src/shared/command.ts";
+import type { TaskClaimWorker } from "../src/todoist/claim-worker.ts";
 import type { TodoistClient } from "../src/todoist/client.ts";
 import type { TodoistProjectMapping } from "../src/todoist/config.ts";
 import { loadConfig, resolveConfiguredProject } from "../src/todoist/config.ts";
@@ -21,6 +22,7 @@ export interface ExtensionDependencies {
 	};
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	claimTaskWorker?: TaskClaimWorker;
 }
 
 function textOf(value: unknown): string {
@@ -54,11 +56,13 @@ async function forwardSafely(
 	ctx: ExtensionContext,
 	label: string,
 	action: () => Promise<void>,
+	notifyOnError = true,
 ): Promise<void> {
 	try {
 		await action();
 	} catch {
-		ctx.ui.notify(`${label} tracking is unavailable`, "warning");
+		if (notifyOnError)
+			ctx.ui.notify(`${label} tracking is unavailable`, "warning");
 	}
 }
 
@@ -76,6 +80,7 @@ export default function extension(
 		openSession: dependencies.openSession,
 		exec: dependencies.exec,
 		createTodoistClient: dependencies.createTodoistClient,
+		claimTaskWorker: dependencies.claimTaskWorker,
 	};
 	const pr = createPrModule(pi, prDependencies);
 	let todoist: TodoistModule | null = null;
@@ -101,8 +106,11 @@ export default function extension(
 			if (todoist) nextTodoist.reconfigure(project, config);
 			todoist = nextTodoist;
 			todoistActive = true;
-			await forwardSafely(ctx, "Todoist", () =>
-				nextTodoist.sessionStart(event, ctx),
+			await forwardSafely(
+				ctx,
+				"Todoist",
+				() => nextTodoist.sessionStart(event, ctx),
+				false,
 			);
 			if (generation !== sessionGeneration) {
 				if (todoist !== nextTodoist) nextTodoist.deactivate();
@@ -127,11 +135,16 @@ export default function extension(
 		});
 		if (generation !== sessionGeneration) return undefined;
 		if (sessionTodoist)
-			await forwardSafely(ctx, "Todoist", async () => {
-				messages.push(
-					(await sessionTodoist.beforeAgentStart(event.prompt ?? "")) ?? "",
-				);
-			});
+			await forwardSafely(
+				ctx,
+				"Todoist",
+				async () => {
+					messages.push(
+						(await sessionTodoist.beforeAgentStart(event.prompt ?? "")) ?? "",
+					);
+				},
+				false,
+			);
 		if (generation !== sessionGeneration) return undefined;
 		const content = messages.filter(Boolean).join("\n");
 		return content
@@ -160,8 +173,11 @@ export default function extension(
 		await forwardSafely(ctx, "PR", () => pr.toolResult(input));
 		if (generation !== sessionGeneration) return;
 		if (sessionTodoist)
-			await forwardSafely(ctx, "Todoist", () =>
-				sessionTodoist.toolResult(input),
+			await forwardSafely(
+				ctx,
+				"Todoist",
+				() => sessionTodoist.toolResult(input),
+				false,
 			);
 	});
 

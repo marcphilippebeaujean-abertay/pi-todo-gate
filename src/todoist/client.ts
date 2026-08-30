@@ -147,7 +147,11 @@ export class TodoistClient {
 
 	async claimTask(
 		ref: string,
-		project: { id: string; currentTaskId?: string },
+		project: {
+			id: string;
+			currentTaskId?: string;
+			allowInProgress?: boolean;
+		},
 	): Promise<TodoistTask> {
 		const task = await this.getTask(ref);
 		if (task.projectId !== project.id) {
@@ -174,7 +178,7 @@ export class TodoistClient {
 		const currentTaskId = project.currentTaskId
 			? canonicalTaskId(project.currentTaskId)
 			: undefined;
-		if (isInProgress && task.id !== currentTaskId) {
+		if (isInProgress && task.id !== currentTaskId && !project.allowInProgress) {
 			throw new TodoistError("task claim", "task is already in progress");
 		}
 		if (!isInProgress) {

@@ -6,10 +6,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Exec, spawnExec } from "../shared/command.ts";
+import { inspectProject } from "../shared/project.ts";
 import {
 	appendCustomState,
 	latestCustomState,
 } from "../shared/session-state.ts";
+import { createTaskClaimWorker, type TaskClaimWorker } from "./claim-worker.ts";
 import { TodoistClient } from "./client.ts";
 import {
 	type ResolvedProject,
@@ -22,7 +24,6 @@ import {
 	isTodoistState,
 	TODOIST_STATE_TYPE,
 	type TodoistState,
-	todoistContext,
 } from "./state.ts";
 
 export interface TodoistSessionReader {
@@ -35,6 +36,7 @@ export interface TodoistModuleDependencies {
 	openSession?: (path: string) => TodoistSessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	claimTaskWorker?: TaskClaimWorker;
 }
 
 export interface TodoistModule {
@@ -63,35 +65,10 @@ type StateAction =
 	| { action: "set_task"; task?: string }
 	| { action: "clear_task" };
 
-type SessionContext = Pick<ExtensionContext, "cwd" | "ui" | "sessionManager">;
-
-const TODOIST_TASK_URL_RE =
-	/https:\/\/app\.todoist\.com\/app\/task\/([A-Za-z0-9_-]+)/gi;
-const TODOIST_TASK_ID_RE =
-	/\b(?:todoist\s+)?task\s+id\s*[:#]?\s*`?([A-Za-z0-9_-]+)/gi;
-const CLAIMED_TASK_ID_RE =
-	/\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\s*[:#]?\s*`?([A-Za-z0-9_-]+)/gi;
-const TODOIST_MOVE_RE =
-	/\btd\s+task\s+move\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))(?=[\s\S]*?--section\s+(?:"In Progress"|'In Progress'|In Progress))/gi;
-const CLAIMED_TASK_RE =
-	/\b(?:claimed|claiming)\s+(?:a\s+)?(?:todoist\s+)?task\b|\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\b|--section\s+(?:"In Progress"|'In Progress'|In Progress)/i;
-const NEGATED_CLAIM_RE =
-	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claim(?:ed|ing)\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
-
-function textOf(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (Array.isArray(value))
-		return value
-			.map((part) =>
-				typeof part === "object" && part !== null && "text" in part
-					? String(part.text)
-					: "",
-			)
-			.join(" ");
-	if (typeof value === "object" && value !== null && "content" in value)
-		return textOf((value as { content?: unknown }).content);
-	return "";
-}
+type SessionContext = Pick<
+	ExtensionContext,
+	"cwd" | "ui" | "sessionManager" | "hasUI"
+>;
 
 function branchTexts(entries: readonly unknown[]): string[] {
 	return entries
@@ -102,46 +79,6 @@ function branchTexts(entries: readonly unknown[]): string[] {
 				(entry as { type?: unknown }).type !== "custom",
 		)
 		.map((entry) => JSON.stringify(entry));
-}
-
-function addMatches(
-	text: string,
-	expression: RegExp,
-	matches: Set<string>,
-): void {
-	expression.lastIndex = 0;
-	for (
-		let match = expression.exec(text);
-		match;
-		match = expression.exec(text)
-	) {
-		const value = match.slice(1).find(Boolean);
-		if (value) matches.add(value);
-	}
-}
-
-function inferClaimedTaskRef(
-	entries: readonly unknown[],
-	prompt = "",
-): string | undefined {
-	const texts = [...branchTexts(entries), prompt];
-	const allTaskRefs = new Set<string>();
-	let hasUnboundClaimEvidence = false;
-	for (const text of texts) {
-		const textTaskRefs = new Set<string>();
-		addMatches(text, TODOIST_TASK_URL_RE, textTaskRefs);
-		addMatches(text, TODOIST_TASK_ID_RE, textTaskRefs);
-		addMatches(text, CLAIMED_TASK_ID_RE, textTaskRefs);
-		addMatches(text, TODOIST_MOVE_RE, textTaskRefs);
-		for (const taskRef of textTaskRefs) allTaskRefs.add(taskRef);
-		if (!CLAIMED_TASK_RE.test(text) || NEGATED_CLAIM_RE.test(text)) continue;
-		const associatedTaskRef = textTaskRefs.values().next().value;
-		if (associatedTaskRef) return associatedTaskRef;
-		hasUnboundClaimEvidence = true;
-	}
-	return hasUnboundClaimEvidence
-		? allTaskRefs.values().next().value
-		: undefined;
 }
 
 function extensionResult(text: string): {
@@ -177,7 +114,7 @@ export function createTodoistModule(
 	let registered = false;
 	let operationGeneration = 0;
 	let ready = false;
-	let allowInference = true;
+	let claimAnalysisComplete = false;
 
 	const refreshStatus = (): void => {
 		if (!context) return;
@@ -195,46 +132,67 @@ export function createTodoistModule(
 		);
 	};
 
-	const linkInferredTask = async (
-		prompt = "",
-		expectedGeneration?: number,
-	): Promise<boolean> => {
-		if (!context || !allowInference || state.taskRef) return false;
-		const taskRef = inferClaimedTaskRef(
-			context.sessionManager.getBranch(),
-			prompt,
+	const persistClaimedTask = async (
+		taskRef: string,
+		generation: number,
+	): Promise<void> => {
+		if (!context || generation !== operationGeneration) return;
+		const client = createClient(context as ExtensionContext, dependencies);
+		const resolved = await client.resolveProject(
+			activeProject.todoistProjectRef,
 		);
-		if (!taskRef) return false;
-		const generation = expectedGeneration ?? ++operationGeneration;
+		if (generation !== operationGeneration || !context) return;
+		const claimed = await client.claimTask(taskRef, {
+			id: resolved.id,
+			allowInProgress: true,
+		});
+		if (generation !== operationGeneration || !context) return;
+		state = applyTodoistStatePatch(state, {
+			taskRef: claimed.id,
+			taskName: claimed.content,
+			taskUrl:
+				claimed.webUrl ??
+				claimed.url ??
+				`https://app.todoist.com/app/task/${claimed.id}`,
+		});
+		appendState();
+		refreshStatus();
+	};
+
+	const analyzeTaskClaim = async (prompt: string): Promise<void> => {
+		if (!context || claimAnalysisComplete || state.taskRef) return;
+		claimAnalysisComplete = true;
+		const generation = ++operationGeneration;
 		try {
-			const client = createClient(context as ExtensionContext, dependencies);
-			const resolved = await client.resolveProject(
-				activeProject.todoistProjectRef,
+			const worker =
+				dependencies.claimTaskWorker ??
+				createTaskClaimWorker(dependencies.exec ?? spawnExec);
+			const worktree = await inspectProject(
+				dependencies.exec ?? spawnExec,
+				context.cwd,
 			);
-			if (generation !== operationGeneration) return false;
-			const claimed = await client.claimTask(taskRef, {
-				id: resolved.id,
-				currentTaskId: taskRef,
+			if (generation !== operationGeneration || !context) return;
+			const result = await worker({
+				prompt,
+				history: branchTexts(context.sessionManager.getBranch()),
+				cwd: context.cwd,
+				projectRef: activeProject.todoistProjectRef,
+				worktree,
 			});
-			if (generation !== operationGeneration) return false;
-			state = applyTodoistStatePatch(state, {
-				taskRef: claimed.id,
-				taskName: claimed.content,
-				taskUrl:
-					claimed.webUrl ??
-					claimed.url ??
-					`https://app.todoist.com/app/task/${claimed.id}`,
-			});
-			appendState();
-			refreshStatus();
-			return true;
-		} catch {
-			if (generation === operationGeneration)
-				context.ui.notify(
-					"Todoist task was not linked from session history",
-					"warning",
+			if (generation !== operationGeneration || !context) return;
+			if (result.status === "none") return;
+			if (result.status === "collision") {
+				if (!context.hasUI) return;
+				const taskName = result.taskName ? `\nTask: ${result.taskName}` : "";
+				const accepted = await context.ui.confirm(
+					"Todoist task collision",
+					`Detected task is already In Progress.${taskName}\n\nSwitch to this task?`,
 				);
-			return false;
+				if (!accepted || generation !== operationGeneration) return;
+			}
+			await persistClaimedTask(result.taskRef, generation);
+		} catch {
+			// Claim handling is isolated from the main agent and non-fatal.
 		}
 	};
 
@@ -276,7 +234,7 @@ export function createTodoistModule(
 							taskName: claimed.content,
 							taskUrl: claimed.webUrl ?? claimed.url,
 						});
-						allowInference = false;
+						claimAnalysisComplete = true;
 						appendState();
 						refreshStatus();
 						return extensionResult(
@@ -289,7 +247,7 @@ export function createTodoistModule(
 					}
 				}
 				++operationGeneration;
-				allowInference = false;
+				claimAnalysisComplete = true;
 				state = {};
 				appendState();
 				refreshStatus();
@@ -305,7 +263,7 @@ export function createTodoistModule(
 			activeProject = nextProject;
 			activeConfig = nextConfig;
 			state = {};
-			allowInference = true;
+			claimAnalysisComplete = false;
 		},
 		async sessionStart(event, nextContext) {
 			const generation = ++operationGeneration;
@@ -316,7 +274,7 @@ export function createTodoistModule(
 				TODOIST_STATE_TYPE,
 				isTodoistState,
 			);
-			allowInference = currentState === null;
+			claimAnalysisComplete = currentState !== null;
 			state = currentState ?? {};
 			if (!currentState && event.previousSessionFile) {
 				const previous =
@@ -334,35 +292,27 @@ export function createTodoistModule(
 					);
 					if (inherited) {
 						state = inherited;
-						allowInference = false;
+						claimAnalysisComplete = true;
 						if (state.taskRef) appendState();
 					}
 				}
 			}
-			await linkInferredTask("", generation);
-			if (generation !== operationGeneration) return;
 			registerTool();
 			refreshStatus();
 			if (generation === operationGeneration) ready = true;
 		},
 		async beforeAgentStart(prompt) {
 			if (!context || !ready) return "";
-			const generation = ++operationGeneration;
-			await linkInferredTask(prompt, generation);
-			if (generation !== operationGeneration || !context || !ready) return "";
-			return todoistContext(state, activeProject.todoistProjectRef);
+			await analyzeTaskClaim(prompt);
+			return "";
 		},
-		async toolResult(input) {
-			if (!context || !ready || input.isError || input.toolName !== "bash")
-				return;
-			await linkInferredTask(
-				`${input.command ?? ""}\n${textOf(input.content)}`,
-			);
+		async toolResult(_input) {
+			// Task claims are analyzed once before the first main-agent turn.
 		},
 		deactivate() {
 			++operationGeneration;
 			ready = false;
-			allowInference = false;
+			claimAnalysisComplete = true;
 			if (context) context.ui.setStatus("pi-todo-gate-task", undefined);
 			context = null;
 			state = {};
