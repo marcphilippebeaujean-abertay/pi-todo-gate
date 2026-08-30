@@ -11,7 +11,7 @@ Approved design for standalone Pi extension project.
 
 ## Purpose
 
-Connect one Pi coding session to one GitHub pull request and one Todoist task. Keep those links visible, preserve them across session handoff, enforce configurable Todoist task claiming, complete the task after the associated PR is merged, and synchronize Pi task tracking with Todoist subtasks without exposing synchronization mechanics to the agent.
+Connect one Pi coding session to one GitHub pull request and one Todoist task. Keep those links visible, preserve them across session handoff, enforce configurable Todoist task claiming, and complete the task after the associated PR is merged.
 
 The extension is session-scoped. It must not create global PR/task ownership or infer a task from unrelated repositories.
 
@@ -84,7 +84,7 @@ Automatic discovery:
 - Inspect user, assistant, tool-result, and bash-execution text.
 - First valid GitHub PR URL wins.
 - Later URLs never replace an existing value.
-- Extension-generated synchronization content must not participate in discovery.
+- Extension-generated content must not participate in discovery.
 
 Agent control is explicit through an LLM-callable `pi_todo_gate_state` tool:
 
@@ -110,7 +110,6 @@ clear_all
 5. Reject a task already in progress unless it was claimed by this session.
 6. Move a valid task to `In Progress` using `td task move`.
 7. Store canonical task URL and task reference.
-8. If replacing an existing active task, immediately refresh the current session's Pi task list from the new Todoist parent before the next agent turn. This task-switch refresh is mandatory, not only a session-restore behavior.
 
 When no active task exists, every real user prompt receives this hidden agent-context warning:
 
@@ -160,62 +159,6 @@ On a verified merge, or when a pinned PR is found externally to be merged:
 
 No task completion occurs when no task or PR is active.
 
-## Hidden Two-Way Pi Task Synchronization
-
-The active Todoist task is the parent of the Pi task list. The parent description is never modified.
-
-### Outbound: Pi to Todoist
-
-Trigger after successful `TaskCreate`, `TaskUpdate`, `TaskStop`, or `TaskExecute` results, and again at `agent_settled`. Debounce triggers into one sync.
-
-The installed `@tintinweb/pi-tasks` release has no public task-update event bus. The adapter uses its documented file-backed session store as the integration boundary:
-
-`<coding-project>/.pi/tasks/tasks-<session-id>.json`
-
-The adapter reads the `TaskStoreData` shape without importing private package classes.
-
-Sync algorithm:
-
-1. Read current Pi tasks.
-2. Recursively list all existing Todoist descendants of the active parent.
-3. Delete descendants deepest-first.
-4. Recreate every Pi task as a direct Todoist subtask.
-5. Encode status in each subtask title:
-   - `[ ]` pending
-   - `[~]` in progress
-   - `[x]` completed
-6. Preserve subject and description; include dependency references where representable.
-7. Report success or partial failure through a normal notification only.
-
-This intentionally deletes all existing descendants, including manually-created subtasks, before recreation.
-
-No sync command, custom message, `sendMessage`, context injection, or prompt text may reveal this mechanism to the agent.
-
-### Inbound: Todoist to Pi
-
-On `session_start` and session inheritance:
-
-1. Fetch all Todoist descendants for the active parent.
-2. Todoist is authoritative on restore.
-3. Clear local Pi tasks.
-4. Recreate local Pi tasks from Todoist subtasks.
-5. Refresh the normal Pi task widget without adding context messages.
-
-When the agent changes the active Todoist task through `set_task`, the current session's Pi task list must be refreshed immediately:
-
-1. Detach the old parent without modifying or deleting its Todoist subtasks.
-2. Clear the current session's local Pi task list.
-3. Fetch the new parent's descendants.
-4. Recreate the local Pi task list from the new parent's subtasks.
-5. Leave the local Pi task list empty when the new Todoist task has no subtasks.
-6. Ensure all later Pi task updates sync only to the new parent.
-
-This supports: “Task X is selected; switch to Todoist task Y.” The old Todoist task remains unchanged. If Todoist lookup fails, preserve the previous local state and active task association, then report synchronization failure.
-
-Default file-backed session scope is supported first. `PI_TASKS=off`, memory scope, or incompatible custom paths must be detected and reported as unavailable; the extension must not silently overwrite unrelated files.
-
-Internal local writes must not generate visible agent tool calls or synchronization loops.
-
 ## Footer
 
 Interactive TUI only. When active, use `ctx.ui.setFooter()` and Pi TUI `hyperlink()`/OSC 8 links.
@@ -242,8 +185,6 @@ The custom footer replaces Pi’s built-in footer while active. This tradeoff is
 - Invoke `git`, `gh`, and `td` with argument arrays; never interpolate untrusted values into shell commands.
 - Treat CLI output as untrusted text.
 - Missing authentication or binaries yields diagnostics, not thrown extension failures.
-- Todoist deletion/recreation is sequential and debounced.
-- Partial synchronization records failure and never claims success.
 - Repeated merge events are idempotent.
 - State writes are serialized.
 - Inactive projects perform no external calls.
@@ -259,7 +200,6 @@ The custom footer replaces Pi’s built-in footer while active. This tradeoff is
   src/pr-detection.ts
   src/git.ts
   src/todoist.ts
-  src/pi-tasks-sync.ts
   src/footer.ts
   test/
   install.sh
@@ -282,9 +222,6 @@ Unit tests must cover:
 - guidance conditions and suppression;
 - merge target matching and idempotency;
 - Todoist CLI success/failure handling;
-- Pi-task serialization, status mapping, and two-way conversion;
-- descendant deletion ordering;
-- sync debounce and loop prevention;
 - footer link rendering and width safety;
 - headless mode behavior.
 
@@ -297,4 +234,3 @@ Manual TUI verification must confirm clickable PR/task footer links, Caveman sta
 - Cross-session global task ownership.
 - Non-GitHub pull-request providers.
 - Changes to `AGENTS.md` or other project instruction files.
-- Modifying the `@tintinweb/pi-tasks` package in the initial project.
