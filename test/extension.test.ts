@@ -577,6 +577,30 @@ describe("PR lifecycle isolation", () => {
 		expect(contextContent(await staleBefore)).toBe("");
 	});
 
+	it("does not duplicate Todoist tools after shutdown and restart", async () => {
+		const h = harness("/configured/project");
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": "Merge TD" }),
+			exec: async () => ({ stdout: "", stderr: "unavailable", code: 1 }),
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+		await h.handlers.get("session_shutdown")?.(
+			{ type: "session_shutdown" },
+			h.ctx,
+		);
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+
+		expect(
+			h.tools.filter((tool) => tool.name === "pi_todoist_gate_state"),
+		).toHaveLength(1);
+	});
+
 	it("does not install Todoist module from stale session initialization", async () => {
 		const h = harness("/configured/project");
 		let configCalls = 0;

@@ -170,6 +170,5 @@ export default function extension(
 		pr.deactivate();
 		todoist?.deactivate();
 		todoistActive = false;
-		todoist = null;
 	});
 }
