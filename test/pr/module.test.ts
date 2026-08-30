@@ -51,6 +51,43 @@ describe("recordMergedPr", () => {
 		});
 	});
 
+	it("refreshes an existing merged PR record without duplicating its URL", () => {
+		const next = recordMergedPr(
+			{
+				prUrl: "https://github.com/o/r/pull/42",
+				mergedPrs: [
+					{
+						prUrl: "https://github.com/o/r/pull/42",
+						detectedAt: "2026-08-29T00:00:00Z",
+						reminderPending: false,
+					},
+					{
+						prUrl: "https://github.com/o/r/pull/41",
+						detectedAt: "2026-08-28T00:00:00Z",
+						reminderPending: false,
+					},
+				],
+			},
+			"2026-08-30T00:00:00Z",
+		);
+
+		expect(next).toEqual({
+			mergedPrs: [
+				{
+					prUrl: "https://github.com/o/r/pull/41",
+					detectedAt: "2026-08-28T00:00:00Z",
+					reminderPending: false,
+				},
+				{
+					prUrl: "https://github.com/o/r/pull/42",
+					detectedAt: "2026-08-30T00:00:00Z",
+					reminderPending: true,
+				},
+			],
+			discoveryDisabled: false,
+		});
+	});
+
 	it("appends second merged PR without duplicating existing URL records", () => {
 		const next = recordMergedPr(
 			{

@@ -4,9 +4,9 @@ import {
 	createFooterFactory,
 	type FooterTheme,
 	renderFooterLine,
-	renderPrStatus,
 	renderTaskStatus,
 } from "../src/footer.ts";
+import { renderPrLabel, renderPrStatus } from "../src/pr/footer.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);
@@ -14,8 +14,8 @@ const styledTheme: FooterTheme = {
 	fg: (color, text) => `<${color}>${text}</${color}>`,
 };
 
-describe("renderFooterLine", () => {
-	it("styles footer labels separately from clickable values", () => {
+describe("PR footer rendering", () => {
+	it("styles status labels separately from clickable values", () => {
 		const pr = renderPrStatus(
 			"https://github.com/owner/repo/pull/42",
 			styledTheme,
@@ -35,6 +35,17 @@ describe("renderFooterLine", () => {
 		expect(task).not.toContain("#7");
 	});
 
+	it("renders clickable PR labels from PR footer module", () => {
+		const pr = renderPrLabel(
+			"https://github.com/owner/repo/pull/42",
+			styledTheme,
+		);
+		expect(pr).toContain("PR #42");
+		expect(pr).toContain("\u001b]8;;https://github.com/owner/repo/pull/42");
+	});
+});
+
+describe("renderFooterLine", () => {
 	it("truncates long task names after 15 characters", () => {
 		const task = renderTaskStatus(
 			"https://app.todoist.com/app/task/7",

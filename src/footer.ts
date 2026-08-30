@@ -3,7 +3,11 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { githubPrUrl } from "./pr-detection.ts";
+import {
+	type PrFooterTheme,
+	renderPrLabel,
+	renderPrStatus as renderPrStatusFromModule,
+} from "./pr/footer.ts";
 
 export interface FooterState {
 	prUrl?: string;
@@ -12,7 +16,7 @@ export interface FooterState {
 	branch?: string | null;
 }
 
-export interface FooterTheme {
+export interface FooterTheme extends PrFooterTheme {
 	fg(color: string, text: string): string;
 }
 
@@ -43,14 +47,6 @@ function linkText(text: string, theme?: FooterTheme): string {
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
-function prLabel(url: string | undefined, theme?: FooterTheme): string {
-	const normalized = url ? githubPrUrl(url) : null;
-	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (!number) return "PR: none";
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return hyperlink(linkText(`PR #${boundedNumber}`, theme), normalized);
-}
-
 function displayTaskName(
 	taskName: string | undefined,
 	id: string | undefined,
@@ -77,18 +73,7 @@ function taskLabel(
 	}
 }
 
-export function renderPrStatus(
-	url: string | undefined,
-	theme?: FooterTheme,
-): string {
-	const muted = (text: string) => theme?.fg("muted", text) ?? text;
-	const value = (text: string) => theme?.fg("text", text) ?? text;
-	const normalized = url ? githubPrUrl(url) : null;
-	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (!number) return `${muted("| PR Link: ")}${value("none")}${muted(" |")}`;
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted("| PR Link: ")}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(" |")}`;
-}
+export const renderPrStatus = renderPrStatusFromModule;
 
 export function renderTaskStatus(
 	url: string | undefined,
@@ -117,7 +102,7 @@ export function renderFooterLine(
 ): string {
 	if (width <= 0) return "";
 	const parts = [
-		prLabel(state.prUrl, theme),
+		renderPrLabel(state.prUrl, theme),
 		taskLabel(state.taskUrl, state.taskName, theme),
 	];
 	if (state.branch) parts.push(`branch: ${state.branch}`);
