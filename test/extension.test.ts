@@ -70,6 +70,27 @@ async function start(
 }
 
 describe("lazy activation", () => {
+	it("does not activate inside dispatched subagents", async () => {
+		const h = harness("/configured/project");
+		let configLoads = 0;
+		const previousSubagent = process.env.PI_SUBAGENT_CHILD;
+		process.env.PI_SUBAGENT_CHILD = "1";
+		try {
+			extension(h.pi, {
+				loadConfig: async () => {
+					configLoads += 1;
+					return config({ "/configured": "merge-td" });
+				},
+			});
+		} finally {
+			if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previousSubagent;
+		}
+		expect(h.handlers.size).toBe(0);
+		expect(h.tools).toHaveLength(0);
+		expect(configLoads).toBe(0);
+	});
+
 	it("does not register tools or perform external work for an unmatched project", async () => {
 		const h = harness("/unconfigured/project");
 		await start(h, { "/configured": "merge-td" });
