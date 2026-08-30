@@ -528,6 +528,55 @@ describe("PR link validation", () => {
 });
 
 describe("PR lifecycle isolation", () => {
+	it("does not forward a stale hook into the new Todoist module", async () => {
+		const h = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-pr-gate-state",
+				data: { prUrl: "https://github.com/o/r/pull/42" },
+			},
+		]);
+		let blockBefore = false;
+		let blocked = false;
+		let releasePrLookup!: () => void;
+		let prLookupStarted!: () => void;
+		const prLookupReady = new Promise<void>((resolve) => {
+			prLookupStarted = resolve;
+		});
+		const blockedPrLookup = new Promise<void>((resolve) => {
+			releasePrLookup = resolve;
+		});
+		const exec = async (command: string) => {
+			if (command === "gh" && blockBefore && !blocked) {
+				blocked = true;
+				prLookupStarted();
+				await blockedPrLookup;
+			}
+			return command === "gh"
+				? { stdout: '{"state":"OPEN","mergedAt":""}', stderr: "", code: 0 }
+				: { stdout: "", stderr: "unavailable", code: 1 };
+		};
+		await start(
+			h,
+			{ "/configured": "Merge TD" },
+			{ exec, createTodoistClient: () => ({}) as unknown as TodoistClient },
+		);
+		blockBefore = true;
+		const staleBefore = h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		await prLookupReady;
+		const currentStart = h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+		await currentStart;
+		releasePrLookup();
+
+		expect(contextContent(await staleBefore)).toBe("");
+	});
+
 	it("does not install Todoist module from stale session initialization", async () => {
 		const h = harness("/configured/project");
 		let configCalls = 0;
@@ -646,6 +695,63 @@ describe("PR lifecycle isolation", () => {
 		resolveProject({ id: "project-1", name: "Merge TD" });
 
 		await expect(pendingContext).resolves.toBe("");
+	});
+
+	it("does not infer Todoist state after inheriting an explicit clear", async () => {
+		const root = "/configured/project";
+		const h = harness(root, [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "Claimed Todoist task https://app.todoist.com/app/task/42",
+				},
+			},
+		]);
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Merge TD" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Stale task",
+				webUrl: "https://app.todoist.com/app/task/42",
+			}),
+		} as unknown as TodoistClient;
+		const exec = async (command: string, args: string[]) => {
+			if (command === "git" && args[0] === "rev-parse")
+				return { stdout: root, stderr: "", code: 0 };
+			if (command === "git" && args[0] === "branch")
+				return { stdout: "feature", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "worktree")
+				return { stdout: "worktree /main", stderr: "", code: 0 };
+			return { stdout: "", stderr: "unavailable", code: 1 };
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": "Merge TD" }),
+			exec,
+			createTodoistClient: () => client,
+			openSession: () => ({
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todoist-gate-state",
+						data: {},
+					},
+				],
+				getCwd: () => root,
+			}),
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new", previousSessionFile: "previous" },
+			h.ctx,
+		);
+		const result = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+
+		expect(contextContent(result)).toContain("# Todoist Task Gate (MANDATORY)");
+		expect(contextContent(result)).not.toContain("Stale task");
+		expect(h.appended).toHaveLength(0);
 	});
 
 	it("does not inherit an unresolved PR link", async () => {

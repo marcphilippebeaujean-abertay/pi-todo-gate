@@ -314,15 +314,15 @@ export function createTodoistModule(
 					config,
 				);
 				if (previousProject?.codingRoot === project.codingRoot) {
-					state =
-						latestCustomState(
-							previous.getBranch(),
-							TODOIST_STATE_TYPE,
-							isTodoistState,
-						) ?? {};
-					if (state.taskRef) {
+					const inherited = latestCustomState(
+						previous.getBranch(),
+						TODOIST_STATE_TYPE,
+						isTodoistState,
+					);
+					if (inherited) {
+						state = inherited;
 						allowInference = false;
-						appendState();
+						if (state.taskRef) appendState();
 					}
 				}
 			}
