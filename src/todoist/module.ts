@@ -27,7 +27,6 @@ import {
 
 export interface TodoistSessionReader {
 	getBranch(): unknown[];
-	getSessionId(): string;
 	getCwd(): string;
 }
 

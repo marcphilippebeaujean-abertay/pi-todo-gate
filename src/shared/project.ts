@@ -38,9 +38,11 @@ export async function inspectProject(
 		branchResult.code === 0 && branchResult.stdout.trim()
 			? branchResult.stdout.trim()
 			: null;
-	const mainRoot = listResult.code === 0 ? firstWorktreePath(listResult.stdout) : null;
+	const mainRoot =
+		listResult.code === 0 ? firstWorktreePath(listResult.stdout) : null;
 	return {
-		isWorktree: root !== null && mainRoot !== null && root !== resolve(mainRoot),
+		isWorktree:
+			root !== null && mainRoot !== null && root !== resolve(mainRoot),
 		root,
 		branch,
 	};

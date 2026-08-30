@@ -26,7 +26,8 @@ describe("shared session state", () => {
 	});
 
 	it("writes the requested custom type and payload unchanged", () => {
-		const appended: Array<{ customType: string; data: { taskRef: string } }> = [];
+		const appended: Array<{ customType: string; data: { taskRef: string } }> =
+			[];
 
 		appendCustomState(
 			(customType, data) => appended.push({ customType, data }),
