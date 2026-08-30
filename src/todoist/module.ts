@@ -174,6 +174,7 @@ export function createTodoistModule(
 	let registered = false;
 	let operationGeneration = 0;
 	let ready = false;
+	let allowInference = true;
 
 	const refreshStatus = (): void => {
 		if (!context) return;
@@ -195,7 +196,7 @@ export function createTodoistModule(
 		prompt = "",
 		expectedGeneration?: number,
 	): Promise<boolean> => {
-		if (!context || state.taskRef) return false;
+		if (!context || !allowInference || state.taskRef) return false;
 		const taskRef = inferClaimedTaskRef(
 			context.sessionManager.getBranch(),
 			prompt,
@@ -270,6 +271,7 @@ export function createTodoistModule(
 							taskName: claimed.content,
 							taskUrl: claimed.webUrl ?? claimed.url,
 						});
+						allowInference = false;
 						appendState();
 						refreshStatus();
 						return extensionResult(
@@ -282,6 +284,7 @@ export function createTodoistModule(
 					}
 				}
 				++operationGeneration;
+				allowInference = false;
 				state = {};
 				appendState();
 				refreshStatus();
@@ -300,6 +303,7 @@ export function createTodoistModule(
 				TODOIST_STATE_TYPE,
 				isTodoistState,
 			);
+			allowInference = currentState === null;
 			state = currentState ?? {};
 			if (!currentState && event.previousSessionFile) {
 				const previous =
@@ -316,7 +320,10 @@ export function createTodoistModule(
 							TODOIST_STATE_TYPE,
 							isTodoistState,
 						) ?? {};
-					if (state.taskRef) appendState();
+					if (state.taskRef) {
+						allowInference = false;
+						appendState();
+					}
 				}
 			}
 			await linkInferredTask("", generation);
@@ -342,6 +349,7 @@ export function createTodoistModule(
 		deactivate() {
 			++operationGeneration;
 			ready = false;
+			allowInference = false;
 			if (context) context.ui.setStatus("pi-todo-gate-task", undefined);
 			context = null;
 			state = {};

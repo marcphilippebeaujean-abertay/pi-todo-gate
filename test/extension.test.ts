@@ -221,6 +221,13 @@ describe("Todoist context composition", () => {
 				customType: "pi-todoist-gate-state",
 				data: {},
 			},
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "Claimed Todoist task https://app.todoist.com/app/task/42",
+				},
+			},
 		]);
 		extension(h.pi, {
 			loadConfig: async () => config({ "/configured": "Merge TD" }),
@@ -235,6 +242,15 @@ describe("Todoist context composition", () => {
 				],
 				getCwd: () => root,
 			}),
+			createTodoistClient: () =>
+				({
+					resolveProject: async () => ({ id: "project-1", name: "Merge TD" }),
+					claimTask: async () => ({
+						id: "42",
+						content: "Stale task",
+						webUrl: "https://app.todoist.com/app/task/42",
+					}),
+				}) as unknown as TodoistClient,
 		});
 		await h.handlers.get("session_start")?.(
 			{
