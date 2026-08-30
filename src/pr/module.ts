@@ -248,13 +248,13 @@ export function createPrModule(
 			);
 			if (generation !== operationGeneration) return;
 			projectRoot = project.root;
-			state =
-				latestCustomState(
-					nextContext.sessionManager.getBranch(),
-					PR_STATE_TYPE,
-					isPrState,
-				) ?? {};
-			if (!state.prUrl && event.previousSessionFile) {
+			const currentState = latestCustomState(
+				nextContext.sessionManager.getBranch(),
+				PR_STATE_TYPE,
+				isPrState,
+			);
+			state = currentState ?? {};
+			if (!currentState && event.previousSessionFile) {
 				const previous =
 					dependencies.openSession?.(event.previousSessionFile) ??
 					SessionManager.open(event.previousSessionFile);

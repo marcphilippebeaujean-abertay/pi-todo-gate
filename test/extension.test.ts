@@ -212,6 +212,45 @@ describe("Todoist context composition", () => {
 			"currently working on task previous-task",
 		);
 	});
+
+	it("does not inherit Todoist state after explicit clear", async () => {
+		const root = "/configured/project";
+		const h = harness(root, [
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: {},
+			},
+		]);
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": "Merge TD" }),
+			exec: async () => ({ stdout: "", stderr: "unavailable", code: 1 }),
+			openSession: () => ({
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todoist-gate-state",
+						data: { taskRef: "previous-task" },
+					},
+				],
+				getCwd: () => root,
+			}),
+		});
+		await h.handlers.get("session_start")?.(
+			{
+				type: "session_start",
+				reason: "new",
+				previousSessionFile: "/sessions/previous.jsonl",
+			},
+			h.ctx,
+		);
+		const result = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(contextContent(result)).toContain("# Todoist Task Gate (MANDATORY)");
+		expect(contextContent(result)).not.toContain("previous-task");
+	});
 });
 
 describe("merge reminder", () => {
@@ -560,8 +599,80 @@ describe("PR lifecycle isolation", () => {
 		expect(h.tools.map((tool) => tool.name)).toContain("pi_todoist_gate_state");
 	});
 
+	it("does not return Todoist context after deactivation during inference", async () => {
+		const h = harness("/configured/project");
+		let resolveProject!: (value: { id: string; name: string }) => void;
+		const projectReady = new Promise<{ id: string; name: string }>(
+			(resolve) => {
+				resolveProject = resolve;
+			},
+		);
+		const client = {
+			resolveProject: async () => projectReady,
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+			}),
+		} as unknown as TodoistClient;
+		const todoist = createTodoistModule(
+			h.pi,
+			{ codingRoot: "/configured", todoistProjectRef: "Merge TD" },
+			{ projects: { "/configured": "Merge TD" } },
+			{ createTodoistClient: () => client },
+		);
+		await todoist.sessionStart({}, h.ctx);
+		const pendingContext = todoist.beforeAgentStart(
+			"Claimed Todoist task https://app.todoist.com/app/task/42",
+		);
+		await Promise.resolve();
+		todoist.deactivate();
+		resolveProject({ id: "project-1", name: "Merge TD" });
+
+		await expect(pendingContext).resolves.toBe("");
+	});
+
 	it("does not inherit an unresolved PR link", async () => {
 		const h = harness("/repo");
+		const exec = async (command: string, args: string[]) => {
+			if (command === "git" && args[0] === "rev-parse")
+				return { stdout: "/repo\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "branch")
+				return { stdout: "feature\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "worktree")
+				return { stdout: "worktree /main\\n", stderr: "", code: 0 };
+			return { stdout: "", stderr: "not found", code: 1 };
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({}),
+			exec,
+			openSession: () => ({
+				getCwd: () => "/repo",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-pr-gate-state",
+						data: { prUrl: "https://github.com/o/r/pull/42" },
+					},
+				],
+			}),
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new", previousSessionFile: "previous" },
+			h.ctx,
+		);
+
+		expect(h.appended).toHaveLength(0);
+	});
+
+	it("does not inherit PR state after explicit clear", async () => {
+		const h = harness("/repo", [
+			{
+				type: "custom",
+				customType: "pi-pr-gate-state",
+				data: { discoveryDisabled: true },
+			},
+		]);
 		const exec = async (command: string, args: string[]) => {
 			if (command === "git" && args[0] === "rev-parse")
 				return { stdout: "/repo\\n", stderr: "", code: 0 };

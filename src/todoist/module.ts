@@ -295,13 +295,13 @@ export function createTodoistModule(
 			const generation = ++operationGeneration;
 			ready = false;
 			context = nextContext;
-			state =
-				latestCustomState(
-					nextContext.sessionManager.getBranch(),
-					TODOIST_STATE_TYPE,
-					isTodoistState,
-				) ?? {};
-			if (!state.taskRef && event.previousSessionFile) {
+			const currentState = latestCustomState(
+				nextContext.sessionManager.getBranch(),
+				TODOIST_STATE_TYPE,
+				isTodoistState,
+			);
+			state = currentState ?? {};
+			if (!currentState && event.previousSessionFile) {
 				const previous =
 					dependencies.openSession?.(event.previousSessionFile) ??
 					SessionManager.open(event.previousSessionFile);
@@ -327,7 +327,9 @@ export function createTodoistModule(
 		},
 		async beforeAgentStart(prompt) {
 			if (!context || !ready) return "";
-			await linkInferredTask(prompt);
+			const generation = ++operationGeneration;
+			await linkInferredTask(prompt, generation);
+			if (generation !== operationGeneration || !context || !ready) return "";
 			return todoistContext(state, project.todoistProjectRef);
 		},
 		async toolResult(input) {
