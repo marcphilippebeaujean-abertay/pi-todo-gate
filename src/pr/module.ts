@@ -125,6 +125,7 @@ export function createPrModule(
 	let workChanged = false;
 	let registered = false;
 	let operationGeneration = 0;
+	let ready = false;
 
 	const appendState = (): void => {
 		appendCustomState(
@@ -197,6 +198,7 @@ export function createPrModule(
 			parameters: stateParameters,
 			async execute(_toolCallId, params: StateAction) {
 				if (!context) throw new Error("PR tracking is inactive");
+				if (!ready) throw new Error("PR tracking is initializing");
 				if (params.action === "status")
 					return extensionResult(
 						JSON.stringify({ ...state, codingRoot: projectRoot }),
@@ -235,7 +237,11 @@ export function createPrModule(
 	return {
 		async sessionStart(event, nextContext) {
 			const generation = ++operationGeneration;
+			ready = false;
 			context = nextContext;
+			state = {};
+			workChanged = false;
+			allowDiscovery = false;
 			const project = await inspectProject(
 				dependencies.exec ?? spawnExec,
 				nextContext.cwd,
@@ -281,15 +287,17 @@ export function createPrModule(
 			registerTool();
 			refreshStatus();
 			await checkExternalMerge(generation);
+			if (generation !== operationGeneration || !context) return;
+			ready = true;
 		},
 		async messageEnd(text) {
-			if (!allowDiscovery || state.prUrl) return;
+			if (!ready || !allowDiscovery || state.prUrl) return;
 			const generation = ++operationGeneration;
 			const urls = unmergedPrUrls([text], mergedUrls(state));
 			if (urls.length) await setDiscoveredPr(urls, generation);
 		},
 		async beforeAgentStart() {
-			if (!context) return [];
+			if (!context || !ready) return [];
 			const generation = operationGeneration;
 			await checkExternalMerge(generation);
 			if (generation !== operationGeneration || !context) return [];
@@ -318,7 +326,7 @@ export function createPrModule(
 			return messages;
 		},
 		async toolResult(input) {
-			if (!context || input.isError) return;
+			if (!context || !ready || input.isError) return;
 			if (input.toolName === "edit" || input.toolName === "write")
 				workChanged = true;
 			if (input.toolName !== "bash") return;
@@ -347,6 +355,9 @@ export function createPrModule(
 		},
 		deactivate() {
 			++operationGeneration;
+			ready = false;
+			workChanged = false;
+			state = {};
 			if (context) context.ui.setStatus("pi-todo-gate-pr", undefined);
 			context = null;
 		},

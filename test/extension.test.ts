@@ -471,6 +471,104 @@ describe("PR link validation", () => {
 	});
 });
 
+describe("PR lifecycle isolation", () => {
+	it("resets work-change guidance when session changes", async () => {
+		const h = harness("/repo");
+		const exec = async (command: string, args: string[]) => {
+			if (command === "git" && args[0] === "rev-parse")
+				return { stdout: "/repo\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "branch")
+				return { stdout: "feature\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "worktree")
+				return { stdout: "worktree /main\\n", stderr: "", code: 0 };
+			if (command === "gh") return { stdout: "[]", stderr: "", code: 0 };
+			return { stdout: "", stderr: "", code: 1 };
+		};
+		await start(h, {}, { exec });
+		await h.handlers.get("tool_result")?.(
+			{
+				type: "tool_result",
+				toolName: "edit",
+				isError: false,
+			},
+			h.ctx,
+		);
+		const beforeReset = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(contextContent(beforeReset)).toContain(
+			"When implementation is finished, push this branch and create a GitHub PR.",
+		);
+
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+		const afterReset = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(contextContent(afterReset)).not.toContain(
+			"When implementation is finished, push this branch and create a GitHub PR.",
+		);
+	});
+
+	it("quiesces old PR state while a new session initializes", async () => {
+		const h = harness("/repo");
+		let switching = false;
+		let releaseGit!: () => void;
+		let gitStarted!: () => void;
+		const gitReady = new Promise<void>((resolve) => {
+			gitStarted = resolve;
+		});
+		const blockedGit = new Promise<void>((resolve) => {
+			releaseGit = resolve;
+		});
+		const exec = async (command: string) => {
+			if (switching && command === "git") {
+				gitStarted();
+				await blockedGit;
+			}
+			if (command === "gh")
+				return switching
+					? {
+							stdout: '{"state":"MERGED","mergedAt":"now"}',
+							stderr: "",
+							code: 0,
+						}
+					: { stdout: '{"state":"OPEN","mergedAt":""}', stderr: "", code: 0 };
+			return { stdout: "", stderr: "", code: 1 };
+		};
+		await start(h, {}, { exec });
+		const prTool = h.tools.find((tool) => tool.name === "pi_pr_gate_state");
+		expect(prTool).toBeDefined();
+		if (!prTool) throw new Error("PR tool was not registered");
+		await prTool.execute(
+			"call",
+			{ action: "set_pr", url: "https://github.com/o/r/pull/42" },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		const appendCount = h.appended.length;
+		switching = true;
+		const pendingStart = h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+		await gitReady;
+		const beforeReset = await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(contextContent(beforeReset)).toBe("");
+		expect(h.appended).toHaveLength(appendCount);
+		releaseGit();
+		await pendingStart;
+	});
+});
+
 describe("independent state tools", () => {
 	it("sets Todoist task through Todoist tool only", async () => {
 		const h = harness("/configured/project");
