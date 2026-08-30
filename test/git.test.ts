@@ -6,6 +6,7 @@ import {
 	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
+	spawnExec,
 } from "../src/git.ts";
 
 const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", code: 0 });
@@ -20,6 +21,22 @@ function fakeExec(results: Record<string, CommandResult>): Exec {
 		results[[command, ...args].join(" ")] ??
 		fail(`unexpected ${command} ${args.join(" ")}`);
 }
+
+describe("spawnExec", () => {
+	it("kills timed out process groups", async () => {
+		const started = Date.now();
+		const result = await spawnExec(
+			process.execPath,
+			[
+				"-e",
+				"const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1000)'], { stdio: 'inherit' });",
+			],
+			{ timeout: 20 },
+		);
+		expect(result.killed).toBe(true);
+		expect(Date.now() - started).toBeLessThan(500);
+	});
+});
 
 describe("inspectWorktree", () => {
 	it("identifies a linked worktree and branch", async () => {

@@ -26,28 +26,51 @@ export interface OpenPrInfo {
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
 
+const PROCESS_KILL_GRACE_MS = 1_000;
+
 export const spawnExec: Exec = (command, args, options = {}) =>
 	new Promise((resolveResult) => {
-		const child = spawn(command, args, { cwd: options.cwd, shell: false });
+		const child = spawn(command, args, {
+			cwd: options.cwd,
+			shell: false,
+			detached: process.platform !== "win32",
+		});
 		let stdout = "";
 		let stderr = "";
 		let killed = false;
 		let settled = false;
+		let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+		let forceTimer: ReturnType<typeof setTimeout> | undefined;
+		const kill = (signal: NodeJS.Signals) => {
+			if (process.platform !== "win32" && child.pid) {
+				try {
+					process.kill(-child.pid, signal);
+					return;
+				} catch {
+					// Fall through when process group is already gone.
+				}
+			}
+			child.kill(signal);
+		};
+		const terminate = () => {
+			if (settled) return;
+			killed = true;
+			kill("SIGTERM");
+			forceTimer ??= setTimeout(() => {
+				if (!settled) kill("SIGKILL");
+			}, PROCESS_KILL_GRACE_MS);
+		};
 		const finish = (result: CommandResult) => {
 			if (settled) return;
 			settled = true;
+			if (timeoutTimer) clearTimeout(timeoutTimer);
+			if (forceTimer) clearTimeout(forceTimer);
 			resolveResult(result);
 		};
-		const timer = options.timeout
-			? setTimeout(() => {
-					killed = true;
-					child.kill("SIGTERM");
-				}, options.timeout)
+		timeoutTimer = options.timeout
+			? setTimeout(terminate, options.timeout)
 			: undefined;
-		const onAbort = () => {
-			killed = true;
-			child.kill("SIGTERM");
-		};
+		const onAbort = () => terminate();
 		options.signal?.addEventListener("abort", onAbort, { once: true });
 		child.stdout.on("data", (chunk: Buffer) => {
 			stdout += chunk.toString();
@@ -56,12 +79,10 @@ export const spawnExec: Exec = (command, args, options = {}) =>
 			stderr += chunk.toString();
 		});
 		child.on("error", (error) => {
-			if (timer) clearTimeout(timer);
 			options.signal?.removeEventListener("abort", onAbort);
 			finish({ stdout, stderr: `${stderr}${error.message}`, code: 1, killed });
 		});
 		child.on("close", (code) => {
-			if (timer) clearTimeout(timer);
 			options.signal?.removeEventListener("abort", onAbort);
 			finish({ stdout, stderr, code: code ?? 1, killed });
 		});

@@ -27,6 +27,10 @@ import {
 	extractInheritedState,
 	latestState,
 } from "../src/session-state.ts";
+import {
+	createTaskClaimWorker,
+	type TaskClaimWorker,
+} from "../src/task-claim-worker.ts";
 import { TodoistClient } from "../src/todoist.ts";
 import type {
 	ResolvedProject,
@@ -47,10 +51,10 @@ export interface ExtensionDependencies {
 	openSession?: (path: string) => SessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	claimTaskWorker?: TaskClaimWorker;
 }
 
 const STATE_TYPE = "pi-todo-gate-state";
-const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
 const taskToolNames = new Set([
 	"TaskCreate",
 	"TaskUpdate",
@@ -82,6 +86,7 @@ interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
+	claimAnalysisComplete: boolean;
 	syncAvailable: boolean;
 	syncGeneration: number;
 	syncTimer?: ReturnType<typeof setTimeout>;
@@ -142,62 +147,6 @@ function branchTexts(entries: readonly unknown[]): string[] {
 				(entry as { type?: unknown }).type !== "custom",
 		)
 		.map((entry) => JSON.stringify(entry));
-}
-
-const TODOIST_TASK_URL_RE =
-	/https:\/\/app\.todoist\.com\/app\/task\/([A-Za-z0-9_-]+)/gi;
-const TODOIST_TASK_ID_RE =
-	/\b(?:todoist\s+)?task\s+id\s*[:#]?\s*`?([A-Za-z0-9_-]+)/gi;
-const CLAIMED_TASK_ID_RE =
-	/\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\s*[:#]?\s*`?([A-Za-z0-9_-]+)/gi;
-const TODOIST_MOVE_RE =
-	/\btd\s+task\s+move\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))(?=[\s\S]*?--section\s+(?:"In Progress"|'In Progress'|In Progress))/gi;
-const CLAIMED_TASK_RE =
-	/\b(?:claimed|claiming)\s+(?:a\s+)?(?:todoist\s+)?task\b|\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\b|--section\s+(?:"In Progress"|'In Progress'|In Progress)/i;
-const NEGATED_CLAIM_RE =
-	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claimed\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
-
-function addMatches(
-	text: string,
-	expression: RegExp,
-	matches: Set<string>,
-): void {
-	expression.lastIndex = 0;
-	for (
-		let match = expression.exec(text);
-		match;
-		match = expression.exec(text)
-	) {
-		const value = match.slice(1).find((candidate) => candidate);
-		if (value) matches.add(value);
-	}
-}
-
-function inferClaimedTaskRef(
-	entries: readonly unknown[],
-	prompt = "",
-): string | undefined {
-	const texts = [...branchTexts(entries), prompt];
-	const allTaskRefs = new Set<string>();
-	let hasUnboundClaimEvidence = false;
-	for (const text of texts) {
-		const textTaskRefs = new Set<string>();
-		addMatches(text, TODOIST_TASK_URL_RE, textTaskRefs);
-		addMatches(text, TODOIST_TASK_ID_RE, textTaskRefs);
-		addMatches(text, CLAIMED_TASK_ID_RE, textTaskRefs);
-		addMatches(text, TODOIST_MOVE_RE, textTaskRefs);
-		for (const taskRef of textTaskRefs) allTaskRefs.add(taskRef);
-
-		const isPositiveClaim =
-			CLAIMED_TASK_RE.test(text) && !NEGATED_CLAIM_RE.test(text);
-		if (!isPositiveClaim) continue;
-		const associatedTaskRef = textTaskRefs.values().next().value;
-		if (associatedTaskRef) return associatedTaskRef;
-		hasUnboundClaimEvidence = true;
-	}
-	return hasUnboundClaimEvidence
-		? allTaskRefs.values().next().value
-		: undefined;
 }
 
 function createClient(
@@ -286,44 +235,69 @@ export default function extension(
 		session.context.ui.setFooter(undefined);
 	};
 
-	const linkInferredTask = async (
+	const persistClaimedTask = async (
 		session: ActiveSession,
-		prompt = "",
-	): Promise<boolean> => {
-		if (session.state.taskRef) return false;
-		const taskRef = inferClaimedTaskRef(
-			session.context.sessionManager.getBranch(),
-			prompt,
+		taskRef: string,
+		allowInProgress: boolean,
+	): Promise<void> => {
+		const client = createClient(session.context, dependencies);
+		const project = await client.resolveProject(
+			session.project.todoistProjectRef,
 		);
-		if (!taskRef) return false;
+		const claimed = await client.claimTask(taskRef, {
+			id: project.id,
+			allowInProgress,
+		});
+		await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
+		session.syncAvailable = true;
+		session.state = applyStatePatch(session.state, {
+			taskRef: claimed.id,
+			taskName: claimed.content,
+			taskUrl:
+				claimed.webUrl ??
+				claimed.url ??
+				`https://app.todoist.com/app/task/${claimed.id}`,
+		});
+		appendState(pi, session.state, !session.allowPrDiscovery);
+		refreshFooterStatuses(session);
+	};
+
+	const analyzeTaskClaim = async (
+		session: ActiveSession,
+		prompt: string,
+	): Promise<void> => {
+		if (session.claimAnalysisComplete || session.state.taskRef) return;
+		session.claimAnalysisComplete = true;
 		try {
-			const client = createClient(session.context, dependencies);
-			const project = await client.resolveProject(
-				session.project.todoistProjectRef,
+			const worktree = await inspectWorktree(
+				dependencies.exec ?? spawnExec,
+				session.context.cwd,
 			);
-			const claimed = await client.claimTask(taskRef, {
-				id: project.id,
-				currentTaskId: taskRef,
+			const worker =
+				dependencies.claimTaskWorker ??
+				createTaskClaimWorker(dependencies.exec ?? spawnExec);
+			const result = await worker({
+				prompt,
+				history: branchTexts(session.context.sessionManager.getBranch()),
+				cwd: session.context.cwd,
+				projectRef: session.project.todoistProjectRef,
+				worktree,
 			});
-			await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
-			session.syncAvailable = true;
-			session.state = applyStatePatch(session.state, {
-				taskRef: claimed.id,
-				taskName: claimed.content,
-				taskUrl:
-					claimed.webUrl ??
-					claimed.url ??
-					`https://app.todoist.com/app/task/${claimed.id}`,
-			});
-			appendState(pi, session.state, !session.allowPrDiscovery);
-			refreshFooterStatuses(session);
-			return true;
+			if (result.status === "none") return;
+			if (result.status === "collision") {
+				if (!session.context.hasUI) return;
+				const taskName = result.taskName ? `\nTask: ${result.taskName}` : "";
+				const accepted = await session.context.ui.confirm(
+					"Todoist task collision",
+					`Detected task is already In Progress.${taskName}\n\nSwitch to this task?`,
+				);
+				if (!accepted) return;
+				await persistClaimedTask(session, result.taskRef, true);
+				return;
+			}
+			await persistClaimedTask(session, result.taskRef, true);
 		} catch {
-			session.context.ui.notify(
-				"Todoist task was not linked from session history",
-				"warning",
-			);
-			return false;
+			// Claim handling is isolated from the main agent and non-fatal.
 		}
 	};
 
@@ -348,8 +322,7 @@ export default function extension(
 					isCurrent,
 				);
 			} catch {
-				if (isCurrent())
-					session.context.ui.notify("Todoist task update failed", "warning");
+				// Todoist synchronization must not interrupt the main agent.
 			}
 		}, 25);
 	};
@@ -512,12 +485,10 @@ export default function extension(
 			allowPrDiscovery,
 			handoffContext,
 			workChanged: false,
+			claimAnalysisComplete: Boolean(state.taskRef),
 			syncAvailable: true,
 			syncGeneration: 0,
 		};
-		const taskWasSynced = state.taskRef
-			? false
-			: await linkInferredTask(active);
 		installTool();
 		if (registered && pi.getActiveTools && pi.setActiveTools) {
 			const activeTools = pi.getActiveTools();
@@ -529,7 +500,7 @@ export default function extension(
 		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
 			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
-		if (state.taskRef && !taskWasSynced) {
+		if (state.taskRef) {
 			try {
 				await syncTodoistToPiTasks(
 					createClient(ctx, dependencies),
@@ -538,7 +509,6 @@ export default function extension(
 				);
 			} catch {
 				active.syncAvailable = false;
-				ctx.ui.notify("Todoist task restore failed", "warning");
 			}
 		}
 	});
@@ -550,17 +520,16 @@ export default function extension(
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!active) return;
-		if (!active.state.taskRef) {
-			await linkInferredTask(active, event.prompt ?? "");
-		}
+		await analyzeTaskClaim(active, event.prompt ?? "");
 		const messages: string[] = [];
-		if (active.handoffContext) {
+		if (active.handoffContext && active.state.prUrl) {
 			messages.push(
-				`This is the task and PR that we were working on.\nTask: ${active.state.taskUrl ?? "none"}\nPR: ${active.state.prUrl ?? "none"}`,
+				`This is the PR that we were working on.\nPR: ${active.state.prUrl}`,
 			);
 			active.handoffContext = false;
+		} else if (active.handoffContext) {
+			active.handoffContext = false;
 		}
-		if (!active.state.taskRef) messages.push(MISSING_TASK_WARNING);
 		if (active.workChanged) {
 			const worktree = await inspectWorktree(
 				dependencies.exec ?? spawnExec,
@@ -600,10 +569,6 @@ export default function extension(
 		if (toolName === "bash") {
 			const command =
 				typeof event.input?.command === "string" ? event.input.command : "";
-			const resultText = textOf(event.content);
-			if (!active.state.taskRef) {
-				await linkInferredTask(active, `${command}\n${resultText}`);
-			}
 			if (
 				/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/.test(
 					command,
@@ -630,16 +595,11 @@ export default function extension(
 							todoistCompletionAttemptedAt: new Date().toISOString(),
 						});
 						appendState(pi, active.state);
-						ctx.ui.notify("Merged PR detected; Todoist task completed", "info");
 					} catch {
 						active.state = applyStatePatch(active.state, {
 							todoistCompletionAttemptedAt: new Date().toISOString(),
 						});
 						appendState(pi, active.state);
-						ctx.ui.notify(
-							"Merged PR detected, but Todoist task completion failed",
-							"warning",
-						);
 					}
 				}
 			}

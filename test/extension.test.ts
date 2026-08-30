@@ -27,6 +27,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const ctx: any = {
 		cwd,
 		mode: "print",
+		hasUI: false,
 		ui: {
 			theme: { fg: (_color: string, text: string) => text },
 			notify: (message: string) => notifications.push(message),
@@ -62,6 +63,7 @@ async function start(
 ) {
 	extension(h.pi, {
 		loadConfig: async () => config(projects),
+		claimTaskWorker: async () => ({ status: "none" }),
 	});
 	await h.handlers.get("session_start")?.(
 		{ type: "session_start", reason: "startup" },
@@ -150,8 +152,8 @@ describe("task synchronization", () => {
 	});
 });
 
-describe("automatic Todoist task linking", () => {
-	it("links a claimed task from session history and refreshes the footer", async () => {
+describe("deferred Todoist task linking", () => {
+	it("does not claim tasks during session startup", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-auto-link-"));
 		const h = harness(root, [
 			{
@@ -186,21 +188,10 @@ describe("automatic Todoist task linking", () => {
 			h.ctx,
 		);
 
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todo-gate-state",
-			data: {
-				taskRef: "42",
-				taskName: "Implement feature",
-				taskUrl: "https://app.todoist.com/app/task/42",
-			},
-		});
-		expect(h.statusCalls.at(-1)).toEqual({
-			key: "pi-todo-gate-task",
-			text: expect.stringContaining("Implement featu..."),
-		});
+		expect(h.appended).toHaveLength(0);
 	});
 
-	it("links a task URL from history when the current prompt confirms the claim", async () => {
+	it("does not claim a task from a later prompt", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-prompt-link-"));
 		const h = harness(root, [
 			{
@@ -224,6 +215,7 @@ describe("automatic Todoist task linking", () => {
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
 			createTodoistClient: () => client,
+			claimTaskWorker: async () => ({ status: "none" }),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -239,17 +231,10 @@ describe("automatic Todoist task linking", () => {
 			h.ctx,
 		);
 
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todo-gate-state",
-			data: {
-				taskRef: "42",
-				taskName: "Implement feature",
-				taskUrl: "https://app.todoist.com/app/task/42",
-			},
-		});
+		expect(h.appended).toHaveLength(0);
 	});
 
-	it("links a successfully moved task as soon as its tool result arrives", async () => {
+	it("does not claim a task from a tool result", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-tool-link-"));
 		const h = harness(root);
 		const client: any = {
@@ -282,18 +267,10 @@ describe("automatic Todoist task linking", () => {
 			h.ctx,
 		);
 
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todo-gate-state",
-			data: {
-				taskRef: "42",
-				taskName: "Implement feature",
-				taskUrl: "https://app.todoist.com/app/task/42",
-			},
-		});
-		expect(h.statusCalls.at(-1)?.text).toContain("Implement featu...");
+		expect(h.appended).toHaveLength(0);
 	});
 
-	it("does not treat the missing-task warning as a claim", async () => {
+	it("does not add missing-task warning to prompt", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-negative-link-"));
 		const h = harness(root, [
 			{
@@ -317,16 +294,14 @@ describe("automatic Todoist task linking", () => {
 });
 
 describe("hidden lifecycle context", () => {
-	it("warns on every prompt only when no task is active", async () => {
+	it("does not add Todoist warnings when no task is active", async () => {
 		const h = harness("/configured/project");
 		await start(h, { "/configured": "merge-td" });
 		const result = await h.handlers.get("before_agent_start")?.(
 			{ type: "before_agent_start", prompt: "work" },
 			h.ctx,
 		);
-		expect(result.message.content).toContain(
-			"you have no claimed a todoist task yet!",
-		);
+		expect(result).toBeUndefined();
 
 		const withTask = harness("/configured/project", [
 			{

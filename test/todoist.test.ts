@@ -88,6 +88,18 @@ describe("TodoistClient", () => {
 		).rejects.toThrow("already in progress");
 	});
 
+	it("allows confirmed switching to another task already in progress", async () => {
+		const fake = fakeTodoist({
+			"task view 42 --json": ok(task({ sectionName: "In Progress" })),
+		});
+		await expect(
+			new TodoistClient(fake.exec).claimTask("42", {
+				id: "project-1",
+				allowInProgress: true,
+			}),
+		).resolves.toMatchObject({ id: "42" });
+	});
+
 	it("resolves section names through supported td section list", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(
