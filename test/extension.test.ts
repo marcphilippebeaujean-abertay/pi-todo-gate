@@ -1,26 +1,45 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
 import type { TodoistClient } from "../src/todoist.ts";
 
+type TestHandlerResult = { message?: { content: string } } | undefined;
+type TestHandler = (
+	event: unknown,
+	ctx: ExtensionContext,
+) => Promise<TestHandlerResult> | TestHandlerResult;
+type TestToolResult = {
+	content: Array<{ type: string; text?: string }>;
+};
+type TestTool = {
+	name: string;
+	execute: (...args: unknown[]) => Promise<TestToolResult>;
+};
+
+function asTodoistClient<T extends object>(value: T): TodoistClient {
+	return value as unknown as TodoistClient;
+}
+
 function harness(cwd: string, branch: unknown[] = []) {
-	const handlers = new Map<
-		string,
-		(event: any, ctx: any) => Promise<any> | any
-	>();
-	const tools: any[] = [];
+	const handlers = new Map<string, TestHandler>();
+	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const notifications: string[] = [];
 	const footerCalls: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
-	const pi: any = {
-		on: (event: string, handler: any) => handlers.set(event, handler),
-		registerTool: (tool: any) => tools.push(tool),
+	const pi = {
+		on: (event: string, handler: unknown) =>
+			handlers.set(event, handler as TestHandler),
+		registerTool: (tool: unknown) => tools.push(tool as TestTool),
 		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
-	};
-	const ctx: any = {
+	} as unknown as ExtensionAPI;
+	const ctx = {
 		cwd,
 		mode: "print",
 		ui: {
@@ -37,7 +56,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 			getSessionDir: () => "/sessions",
 		},
 		exec: async () => ({ stdout: "", stderr: "", code: 0 }),
-	};
+	} as unknown as ExtensionContext;
 	return {
 		pi,
 		ctx,
@@ -136,7 +155,7 @@ describe("Todoist task lifecycle", () => {
 		) as unknown as TodoistClient;
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -175,7 +194,7 @@ describe("automatic Todoist task linking", () => {
 				},
 			},
 		]);
-		const client: any = {
+		const client = {
 			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
 			claimTask: async () => ({
 				id: "42",
@@ -186,7 +205,7 @@ describe("automatic Todoist task linking", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -218,7 +237,7 @@ describe("automatic Todoist task linking", () => {
 				},
 			},
 		]);
-		const client: any = {
+		const client = {
 			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
 			claimTask: async () => ({
 				id: "42",
@@ -229,7 +248,7 @@ describe("automatic Todoist task linking", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -258,7 +277,7 @@ describe("automatic Todoist task linking", () => {
 	it("links a successfully moved task as soon as its tool result arrives", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-tool-link-"));
 		const h = harness(root);
-		const client: any = {
+		const client = {
 			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
 			claimTask: async () => ({
 				id: "42",
@@ -269,7 +288,7 @@ describe("automatic Todoist task linking", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -329,14 +348,14 @@ describe("hidden lifecycle context", () => {
 			{ type: "before_agent_start", prompt: "work" },
 			h.ctx,
 		);
-		expect(result.message.content).toContain(
+		expect(result?.message?.content).toContain(
 			"# Todoist Task Gate (MANDATORY — before any code change on a new branch/worktree)",
 		);
-		expect(result.message.content).toContain(
+		expect(result?.message?.content).toContain(
 			"td task list --project id:6RVXQ9x8qfhxHr4f",
 		);
-		expect(result.message.content).not.toContain("herdr");
-		expect(result.message.content).not.toContain(
+		expect(result?.message?.content).not.toContain("herdr");
+		expect(result?.message?.content).not.toContain(
 			"you have no claimed a todoist task yet!",
 		);
 
@@ -393,10 +412,10 @@ describe("hidden lifecycle context", () => {
 			h.ctx,
 		);
 
-		expect(result.message.content).toContain(
+		expect(result?.message?.content).toContain(
 			"We are tracking tasks with Todoist and you are currently working on task previous-task",
 		);
-		expect(result.message.content).not.toContain(
+		expect(result?.message?.content).not.toContain(
 			"you have no claimed a todoist task yet!",
 		);
 	});
@@ -575,7 +594,7 @@ describe("pi_todo_gate_state", () => {
 			]);
 			let completedRef: string | undefined;
 			let completionAttempts = 0;
-			const client: any = {
+			const client = {
 				completeTask: async (ref: string) => {
 					completionAttempts += 1;
 					completedRef = ref;
@@ -589,7 +608,7 @@ describe("pi_todo_gate_state", () => {
 			});
 			extension(h.pi, {
 				loadConfig: async () => config({ [root]: "merge-td" }),
-				createTodoistClient: () => client,
+				createTodoistClient: () => asTodoistClient(client),
 				exec,
 			});
 			await h.handlers.get("session_start")?.(
@@ -655,7 +674,7 @@ describe("pi_todo_gate_state", () => {
 		}) => void;
 		let verificationStarted = false;
 		let completions = 0;
-		const client: any = {
+		const client = {
 			completeTask: async () => {
 				completions += 1;
 			},
@@ -678,7 +697,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 			exec,
 		});
 		await h.handlers.get("session_start")?.(
@@ -731,7 +750,7 @@ describe("pi_todo_gate_state", () => {
 		let releaseCompletion!: () => void;
 		let completionStarted = false;
 		let completionCalls = 0;
-		const client: any = {
+		const client = {
 			completeTask: async () => {
 				completionCalls += 1;
 				completionStarted = true;
@@ -756,7 +775,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 			exec,
 		});
 		await h.handlers.get("session_start")?.(
@@ -801,7 +820,7 @@ describe("pi_todo_gate_state", () => {
 		]);
 		let releaseCompletion!: () => void;
 		let completionStarted = false;
-		const client: any = {
+		const client = {
 			completeTask: async () => {
 				completionStarted = true;
 				await new Promise<void>((resolve) => {
@@ -825,7 +844,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 			exec,
 		});
 		await h.handlers.get("session_start")?.(
@@ -872,7 +891,7 @@ describe("pi_todo_gate_state", () => {
 			},
 		]);
 		let completedRef: string | undefined;
-		const client: any = {
+		const client = {
 			completeTask: async (ref: string) => {
 				completedRef = ref;
 			},
@@ -892,7 +911,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 			exec,
 		});
 		await h.handlers.get("session_start")?.(
@@ -928,7 +947,7 @@ describe("pi_todo_gate_state", () => {
 		]);
 		let prChecks = 0;
 		let completedRef: string | undefined;
-		const client: any = {
+		const client = {
 			completeTask: async (ref: string) => {
 				completedRef = ref;
 			},
@@ -949,7 +968,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 			exec,
 		});
 		await h.handlers.get("session_start")?.(
@@ -983,7 +1002,7 @@ describe("pi_todo_gate_state", () => {
 					},
 				},
 			]);
-			const client: any = {
+			const client = {
 				completeTask: async () => {
 					throw new Error("Todoist unavailable");
 				},
@@ -995,7 +1014,7 @@ describe("pi_todo_gate_state", () => {
 			});
 			extension(h.pi, {
 				loadConfig: async () => config({ [root]: "merge-td" }),
-				createTodoistClient: () => client,
+				createTodoistClient: () => asTodoistClient(client),
 				exec,
 			});
 			await h.handlers.get("session_start")?.(
@@ -1055,7 +1074,7 @@ describe("pi_todo_gate_state", () => {
 		]);
 		let releaseFirstClaim!: () => void;
 		let firstClaimStarted = false;
-		const client: any = {
+		const client = {
 			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
 			claimTask: async (ref: string) => {
 				if (ref === "first") {
@@ -1074,7 +1093,7 @@ describe("pi_todo_gate_state", () => {
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
+			createTodoistClient: () => asTodoistClient(client),
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
