@@ -78,11 +78,18 @@ export async function inspectWorktree(
 	exec: Exec,
 	cwd: string,
 ): Promise<WorktreeInfo> {
-	const [rootResult, branchResult, listResult] = await Promise.all([
-		exec("git", ["rev-parse", "--show-toplevel"], { cwd }),
-		exec("git", ["branch", "--show-current"], { cwd }),
-		exec("git", ["worktree", "list", "--porcelain"], { cwd }),
-	]);
+	let rootResult: CommandResult;
+	let branchResult: CommandResult;
+	let listResult: CommandResult;
+	try {
+		[rootResult, branchResult, listResult] = await Promise.all([
+			exec("git", ["rev-parse", "--show-toplevel"], { cwd }),
+			exec("git", ["branch", "--show-current"], { cwd }),
+			exec("git", ["worktree", "list", "--porcelain"], { cwd }),
+		]);
+	} catch {
+		return { isWorktree: false, root: null, branch: null };
+	}
 	const root =
 		rootResult.code === 0 && rootResult.stdout.trim()
 			? resolve(rootResult.stdout.trim())
@@ -101,27 +108,65 @@ export async function inspectWorktree(
 	};
 }
 
+export async function findPrState(
+	exec: Exec,
+	cwd: string,
+	prUrl: string,
+): Promise<OpenPrInfo["state"]> {
+	let result: CommandResult;
+	try {
+		result = await exec(
+			"gh",
+			["pr", "view", prUrl, "--json", "state,mergedAt"],
+			{ cwd },
+		);
+	} catch {
+		return "UNKNOWN";
+	}
+	if (result.code !== 0) return "UNKNOWN";
+	try {
+		const row: unknown = JSON.parse(result.stdout);
+		if (typeof row !== "object" || row === null) return "UNKNOWN";
+		const data = row as { state?: unknown; mergedAt?: unknown };
+		if (
+			data.state === "MERGED" &&
+			typeof data.mergedAt === "string" &&
+			data.mergedAt.trim() !== ""
+		)
+			return "MERGED";
+		if (data.state === "OPEN" || data.state === "CLOSED") return data.state;
+		return "UNKNOWN";
+	} catch {
+		return "UNKNOWN";
+	}
+}
+
 export async function findOpenPr(
 	exec: Exec,
 	cwd: string,
 	branch: string,
 ): Promise<OpenPrInfo> {
-	const result = await exec(
-		"gh",
-		[
-			"pr",
-			"list",
-			"--head",
-			branch,
-			"--state",
-			"open",
-			"--json",
-			"url,state",
-			"--limit",
-			"1",
-		],
-		{ cwd },
-	);
+	let result: CommandResult;
+	try {
+		result = await exec(
+			"gh",
+			[
+				"pr",
+				"list",
+				"--head",
+				branch,
+				"--state",
+				"open",
+				"--json",
+				"url,state",
+				"--limit",
+				"1",
+			],
+			{ cwd },
+		);
+	} catch {
+		return { url: null, state: "UNKNOWN" };
+	}
 	if (result.code !== 0) return { url: null, state: "UNKNOWN" };
 	try {
 		const rows: unknown = JSON.parse(result.stdout);
@@ -142,39 +187,47 @@ export async function findOpenPr(
 	}
 }
 
-function shellSegments(command: string): string[] {
+function shellSegments(command: string): string[] | null {
 	const segments: string[] = [];
 	let current = "";
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
+	let terminatedWithOperator = false;
 	for (const character of command) {
 		if (escaped) {
 			current += character;
 			escaped = false;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (character === "\\" && quote !== "'") {
 			current += character;
 			escaped = true;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (quote) {
 			current += character;
 			if (character === quote) quote = null;
+			if (!/\s/.test(character)) terminatedWithOperator = false;
 			continue;
 		}
 		if (character === "'" || character === '"') {
 			quote = character;
 			current += character;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (character === ";" || character === "|" || character === "&") {
 			if (current.trim()) segments.push(current.trim());
 			current = "";
+			terminatedWithOperator = true;
 			continue;
 		}
 		current += character;
+		if (!/\s/.test(character)) terminatedWithOperator = false;
 	}
+	if (quote || escaped || terminatedWithOperator) return null;
 	if (current.trim()) segments.push(current.trim());
 	return segments;
 }
@@ -226,7 +279,7 @@ export function mergeCommand(
 	command: string,
 ): { kind: "git" | "gh"; args: string[] } | null {
 	const segments = shellSegments(command);
-	if (segments.length !== 1) return null;
+	if (segments?.length !== 1) return null;
 	let parsed: { kind: "git" | "gh"; args: string[] } | null = null;
 	for (const segment of segments) {
 		const words = shellWords(segment);
@@ -257,6 +310,35 @@ function positionalArgs(args: string[]): string[] {
 	return args.filter((arg) => arg !== "--" && !arg.startsWith("-"));
 }
 
+const NON_COMPLETING_GIT_MERGE_OPTIONS = new Set(["--no-commit", "--squash"]);
+const NON_COMPLETING_GH_MERGE_OPTIONS = new Set(["--auto", "--dry-run"]);
+
+function hasNonCompletingMergeOption(
+	kind: "git" | "gh",
+	args: readonly string[],
+): boolean {
+	const options =
+		kind === "git"
+			? NON_COMPLETING_GIT_MERGE_OPTIONS
+			: NON_COMPLETING_GH_MERGE_OPTIONS;
+	for (const arg of args) {
+		if (arg === "--") break;
+		if (options.has(arg) || (kind === "gh" && arg.startsWith("--auto=")))
+			return true;
+	}
+	return false;
+}
+
+const GH_MERGE_FLAG_OPTIONS = new Set([
+	"--admin",
+	"--auto",
+	"--delete-branch",
+	"--disable-auto",
+	"--dry-run",
+	"--merge",
+	"--rebase",
+	"--squash",
+]);
 const GH_MERGE_VALUE_OPTIONS = new Set([
 	"--author-email",
 	"--body",
@@ -282,6 +364,7 @@ function ghMergeTargets(args: string[]): string[] | null {
 			continue;
 		}
 		if (arg.startsWith("-")) {
+			if (GH_MERGE_FLAG_OPTIONS.has(arg)) continue;
 			if (index + 1 < args.length && !args[index + 1].startsWith("-"))
 				return null;
 			continue;
@@ -300,11 +383,14 @@ async function queryPinnedHead(
 	cwd: string,
 	prUrl: string,
 ): Promise<string | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", prUrl, "--json", "headRefName"],
-		{ cwd },
-	);
+	let result: CommandResult;
+	try {
+		result = await exec("gh", ["pr", "view", prUrl, "--json", "headRefName"], {
+			cwd,
+		});
+	} catch {
+		return null;
+	}
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -323,11 +409,16 @@ async function queryCurrentPr(
 	cwd: string,
 	target: string,
 ): Promise<{ url: string; headRefName: string } | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", target, "--json", "url,headRefName"],
-		{ cwd },
-	);
+	let result: CommandResult;
+	try {
+		result = await exec(
+			"gh",
+			["pr", "view", target, "--json", "url,headRefName"],
+			{ cwd },
+		);
+	} catch {
+		return null;
+	}
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -350,6 +441,7 @@ export async function matchesPinnedPr(
 	const parsed = mergeCommand(command);
 	const pinned = normalizedUrl(prUrl);
 	if (!parsed || !pinned) return false;
+	if (hasNonCompletingMergeOption(parsed.kind, parsed.args)) return false;
 
 	if (parsed.kind === "gh") {
 		const targets = ghMergeTargets(parsed.args);

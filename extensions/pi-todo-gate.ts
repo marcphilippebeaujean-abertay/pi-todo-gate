@@ -10,6 +10,7 @@ import { renderPrStatus, renderTaskStatus } from "../src/footer.ts";
 import {
 	type Exec,
 	findOpenPr,
+	findPrState,
 	inspectWorktree,
 	matchesPinnedPr,
 	spawnExec,
@@ -43,7 +44,36 @@ export interface ExtensionDependencies {
 }
 
 const STATE_TYPE = "pi-todo-gate-state";
-const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
+const DEFAULT_TODOIST_INSTRUCTIONS = `# Todoist Task Gate (MANDATORY — before any code change on a new branch/worktree)
+
+Every code change on a new branch or worktree must be tracked in the Todoist **Merge TD** project (ID
+\`6RVXQ9x8qfhxHr4f\`). Before touching any code:
+
+1. **Find or create the task** in Merge TD:
+   \`\`\`bash
+   td task list --project id:6RVXQ9x8qfhxHr4f
+   \`\`\`
+    - Match by name against what you're about to do. If a matching task exists, use it.
+    - If no task matches, create one: \`td task add "<description>" --project id:6RVXQ9x8qfhxHr4f\`
+
+2. **Check if already claimed:**
+   \`\`\`bash
+   td task view "<task-ref>"
+   \`\`\`
+    - If the task is in the **In progress** section → **STOP and alert.** Another agent may be working on it. Do not proceed until the task is free.
+
+3. **Claim the task** by moving it to the **In progress** section:
+   \`\`\`bash
+   td task move "<task-ref>" --section "In progress" --project id:6RVXQ9x8qfhxHr4f
+   \`\`\`
+
+4. **After the PR merges**, complete the task:
+   \`\`\`bash
+   td task complete "<task-ref>"
+   \u0060\u0060\u0060
+`;
+const ACTIVE_TASK_CONTEXT =
+	"We are tracking tasks with Todoist and you are currently working on task";
 const stateParameters = Type.Object({
 	action: StringEnum([
 		"status",
@@ -69,6 +99,11 @@ interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
+	mergeRetryCount: number;
+	mergeRetryExhausted: boolean;
+	mergeCompletionInFlight: boolean;
+	mergeRetryTimer?: ReturnType<typeof setTimeout>;
+	taskOperationGeneration: number;
 }
 
 function textOf(value: unknown): string {
@@ -139,7 +174,7 @@ const TODOIST_MOVE_RE =
 const CLAIMED_TASK_RE =
 	/\b(?:claimed|claiming)\s+(?:a\s+)?(?:todoist\s+)?task\b|\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\b|--section\s+(?:"In Progress"|'In Progress'|In Progress)/i;
 const NEGATED_CLAIM_RE =
-	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claimed\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
+	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claim(?:ed|ing)\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
 
 function addMatches(
 	text: string,
@@ -212,6 +247,10 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
+	// Todoist state belongs to parent sessions; child sessions must not claim,
+	// complete, or otherwise mutate the parent's work tracking.
+	if (process.env.PI_SUBAGENT_CHILD === "1") return;
+
 	let active: ActiveSession | null = null;
 	let registered = false;
 
@@ -224,6 +263,17 @@ export default function extension(
 		appendState(pi, active.state);
 		refreshFooterStatuses(active);
 	};
+
+	const beginTaskOperation = (session: ActiveSession): number => {
+		session.taskOperationGeneration += 1;
+		return session.taskOperationGeneration;
+	};
+
+	const isCurrentTaskOperation = (
+		session: ActiveSession,
+		generation: number,
+	): boolean =>
+		active === session && session.taskOperationGeneration === generation;
 
 	const refreshFooterStatuses = (session: ActiveSession): void => {
 		session.context.ui.setStatus(
@@ -245,7 +295,20 @@ export default function extension(
 		session.context.ui.setStatus("pi-todo-gate-task", undefined);
 	};
 
-	const deactivate = (session: ActiveSession): void => {
+	const cancelMergeRetry = (session: ActiveSession, reset = false): void => {
+		if (session.mergeRetryTimer) {
+			clearTimeout(session.mergeRetryTimer);
+			session.mergeRetryTimer = undefined;
+		}
+		if (reset) {
+			session.mergeRetryCount = 0;
+			session.mergeRetryExhausted = false;
+		}
+	};
+
+	const deactivate = async (session: ActiveSession): Promise<void> => {
+		cancelMergeRetry(session, true);
+		session.taskOperationGeneration += 1;
 		clearFooterStatuses(session);
 		session.context.ui.setFooter(undefined);
 	};
@@ -260,15 +323,20 @@ export default function extension(
 			prompt,
 		);
 		if (!taskRef) return false;
+		const generation = beginTaskOperation(session);
+		const isCurrent = (): boolean =>
+			isCurrentTaskOperation(session, generation);
 		try {
 			const client = createClient(session.context, dependencies);
 			const project = await client.resolveProject(
 				session.project.todoistProjectRef,
 			);
+			if (!isCurrent()) return false;
 			const claimed = await client.claimTask(taskRef, {
 				id: project.id,
 				currentTaskId: taskRef,
 			});
+			if (!isCurrent()) return false;
 			session.state = applyStatePatch(session.state, {
 				taskRef: claimed.id,
 				taskName: claimed.content,
@@ -281,12 +349,118 @@ export default function extension(
 			refreshFooterStatuses(session);
 			return true;
 		} catch {
+			if (!isCurrent()) return false;
 			session.context.ui.notify(
 				"Todoist task was not linked from session history",
 				"warning",
 			);
 			return false;
 		}
+	};
+
+	const completeMergedTask = async (
+		session: ActiveSession,
+		expected?: { prUrl: string; taskRef: string },
+	): Promise<boolean> => {
+		const prUrl = session.state.prUrl;
+		const taskRef = session.state.taskRef;
+		const taskGeneration = session.taskOperationGeneration;
+		if (
+			!prUrl ||
+			!taskRef ||
+			session.mergeRetryExhausted ||
+			session.mergeCompletionInFlight ||
+			(expected && (prUrl !== expected.prUrl || taskRef !== expected.taskRef))
+		)
+			return false;
+		cancelMergeRetry(session);
+		session.mergeCompletionInFlight = true;
+		const isCurrent = (): boolean =>
+			active === session &&
+			session.taskOperationGeneration === taskGeneration &&
+			session.state.prUrl === prUrl &&
+			session.state.taskRef === taskRef;
+		try {
+			await createClient(session.context, dependencies).completeTask(taskRef);
+			if (!isCurrent()) return false;
+			session.state = applyStatePatch(session.state, {
+				prUrl: undefined,
+				mergeCompletedAt: new Date().toISOString(),
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			});
+			session.mergeRetryCount = 0;
+			session.mergeRetryExhausted = false;
+			appendState(pi, session.state, true);
+			refreshFooterStatuses(session);
+			session.context.ui.notify(
+				"Merged PR detected; Todoist task completed",
+				"info",
+			);
+			return true;
+		} catch {
+			if (!isCurrent()) return false;
+			session.state = applyStatePatch(session.state, {
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			});
+			appendState(pi, session.state);
+			session.context.ui.notify(
+				"Merged PR detected, but Todoist task completion failed",
+				"warning",
+			);
+			scheduleMergeRetry(session, prUrl, taskRef);
+			return false;
+		} finally {
+			session.mergeCompletionInFlight = false;
+		}
+	};
+
+	const scheduleMergeRetry = (
+		session: ActiveSession,
+		prUrl: string,
+		taskRef: string,
+	): void => {
+		const maxRetries = 3;
+		if (session.mergeRetryCount >= maxRetries) {
+			session.mergeRetryExhausted = true;
+			return;
+		}
+		const retryNumber = session.mergeRetryCount;
+		session.mergeRetryCount += 1;
+		session.mergeRetryTimer = setTimeout(
+			async () => {
+				session.mergeRetryTimer = undefined;
+				if (
+					active !== session ||
+					session.state.prUrl !== prUrl ||
+					session.state.taskRef !== taskRef
+				)
+					return;
+				await completeMergedTask(session, { prUrl, taskRef });
+			},
+			100 * 2 ** retryNumber,
+		);
+	};
+
+	const completeExternallyMergedTask = async (
+		session: ActiveSession,
+	): Promise<void> => {
+		if (!session.state.prUrl || !session.state.taskRef) return;
+		const prUrl = session.state.prUrl;
+		const taskRef = session.state.taskRef;
+		const taskGeneration = session.taskOperationGeneration;
+		const state = await findPrState(
+			dependencies.exec ?? spawnExec,
+			session.context.cwd,
+			prUrl,
+		);
+		if (
+			state === "MERGED" &&
+			active === session &&
+			session.taskOperationGeneration === taskGeneration &&
+			session.state.prUrl === prUrl &&
+			session.state.taskRef === taskRef
+		)
+			await completeMergedTask(session, { prUrl, taskRef });
 	};
 
 	const installTool = (): void => {
@@ -315,6 +489,7 @@ export default function extension(
 					const url = githubPrUrl(params.url ?? "");
 					if (!url)
 						throw new Error("set_pr requires a valid GitHub pull request URL");
+					cancelMergeRetry(session, true);
 					const prChanged = session.state.prUrl !== url;
 					session.state = applyStatePatch(session.state, {
 						prUrl: url,
@@ -331,6 +506,7 @@ export default function extension(
 					return extensionResult(`Pinned PR ${url}`);
 				}
 				if (params.action === "clear_pr") {
+					cancelMergeRetry(session, true);
 					session.state = applyStatePatch(session.state, {
 						prUrl: undefined,
 						mergeCompletedAt: undefined,
@@ -344,33 +520,49 @@ export default function extension(
 				if (params.action === "set_task") {
 					if (!params.task)
 						throw new Error("set_task requires a Todoist task reference");
-					const client = createClient(ctx, dependencies);
-					const project = await client.resolveProject(
-						session.project.todoistProjectRef,
-					);
-					const claimed = await client.claimTask(params.task, {
-						id: project.id,
-						currentTaskId: session.state.taskRef,
-					});
-					const taskChanged = session.state.taskRef !== claimed.id;
-					session.state = applyStatePatch(session.state, {
-						taskRef: claimed.id,
-						taskName: claimed.content,
-						taskUrl: claimed.webUrl ?? claimed.url,
-						...(taskChanged
-							? {
-									mergeCompletedAt: undefined,
-									todoistCompletionAttemptedAt: undefined,
-								}
-							: {}),
-					});
-					appendState(pi, session.state, !session.allowPrDiscovery);
-					refreshFooterStatuses(session);
-					return extensionResult(
-						`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
-					);
+					cancelMergeRetry(session, true);
+					const generation = beginTaskOperation(session);
+					const isCurrent = (): boolean =>
+						isCurrentTaskOperation(session, generation);
+					try {
+						const client = createClient(ctx, dependencies);
+						const project = await client.resolveProject(
+							session.project.todoistProjectRef,
+						);
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						const claimed = await client.claimTask(params.task, {
+							id: project.id,
+							currentTaskId: session.state.taskRef,
+						});
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						const taskChanged = session.state.taskRef !== claimed.id;
+						session.state = applyStatePatch(session.state, {
+							taskRef: claimed.id,
+							taskName: claimed.content,
+							taskUrl: claimed.webUrl ?? claimed.url,
+							...(taskChanged
+								? {
+										mergeCompletedAt: undefined,
+										todoistCompletionAttemptedAt: undefined,
+									}
+								: {}),
+						});
+						appendState(pi, session.state, !session.allowPrDiscovery);
+						refreshFooterStatuses(session);
+						return extensionResult(
+							`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
+						);
+					} catch (error) {
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						throw error;
+					}
 				}
 				if (params.action === "clear_task") {
+					cancelMergeRetry(session, true);
+					beginTaskOperation(session);
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
 						taskName: undefined,
@@ -382,6 +574,8 @@ export default function extension(
 					refreshFooterStatuses(session);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
+				cancelMergeRetry(session, true);
+				beginTaskOperation(session);
 				session.state = {};
 				session.allowPrDiscovery = false;
 				appendState(pi, session.state, true);
@@ -396,7 +590,7 @@ export default function extension(
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (!project) {
 			if (active) {
-				deactivate(active);
+				await deactivate(active);
 				if (pi.getActiveTools && pi.setActiveTools) {
 					pi.setActiveTools(
 						pi.getActiveTools().filter((name) => name !== "pi_todo_gate_state"),
@@ -406,7 +600,7 @@ export default function extension(
 			active = null;
 			return;
 		}
-		if (active) deactivate(active);
+		if (active) await deactivate(active);
 		const branch = ctx.sessionManager.getBranch();
 		const stateEntry = latestStateData(branch);
 		let state = latestState(branch);
@@ -440,6 +634,10 @@ export default function extension(
 			allowPrDiscovery,
 			handoffContext,
 			workChanged: false,
+			mergeRetryCount: 0,
+			mergeRetryExhausted: false,
+			mergeCompletionInFlight: false,
+			taskOperationGeneration: 0,
 		};
 		await linkInferredTask(active);
 		installTool();
@@ -453,6 +651,7 @@ export default function extension(
 		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
 			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
+		await completeExternallyMergedTask(active);
 	});
 
 	pi.on("message_end", async (event) => {
@@ -465,6 +664,7 @@ export default function extension(
 		if (!active.state.taskRef) {
 			await linkInferredTask(active, event.prompt ?? "");
 		}
+		await completeExternallyMergedTask(active);
 		const messages: string[] = [];
 		if (active.handoffContext) {
 			messages.push(
@@ -472,7 +672,11 @@ export default function extension(
 			);
 			active.handoffContext = false;
 		}
-		if (!active.state.taskRef) messages.push(MISSING_TASK_WARNING);
+		if (active.state.taskRef) {
+			messages.push(`${ACTIVE_TASK_CONTEXT} ${active.state.taskRef}`);
+		} else {
+			messages.push(DEFAULT_TODOIST_INSTRUCTIONS);
+		}
 		if (active.workChanged) {
 			const worktree = await inspectWorktree(
 				dependencies.exec ?? spawnExec,
@@ -522,45 +726,31 @@ export default function extension(
 				)
 			)
 				active.workChanged = true;
+			const session = active;
+			const prUrl = session.state.prUrl;
+			const taskRef = session.state.taskRef;
+			const taskGeneration = session.taskOperationGeneration;
 			if (
-				active.state.prUrl &&
-				active.state.taskRef &&
+				prUrl &&
+				taskRef &&
 				(await matchesPinnedPr(
 					dependencies.exec ?? spawnExec,
 					ctx.cwd,
 					command,
-					active.state.prUrl,
-				))
-			) {
-				if (!active.state.todoistCompletionAttemptedAt) {
-					try {
-						await createClient(ctx, dependencies).completeTask(
-							active.state.taskRef,
-						);
-						active.state = applyStatePatch(active.state, {
-							mergeCompletedAt: new Date().toISOString(),
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify("Merged PR detected; Todoist task completed", "info");
-					} catch {
-						active.state = applyStatePatch(active.state, {
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify(
-							"Merged PR detected, but Todoist task completion failed",
-							"warning",
-						);
-					}
-				}
-			}
+					prUrl,
+				)) &&
+				active === session &&
+				session.taskOperationGeneration === taskGeneration &&
+				session.state.prUrl === prUrl &&
+				session.state.taskRef === taskRef
+			)
+				await completeMergedTask(session, { prUrl, taskRef });
 		}
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", async () => {
 		if (!active) return;
-		deactivate(active);
+		await deactivate(active);
 		active = null;
 	});
 }
