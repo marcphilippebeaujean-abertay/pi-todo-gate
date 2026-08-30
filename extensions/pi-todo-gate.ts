@@ -10,6 +10,7 @@ import { renderPrStatus, renderTaskStatus } from "../src/footer.ts";
 import {
 	type Exec,
 	findOpenPr,
+	findPrState,
 	inspectWorktree,
 	matchesPinnedPr,
 	spawnExec,
@@ -85,6 +86,12 @@ interface ActiveSession {
 	syncAvailable: boolean;
 	syncGeneration: number;
 	syncTimer?: ReturnType<typeof setTimeout>;
+	syncInFlight?: Promise<void>;
+	mergeRetryCount: number;
+	mergeRetryExhausted: boolean;
+	mergeCompletionInFlight: boolean;
+	mergeRetryTimer?: ReturnType<typeof setTimeout>;
+	taskOperationGeneration: number;
 }
 
 function textOf(value: unknown): string {
@@ -155,7 +162,7 @@ const TODOIST_MOVE_RE =
 const CLAIMED_TASK_RE =
 	/\b(?:claimed|claiming)\s+(?:a\s+)?(?:todoist\s+)?task\b|\b(?:todoist\s+)?task\s+(?:is\s+)?claimed\b|--section\s+(?:"In Progress"|'In Progress'|In Progress)/i;
 const NEGATED_CLAIM_RE =
-	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claimed\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
+	/\b(?:no|not|never)\s+(?:[a-z]+\s+){0,2}claim(?:ed|ing)\s+(?:a\s+)?(?:todoist\s+)?task\b/i;
 
 function addMatches(
 	text: string,
@@ -252,12 +259,31 @@ export default function extension(
 		await writePiTaskStore(taskPath(session), { nextId: 1, tasks: [] });
 	};
 
-	const cancelScheduledSync = (session: ActiveSession): void => {
-		session.syncGeneration += 1;
+	const beginTaskOperation = (session: ActiveSession): number => {
+		session.taskOperationGeneration += 1;
+		return session.taskOperationGeneration;
+	};
+
+	const isCurrentTaskOperation = (
+		session: ActiveSession,
+		generation: number,
+	): boolean =>
+		active === session && session.taskOperationGeneration === generation;
+
+	const cancelSyncTimer = (session: ActiveSession): void => {
 		if (session.syncTimer) {
 			clearTimeout(session.syncTimer);
 			session.syncTimer = undefined;
 		}
+	};
+
+	const cancelScheduledSync = (session: ActiveSession): void => {
+		session.syncGeneration += 1;
+		cancelSyncTimer(session);
+	};
+
+	const awaitSyncIdle = async (session: ActiveSession): Promise<void> => {
+		await session.syncInFlight;
 	};
 
 	const refreshFooterStatuses = (session: ActiveSession): void => {
@@ -280,8 +306,26 @@ export default function extension(
 		session.context.ui.setStatus("pi-todo-gate-task", undefined);
 	};
 
-	const deactivate = (session: ActiveSession): void => {
-		cancelScheduledSync(session);
+	const cancelMergeRetry = (session: ActiveSession, reset = false): void => {
+		if (session.mergeRetryTimer) {
+			clearTimeout(session.mergeRetryTimer);
+			session.mergeRetryTimer = undefined;
+		}
+		if (reset) {
+			session.mergeRetryCount = 0;
+			session.mergeRetryExhausted = false;
+		}
+	};
+
+	const deactivate = async (session: ActiveSession): Promise<void> => {
+		cancelSyncTimer(session);
+		try {
+			await session.syncInFlight;
+		} finally {
+			cancelScheduledSync(session);
+			cancelMergeRetry(session, true);
+			session.taskOperationGeneration += 1;
+		}
 		clearFooterStatuses(session);
 		session.context.ui.setFooter(undefined);
 	};
@@ -296,16 +340,27 @@ export default function extension(
 			prompt,
 		);
 		if (!taskRef) return false;
+		const generation = beginTaskOperation(session);
+		const isCurrent = (): boolean =>
+			isCurrentTaskOperation(session, generation);
 		try {
 			const client = createClient(session.context, dependencies);
 			const project = await client.resolveProject(
 				session.project.todoistProjectRef,
 			);
+			if (!isCurrent()) return false;
 			const claimed = await client.claimTask(taskRef, {
 				id: project.id,
 				currentTaskId: taskRef,
 			});
-			await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
+			if (!isCurrent()) return false;
+			await syncTodoistToPiTasks(
+				client,
+				claimed.id,
+				taskPath(session),
+				isCurrent,
+			);
+			if (!isCurrent()) return false;
 			session.syncAvailable = true;
 			session.state = applyStatePatch(session.state, {
 				taskRef: claimed.id,
@@ -319,6 +374,7 @@ export default function extension(
 			refreshFooterStatuses(session);
 			return true;
 		} catch {
+			if (!isCurrent()) return false;
 			session.context.ui.notify(
 				"Todoist task was not linked from session history",
 				"warning",
@@ -327,29 +383,148 @@ export default function extension(
 		}
 	};
 
+	const completeMergedTask = async (
+		session: ActiveSession,
+		expected?: { prUrl: string; taskRef: string },
+	): Promise<boolean> => {
+		const prUrl = session.state.prUrl;
+		const taskRef = session.state.taskRef;
+		const taskGeneration = session.taskOperationGeneration;
+		if (
+			!prUrl ||
+			!taskRef ||
+			session.mergeRetryExhausted ||
+			session.mergeCompletionInFlight ||
+			(expected && (prUrl !== expected.prUrl || taskRef !== expected.taskRef))
+		)
+			return false;
+		cancelMergeRetry(session);
+		session.mergeCompletionInFlight = true;
+		const isCurrent = (): boolean =>
+			active === session &&
+			session.taskOperationGeneration === taskGeneration &&
+			session.state.prUrl === prUrl &&
+			session.state.taskRef === taskRef;
+		try {
+			await createClient(session.context, dependencies).completeTask(taskRef);
+			if (!isCurrent()) return false;
+			session.state = applyStatePatch(session.state, {
+				prUrl: undefined,
+				mergeCompletedAt: new Date().toISOString(),
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			});
+			session.mergeRetryCount = 0;
+			session.mergeRetryExhausted = false;
+			appendState(pi, session.state, true);
+			refreshFooterStatuses(session);
+			session.context.ui.notify(
+				"Merged PR detected; Todoist task completed",
+				"info",
+			);
+			return true;
+		} catch {
+			if (!isCurrent()) return false;
+			session.state = applyStatePatch(session.state, {
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			});
+			appendState(pi, session.state);
+			session.context.ui.notify(
+				"Merged PR detected, but Todoist task completion failed",
+				"warning",
+			);
+			scheduleMergeRetry(session, prUrl, taskRef);
+			return false;
+		} finally {
+			session.mergeCompletionInFlight = false;
+		}
+	};
+
+	const scheduleMergeRetry = (
+		session: ActiveSession,
+		prUrl: string,
+		taskRef: string,
+	): void => {
+		const maxRetries = 3;
+		if (session.mergeRetryCount >= maxRetries) {
+			session.mergeRetryExhausted = true;
+			return;
+		}
+		const retryNumber = session.mergeRetryCount;
+		session.mergeRetryCount += 1;
+		session.mergeRetryTimer = setTimeout(
+			async () => {
+				session.mergeRetryTimer = undefined;
+				if (
+					active !== session ||
+					session.state.prUrl !== prUrl ||
+					session.state.taskRef !== taskRef
+				)
+					return;
+				await completeMergedTask(session, { prUrl, taskRef });
+			},
+			100 * 2 ** retryNumber,
+		);
+	};
+
+	const completeExternallyMergedTask = async (
+		session: ActiveSession,
+	): Promise<void> => {
+		if (!session.state.prUrl || !session.state.taskRef) return;
+		const prUrl = session.state.prUrl;
+		const taskRef = session.state.taskRef;
+		const taskGeneration = session.taskOperationGeneration;
+		const state = await findPrState(
+			dependencies.exec ?? spawnExec,
+			session.context.cwd,
+			prUrl,
+		);
+		if (
+			state === "MERGED" &&
+			active === session &&
+			session.taskOperationGeneration === taskGeneration &&
+			session.state.prUrl === prUrl &&
+			session.state.taskRef === taskRef
+		)
+			await completeMergedTask(session, { prUrl, taskRef });
+	};
+
 	const scheduleSync = (session: ActiveSession): void => {
 		const parentRef = session.state.taskRef;
 		if (!parentRef || !session.syncAvailable) return;
-		cancelScheduledSync(session);
+		cancelSyncTimer(session);
 		const generation = session.syncGeneration;
 		const isCurrent = (): boolean =>
-			active === session &&
-			generation === session.syncGeneration &&
-			session.syncAvailable;
+			generation === session.syncGeneration && session.syncAvailable;
 		session.syncTimer = setTimeout(async () => {
 			session.syncTimer = undefined;
 			if (!isCurrent()) return;
+			const previous = session.syncInFlight ?? Promise.resolve();
+			const operation = previous
+				.catch(() => {})
+				.then(async () => {
+					if (!isCurrent()) return;
+					try {
+						const store = await readPiTaskStore(taskPath(session));
+						await syncPiTasksToTodoist(
+							createClient(session.context, dependencies),
+							parentRef,
+							store ?? { nextId: 1, tasks: [] },
+							isCurrent,
+						);
+					} catch {
+						if (isCurrent())
+							session.context.ui.notify(
+								"Todoist task update failed",
+								"warning",
+							);
+					}
+				});
+			session.syncInFlight = operation;
 			try {
-				const store = await readPiTaskStore(taskPath(session));
-				await syncPiTasksToTodoist(
-					createClient(session.context, dependencies),
-					parentRef,
-					store ?? { nextId: 1, tasks: [] },
-					isCurrent,
-				);
-			} catch {
-				if (isCurrent())
-					session.context.ui.notify("Todoist task update failed", "warning");
+				await operation;
+			} finally {
+				if (session.syncInFlight === operation)
+					session.syncInFlight = undefined;
 			}
 		}, 25);
 	};
@@ -380,6 +555,7 @@ export default function extension(
 					const url = githubPrUrl(params.url ?? "");
 					if (!url)
 						throw new Error("set_pr requires a valid GitHub pull request URL");
+					cancelMergeRetry(session, true);
 					const prChanged = session.state.prUrl !== url;
 					session.state = applyStatePatch(session.state, {
 						prUrl: url,
@@ -396,6 +572,7 @@ export default function extension(
 					return extensionResult(`Pinned PR ${url}`);
 				}
 				if (params.action === "clear_pr") {
+					cancelMergeRetry(session, true);
 					session.state = applyStatePatch(session.state, {
 						prUrl: undefined,
 						mergeCompletedAt: undefined,
@@ -409,37 +586,77 @@ export default function extension(
 				if (params.action === "set_task") {
 					if (!params.task)
 						throw new Error("set_task requires a Todoist task reference");
-					cancelScheduledSync(session);
-					const client = createClient(ctx, dependencies);
-					const project = await client.resolveProject(
-						session.project.todoistProjectRef,
-					);
-					const claimed = await client.claimTask(params.task, {
-						id: project.id,
-						currentTaskId: session.state.taskRef,
-					});
-					await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
-					session.syncAvailable = true;
-					const taskChanged = session.state.taskRef !== claimed.id;
-					session.state = applyStatePatch(session.state, {
-						taskRef: claimed.id,
-						taskName: claimed.content,
-						taskUrl: claimed.webUrl ?? claimed.url,
-						...(taskChanged
-							? {
-									mergeCompletedAt: undefined,
-									todoistCompletionAttemptedAt: undefined,
-								}
-							: {}),
-					});
-					appendState(pi, session.state, !session.allowPrDiscovery);
-					refreshFooterStatuses(session);
-					return extensionResult(
-						`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
-					);
+					cancelSyncTimer(session);
+					cancelMergeRetry(session, true);
+					const generation = beginTaskOperation(session);
+					const isCurrent = (): boolean =>
+						isCurrentTaskOperation(session, generation);
+					try {
+						await awaitSyncIdle(session);
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						cancelScheduledSync(session);
+						const client = createClient(ctx, dependencies);
+						const project = await client.resolveProject(
+							session.project.todoistProjectRef,
+						);
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						const claimed = await client.claimTask(params.task, {
+							id: project.id,
+							currentTaskId: session.state.taskRef,
+						});
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						await syncTodoistToPiTasks(
+							client,
+							claimed.id,
+							taskPath(session),
+							isCurrent,
+						);
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						session.syncAvailable = true;
+						const taskChanged = session.state.taskRef !== claimed.id;
+						session.state = applyStatePatch(session.state, {
+							taskRef: claimed.id,
+							taskName: claimed.content,
+							taskUrl: claimed.webUrl ?? claimed.url,
+							...(taskChanged
+								? {
+										mergeCompletedAt: undefined,
+										todoistCompletionAttemptedAt: undefined,
+									}
+								: {}),
+						});
+						appendState(pi, session.state, !session.allowPrDiscovery);
+						refreshFooterStatuses(session);
+						return extensionResult(
+							`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
+						);
+					} catch (error) {
+						if (!isCurrent())
+							return extensionResult("Todoist task change superseded");
+						throw error;
+					}
 				}
 				if (params.action === "clear_task") {
-					cancelScheduledSync(session);
+					cancelSyncTimer(session);
+					cancelMergeRetry(session, true);
+					const generation = beginTaskOperation(session);
+					try {
+						await awaitSyncIdle(session);
+						if (!isCurrentTaskOperation(session, generation))
+							return extensionResult("Todoist task change superseded");
+						cancelScheduledSync(session);
+						await clearLocalTasks(session);
+					} catch (error) {
+						if (!isCurrentTaskOperation(session, generation))
+							return extensionResult("Todoist task change superseded");
+						throw error;
+					}
+					if (!isCurrentTaskOperation(session, generation))
+						return extensionResult("Todoist task change superseded");
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
 						taskName: undefined,
@@ -447,15 +664,22 @@ export default function extension(
 						mergeCompletedAt: undefined,
 						todoistCompletionAttemptedAt: undefined,
 					});
-					await clearLocalTasks(session);
 					appendState(pi, session.state, !session.allowPrDiscovery);
 					refreshFooterStatuses(session);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
+				cancelSyncTimer(session);
+				cancelMergeRetry(session, true);
+				const generation = beginTaskOperation(session);
+				await awaitSyncIdle(session);
+				if (!isCurrentTaskOperation(session, generation))
+					return extensionResult("Todoist task change superseded");
 				cancelScheduledSync(session);
+				await clearLocalTasks(session);
+				if (!isCurrentTaskOperation(session, generation))
+					return extensionResult("Todoist task change superseded");
 				session.state = {};
 				session.allowPrDiscovery = false;
-				await clearLocalTasks(session);
 				appendState(pi, session.state, true);
 				refreshFooterStatuses(session);
 				return extensionResult("Cleared session PR and task links");
@@ -468,7 +692,7 @@ export default function extension(
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (!project) {
 			if (active) {
-				deactivate(active);
+				await deactivate(active);
 				if (pi.getActiveTools && pi.setActiveTools) {
 					pi.setActiveTools(
 						pi.getActiveTools().filter((name) => name !== "pi_todo_gate_state"),
@@ -478,7 +702,7 @@ export default function extension(
 			active = null;
 			return;
 		}
-		if (active) deactivate(active);
+		if (active) await deactivate(active);
 		const branch = ctx.sessionManager.getBranch();
 		const stateEntry = latestStateData(branch);
 		let state = latestState(branch);
@@ -514,10 +738,16 @@ export default function extension(
 			workChanged: false,
 			syncAvailable: true,
 			syncGeneration: 0,
+			mergeRetryCount: 0,
+			mergeRetryExhausted: false,
+			mergeCompletionInFlight: false,
+			taskOperationGeneration: 0,
 		};
 		const taskWasSynced = state.taskRef
 			? false
 			: await linkInferredTask(active);
+		const restoreGeneration =
+			state.taskRef && !taskWasSynced ? beginTaskOperation(active) : undefined;
 		installTool();
 		if (registered && pi.getActiveTools && pi.setActiveTools) {
 			const activeTools = pi.getActiveTools();
@@ -529,18 +759,25 @@ export default function extension(
 		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
 			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
-		if (state.taskRef && !taskWasSynced) {
+		if (state.taskRef && !taskWasSynced && restoreGeneration !== undefined) {
+			const restoreSession = active;
+			const isCurrent = (): boolean =>
+				isCurrentTaskOperation(restoreSession, restoreGeneration);
 			try {
 				await syncTodoistToPiTasks(
 					createClient(ctx, dependencies),
 					state.taskRef,
 					taskPath(active),
+					isCurrent,
 				);
 			} catch {
-				active.syncAvailable = false;
-				ctx.ui.notify("Todoist task restore failed", "warning");
+				if (isCurrent()) {
+					active.syncAvailable = false;
+					ctx.ui.notify("Todoist task restore failed", "warning");
+				}
 			}
 		}
+		await completeExternallyMergedTask(active);
 	});
 
 	pi.on("message_end", async (event) => {
@@ -553,6 +790,7 @@ export default function extension(
 		if (!active.state.taskRef) {
 			await linkInferredTask(active, event.prompt ?? "");
 		}
+		await completeExternallyMergedTask(active);
 		const messages: string[] = [];
 		if (active.handoffContext) {
 			messages.push(
@@ -610,39 +848,25 @@ export default function extension(
 				)
 			)
 				active.workChanged = true;
+			const session = active;
+			const prUrl = session.state.prUrl;
+			const taskRef = session.state.taskRef;
+			const taskGeneration = session.taskOperationGeneration;
 			if (
-				active.state.prUrl &&
-				active.state.taskRef &&
+				prUrl &&
+				taskRef &&
 				(await matchesPinnedPr(
 					dependencies.exec ?? spawnExec,
 					ctx.cwd,
 					command,
-					active.state.prUrl,
-				))
-			) {
-				if (!active.state.todoistCompletionAttemptedAt) {
-					try {
-						await createClient(ctx, dependencies).completeTask(
-							active.state.taskRef,
-						);
-						active.state = applyStatePatch(active.state, {
-							mergeCompletedAt: new Date().toISOString(),
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify("Merged PR detected; Todoist task completed", "info");
-					} catch {
-						active.state = applyStatePatch(active.state, {
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify(
-							"Merged PR detected, but Todoist task completion failed",
-							"warning",
-						);
-					}
-				}
-			}
+					prUrl,
+				)) &&
+				active === session &&
+				session.taskOperationGeneration === taskGeneration &&
+				session.state.prUrl === prUrl &&
+				session.state.taskRef === taskRef
+			)
+				await completeMergedTask(session, { prUrl, taskRef });
 		}
 		if (taskToolNames.has(toolName)) scheduleSync(active);
 	});
@@ -651,9 +875,9 @@ export default function extension(
 		if (active) scheduleSync(active);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", async () => {
 		if (!active) return;
-		deactivate(active);
+		await deactivate(active);
 		active = null;
 	});
 }

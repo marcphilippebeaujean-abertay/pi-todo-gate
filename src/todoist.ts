@@ -80,12 +80,15 @@ function nullableString(value: unknown): string | null | undefined {
 function taskFromPayload(value: unknown): TodoistTask {
 	const data = record(value);
 	const id = stringValue(data.id);
-	if (!id) throw new TodoistError("response", "task has no id");
+	const content = stringValue(data.content);
+	const projectId = stringValue(data.projectId ?? data.project_id);
+	if (!id || !content || !projectId)
+		throw new TodoistError("response", "task has missing required fields");
 	return {
 		id,
-		content: stringValue(data.content),
+		content,
 		description: stringValue(data.description),
-		projectId: stringValue(data.projectId ?? data.project_id),
+		projectId,
 		sectionId: nullableString(data.sectionId ?? data.section_id),
 		sectionName: nullableString(data.sectionName ?? data.section_name),
 		parentId: nullableString(data.parentId ?? data.parent_id),
@@ -98,7 +101,8 @@ function childList(value: unknown): unknown[] {
 	if (Array.isArray(value)) return value;
 	const data = record(value);
 	if (Array.isArray(data.tasks)) return data.tasks;
-	return Array.isArray(data.results) ? data.results : [];
+	if (Array.isArray(data.results)) return data.results;
+	throw new TodoistError("response", "expected a list payload");
 }
 
 export class TodoistClient {
@@ -198,7 +202,7 @@ export class TodoistClient {
 	}
 
 	async completeTask(ref: string): Promise<void> {
-		await this.run(["task", "complete", ref]);
+		await this.run(["task", "complete", ref], false);
 	}
 
 	async listDescendants(ref: string): Promise<TodoistChild[]> {
@@ -212,9 +216,15 @@ export class TodoistClient {
 		return children;
 	}
 
-	async deleteDescendants(children: readonly TodoistChild[]): Promise<void> {
+	async deleteDescendants(
+		children: readonly TodoistChild[],
+		isCurrent?: () => boolean,
+	): Promise<void> {
 		for (const child of children) {
-			if (child.children?.length) await this.deleteDescendants(child.children);
+			if (isCurrent && !isCurrent()) return;
+			if (child.children?.length)
+				await this.deleteDescendants(child.children, isCurrent);
+			if (isCurrent && !isCurrent()) return;
 			await this.run(["task", "delete", `id:${child.id}`, "--yes"]);
 		}
 	}

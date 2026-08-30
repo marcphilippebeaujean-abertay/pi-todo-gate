@@ -124,11 +124,12 @@ export async function readPiTaskStore(
 	return { nextId, tasks };
 }
 
-export async function writePiTaskStore(
+const taskStoreWrites = new Map<string, Promise<void>>();
+
+async function writePiTaskStoreNow(
 	path: string,
 	data: PiTaskStoreData,
 ): Promise<void> {
-	ensureFileBacked(path);
 	await mkdir(dirname(path), { recursive: true });
 	const temporary = `${path}.tmp`;
 	await writeFile(temporary, JSON.stringify(data, null, 2), "utf8");
@@ -141,6 +142,23 @@ export async function writePiTaskStore(
 			/* preserve the original rename error */
 		}
 		throw error;
+	}
+}
+
+export async function writePiTaskStore(
+	path: string,
+	data: PiTaskStoreData,
+): Promise<void> {
+	ensureFileBacked(path);
+	const previous = taskStoreWrites.get(path) ?? Promise.resolve();
+	const operation = previous
+		.catch(() => {})
+		.then(() => writePiTaskStoreNow(path, data));
+	taskStoreWrites.set(path, operation);
+	try {
+		await operation;
+	} finally {
+		if (taskStoreWrites.get(path) === operation) taskStoreWrites.delete(path);
 	}
 }
 
@@ -273,7 +291,7 @@ export async function syncPiTasksToTodoist(
 	assertCurrent();
 	const descendants = await client.listDescendants(parentRef);
 	assertCurrent();
-	await client.deleteDescendants(descendants);
+	await client.deleteDescendants(descendants, isCurrent);
 	assertCurrent();
 	for (const subtask of piTasksToTodoistSubtasks(store.tasks)) {
 		assertCurrent();
@@ -285,8 +303,10 @@ export async function syncTodoistToPiTasks(
 	client: TodoistClient,
 	parentRef: string,
 	path: string,
+	isCurrent?: () => boolean,
 ): Promise<PiTaskStoreData> {
 	const descendants = await client.listDescendants(parentRef);
+	if (isCurrent && !isCurrent()) throw new SyncCancelledError();
 	const store = todoistSubtasksToPiTasks(descendants);
 	await writePiTaskStore(path, store);
 	return store;

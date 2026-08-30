@@ -3,6 +3,7 @@ import {
 	type CommandResult,
 	type Exec,
 	findOpenPr,
+	findPrState,
 	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
@@ -39,6 +40,17 @@ describe("inspectWorktree", () => {
 		});
 	});
 
+	it("returns an inert result when a git lookup rejects", async () => {
+		const exec: Exec = async () => {
+			throw new Error("git unavailable");
+		};
+		await expect(inspectWorktree(exec, "/repo")).resolves.toEqual({
+			isWorktree: false,
+			root: null,
+			branch: null,
+		});
+	});
+
 	it("identifies the main checkout", async () => {
 		const exec = fakeExec({
 			"git rev-parse --show-toplevel": ok("/repo\n"),
@@ -52,6 +64,43 @@ describe("inspectWorktree", () => {
 			root: "/repo",
 			branch: "main",
 		});
+	});
+});
+
+describe("findPrState", () => {
+	it("requires a real merged state", async () => {
+		const exec = fakeExec({
+			"gh pr view https://github.com/o/r/pull/42 --json state,mergedAt": ok(
+				'{"state":"OPEN","mergedAt":""}',
+			),
+		});
+		await expect(
+			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
+		).resolves.toBe("OPEN");
+	});
+
+	it("returns unknown when PR lookup executor rejects", async () => {
+		const exec: Exec = async () => {
+			throw new Error("gh unavailable");
+		};
+		await expect(
+			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
+		).resolves.toBe("UNKNOWN");
+		await expect(findOpenPr(exec, "/repo", "feature")).resolves.toEqual({
+			url: null,
+			state: "UNKNOWN",
+		});
+	});
+
+	it("does not accept merged state without mergedAt", async () => {
+		const exec = fakeExec({
+			"gh pr view https://github.com/o/r/pull/42 --json state,mergedAt": ok(
+				'{"state":"MERGED","mergedAt":null}',
+			),
+		});
+		await expect(
+			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
+		).resolves.toBe("UNKNOWN");
 	});
 });
 
@@ -108,6 +157,49 @@ describe("mergeCommand", () => {
 		expect(mergeCommand("git status && printf 'git merge no'")).toBeNull();
 		expect(mergeCommand("git merge feature/a; git merge feature/b")).toBeNull();
 		expect(mergeCommand("git merge feature/a; true")).toBeNull();
+		expect(mergeCommand("git merge feature/a;")).toBeNull();
+		expect(mergeCommand("git merge feature/a &&")).toBeNull();
+		expect(mergeCommand("git merge 'feature/a")).toBeNull();
+	});
+
+	it("accepts valueless gh merge flags before target", async () => {
+		await expect(
+			matchesPinnedPr(
+				fakeExec({}),
+				"/repo",
+				"gh pr merge --squash https://github.com/o/r/pull/42",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(true);
+	});
+
+	it("rejects non-completing merge commands", async () => {
+		expect(mergeCommand("gh pr merge 42 --auto")).not.toBeNull();
+		expect(mergeCommand("gh pr merge 42 --dry-run")).not.toBeNull();
+		await expect(
+			matchesPinnedPr(
+				fakeExec({}),
+				"/repo",
+				"gh pr merge https://github.com/o/r/pull/42 --auto",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(false);
+		await expect(
+			matchesPinnedPr(
+				fakeExec({}),
+				"/repo",
+				"gh pr merge https://github.com/o/r/pull/42 --dry-run",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(false);
+		await expect(
+			matchesPinnedPr(
+				fakeExec({}),
+				"/repo",
+				"git merge --no-commit feature/auth",
+				"https://github.com/o/r/pull/42",
+			),
+		).resolves.toBe(false);
 	});
 
 	it("ignores unrelated commands", () => {
