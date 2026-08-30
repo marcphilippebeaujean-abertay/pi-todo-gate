@@ -5,6 +5,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
 import type { TodoistClient } from "../src/todoist/client.ts";
+import { createTodoistModule } from "../src/todoist/module.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 type TestTool = {
@@ -472,6 +473,93 @@ describe("PR link validation", () => {
 });
 
 describe("PR lifecycle isolation", () => {
+	it("does not install Todoist module from stale session initialization", async () => {
+		const h = harness("/configured/project");
+		let configCalls = 0;
+		let configStarted!: () => void;
+		let releaseConfig!: () => void;
+		const configStartedSignal = new Promise<void>((resolve) => {
+			configStarted = resolve;
+		});
+		const configReady = new Promise<void>((resolve) => {
+			releaseConfig = resolve;
+		});
+		const loadConfig = async () => {
+			configCalls += 1;
+			if (configCalls === 1) {
+				configStarted();
+				await configReady;
+			}
+			return config({ "/configured": "Merge TD" });
+		};
+		extension(h.pi, { loadConfig });
+		const sessionStart = h.handlers.get("session_start");
+		expect(sessionStart).toBeDefined();
+		if (!sessionStart)
+			throw new Error("session_start handler was not registered");
+
+		const staleStart = sessionStart(
+			{ type: "session_start", reason: "startup" },
+			h.ctx,
+		);
+		await configStartedSignal;
+		const currentStart = sessionStart(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+		await currentStart;
+		releaseConfig();
+		await staleStart;
+
+		expect(
+			h.tools.filter((tool) => tool.name === "pi_todoist_gate_state"),
+		).toHaveLength(1);
+	});
+
+	it("does not run Todoist hooks before startup finishes", async () => {
+		const h = harness("/configured/project", [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: "Claimed Todoist task https://app.todoist.com/app/task/42",
+				},
+			},
+		]);
+		let resolveProject!: (value: { id: string; name: string }) => void;
+		const projectReady = new Promise<{ id: string; name: string }>(
+			(resolve) => {
+				resolveProject = resolve;
+			},
+		);
+		const client = {
+			resolveProject: async () => projectReady,
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+			}),
+		} as unknown as TodoistClient;
+		const todoist = createTodoistModule(
+			h.pi,
+			{ codingRoot: "/configured", todoistProjectRef: "Merge TD" },
+			{ projects: { "/configured": "Merge TD" } },
+			{ createTodoistClient: () => client },
+		);
+		const startup = todoist.sessionStart({}, h.ctx);
+		let beforeSettled = false;
+		const beforeStartup = todoist.beforeAgentStart("continue").then(() => {
+			beforeSettled = true;
+		});
+		await Promise.resolve();
+		expect(beforeSettled).toBe(true);
+		await beforeStartup;
+		resolveProject({ id: "project-1", name: "Merge TD" });
+		await startup;
+
+		expect(h.tools.map((tool) => tool.name)).toContain("pi_todoist_gate_state");
+	});
+
 	it("does not inherit an unresolved PR link", async () => {
 		const h = harness("/repo");
 		const exec = async (command: string, args: string[]) => {

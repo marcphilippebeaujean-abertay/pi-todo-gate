@@ -79,23 +79,36 @@ export default function extension(
 	};
 	const pr = createPrModule(pi, prDependencies);
 	let todoist: TodoistModule | null = null;
+	let sessionGeneration = 0;
 
 	pi.on("session_start", async (event, ctx) => {
+		const generation = ++sessionGeneration;
 		if (todoist) {
 			todoist.deactivate();
 			todoist = null;
 		}
 		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
+		if (generation !== sessionGeneration) return;
 
 		const config = await (dependencies.loadConfig ?? loadConfig)();
+		if (generation !== sessionGeneration) return;
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (project) {
-			todoist = createTodoistModule(pi, project, config, todoistDependencies);
-			await forwardSafely(
-				ctx,
-				"Todoist",
-				() => todoist?.sessionStart(event, ctx) ?? Promise.resolve(),
+			const nextTodoist = createTodoistModule(
+				pi,
+				project,
+				config,
+				todoistDependencies,
 			);
+			todoist = nextTodoist;
+			await forwardSafely(ctx, "Todoist", () =>
+				nextTodoist.sessionStart(event, ctx),
+			);
+			if (generation !== sessionGeneration) {
+				nextTodoist.deactivate();
+				if (todoist === nextTodoist) todoist = null;
+				return;
+			}
 		}
 		updateActiveTools(pi, todoist !== null);
 	});
@@ -149,6 +162,7 @@ export default function extension(
 	});
 
 	pi.on("session_shutdown", async () => {
+		++sessionGeneration;
 		pr.deactivate();
 		todoist?.deactivate();
 		todoist = null;

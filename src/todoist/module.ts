@@ -173,6 +173,7 @@ export function createTodoistModule(
 	let state: TodoistState = {};
 	let registered = false;
 	let operationGeneration = 0;
+	let ready = false;
 
 	const refreshStatus = (): void => {
 		if (!context) return;
@@ -190,14 +191,17 @@ export function createTodoistModule(
 		);
 	};
 
-	const linkInferredTask = async (prompt = ""): Promise<boolean> => {
+	const linkInferredTask = async (
+		prompt = "",
+		expectedGeneration?: number,
+	): Promise<boolean> => {
 		if (!context || state.taskRef) return false;
 		const taskRef = inferClaimedTaskRef(
 			context.sessionManager.getBranch(),
 			prompt,
 		);
 		if (!taskRef) return false;
-		const generation = ++operationGeneration;
+		const generation = expectedGeneration ?? ++operationGeneration;
 		try {
 			const client = createClient(context as ExtensionContext, dependencies);
 			const resolved = await client.resolveProject(project.todoistProjectRef);
@@ -239,6 +243,7 @@ export function createTodoistModule(
 			parameters: stateParameters,
 			async execute(_toolCallId, params: StateAction, _signal, _onUpdate, ctx) {
 				if (!context) throw new Error("Todoist tracking is inactive");
+				if (!ready) throw new Error("Todoist tracking is initializing");
 				if (params.action === "status")
 					return extensionResult(
 						JSON.stringify({ ...state, codingRoot: project.codingRoot }),
@@ -287,6 +292,8 @@ export function createTodoistModule(
 
 	return {
 		async sessionStart(event, nextContext) {
+			const generation = ++operationGeneration;
+			ready = false;
 			context = nextContext;
 			state =
 				latestCustomState(
@@ -312,23 +319,27 @@ export function createTodoistModule(
 					if (state.taskRef) appendState();
 				}
 			}
-			await linkInferredTask();
+			await linkInferredTask("", generation);
+			if (generation !== operationGeneration) return;
 			registerTool();
 			refreshStatus();
+			if (generation === operationGeneration) ready = true;
 		},
 		async beforeAgentStart(prompt) {
-			if (!context) return "";
+			if (!context || !ready) return "";
 			await linkInferredTask(prompt);
 			return todoistContext(state, project.todoistProjectRef);
 		},
 		async toolResult(input) {
-			if (!context || input.isError || input.toolName !== "bash") return;
+			if (!context || !ready || input.isError || input.toolName !== "bash")
+				return;
 			await linkInferredTask(
 				`${input.command ?? ""}\n${textOf(input.content)}`,
 			);
 		},
 		deactivate() {
 			++operationGeneration;
+			ready = false;
 			if (context) context.ui.setStatus("pi-todo-gate-task", undefined);
 			context = null;
 			state = {};
