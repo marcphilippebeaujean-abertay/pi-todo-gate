@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-	type CommandResult,
-	type Exec,
-} from "../src/shared/command.ts";
-import { inspectProject } from "../src/shared/project.ts";
-import {
 	findOpenPr,
 	findPrState,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../src/git.ts";
+} from "../src/pr/git.ts";
+import type { CommandResult, Exec } from "../src/shared/command.ts";
+import { inspectProject } from "../src/shared/project.ts";
 
 const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", code: 0 });
 const fail = (stderr = "error"): CommandResult => ({
