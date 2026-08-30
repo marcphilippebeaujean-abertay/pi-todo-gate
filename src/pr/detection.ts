@@ -16,7 +16,7 @@ function normalizedGithubPrUrl(candidate: string): string | null {
 	}
 }
 
-function githubPrUrls(text: string): string[] {
+export function githubPrUrls(text: string): string[] {
 	const urls: string[] = [];
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
 		const normalized = normalizedGithubPrUrl(candidate);

@@ -379,6 +379,96 @@ describe("PR link validation", () => {
 
 		expect(h.appended).toHaveLength(0);
 	});
+
+	it("skips an unresolved history URL and pins the next existing PR", async () => {
+		const h = harness("/repo", [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content:
+						"https://github.com/o/r/pull/42 https://github.com/o/r/pull/43",
+				},
+			},
+		]);
+		const exec = async (command: string, args: string[]) => {
+			if (command !== "gh") return { stdout: "", stderr: "", code: 1 };
+			if (args[2] === "https://github.com/o/r/pull/43")
+				return {
+					stdout: '{"state":"OPEN","mergedAt":""}',
+					stderr: "",
+					code: 0,
+				};
+			return { stdout: "", stderr: "not found", code: 1 };
+		};
+
+		await start(h, {}, { exec });
+
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-pr-gate-state",
+			data: {
+				prUrl: "https://github.com/o/r/pull/43",
+				discoveryDisabled: false,
+			},
+		});
+	});
+
+	it("does not restore a pending PR pin after clear_pr", async () => {
+		const h = harness("/repo");
+		let resolveLookup!: (result: {
+			stdout: string;
+			stderr: string;
+			code: number;
+		}) => void;
+		const lookup = new Promise<{
+			stdout: string;
+			stderr: string;
+			code: number;
+		}>((resolve) => {
+			resolveLookup = resolve;
+		});
+		const exec = async (command: string) => {
+			if (command === "gh") return lookup;
+			return { stdout: "", stderr: "", code: 1 };
+		};
+
+		await start(h, {}, { exec });
+		const prTool = h.tools.find((tool) => tool.name === "pi_pr_gate_state");
+		expect(prTool).toBeDefined();
+		if (!prTool) throw new Error("PR tool was not registered");
+
+		const pendingPin = prTool.execute(
+			"call",
+			{
+				action: "set_pr",
+				url: "https://github.com/o/r/pull/42",
+			},
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await prTool.execute(
+			"call",
+			{ action: "clear_pr" },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		resolveLookup({
+			stdout: '{"state":"OPEN","mergedAt":""}',
+			stderr: "",
+			code: 0,
+		});
+		await pendingPin;
+
+		expect(h.appended.at(-1)).toMatchObject({
+			type: "pi-pr-gate-state",
+			data: { discoveryDisabled: true },
+		});
+		expect((h.appended.at(-1) as { data: { prUrl?: string } }).data.prUrl).toBe(
+			undefined,
+		);
+	});
 });
 
 describe("independent state tools", () => {
