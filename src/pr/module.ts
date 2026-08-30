@@ -270,8 +270,20 @@ export function createPrModule(
 						isPrState,
 					);
 					if (inherited) {
-						state = inherited;
-						appendState();
+						let canInherit = true;
+						if (inherited.prUrl) {
+							const inheritedPrState = await findPrState(
+								dependencies.exec ?? spawnExec,
+								context?.cwd ?? nextContext.cwd,
+								inherited.prUrl,
+							);
+							if (generation !== operationGeneration) return;
+							canInherit = inheritedPrState !== "UNKNOWN";
+						}
+						if (canInherit) {
+							state = inherited;
+							appendState();
+						}
 					}
 				}
 			}

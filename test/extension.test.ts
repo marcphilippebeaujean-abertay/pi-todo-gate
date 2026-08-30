@@ -472,6 +472,39 @@ describe("PR link validation", () => {
 });
 
 describe("PR lifecycle isolation", () => {
+	it("does not inherit an unresolved PR link", async () => {
+		const h = harness("/repo");
+		const exec = async (command: string, args: string[]) => {
+			if (command === "git" && args[0] === "rev-parse")
+				return { stdout: "/repo\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "branch")
+				return { stdout: "feature\\n", stderr: "", code: 0 };
+			if (command === "git" && args[0] === "worktree")
+				return { stdout: "worktree /main\\n", stderr: "", code: 0 };
+			return { stdout: "", stderr: "not found", code: 1 };
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({}),
+			exec,
+			openSession: () => ({
+				getCwd: () => "/repo",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-pr-gate-state",
+						data: { prUrl: "https://github.com/o/r/pull/42" },
+					},
+				],
+			}),
+		});
+		await h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new", previousSessionFile: "previous" },
+			h.ctx,
+		);
+
+		expect(h.appended).toHaveLength(0);
+	});
+
 	it("resets work-change guidance when session changes", async () => {
 		const h = harness("/repo");
 		const exec = async (command: string, args: string[]) => {
@@ -512,6 +545,75 @@ describe("PR lifecycle isolation", () => {
 		expect(contextContent(afterReset)).not.toContain(
 			"When implementation is finished, push this branch and create a GitHub PR.",
 		);
+	});
+
+	it("deactivates Todoist before new session initialization awaits", async () => {
+		const h = harness("/configured/project");
+		let holdConfig = false;
+		let configStarted!: () => void;
+		let releaseConfig!: () => void;
+		const configStartedSignal = new Promise<void>((resolve) => {
+			configStarted = resolve;
+		});
+		const configReady = new Promise<void>((resolve) => {
+			releaseConfig = resolve;
+		});
+		let resolveClaim!: (value: {
+			id: string;
+			content: string;
+			webUrl: string;
+		}) => void;
+		const claim = new Promise<{
+			id: string;
+			content: string;
+			webUrl: string;
+		}>((resolve) => {
+			resolveClaim = resolve;
+		});
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Merge TD" }),
+			claimTask: async () => claim,
+		};
+		const loadConfig = async () => {
+			if (holdConfig) {
+				configStarted();
+				await configReady;
+			}
+			return config({ "/configured": "Merge TD" });
+		};
+		await start(
+			h,
+			{ "/configured": "Merge TD" },
+			{ loadConfig, createTodoistClient: () => client },
+		);
+		const todoistTool = h.tools.find(
+			(tool) => tool.name === "pi_todoist_gate_state",
+		);
+		expect(todoistTool).toBeDefined();
+		if (!todoistTool) throw new Error("Todoist tool was not registered");
+		const pendingClaim = todoistTool.execute(
+			"call",
+			{ action: "set_task", task: "42" },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		holdConfig = true;
+		const pendingStart = h.handlers.get("session_start")?.(
+			{ type: "session_start", reason: "new" },
+			h.ctx,
+		);
+		await configStartedSignal;
+		resolveClaim({
+			id: "42",
+			content: "Implement feature",
+			webUrl: "https://app.todoist.com/app/task/42",
+		});
+		await pendingClaim;
+		expect(h.appended).toHaveLength(0);
+		// Release new session config after stale operation has been invalidated.
+		releaseConfig();
+		await pendingStart;
 	});
 
 	it("quiesces old PR state while a new session initializes", async () => {

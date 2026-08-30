@@ -81,14 +81,14 @@ export default function extension(
 	let todoist: TodoistModule | null = null;
 
 	pi.on("session_start", async (event, ctx) => {
-		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
-
-		const config = await (dependencies.loadConfig ?? loadConfig)();
-		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (todoist) {
 			todoist.deactivate();
 			todoist = null;
 		}
+		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
+
+		const config = await (dependencies.loadConfig ?? loadConfig)();
+		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (project) {
 			todoist = createTodoistModule(pi, project, config, todoistDependencies);
 			await forwardSafely(
