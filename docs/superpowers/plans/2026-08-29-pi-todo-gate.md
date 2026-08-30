@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an explicitly configured, session-scoped Pi extension that links GitHub PRs and Todoist tasks, guides worktree PR completion, and silently synchronizes Pi task lists with Todoist subtasks.
+**Goal:** Build an explicitly configured, session-scoped Pi extension that links GitHub PRs and Todoist tasks and guides worktree PR completion.
 
-**Architecture:** A lazy-activated TypeScript extension resolves the nearest configured coding-project ancestor before registering behavior. Pure adapters isolate configuration, session state, URL parsing, Git inspection, Todoist CLI calls, Pi task-store conversion, and footer rendering. Runtime hooks coordinate those adapters while keeping synchronization out of model context.
+**Architecture:** A lazy-activated TypeScript extension resolves the nearest configured coding-project ancestor before registering behavior. Pure adapters isolate configuration, session state, URL parsing, Git inspection, Todoist CLI calls, and footer rendering. Runtime hooks coordinate those adapters without adding hidden task-management integrations.
 
 **Tech Stack:** TypeScript, Node.js built-ins, Pi ExtensionAPI, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `typebox`, `vitest`, `td`, `git`, and `gh`.
 
@@ -23,10 +23,6 @@
 - Active task must belong to resolved configured Todoist project and be claimed in `In Progress`.
 - Successful matching `git merge` and `gh pr merge` may complete the active Todoist task.
 - Worktree guidance reminds but never pushes or creates a PR automatically.
-- Pi-task synchronization emits no context message, custom message, sync tool call, or prompt text.
-- Outbound sync deletes all Todoist descendants under active parent before recreation.
-- Inbound restore treats Todoist subtasks as authoritative and replaces local Pi tasks.
-- Old Todoist parent and its subtasks remain unchanged when active task switches.
 - Invoke external commands with argument arrays; never interpolate untrusted values into shell commands.
 - Write tests before production code and demonstrate each new behavior failing first.
 - No changes to `AGENTS.md` or other project instruction files.
@@ -43,15 +39,13 @@
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/session-state.ts` — state reconstruction and serialized state transitions.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/pr-detection.ts` — GitHub PR URL extraction and first-wins scanning.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/git.ts` — Git/worktree/branch/open-PR probes and merge matching.
-- `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/todoist.ts` — `td` command adapter, project validation, task claim, completion, and subtree operations.
-- `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/pi-tasks-sync.ts` — documented Pi task-store reader/writer and Pi↔Todoist task conversion.
+- `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/todoist.ts` — `td` command adapter, project validation, task claim, and completion.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/footer.ts` — compact clickable footer component and status preservation.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/config.test.ts` — activation/config tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/session-state.test.ts` — state and inheritance tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/pr-detection.test.ts` — URL tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/git.test.ts` — worktree/PR/merge tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/todoist.test.ts` — CLI argument and claim tests.
-- `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/pi-tasks-sync.test.ts` — conversion, replacement, deletion-order, and loop tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/footer.test.ts` — hyperlink and width tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/extension.test.ts` — mocked Pi lifecycle integration tests.
 - `/Users/marcphilippebeaujean/Documents/pi-todo-gate/install.sh` — explicit local installation/symlink script.
@@ -372,13 +366,8 @@ export interface TodoistTask {
   projectId: string;
   sectionId?: string | null;
   sectionName?: string | null;
-  parentId?: string | null;
   url?: string;
   webUrl?: string;
-}
-
-export interface TodoistChild extends TodoistTask {
-  children?: TodoistChild[];
 }
 
 export interface TodoistExec {
@@ -391,15 +380,12 @@ export class TodoistClient {
   getTask(ref: string): Promise<TodoistTask>;
   claimTask(ref: string, project: { id: string }): Promise<TodoistTask>;
   completeTask(ref: string): Promise<void>;
-  listDescendants(ref: string): Promise<TodoistChild[]>;
-  deleteDescendants(children: readonly TodoistChild[]): Promise<void>;
-  createSubtask(parentRef: string, input: { content: string; description: string }): Promise<TodoistTask>;
 }
 ```
 
 - [ ] **Step 1: Write failing CLI tests**
 
-Use a fake `TodoistExec` that records argument arrays. Cover project resolution by name and ID, task project mismatch, existing `In Progress` rejection, same-session claim acceptance, task move arguments, canonical URL selection, completion, recursive child listing, deepest-first deletion, and no shell interpolation.
+Use a fake `TodoistExec` that records argument arrays. Cover project resolution by name and ID, task project mismatch, existing `In Progress` rejection, same-session claim acceptance, task move arguments, canonical URL selection, completion, and no shell interpolation.
 
 - [ ] **Step 2: Run tests**
 
@@ -423,11 +409,7 @@ td task move <task-ref> --section In Progress --project id:<project-id>
 
 Return `webUrl`, then `url`, then a constructed Todoist URL only when the CLI provides enough identity.
 
-- [ ] **Step 5: Implement task lifecycle and descendants**
-
-`completeTask` invokes `td task complete <task-ref>`. `listDescendants` recursively queries children. `deleteDescendants` flattens leaves-first and invokes `td task delete id:<id> --yes`. `createSubtask` invokes `td task add <content> --parent <parent-ref> --description <description>`.
-
-- [ ] **Step 6: Run checks and commit**
+- [ ] **Step 5: Run checks and commit**
 
 ```bash
 npm test -- --run test/todoist.test.ts
@@ -436,81 +418,7 @@ git add src/types.ts src/todoist.ts test/todoist.test.ts
 git commit -m "feat: claim and complete configured todoist tasks"
 ```
 
-## Task 6: Implement hidden Pi-task store synchronization
-
-**Files:**
-- Create: `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/pi-tasks-sync.ts`
-- Create: `/Users/marcphilippebeaujean/Documents/pi-todo-gate/test/pi-tasks-sync.test.ts`
-
-**Interfaces:**
-
-```ts
-export interface PiTask {
-  id: string;
-  subject: string;
-  description: string;
-  status: "pending" | "in_progress" | "completed";
-  activeForm?: string;
-  owner?: string;
-  metadata: Record<string, unknown>;
-  blocks: string[];
-  blockedBy: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface PiTaskStoreData {
-  nextId: number;
-  tasks: PiTask[];
-}
-
-export function sessionTaskPath(cwd: string, sessionId: string): string;
-export async function readPiTaskStore(path: string): Promise<PiTaskStoreData | null>;
-export async function writePiTaskStore(path: string, data: PiTaskStoreData): Promise<void>;
-export function todoistSubtasksToPiTasks(children: readonly TodoistChild[]): PiTaskStoreData;
-export function piTasksToTodoistSubtasks(tasks: readonly PiTask[]): Array<{ content: string; description: string }>;
-export async function syncPiTasksToTodoist(client: TodoistClient, parentRef: string, store: PiTaskStoreData): Promise<void>;
-export async function syncTodoistToPiTasks(client: TodoistClient, parentRef: string, path: string): Promise<PiTaskStoreData>;
-```
-
-- [ ] **Step 1: Write failing conversion tests**
-
-Cover status markers `[ ]`, `[~]`, `[x]`, subject/description preservation, owner/dependency metadata, stable IDs from an internal description marker, manually-created subtasks receiving new IDs, empty parent behavior, and malformed store rejection.
-
-- [ ] **Step 2: Write failing sync-order tests**
-
-Use fake Todoist client methods. Assert all descendants are deleted deepest-first before creation, no parent description update occurs, and a failed delete/create stops and reports failure.
-
-- [ ] **Step 3: Run tests**
-
-```bash
-npm test -- --run test/pi-tasks-sync.test.ts
-```
-
-Expected: FAIL.
-
-- [ ] **Step 4: Implement documented store access**
-
-Use the default path `/active/coding/root/.pi/tasks/tasks-<session-id>.json`. Read `TaskStoreData`, normalize missing arrays and metadata, and reject unrelated JSON shapes. Write atomically through a sibling temporary file followed by rename. Refuse writes when `PI_TASKS=off`, memory scope, or an incompatible configured path is detected.
-
-- [ ] **Step 5: Implement conversion**
-
-Encode the Pi ID in a machine-readable private description line so inbound recreation can preserve identity. Prefix content with status marker. Store owner and dependency references in description lines. Do not add synchronization instructions or model-facing messages.
-
-- [ ] **Step 6: Implement inbound/outbound sync**
-
-Inbound clears/replaces local store only after all Todoist descendants have been fetched successfully. Outbound deletes all descendants, then creates direct subtasks. A parent with no children writes an empty task list. Use an in-process origin flag to prevent recursive sync scheduling.
-
-- [ ] **Step 7: Run checks and commit**
-
-```bash
-npm test -- --run test/pi-tasks-sync.test.ts
-npm run typecheck
-git add src/pi-tasks-sync.ts test/pi-tasks-sync.test.ts
-git commit -m "feat: synchronize pi tasks with todoist subtasks"
-```
-
-## Task 7: Implement footer renderer
+## Task 6: Implement footer renderer
 
 **Files:**
 - Create: `/Users/marcphilippebeaujean/Documents/pi-todo-gate/src/footer.ts`
@@ -558,7 +466,7 @@ git add src/footer.ts test/footer.test.ts
 git commit -m "feat: show clickable work links in footer"
 ```
 
-## Task 8: Wire extension lifecycle, agent tool, and hidden sync
+## Task 7: Wire extension lifecycle and agent tool
 
 **Files:**
 - Create: `/Users/marcphilippebeaujean/Documents/pi-todo-gate/extensions/pi-todo-gate.ts`
@@ -585,9 +493,6 @@ Use a mocked `ExtensionAPI` and `ExtensionContext` to prove:
 - session start restores state and inherits previous session state;
 - first history PR is pinned and later PRs are ignored;
 - missing-task warning appears in `before_agent_start` only when task is absent;
-- sync internals never call `sendMessage` or `sendUserMessage`;
-- `set_task` clears local Pi tasks and loads new parent subtasks;
-- outbound sync runs after task tool results and `agent_settled` with debounce;
 - merge completion requires successful matching command;
 - worktree guidance appears only after work changes and missing open PR;
 - explicit PR override survives later automatic discovery.
@@ -610,13 +515,13 @@ Restore current branch state. When current state is empty and `previousSessionFi
 
 - [ ] **Step 5: Implement hidden PR discovery**
 
-Scan session branch message text during startup and finalized message events. On first valid PR URL with empty state, persist it and refresh footer. Ignore extension-generated state/sync entries.
+Scan session branch message text during startup and finalized message events. On first valid PR URL with empty state, persist it and refresh footer. Ignore extension-generated entries.
 
 - [ ] **Step 6: Implement agent state tool**
 
-Use `Type.Object` plus `StringEnum` for action schema. `status` returns current PR/task and activation root. `set_pr` validates GitHub URL and persists override. `clear_pr` clears only PR. `set_task` validates and claims the new Todoist task, fetches its subtasks, and only after all inbound work succeeds atomically replaces the local active task association and Pi task store. If validation or inbound sync fails, preserve the previous task association and local Pi tasks. `clear_task` clears association and local Pi tasks without touching Todoist. `clear_all` clears both local associations and local Pi task store without changing remote Todoist subtasks.
+Use `Type.Object` plus `StringEnum` for action schema. `status` returns current PR/task and activation root. `set_pr` validates GitHub URL and persists override. `clear_pr` clears only PR. `set_task` validates and claims the new Todoist task. `clear_task` clears the association without touching Todoist. `clear_all` clears all local associations without changing Todoist.
 
-Tool output may describe state mutation but must not describe hidden synchronization internals.
+Tool output may describe state mutation without exposing internal lifecycle details.
 
 - [ ] **Step 7: Implement prompt guidance**
 
@@ -626,17 +531,17 @@ In `before_agent_start`, append only:
 - one-time prior-session task/PR context;
 - worktree push/create-PR guidance when matched conditions hold.
 
-Do not mention Pi↔Todoist synchronization.
+Do not expose internal lifecycle details.
 
-- [ ] **Step 8: Implement task and merge hooks**
+- [ ] **Step 8: Implement merge hook**
 
-On successful `tool_result` for `TaskCreate`, `TaskUpdate`, `TaskStop`, or `TaskExecute`, schedule outbound sync. On `agent_settled`, schedule one final sync. On successful bash result matching pinned merge, complete active Todoist task, persist idempotency metadata, and notify agent.
+On successful bash result matching pinned merge, complete active Todoist task, persist idempotency metadata, and notify agent.
 
 Track work changes from successful edit/write results and Git state changes. Cache open-PR lookup for the prompt turn to avoid duplicate network calls.
 
 - [ ] **Step 9: Implement session and shutdown cleanup**
 
-Install/update footer only in TUI. On session shutdown, clear footer, cancel pending sync timer, and release any resources. Do not start watchers or processes in the extension factory.
+Install/update footer only in TUI. On session shutdown, clear footer and release any resources. Do not start watchers or processes in the extension factory.
 
 - [ ] **Step 10: Run integration checks and commit**
 
@@ -648,7 +553,7 @@ git add extensions/pi-todo-gate.ts test/extension.test.ts
 git commit -m "feat: wire session-aware todo gate extension"
 ```
 
-## Task 9: Add installation and configuration workflow
+## Task 8: Add installation and configuration workflow
 
 **Files:**
 - Create: `/Users/marcphilippebeaujean/Documents/pi-todo-gate/install.sh`
@@ -685,7 +590,7 @@ git add install.sh package.json test/install-script.test.ts
 git commit -m "feat: add explicit local installation workflow"
 ```
 
-## Task 10: Full verification and manual TUI check
+## Task 9: Full verification and manual TUI check
 
 **Files:**
 - Modify: tests only when a failing verification exposes missing behavior.
@@ -715,9 +620,7 @@ Configure `/Users/marcphilippebeaujean/Documents/tower-chess` to Todoist project
 - Caveman status remains visible;
 - missing-task warning appears when task is cleared;
 - `set_pr` changes automatic PR selection;
-- `set_task` claims task and loads Todoist subtasks into Pi tasks;
-- changing task preserves old Todoist subtasks and replaces local Pi tasks;
-- Pi task updates recreate only new parent’s descendants;
+- `set_task` claims the selected Todoist task;
 - new-session inheritance shows task/PR context once;
 - linked worktree with edits and no open PR receives push/create-PR guidance;
 - successful matching local/remote merge completes Todoist parent and notifies agent.
@@ -734,16 +637,15 @@ Commit any final test-only fixes separately with a focused message.
 
 ## Plan Self-Review
 
-- Activation: Task 2 and Task 8 cover nearest ancestor, no default, and fully inert unmatched projects.
-- Session state: Task 3 and Task 8 cover current restore, previous-session inheritance, explicit clears, and one-shot context.
-- PR handling: Task 3 and Task 8 cover first-wins discovery and agent override.
-- Todoist claiming: Task 5 and Task 8 cover configurable project validation, `In Progress`, completion, and failures.
-- Worktree guidance: Task 4 and Task 8 cover worktree detection, changed-work tracking, open PR lookup, and non-mutating reminders.
-- Merge completion: Task 4, Task 5, and Task 8 cover local/remote commands, conservative matching, idempotency, and notification.
-- Hidden two-way sync: Task 6 and Task 8 cover hooks, direct store access, inbound authority, outbound replacement, loop prevention, and unsupported scopes.
-- Footer: Task 7 and Task 8 cover OSC 8 links, width limits, TUI-only behavior, branch refresh, and Caveman compatibility.
-- Safety: Tasks 4, 5, 6, and 8 cover argv-based commands, inactive no-op behavior, error preservation, and no context leakage.
-- Installation: Task 9 covers local standalone deployment without automatic settings mutation.
-- Verification: Task 10 covers automated and manual acceptance criteria.
+- Activation: Task 2 and Task 7 cover nearest ancestor, no default, and fully inert unmatched projects.
+- Session state: Task 3 and Task 7 cover current restore, previous-session inheritance, explicit clears, and one-shot context.
+- PR handling: Task 3 and Task 7 cover first-wins discovery and agent override.
+- Todoist claiming: Task 5 and Task 7 cover configurable project validation, `In Progress`, completion, and failures.
+- Worktree guidance: Task 4 and Task 7 cover worktree detection, changed-work tracking, open PR lookup, and non-mutating reminders.
+- Merge completion: Task 4, Task 5, and Task 7 cover local/remote commands, conservative matching, idempotency, and notification.
+- Footer: Task 6 and Task 7 cover OSC 8 links, width limits, TUI-only behavior, branch refresh, and Caveman compatibility.
+- Safety: Tasks 4, 5, and 7 cover argv-based commands, inactive no-op behavior, error preservation, and no context leakage.
+- Installation: Task 8 covers local standalone deployment without automatic settings mutation.
+- Verification: Task 9 covers automated and manual acceptance criteria.
 
 Placeholder scan performed while writing: no `TBD`, `FIXME`, or incomplete implementation markers remain.

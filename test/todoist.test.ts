@@ -186,52 +186,6 @@ describe("TodoistClient", () => {
 		expect(fake.calls).toEqual([["task", "complete", "id:42"]]);
 	});
 
-	it("lists recursive descendants and deletes deepest first", async () => {
-		const fake = fakeTodoist({
-			"task list --parent 42 --json": ok([
-				task({ id: "child", parentId: "42" }),
-			]),
-			"task list --parent child --json": ok([
-				task({ id: "grandchild", parentId: "child" }),
-			]),
-			"task list --parent grandchild --json": ok([]),
-			"task delete id:grandchild --yes": ok({}),
-			"task delete id:child --yes": ok({}),
-		});
-		const client = new TodoistClient(fake.exec);
-		await expect(client.listDescendants("42")).resolves.toMatchObject([
-			{ id: "child", children: [{ id: "grandchild" }] },
-		]);
-		await client.deleteDescendants(await client.listDescendants("42"));
-		expect(fake.calls.slice(-2)).toEqual([
-			["task", "delete", "id:grandchild", "--yes"],
-			["task", "delete", "id:child", "--yes"],
-		]);
-	});
-
-	it("creates subtasks without shell interpolation", async () => {
-		const fake = fakeTodoist({
-			"task add content with spaces; $HOME --parent 42 --description description && rm -rf / --json":
-				ok(task({ id: "new" })),
-		});
-		await expect(
-			new TodoistClient(fake.exec).createSubtask("42", {
-				content: "content with spaces; $HOME",
-				description: "description && rm -rf /",
-			}),
-		).resolves.toMatchObject({ id: "new" });
-		expect(fake.calls[0]).toEqual([
-			"task",
-			"add",
-			"content with spaces; $HOME",
-			"--parent",
-			"42",
-			"--description",
-			"description && rm -rf /",
-			"--json",
-		]);
-	});
-
 	it("returns a typed sanitized error for failed CLI commands", async () => {
 		const fake = fakeTodoist({
 			"task complete 42": fail("token=super-secret failed"),

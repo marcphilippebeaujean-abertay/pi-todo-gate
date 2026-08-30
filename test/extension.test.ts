@@ -1,13 +1,9 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
-import {
-	readPiTaskStore,
-	sessionTaskPath,
-	writePiTaskStore,
-} from "../src/pi-tasks-sync.ts";
+import type { TodoistClient } from "../src/todoist.ts";
 
 function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<
@@ -95,58 +91,49 @@ describe("lazy activation", () => {
 	});
 });
 
-describe("task synchronization", () => {
-	it("reads the task store from the active worktree", async () => {
-		const configuredRoot = await mkdtemp(
-			join(tmpdir(), "pi-todo-gate-project-"),
-		);
-		const worktree = join(configuredRoot, ".worktrees", "dialog-edit");
-		const h = harness(worktree, [
+describe("Todoist task lifecycle", () => {
+	it("claims tasks without extra task operations", async () => {
+		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-task-lifecycle-"));
+		const h = harness(root);
+		const accessed: string[] = [];
+		const client = new Proxy(
 			{
-				type: "custom",
-				customType: "pi-todo-gate-state",
-				data: {
-					taskRef: "parent",
-					taskUrl: "https://app.todoist.com/app/task/parent",
+				resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
+				claimTask: async (ref: string) => ({
+					id: ref,
+					content: "Implement feature",
+					webUrl: `https://app.todoist.com/app/task/${ref}`,
+					projectId: "project-1",
+				}),
+			},
+			{
+				get(target, property, receiver) {
+					if (!(property in target)) accessed.push(String(property));
+					return Reflect.get(target, property, receiver);
 				},
 			},
-		]);
-		const created: string[] = [];
-		const client: any = {
-			listDescendants: async () => [],
-			deleteDescendants: async () => {},
-			createSubtask: async (parent: string, task: { content: string }) => {
-				created.push(`${parent}:${task.content}`);
-			},
-		};
+		) as unknown as TodoistClient;
 		extension(h.pi, {
-			loadConfig: async () => config({ [configuredRoot]: "merge-td" }),
+			loadConfig: async () => config({ [root]: "merge-td" }),
 			createTodoistClient: () => client,
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
 			h.ctx,
 		);
-		await writePiTaskStore(sessionTaskPath(worktree, "session-current"), {
-			nextId: 2,
-			tasks: [
-				{
-					id: "1",
-					subject: "Worktree task",
-					description: "",
-					status: "pending",
-					metadata: {},
-					blocks: [],
-					blockedBy: [],
-					createdAt: 1,
-					updatedAt: 1,
-				},
-			],
+
+		await expect(
+			h.tools[0].execute(
+				"call",
+				{ action: "set_task", task: "42" },
+				undefined,
+				undefined,
+				h.ctx,
+			),
+		).resolves.toMatchObject({
+			content: [{ text: expect.stringContaining("Claimed Todoist task") }],
 		});
-		await h.handlers.get("agent_settled")?.({ type: "agent_settled" }, h.ctx);
-		await vi.waitFor(() => {
-			expect(created).toEqual(["parent:[ ] Worktree task"]);
-		});
+		expect(accessed).toEqual([]);
 	});
 });
 
@@ -175,7 +162,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: "https://app.todoist.com/app/task/42",
 				projectId: "project-1",
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
@@ -219,7 +205,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: "https://app.todoist.com/app/task/42",
 				projectId: "project-1",
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
@@ -260,7 +245,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: "https://app.todoist.com/app/task/42",
 				projectId: "project-1",
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
@@ -383,7 +367,7 @@ describe("hidden lifecycle context", () => {
 		expect(h.appended).toHaveLength(1);
 	});
 
-	it("never sends synchronization messages to the agent", async () => {
+	it("never sends hidden lifecycle messages through send APIs", async () => {
 		const h = harness("/configured/project");
 		let sent = 0;
 		h.pi.sendMessage = () => {
@@ -482,7 +466,6 @@ describe("pi_todo_gate_state", () => {
 		]);
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => ({ listDescendants: async () => [] }) as any,
 		});
 		await h.handlers.get("session_start")?.(
 			{ type: "session_start", reason: "startup" },
@@ -501,54 +484,6 @@ describe("pi_todo_gate_state", () => {
 		});
 	});
 
-	it("does not run a pending old-parent sync after switching tasks", async () => {
-		vi.useFakeTimers();
-		try {
-			const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-extension-"));
-			const h = harness(root, [
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { taskRef: "old" },
-				},
-			]);
-			const calls: string[] = [];
-			const client: any = {
-				resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
-				claimTask: async (ref: string) => ({
-					id: ref,
-					webUrl: `https://app.todoist.com/app/task/${ref}`,
-					projectId: "project-1",
-				}),
-				listDescendants: async (ref: string) => {
-					calls.push(`list:${ref}`);
-					return [];
-				},
-			};
-			extension(h.pi, {
-				loadConfig: async () => config({ [root]: "merge-td" }),
-				createTodoistClient: () => client,
-			});
-			await h.handlers.get("session_start")?.(
-				{ type: "session_start", reason: "startup" },
-				h.ctx,
-			);
-			calls.length = 0;
-			await h.handlers.get("agent_settled")?.({ type: "agent_settled" }, h.ctx);
-			await h.tools[0].execute(
-				"call",
-				{ action: "set_task", task: "new" },
-				undefined,
-				undefined,
-				h.ctx,
-			);
-			await vi.advanceTimersByTimeAsync(30);
-			expect(calls).toEqual(["list:new"]);
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
 	it("records failed Todoist completion attempts", async () => {
 		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-extension-"));
 		const h = harness(root, [
@@ -562,7 +497,6 @@ describe("pi_todo_gate_state", () => {
 			},
 		]);
 		const client: any = {
-			listDescendants: async () => [],
 			completeTask: async () => {
 				throw new Error("Todoist unavailable");
 			},
@@ -594,105 +528,6 @@ describe("pi_todo_gate_state", () => {
 			(h.appended.at(-1) as { data: { todoistCompletionAttemptedAt?: string } })
 				.data.todoistCompletionAttemptedAt,
 		).toEqual(expect.any(String));
-	});
-
-	it("does not outbound-sync after an inbound restore failure", async () => {
-		vi.useFakeTimers();
-		try {
-			const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-extension-"));
-			const h = harness(root, [
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { taskRef: "old" },
-				},
-			]);
-			let lists = 0;
-			const client: any = {
-				listDescendants: async () => {
-					lists += 1;
-					throw new Error("restore failed");
-				},
-			};
-			extension(h.pi, {
-				loadConfig: async () => config({ [root]: "merge-td" }),
-				createTodoistClient: () => client,
-			});
-			await h.handlers.get("session_start")?.(
-				{ type: "session_start", reason: "startup" },
-				h.ctx,
-			);
-			await h.handlers.get("agent_settled")?.({ type: "agent_settled" }, h.ctx);
-			await vi.advanceTimersByTimeAsync(30);
-			expect(lists).toBe(1);
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it("switches tasks only after loading the new parent's subtasks", async () => {
-		const root = await mkdtemp(join(tmpdir(), "pi-todo-gate-extension-"));
-		const h = harness(root, [
-			{
-				type: "custom",
-				customType: "pi-todo-gate-state",
-				data: {
-					taskRef: "old",
-					taskUrl: "https://app.todoist.com/app/task/old",
-				},
-			},
-		]);
-		const calls: string[] = [];
-		const client: any = {
-			resolveProject: async () => ({ id: "project-1", name: "merge-td" }),
-			claimTask: async (ref: string) => ({
-				id: ref,
-				content: "Add dialog controls",
-				webUrl: `https://app.todoist.com/app/task/${ref}`,
-				projectId: "project-1",
-			}),
-			listDescendants: async (ref: string) => {
-				calls.push(`list:${ref}`);
-				return [
-					{
-						id: "new-child",
-						content: "[ ] New child",
-						description: "",
-						projectId: "project-1",
-					},
-				];
-			},
-		};
-		extension(h.pi, {
-			loadConfig: async () => config({ [root]: "merge-td" }),
-			createTodoistClient: () => client,
-		});
-		await h.handlers.get("session_start")?.(
-			{ type: "session_start", reason: "startup" },
-			h.ctx,
-		);
-		calls.length = 0;
-		await h.tools[0].execute(
-			"call",
-			{ action: "set_task", task: "new-parent" },
-			undefined,
-			undefined,
-			h.ctx,
-		);
-		expect(calls).toEqual(["list:new-parent"]);
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todo-gate-state",
-			data: {
-				taskRef: "new-parent",
-				taskName: "Add dialog controls",
-				taskUrl: "https://app.todoist.com/app/task/new-parent",
-			},
-		});
-		await expect(
-			readPiTaskStore(sessionTaskPath(root, "session-current")),
-		).resolves.toMatchObject({
-			tasks: [{ subject: "New child" }],
-		});
 	});
 
 	it("rejects invalid PR URLs without persisting them", async () => {

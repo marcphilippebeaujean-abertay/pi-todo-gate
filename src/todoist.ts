@@ -7,13 +7,8 @@ export interface TodoistTask {
 	projectId: string;
 	sectionId?: string | null;
 	sectionName?: string | null;
-	parentId?: string | null;
 	url?: string;
 	webUrl?: string;
-}
-
-export interface TodoistChild extends TodoistTask {
-	children?: TodoistChild[];
 }
 
 export interface TodoistExec {
@@ -88,7 +83,6 @@ function taskFromPayload(value: unknown): TodoistTask {
 		projectId: stringValue(data.projectId ?? data.project_id),
 		sectionId: nullableString(data.sectionId ?? data.section_id),
 		sectionName: nullableString(data.sectionName ?? data.section_name),
-		parentId: nullableString(data.parentId ?? data.parent_id),
 		url: safeHttpUrl(data.url),
 		webUrl: safeHttpUrl(data.webUrl ?? data.web_url),
 	};
@@ -199,41 +193,5 @@ export class TodoistClient {
 
 	async completeTask(ref: string): Promise<void> {
 		await this.run(["task", "complete", ref]);
-	}
-
-	async listDescendants(ref: string): Promise<TodoistChild[]> {
-		const payload = await this.run(["task", "list", "--parent", ref, "--json"]);
-		const children: TodoistChild[] = [];
-		for (const item of childList(payload)) {
-			const child = taskFromPayload(item) as TodoistChild;
-			child.children = await this.listDescendants(child.id);
-			children.push(child);
-		}
-		return children;
-	}
-
-	async deleteDescendants(children: readonly TodoistChild[]): Promise<void> {
-		for (const child of children) {
-			if (child.children?.length) await this.deleteDescendants(child.children);
-			await this.run(["task", "delete", `id:${child.id}`, "--yes"]);
-		}
-	}
-
-	async createSubtask(
-		parentRef: string,
-		input: { content: string; description: string },
-	): Promise<TodoistTask> {
-		return taskFromPayload(
-			await this.run([
-				"task",
-				"add",
-				input.content,
-				"--parent",
-				parentRef,
-				"--description",
-				input.description,
-				"--json",
-			]),
-		);
 	}
 }

@@ -14,13 +14,6 @@ import {
 	matchesPinnedPr,
 	spawnExec,
 } from "../src/git.ts";
-import {
-	readPiTaskStore,
-	sessionTaskPath,
-	syncPiTasksToTodoist,
-	syncTodoistToPiTasks,
-	writePiTaskStore,
-} from "../src/pi-tasks-sync.ts";
 import { firstGithubPrUrl, githubPrUrl } from "../src/pr-detection.ts";
 import {
 	applyStatePatch,
@@ -51,12 +44,6 @@ export interface ExtensionDependencies {
 
 const STATE_TYPE = "pi-todo-gate-state";
 const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
-const taskToolNames = new Set([
-	"TaskCreate",
-	"TaskUpdate",
-	"TaskStop",
-	"TaskExecute",
-]);
 const stateParameters = Type.Object({
 	action: StringEnum([
 		"status",
@@ -82,9 +69,6 @@ interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
-	syncAvailable: boolean;
-	syncGeneration: number;
-	syncTimer?: ReturnType<typeof setTimeout>;
 }
 
 function textOf(value: unknown): string {
@@ -224,13 +208,6 @@ function appendState(
 	pi.appendEntry(STATE_TYPE, data);
 }
 
-function taskPath(active: ActiveSession): string {
-	return sessionTaskPath(
-		active.context.cwd,
-		active.context.sessionManager.getSessionId(),
-	);
-}
-
 export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
@@ -246,18 +223,6 @@ export default function extension(
 		active.allowPrDiscovery = false;
 		appendState(pi, active.state);
 		refreshFooterStatuses(active);
-	};
-
-	const clearLocalTasks = async (session: ActiveSession): Promise<void> => {
-		await writePiTaskStore(taskPath(session), { nextId: 1, tasks: [] });
-	};
-
-	const cancelScheduledSync = (session: ActiveSession): void => {
-		session.syncGeneration += 1;
-		if (session.syncTimer) {
-			clearTimeout(session.syncTimer);
-			session.syncTimer = undefined;
-		}
 	};
 
 	const refreshFooterStatuses = (session: ActiveSession): void => {
@@ -281,7 +246,6 @@ export default function extension(
 	};
 
 	const deactivate = (session: ActiveSession): void => {
-		cancelScheduledSync(session);
 		clearFooterStatuses(session);
 		session.context.ui.setFooter(undefined);
 	};
@@ -305,8 +269,6 @@ export default function extension(
 				id: project.id,
 				currentTaskId: taskRef,
 			});
-			await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
-			session.syncAvailable = true;
 			session.state = applyStatePatch(session.state, {
 				taskRef: claimed.id,
 				taskName: claimed.content,
@@ -325,33 +287,6 @@ export default function extension(
 			);
 			return false;
 		}
-	};
-
-	const scheduleSync = (session: ActiveSession): void => {
-		const parentRef = session.state.taskRef;
-		if (!parentRef || !session.syncAvailable) return;
-		cancelScheduledSync(session);
-		const generation = session.syncGeneration;
-		const isCurrent = (): boolean =>
-			active === session &&
-			generation === session.syncGeneration &&
-			session.syncAvailable;
-		session.syncTimer = setTimeout(async () => {
-			session.syncTimer = undefined;
-			if (!isCurrent()) return;
-			try {
-				const store = await readPiTaskStore(taskPath(session));
-				await syncPiTasksToTodoist(
-					createClient(session.context, dependencies),
-					parentRef,
-					store ?? { nextId: 1, tasks: [] },
-					isCurrent,
-				);
-			} catch {
-				if (isCurrent())
-					session.context.ui.notify("Todoist task update failed", "warning");
-			}
-		}, 25);
 	};
 
 	const installTool = (): void => {
@@ -409,7 +344,6 @@ export default function extension(
 				if (params.action === "set_task") {
 					if (!params.task)
 						throw new Error("set_task requires a Todoist task reference");
-					cancelScheduledSync(session);
 					const client = createClient(ctx, dependencies);
 					const project = await client.resolveProject(
 						session.project.todoistProjectRef,
@@ -418,8 +352,6 @@ export default function extension(
 						id: project.id,
 						currentTaskId: session.state.taskRef,
 					});
-					await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
-					session.syncAvailable = true;
 					const taskChanged = session.state.taskRef !== claimed.id;
 					session.state = applyStatePatch(session.state, {
 						taskRef: claimed.id,
@@ -439,7 +371,6 @@ export default function extension(
 					);
 				}
 				if (params.action === "clear_task") {
-					cancelScheduledSync(session);
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
 						taskName: undefined,
@@ -447,15 +378,12 @@ export default function extension(
 						mergeCompletedAt: undefined,
 						todoistCompletionAttemptedAt: undefined,
 					});
-					await clearLocalTasks(session);
 					appendState(pi, session.state, !session.allowPrDiscovery);
 					refreshFooterStatuses(session);
 					return extensionResult("Cleared the claimed Todoist task");
 				}
-				cancelScheduledSync(session);
 				session.state = {};
 				session.allowPrDiscovery = false;
-				await clearLocalTasks(session);
 				appendState(pi, session.state, true);
 				refreshFooterStatuses(session);
 				return extensionResult("Cleared session PR and task links");
@@ -512,12 +440,8 @@ export default function extension(
 			allowPrDiscovery,
 			handoffContext,
 			workChanged: false,
-			syncAvailable: true,
-			syncGeneration: 0,
 		};
-		const taskWasSynced = state.taskRef
-			? false
-			: await linkInferredTask(active);
+		await linkInferredTask(active);
 		installTool();
 		if (registered && pi.getActiveTools && pi.setActiveTools) {
 			const activeTools = pi.getActiveTools();
@@ -529,18 +453,6 @@ export default function extension(
 		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
 			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
-		if (state.taskRef && !taskWasSynced) {
-			try {
-				await syncTodoistToPiTasks(
-					createClient(ctx, dependencies),
-					state.taskRef,
-					taskPath(active),
-				);
-			} catch {
-				active.syncAvailable = false;
-				ctx.ui.notify("Todoist task restore failed", "warning");
-			}
-		}
 	});
 
 	pi.on("message_end", async (event) => {
@@ -644,11 +556,6 @@ export default function extension(
 				}
 			}
 		}
-		if (taskToolNames.has(toolName)) scheduleSync(active);
-	});
-
-	pi.on("agent_settled", () => {
-		if (active) scheduleSync(active);
 	});
 
 	pi.on("session_shutdown", () => {
