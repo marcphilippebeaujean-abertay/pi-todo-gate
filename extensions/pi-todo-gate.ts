@@ -79,44 +79,60 @@ export default function extension(
 	};
 	const pr = createPrModule(pi, prDependencies);
 	let todoist: TodoistModule | null = null;
+	let todoistActive = false;
+	let sessionGeneration = 0;
 
 	pi.on("session_start", async (event, ctx) => {
-		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
-
-		const config = await (dependencies.loadConfig ?? loadConfig)();
-		const project = resolveConfiguredProject(ctx.cwd, config);
+		const generation = ++sessionGeneration;
 		if (todoist) {
 			todoist.deactivate();
-			todoist = null;
+			todoistActive = false;
 		}
+		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
+		if (generation !== sessionGeneration) return;
+
+		const config = await (dependencies.loadConfig ?? loadConfig)();
+		if (generation !== sessionGeneration) return;
+		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (project) {
-			todoist = createTodoistModule(pi, project, config, todoistDependencies);
-			await forwardSafely(
-				ctx,
-				"Todoist",
-				() => todoist?.sessionStart(event, ctx) ?? Promise.resolve(),
+			const nextTodoist =
+				todoist ??
+				createTodoistModule(pi, project, config, todoistDependencies);
+			if (todoist) nextTodoist.reconfigure(project, config);
+			todoist = nextTodoist;
+			todoistActive = true;
+			await forwardSafely(ctx, "Todoist", () =>
+				nextTodoist.sessionStart(event, ctx),
 			);
+			if (generation !== sessionGeneration) {
+				if (todoist !== nextTodoist) nextTodoist.deactivate();
+				return;
+			}
 		}
-		updateActiveTools(pi, todoist !== null);
+		updateActiveTools(pi, todoistActive);
 	});
 
 	pi.on("message_end", async (event, ctx) => {
 		await forwardSafely(ctx, "PR", async () => {
-			pr.messageEnd(textOf(event.message));
+			await pr.messageEnd(textOf(event.message));
 		});
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
+		const generation = sessionGeneration;
+		const sessionTodoist = todoistActive ? todoist : null;
 		const messages: string[] = [];
 		await forwardSafely(ctx, "PR", async () => {
 			messages.push(...(await pr.beforeAgentStart()));
 		});
-		if (todoist)
+		if (generation !== sessionGeneration) return undefined;
+		if (sessionTodoist)
 			await forwardSafely(ctx, "Todoist", async () => {
 				messages.push(
-					(await todoist?.beforeAgentStart(event.prompt ?? "")) ?? "",
+					(await sessionTodoist.beforeAgentStart(event.prompt ?? "")) ?? "",
 				);
 			});
+		if (generation !== sessionGeneration) return undefined;
 		const content = messages.filter(Boolean).join("\n");
 		return content
 			? {
@@ -130,6 +146,8 @@ export default function extension(
 	});
 
 	pi.on("tool_result", async (event, ctx) => {
+		const generation = sessionGeneration;
+		const sessionTodoist = todoistActive ? todoist : null;
 		const input = {
 			toolName: String(event.toolName),
 			command:
@@ -140,17 +158,17 @@ export default function extension(
 			isError: event.isError,
 		};
 		await forwardSafely(ctx, "PR", () => pr.toolResult(input));
-		if (todoist)
-			await forwardSafely(
-				ctx,
-				"Todoist",
-				() => todoist?.toolResult(input) ?? Promise.resolve(),
+		if (generation !== sessionGeneration) return;
+		if (sessionTodoist)
+			await forwardSafely(ctx, "Todoist", () =>
+				sessionTodoist.toolResult(input),
 			);
 	});
 
 	pi.on("session_shutdown", async () => {
+		++sessionGeneration;
 		pr.deactivate();
 		todoist?.deactivate();
-		todoist = null;
+		todoistActive = false;
 	});
 }

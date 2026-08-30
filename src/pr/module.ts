@@ -11,7 +11,7 @@ import {
 	appendCustomState,
 	latestCustomState,
 } from "../shared/session-state.ts";
-import { firstUnmergedGithubPrUrl, githubPrUrl } from "./detection.ts";
+import { githubPrUrl, githubPrUrls } from "./detection.ts";
 import { renderPrStatus } from "./footer.ts";
 import { findOpenPr, findPrState, matchesPinnedPr } from "./git.ts";
 import {
@@ -42,7 +42,7 @@ export interface PrModule {
 		event: { previousSessionFile?: string },
 		ctx: ExtensionContext,
 	): Promise<void>;
-	messageEnd(text: string): void;
+	messageEnd(text: string): Promise<void>;
 	beforeAgentStart(): Promise<string[]>;
 	toolResult(input: {
 		toolName: string;
@@ -83,6 +83,24 @@ function extensionResult(text: string): {
 	return { content: [{ type: "text", text }], details: undefined };
 }
 
+function unmergedPrUrls(
+	texts: readonly string[],
+	mergedPrs: readonly string[],
+): string[] {
+	const merged = new Set(mergedPrs);
+	const seen = new Set<string>();
+	const candidates: string[] = [];
+	for (const text of texts) {
+		for (const url of githubPrUrls(text)) {
+			if (!merged.has(url) && !seen.has(url)) {
+				seen.add(url);
+				candidates.push(url);
+			}
+		}
+	}
+	return candidates;
+}
+
 async function findOpenPrMessage(
 	exec: Exec,
 	cwd: string,
@@ -106,6 +124,8 @@ export function createPrModule(
 	let allowDiscovery = true;
 	let workChanged = false;
 	let registered = false;
+	let operationGeneration = 0;
+	let ready = false;
 
 	const appendState = (): void => {
 		appendCustomState(
@@ -123,11 +143,25 @@ export function createPrModule(
 		);
 	};
 
-	const setDiscoveredPr = (url: string): void => {
-		state = { ...state, prUrl: url, discoveryDisabled: false };
-		allowDiscovery = false;
-		appendState();
-		refreshStatus();
+	const setDiscoveredPr = async (
+		urls: readonly string[],
+		generation: number,
+	): Promise<void> => {
+		for (const url of urls) {
+			if (generation !== operationGeneration || !context) return;
+			const prState = await findPrState(
+				dependencies.exec ?? spawnExec,
+				context.cwd,
+				url,
+			);
+			if (generation !== operationGeneration || !context) return;
+			if (prState === "UNKNOWN") continue;
+			state = { ...state, prUrl: url, discoveryDisabled: false };
+			allowDiscovery = false;
+			appendState();
+			refreshStatus();
+			return;
+		}
 	};
 
 	const recordMerge = (): void => {
@@ -138,18 +172,19 @@ export function createPrModule(
 		refreshStatus();
 	};
 
-	const checkExternalMerge = async (): Promise<void> => {
+	const checkExternalMerge = async (
+		generation = operationGeneration,
+	): Promise<void> => {
 		if (!context || !state.prUrl) return;
 		const prUrl = state.prUrl;
-		if (
-			(await findPrState(
-				dependencies.exec ?? spawnExec,
-				context.cwd,
-				prUrl,
-			)) === "MERGED" &&
-			state.prUrl === prUrl
-		)
-			recordMerge();
+		const prState = await findPrState(
+			dependencies.exec ?? spawnExec,
+			context.cwd,
+			prUrl,
+		);
+		if (generation !== operationGeneration || !context || state.prUrl !== prUrl)
+			return;
+		if (prState === "MERGED") recordMerge();
 	};
 
 	const registerTool = (): void => {
@@ -163,6 +198,7 @@ export function createPrModule(
 			parameters: stateParameters,
 			async execute(_toolCallId, params: StateAction) {
 				if (!context) throw new Error("PR tracking is inactive");
+				if (!ready) throw new Error("PR tracking is initializing");
 				if (params.action === "status")
 					return extensionResult(
 						JSON.stringify({ ...state, codingRoot: projectRoot }),
@@ -171,6 +207,16 @@ export function createPrModule(
 					const url = githubPrUrl(params.url ?? "");
 					if (!url)
 						throw new Error("set_pr requires a valid GitHub pull request URL");
+					const generation = ++operationGeneration;
+					const prState = await findPrState(
+						dependencies.exec ?? spawnExec,
+						context.cwd,
+						url,
+					);
+					if (generation !== operationGeneration)
+						return extensionResult("PR change superseded");
+					if (prState === "UNKNOWN")
+						throw new Error("set_pr requires an existing GitHub pull request");
 					state = removeMergedPr({ ...state, prUrl: url }, url);
 					state = { ...state, prUrl: url, discoveryDisabled: true };
 					allowDiscovery = false;
@@ -178,6 +224,7 @@ export function createPrModule(
 					refreshStatus();
 					return extensionResult(`Pinned PR ${url}`);
 				}
+				++operationGeneration;
 				state = { ...state, prUrl: undefined, discoveryDisabled: true };
 				allowDiscovery = false;
 				appendState();
@@ -189,19 +236,25 @@ export function createPrModule(
 
 	return {
 		async sessionStart(event, nextContext) {
+			const generation = ++operationGeneration;
+			ready = false;
 			context = nextContext;
+			state = {};
+			workChanged = false;
+			allowDiscovery = false;
 			const project = await inspectProject(
 				dependencies.exec ?? spawnExec,
 				nextContext.cwd,
 			);
+			if (generation !== operationGeneration) return;
 			projectRoot = project.root;
-			state =
-				latestCustomState(
-					nextContext.sessionManager.getBranch(),
-					PR_STATE_TYPE,
-					isPrState,
-				) ?? {};
-			if (!state.prUrl && event.previousSessionFile) {
+			const currentState = latestCustomState(
+				nextContext.sessionManager.getBranch(),
+				PR_STATE_TYPE,
+				isPrState,
+			);
+			state = currentState ?? {};
+			if (!currentState && event.previousSessionFile) {
 				const previous =
 					dependencies.openSession?.(event.previousSessionFile) ??
 					SessionManager.open(event.previousSessionFile);
@@ -209,6 +262,7 @@ export function createPrModule(
 					dependencies.exec ?? spawnExec,
 					previous.getCwd(),
 				);
+				if (generation !== operationGeneration) return;
 				if (projectRoot && projectRoot === previousProject.root) {
 					const inherited = latestCustomState(
 						previous.getBranch(),
@@ -216,31 +270,49 @@ export function createPrModule(
 						isPrState,
 					);
 					if (inherited) {
-						state = inherited;
-						appendState();
+						let canInherit = true;
+						if (inherited.prUrl) {
+							const inheritedPrState = await findPrState(
+								dependencies.exec ?? spawnExec,
+								context?.cwd ?? nextContext.cwd,
+								inherited.prUrl,
+							);
+							if (generation !== operationGeneration) return;
+							canInherit = inheritedPrState !== "UNKNOWN";
+						}
+						if (canInherit) {
+							state = inherited;
+							appendState();
+						}
 					}
 				}
 			}
 			allowDiscovery = !state.discoveryDisabled && !state.prUrl;
 			if (allowDiscovery) {
-				const url = firstUnmergedGithubPrUrl(
+				const urls = unmergedPrUrls(
 					branchTexts(nextContext.sessionManager.getBranch()),
 					mergedUrls(state),
 				);
-				if (url) setDiscoveredPr(url);
+				if (urls.length) await setDiscoveredPr(urls, generation);
 			}
+			if (generation !== operationGeneration) return;
 			registerTool();
 			refreshStatus();
-			await checkExternalMerge();
+			await checkExternalMerge(generation);
+			if (generation !== operationGeneration || !context) return;
+			ready = true;
 		},
-		messageEnd(text) {
-			if (!allowDiscovery || state.prUrl) return;
-			const url = firstUnmergedGithubPrUrl([text], mergedUrls(state));
-			if (url) setDiscoveredPr(url);
+		async messageEnd(text) {
+			if (!ready || !allowDiscovery || state.prUrl) return;
+			const generation = ++operationGeneration;
+			const urls = unmergedPrUrls([text], mergedUrls(state));
+			if (urls.length) await setDiscoveredPr(urls, generation);
 		},
 		async beforeAgentStart() {
-			if (!context) return [];
-			await checkExternalMerge();
+			if (!context || !ready) return [];
+			const generation = operationGeneration;
+			await checkExternalMerge(generation);
+			if (generation !== operationGeneration || !context) return [];
 			const messages: string[] = [];
 			if (state.mergedPrs?.some((entry) => entry.reminderPending)) {
 				messages.push(MERGE_REMINDER);
@@ -252,23 +324,27 @@ export function createPrModule(
 					dependencies.exec ?? spawnExec,
 					context.cwd,
 				);
+				if (generation !== operationGeneration || !context) return [];
 				if (project.isWorktree && project.branch) {
 					const message = await findOpenPrMessage(
 						dependencies.exec ?? spawnExec,
 						context.cwd,
 						project.branch,
 					);
+					if (generation !== operationGeneration || !context) return [];
 					if (message) messages.push(message);
 				}
 			}
 			return messages;
 		},
 		async toolResult(input) {
-			if (!context || input.isError) return;
+			if (!context || !ready || input.isError) return;
 			if (input.toolName === "edit" || input.toolName === "write")
 				workChanged = true;
 			if (input.toolName !== "bash") return;
 			const command = input.command ?? "";
+			const generation = operationGeneration;
+			const prUrl = state.prUrl;
 			if (
 				/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/.test(
 					command,
@@ -276,17 +352,24 @@ export function createPrModule(
 			)
 				workChanged = true;
 			if (
-				state.prUrl &&
+				prUrl &&
 				(await matchesPinnedPr(
 					dependencies.exec ?? spawnExec,
 					context.cwd,
 					command,
-					state.prUrl,
-				))
+					prUrl,
+				)) &&
+				generation === operationGeneration &&
+				context &&
+				state.prUrl === prUrl
 			)
 				recordMerge();
 		},
 		deactivate() {
+			++operationGeneration;
+			ready = false;
+			workChanged = false;
+			state = {};
 			if (context) context.ui.setStatus("pi-todo-gate-pr", undefined);
 			context = null;
 		},

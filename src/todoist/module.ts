@@ -38,6 +38,7 @@ export interface TodoistModuleDependencies {
 }
 
 export interface TodoistModule {
+	reconfigure(project: ResolvedProject, config: TodoistProjectMapping): void;
 	sessionStart(
 		event: { previousSessionFile?: string },
 		ctx: ExtensionContext,
@@ -169,10 +170,14 @@ export function createTodoistModule(
 	config: TodoistProjectMapping,
 	dependencies: TodoistModuleDependencies = {},
 ): TodoistModule {
+	let activeProject = project;
+	let activeConfig = config;
 	let context: SessionContext | null = null;
 	let state: TodoistState = {};
 	let registered = false;
 	let operationGeneration = 0;
+	let ready = false;
+	let allowInference = true;
 
 	const refreshStatus = (): void => {
 		if (!context) return;
@@ -190,17 +195,22 @@ export function createTodoistModule(
 		);
 	};
 
-	const linkInferredTask = async (prompt = ""): Promise<boolean> => {
-		if (!context || state.taskRef) return false;
+	const linkInferredTask = async (
+		prompt = "",
+		expectedGeneration?: number,
+	): Promise<boolean> => {
+		if (!context || !allowInference || state.taskRef) return false;
 		const taskRef = inferClaimedTaskRef(
 			context.sessionManager.getBranch(),
 			prompt,
 		);
 		if (!taskRef) return false;
-		const generation = ++operationGeneration;
+		const generation = expectedGeneration ?? ++operationGeneration;
 		try {
 			const client = createClient(context as ExtensionContext, dependencies);
-			const resolved = await client.resolveProject(project.todoistProjectRef);
+			const resolved = await client.resolveProject(
+				activeProject.todoistProjectRef,
+			);
 			if (generation !== operationGeneration) return false;
 			const claimed = await client.claimTask(taskRef, {
 				id: resolved.id,
@@ -239,9 +249,10 @@ export function createTodoistModule(
 			parameters: stateParameters,
 			async execute(_toolCallId, params: StateAction, _signal, _onUpdate, ctx) {
 				if (!context) throw new Error("Todoist tracking is inactive");
+				if (!ready) throw new Error("Todoist tracking is initializing");
 				if (params.action === "status")
 					return extensionResult(
-						JSON.stringify({ ...state, codingRoot: project.codingRoot }),
+						JSON.stringify({ ...state, codingRoot: activeProject.codingRoot }),
 					);
 				if (params.action === "set_task") {
 					if (!params.task)
@@ -250,7 +261,7 @@ export function createTodoistModule(
 					try {
 						const client = createClient(ctx, dependencies);
 						const resolved = await client.resolveProject(
-							project.todoistProjectRef,
+							activeProject.todoistProjectRef,
 						);
 						if (generation !== operationGeneration)
 							return extensionResult("Todoist task change superseded");
@@ -265,6 +276,7 @@ export function createTodoistModule(
 							taskName: claimed.content,
 							taskUrl: claimed.webUrl ?? claimed.url,
 						});
+						allowInference = false;
 						appendState();
 						refreshStatus();
 						return extensionResult(
@@ -277,6 +289,7 @@ export function createTodoistModule(
 					}
 				}
 				++operationGeneration;
+				allowInference = false;
 				state = {};
 				appendState();
 				refreshStatus();
@@ -286,49 +299,70 @@ export function createTodoistModule(
 	};
 
 	return {
+		reconfigure(nextProject, nextConfig) {
+			++operationGeneration;
+			ready = false;
+			activeProject = nextProject;
+			activeConfig = nextConfig;
+			state = {};
+			allowInference = true;
+		},
 		async sessionStart(event, nextContext) {
+			const generation = ++operationGeneration;
+			ready = false;
 			context = nextContext;
-			state =
-				latestCustomState(
-					nextContext.sessionManager.getBranch(),
-					TODOIST_STATE_TYPE,
-					isTodoistState,
-				) ?? {};
-			if (!state.taskRef && event.previousSessionFile) {
+			const currentState = latestCustomState(
+				nextContext.sessionManager.getBranch(),
+				TODOIST_STATE_TYPE,
+				isTodoistState,
+			);
+			allowInference = currentState === null;
+			state = currentState ?? {};
+			if (!currentState && event.previousSessionFile) {
 				const previous =
 					dependencies.openSession?.(event.previousSessionFile) ??
 					SessionManager.open(event.previousSessionFile);
 				const previousProject = resolveConfiguredProject(
 					previous.getCwd(),
-					config,
+					activeConfig,
 				);
-				if (previousProject?.codingRoot === project.codingRoot) {
-					state =
-						latestCustomState(
-							previous.getBranch(),
-							TODOIST_STATE_TYPE,
-							isTodoistState,
-						) ?? {};
-					if (state.taskRef) appendState();
+				if (previousProject?.codingRoot === activeProject.codingRoot) {
+					const inherited = latestCustomState(
+						previous.getBranch(),
+						TODOIST_STATE_TYPE,
+						isTodoistState,
+					);
+					if (inherited) {
+						state = inherited;
+						allowInference = false;
+						if (state.taskRef) appendState();
+					}
 				}
 			}
-			await linkInferredTask();
+			await linkInferredTask("", generation);
+			if (generation !== operationGeneration) return;
 			registerTool();
 			refreshStatus();
+			if (generation === operationGeneration) ready = true;
 		},
 		async beforeAgentStart(prompt) {
-			if (!context) return "";
-			await linkInferredTask(prompt);
-			return todoistContext(state, project.todoistProjectRef);
+			if (!context || !ready) return "";
+			const generation = ++operationGeneration;
+			await linkInferredTask(prompt, generation);
+			if (generation !== operationGeneration || !context || !ready) return "";
+			return todoistContext(state, activeProject.todoistProjectRef);
 		},
 		async toolResult(input) {
-			if (!context || input.isError || input.toolName !== "bash") return;
+			if (!context || !ready || input.isError || input.toolName !== "bash")
+				return;
 			await linkInferredTask(
 				`${input.command ?? ""}\n${textOf(input.content)}`,
 			);
 		},
 		deactivate() {
 			++operationGeneration;
+			ready = false;
+			allowInference = false;
 			if (context) context.ui.setStatus("pi-todo-gate-task", undefined);
 			context = null;
 			state = {};
