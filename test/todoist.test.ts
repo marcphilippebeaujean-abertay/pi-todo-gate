@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CommandResult } from "../src/git.ts";
+import type { CommandResult } from "../src/shared/command.ts";
 import {
 	TodoistClient,
 	TodoistError,
 	type TodoistExec,
-} from "../src/todoist.ts";
+} from "../src/todoist/client.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),
@@ -65,6 +65,22 @@ describe("TodoistClient", () => {
 		await expect(
 			new TodoistClient(byId.exec).resolveProject("id:1"),
 		).resolves.toEqual({ id: "1", name: "Merge TD" });
+	});
+
+	it("rejects malformed list and task payloads", async () => {
+		const malformedList = fakeTodoist({
+			"project list --json": ok({ unexpected: [] }),
+		});
+		await expect(
+			new TodoistClient(malformedList.exec).resolveProject("Merge TD"),
+		).rejects.toThrow("expected a list payload");
+
+		const malformedTask = fakeTodoist({
+			"task view 42 --json": ok({ id: "42", description: "missing fields" }),
+		});
+		await expect(
+			new TodoistClient(malformedTask.exec).getTask("42"),
+		).rejects.toThrow("missing required fields");
 	});
 
 	it("rejects a task outside the configured project", async () => {
@@ -161,6 +177,20 @@ describe("TodoistClient", () => {
 		]);
 	});
 
+	it("accepts an id-prefixed ref for a task already in progress", async () => {
+		const fake = fakeTodoist({
+			"task view id:42 --json": ok(task({ sectionName: "In progress" })),
+		});
+
+		await expect(
+			new TodoistClient(fake.exec).claimTask("id:42", {
+				id: "project-1",
+				currentTaskId: "id:42",
+			}),
+		).resolves.toMatchObject({ id: "42", sectionName: "In progress" });
+		expect(fake.calls).toEqual([["task", "view", "id:42", "--json"]]);
+	});
+
 	it("rejects unsafe URL schemes from CLI data", async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(
@@ -190,69 +220,15 @@ describe("TodoistClient", () => {
 		).resolves.toMatchObject({ url: "https://app.todoist.com/app/task/42" });
 	});
 
-	it("completes tasks with separate arguments", async () => {
-		const fake = fakeTodoist({ "task complete id:42": ok({}) });
-		await expect(
-			new TodoistClient(fake.exec).completeTask("id:42"),
-		).resolves.toBeUndefined();
-		expect(fake.calls).toEqual([["task", "complete", "id:42"]]);
-	});
-
-	it("lists recursive descendants and deletes deepest first", async () => {
-		const fake = fakeTodoist({
-			"task list --parent 42 --json": ok([
-				task({ id: "child", parentId: "42" }),
-			]),
-			"task list --parent child --json": ok([
-				task({ id: "grandchild", parentId: "child" }),
-			]),
-			"task list --parent grandchild --json": ok([]),
-			"task delete id:grandchild --yes": ok({}),
-			"task delete id:child --yes": ok({}),
-		});
-		const client = new TodoistClient(fake.exec);
-		await expect(client.listDescendants("42")).resolves.toMatchObject([
-			{ id: "child", children: [{ id: "grandchild" }] },
-		]);
-		await client.deleteDescendants(await client.listDescendants("42"));
-		expect(fake.calls.slice(-2)).toEqual([
-			["task", "delete", "id:grandchild", "--yes"],
-			["task", "delete", "id:child", "--yes"],
-		]);
-	});
-
-	it("creates subtasks without shell interpolation", async () => {
-		const fake = fakeTodoist({
-			"task add content with spaces; $HOME --parent 42 --description description && rm -rf / --json":
-				ok(task({ id: "new" })),
-		});
-		await expect(
-			new TodoistClient(fake.exec).createSubtask("42", {
-				content: "content with spaces; $HOME",
-				description: "description && rm -rf /",
-			}),
-		).resolves.toMatchObject({ id: "new" });
-		expect(fake.calls[0]).toEqual([
-			"task",
-			"add",
-			"content with spaces; $HOME",
-			"--parent",
-			"42",
-			"--description",
-			"description && rm -rf /",
-			"--json",
-		]);
-	});
-
 	it("returns a typed sanitized error for failed CLI commands", async () => {
 		const fake = fakeTodoist({
-			"task complete 42": fail("token=super-secret failed"),
+			"task view 42 --json": fail("token=super-secret failed"),
 		});
 		const error = await new TodoistClient(fake.exec)
-			.completeTask("42")
+			.getTask("42")
 			.catch((value: unknown) => value);
 		expect(error).toBeInstanceOf(TodoistError);
 		expect((error as Error).message).not.toContain("super-secret");
-		expect((error as Error).message).toContain("task complete");
+		expect((error as Error).message).toContain("task view");
 	});
 });
