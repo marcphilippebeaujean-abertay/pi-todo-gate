@@ -50,15 +50,16 @@ function updateActiveTools(pi: ExtensionAPI, todoistActive: boolean): void {
 	pi.setActiveTools(tools);
 }
 
-async function forwardSafely(
+async function forwardSafely<T>(
 	ctx: ExtensionContext,
 	label: string,
-	action: () => Promise<void>,
-): Promise<void> {
+	action: () => Promise<T>,
+): Promise<T | undefined> {
 	try {
-		await action();
+		return await action();
 	} catch {
 		ctx.ui.notify(`${label} tracking is unavailable`, "warning");
+		return undefined;
 	}
 }
 
@@ -126,6 +127,13 @@ export default function extension(
 			messages.push(...(await pr.beforeAgentStart()));
 		});
 		if (generation !== sessionGeneration) return undefined;
+		const mergeEvents = pr.drainMergeEvents();
+		if (sessionTodoist)
+			for (const mergeEvent of mergeEvents)
+				await forwardSafely(ctx, "Todoist", () =>
+					sessionTodoist.mergeDetected(mergeEvent),
+				);
+		if (generation !== sessionGeneration) return undefined;
 		if (sessionTodoist)
 			await forwardSafely(ctx, "Todoist", async () => {
 				messages.push(
@@ -157,7 +165,14 @@ export default function extension(
 			content: event.content,
 			isError: event.isError,
 		};
-		await forwardSafely(ctx, "PR", () => pr.toolResult(input));
+		const mergeEvent = await forwardSafely(ctx, "PR", () =>
+			pr.toolResult(input),
+		);
+		if (generation !== sessionGeneration) return;
+		if (sessionTodoist && mergeEvent)
+			await forwardSafely(ctx, "Todoist", () =>
+				sessionTodoist.mergeDetected(mergeEvent),
+			);
 		if (generation !== sessionGeneration) return;
 		if (sessionTodoist)
 			await forwardSafely(ctx, "Todoist", () =>

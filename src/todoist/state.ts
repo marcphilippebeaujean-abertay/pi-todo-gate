@@ -4,12 +4,14 @@ export interface TodoistState {
 	taskRef?: string;
 	taskName?: string;
 	taskUrl?: string;
+	mergePromptedPrUrl?: string;
 }
 
 const STATE_KEYS = new Set<keyof TodoistState>([
 	"taskRef",
 	"taskName",
 	"taskUrl",
+	"mergePromptedPrUrl",
 ]);
 
 export function isTodoistState(value: unknown): value is TodoistState {

@@ -13,11 +13,12 @@ type TestTool = {
 	execute(...args: unknown[]): Promise<unknown>;
 };
 
-function harness(cwd: string, branch: unknown[] = []) {
+function harness(cwd: string, branch: unknown[] = [], selectChoice = "No") {
 	const handlers = new Map<string, Handler>();
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const notifications: string[] = [];
+	const selections: Array<{ title: string; options: string[] }> = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
 	let activeTools: string[] = [];
 	const pi = {
@@ -35,6 +36,10 @@ function harness(cwd: string, branch: unknown[] = []) {
 		ui: {
 			theme: { fg: (_color: string, text: string) => text },
 			notify: (message: string) => notifications.push(message),
+			select: async (title: string, options: string[]) => {
+				selections.push({ title, options: [...options] });
+				return selectChoice;
+			},
 			setStatus: (key: string, text: string | undefined) =>
 				statusCalls.push({ key, text }),
 		},
@@ -44,7 +49,16 @@ function harness(cwd: string, branch: unknown[] = []) {
 			getCwd: () => cwd,
 		},
 	} as unknown as ExtensionContext;
-	return { pi, ctx, handlers, tools, appended, notifications, statusCalls };
+	return {
+		pi,
+		ctx,
+		handlers,
+		tools,
+		appended,
+		notifications,
+		selections,
+		statusCalls,
+	};
 }
 
 const config = (projects: Record<string, string>) => ({ projects });
@@ -384,6 +398,168 @@ describe("merge reminder", () => {
 			},
 		);
 		expect(completions).toBe(0);
+	});
+
+	it("prompts before completing a task when PR merge is detected", async () => {
+		const h = harness(
+			"/configured/project",
+			[
+				{
+					type: "custom",
+					customType: "pi-pr-gate-state",
+					data: { prUrl: "https://github.com/o/r/pull/42" },
+				},
+				{
+					type: "custom",
+					customType: "pi-todoist-gate-state",
+					data: {
+						taskRef: "task-1",
+						taskName: "Implement feature",
+					},
+				},
+			],
+			"Yes",
+		);
+		let completions = 0;
+		const client = {
+			completeTask: async () => {
+				completions += 1;
+			},
+		} as unknown as TodoistClient;
+		const exec = async (_command: string, args: string[]) => {
+			if (args.includes("state,mergedAt"))
+				return {
+					stdout: JSON.stringify({ state: "MERGED", mergedAt: "now" }),
+					stderr: "",
+					code: 0,
+				};
+			return { stdout: "", stderr: "", code: 0 };
+		};
+		await start(
+			h,
+			{ "/configured": "Merge TD" },
+			{
+				exec,
+				createTodoistClient: () => client,
+			},
+		);
+		await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+
+		expect(h.selections).toEqual([
+			{
+				title: "Do you wish to mark task Implement feature as complete?",
+				options: ["Yes", "No", "No and clear session task"],
+			},
+		]);
+		expect(completions).toBe(1);
+	});
+
+	it("keeps task linked when user declines completion", async () => {
+		const h = harness(
+			"/configured/project",
+			[
+				{
+					type: "custom",
+					customType: "pi-pr-gate-state",
+					data: { prUrl: "https://github.com/o/r/pull/42" },
+				},
+				{
+					type: "custom",
+					customType: "pi-todoist-gate-state",
+					data: { taskRef: "task-1", taskName: "Implement feature" },
+				},
+			],
+			"No",
+		);
+		let completions = 0;
+		const client = {
+			completeTask: async () => {
+				completions += 1;
+			},
+		} as unknown as TodoistClient;
+		const exec = async (_command: string, args: string[]) =>
+			args.includes("state,mergedAt")
+				? { stdout: '{"state":"MERGED","mergedAt":"now"}', stderr: "", code: 0 }
+				: { stdout: "", stderr: "", code: 0 };
+		await start(
+			h,
+			{ "/configured": "Merge TD" },
+			{
+				exec,
+				createTodoistClient: () => client,
+			},
+		);
+		await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(completions).toBe(0);
+		expect(h.selections).toHaveLength(1);
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todoist-gate-state",
+			data: {
+				taskRef: "task-1",
+				taskName: "Implement feature",
+				mergePromptedPrUrl: "https://github.com/o/r/pull/42",
+			},
+		});
+	});
+
+	it("clears task and prevents historical relinking when user declines and clears", async () => {
+		const h = harness(
+			"/configured/project",
+			[
+				{
+					type: "custom",
+					customType: "pi-pr-gate-state",
+					data: { prUrl: "https://github.com/o/r/pull/42" },
+				},
+				{
+					type: "custom",
+					customType: "pi-todoist-gate-state",
+					data: { taskRef: "task-1", taskName: "Implement feature" },
+				},
+				{
+					type: "message",
+					message: {
+						role: "assistant",
+						content:
+							"Claimed Todoist task https://app.todoist.com/app/task/task-1",
+					},
+				},
+			],
+			"No and clear session task",
+		);
+		const client = {} as TodoistClient;
+		const exec = async (_command: string, args: string[]) =>
+			args.includes("state,mergedAt")
+				? { stdout: '{"state":"MERGED","mergedAt":"now"}', stderr: "", code: 0 }
+				: { stdout: "", stderr: "", code: 0 };
+		await start(
+			h,
+			{ "/configured": "Merge TD" },
+			{
+				exec,
+				createTodoistClient: () => client,
+			},
+		);
+		await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todoist-gate-state",
+			data: {},
+		});
+		const appendedCount = h.appended.length;
+		await h.handlers.get("before_agent_start")?.(
+			{ type: "before_agent_start", prompt: "continue" },
+			h.ctx,
+		);
+		expect(h.appended).toHaveLength(appendedCount);
 	});
 });
 
