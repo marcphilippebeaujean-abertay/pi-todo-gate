@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CommandResult } from "../src/git.ts";
+import type { CommandResult } from "../src/shared/command.ts";
 import {
 	TodoistClient,
 	TodoistError,
 	type TodoistExec,
-} from "../src/todoist.ts";
+} from "../src/todoist/client.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),
@@ -194,32 +194,15 @@ describe("TodoistClient", () => {
 		).resolves.toMatchObject({ url: "https://app.todoist.com/app/task/42" });
 	});
 
-	it("completes tasks from human-readable CLI output", async () => {
-		const fake = fakeTodoist({
-			"task complete id:42": okText("Task completed successfully"),
-		});
-		await expect(
-			new TodoistClient(fake.exec).completeTask("id:42"),
-		).resolves.toBeUndefined();
-	});
-
-	it("completes tasks with separate arguments", async () => {
-		const fake = fakeTodoist({ "task complete id:42": ok({}) });
-		await expect(
-			new TodoistClient(fake.exec).completeTask("id:42"),
-		).resolves.toBeUndefined();
-		expect(fake.calls).toEqual([["task", "complete", "id:42"]]);
-	});
-
 	it("returns a typed sanitized error for failed CLI commands", async () => {
 		const fake = fakeTodoist({
-			"task complete 42": fail("token=super-secret failed"),
+			"task view 42 --json": fail("token=super-secret failed"),
 		});
 		const error = await new TodoistClient(fake.exec)
-			.completeTask("42")
+			.getTask("42")
 			.catch((value: unknown) => value);
 		expect(error).toBeInstanceOf(TodoistError);
 		expect((error as Error).message).not.toContain("super-secret");
-		expect((error as Error).message).toContain("task complete");
+		expect((error as Error).message).toContain("task view");
 	});
 });

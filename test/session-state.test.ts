@@ -1,82 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
-	applyStatePatch,
-	emptyWorkState,
-	extractInheritedState,
-	latestState,
-} from "../src/session-state.ts";
+	appendCustomState,
+	latestCustomState,
+} from "../src/shared/session-state.ts";
 
-describe("session state", () => {
-	it("starts empty", () => {
-		expect(emptyWorkState()).toEqual({});
+describe("shared session state", () => {
+	it("reads only the requested custom state type", () => {
+		const entries = [
+			{ type: "custom", customType: "pi-pr-gate-state", data: { prUrl: "pr" } },
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: { taskRef: "task" },
+			},
+		];
+
+		expect(
+			latestCustomState(
+				entries,
+				"pi-pr-gate-state",
+				(value): value is Record<string, unknown> =>
+					typeof value === "object" && value !== null && !Array.isArray(value),
+			),
+		).toEqual({ prUrl: "pr" });
 	});
 
-	it("uses the latest valid custom state entry", () => {
-		expect(
-			latestState([
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { prUrl: "old" },
-				},
-				{ type: "message", message: "ignored" },
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { taskRef: "new", taskName: "New task" },
-				},
-			]),
-		).toEqual({ taskRef: "new", taskName: "New task" });
-	});
+	it("writes the requested custom type and payload unchanged", () => {
+		const appended: Array<{ customType: string; data: { taskRef: string } }> =
+			[];
 
-	it("treats an explicit empty state as a clear", () => {
-		expect(
-			latestState([
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { prUrl: "old" },
-				},
-				{ type: "custom", customType: "pi-todo-gate-state", data: {} },
-			]),
-		).toEqual({});
-	});
+		appendCustomState(
+			(customType, data) => appended.push({ customType, data }),
+			"pi-todoist-gate-state",
+			{ taskRef: "task" },
+		);
 
-	it("ignores branch-only and malformed entries", () => {
-		expect(
-			latestState([
-				{ type: "branch", id: "branch-only", data: { prUrl: "wrong" } },
-				{ type: "custom", customType: "other", data: { prUrl: "wrong" } },
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: { prUrl: 42 },
-				},
-			]),
-		).toEqual({});
-	});
-
-	it("clears patched keys when undefined is supplied", () => {
-		expect(
-			applyStatePatch({ prUrl: "pr", taskRef: "task" }, { prUrl: undefined }),
-		).toEqual({ taskRef: "task" });
-	});
-
-	it("preserves inherited session IDs", () => {
-		expect(
-			extractInheritedState([
-				{
-					type: "custom",
-					customType: "pi-todo-gate-state",
-					data: {
-						inheritedFrom: "session-123",
-						prUrl: "https://github.com/a/b/pull/1",
-					},
-				},
-			]),
-		).toEqual({
-			inheritedFrom: "session-123",
-			prUrl: "https://github.com/a/b/pull/1",
-		});
+		expect(appended).toEqual([
+			{ customType: "pi-todoist-gate-state", data: { taskRef: "task" } },
+		]);
 	});
 });

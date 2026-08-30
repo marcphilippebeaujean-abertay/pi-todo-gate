@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { firstGithubPrUrl, githubPrUrl } from "../src/pr-detection.ts";
+import {
+	firstGithubPrUrl,
+	firstUnmergedGithubPrUrl,
+	githubPrUrl,
+} from "../src/pr/detection.ts";
 
 describe("githubPrUrl", () => {
 	it("accepts a valid GitHub pull request URL", () => {
@@ -30,5 +34,18 @@ describe("firstGithubPrUrl", () => {
 				"https://github.com/new/repo/pull/8",
 			]),
 		).toBe("https://github.com/old/repo/pull/7");
+	});
+});
+
+describe("firstUnmergedGithubPrUrl", () => {
+	it("skips merged URLs and returns next discovered URL", () => {
+		expect(
+			firstUnmergedGithubPrUrl(
+				[
+					"https://github.com/old/repo/pull/7 https://github.com/new/repo/pull/8",
+				],
+				["https://github.com/old/repo/pull/7"],
+			),
+		).toBe("https://github.com/new/repo/pull/8");
 	});
 });

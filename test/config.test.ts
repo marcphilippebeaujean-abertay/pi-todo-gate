@@ -7,7 +7,7 @@ import {
 	loadConfig,
 	parseConfig,
 	resolveConfiguredProject,
-} from "../src/config.ts";
+} from "../src/todoist/config.ts";
 
 describe("parseConfig", () => {
 	it("accepts project mappings", () => {

@@ -1,4 +1,4 @@
-import type { CommandResult } from "./git.ts";
+import type { CommandResult } from "../shared/command.ts";
 
 export interface TodoistTask {
 	id: string;
@@ -193,9 +193,5 @@ export class TodoistClient {
 				task.url ??
 				`https://app.todoist.com/app/task/${task.id}`,
 		};
-	}
-
-	async completeTask(ref: string): Promise<void> {
-		await this.run(["task", "complete", ref], false);
 	}
 }
