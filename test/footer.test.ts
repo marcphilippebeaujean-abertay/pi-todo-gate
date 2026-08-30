@@ -4,9 +4,9 @@ import {
 	createFooterFactory,
 	type FooterTheme,
 	renderFooterLine,
-	renderTaskStatus,
 } from "../src/footer.ts";
 import { renderPrLabel, renderPrStatus } from "../src/pr/footer.ts";
+import { renderTaskStatus } from "../src/todoist/footer.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);
