@@ -1,111 +1,22 @@
-import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import { githubPrUrl } from "./pr-detection.ts";
+import type { CommandResult, Exec } from "./shared/command.ts";
+import { inspectProject, type ProjectInfo } from "./shared/project.ts";
 
-export interface CommandResult {
-	stdout: string;
-	stderr: string;
-	code: number;
-	killed?: boolean;
-}
+export type { CommandResult, Exec } from "./shared/command.ts";
+export { spawnExec } from "./shared/command.ts";
 
-export type Exec = (
-	command: string,
-	args: string[],
-	options?: { timeout?: number; signal?: AbortSignal; cwd?: string },
-) => Promise<CommandResult>;
-
-export interface WorktreeInfo {
-	isWorktree: boolean;
-	root: string | null;
-	branch: string | null;
-}
+export type WorktreeInfo = ProjectInfo;
 
 export interface OpenPrInfo {
 	url: string | null;
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
 
-export const spawnExec: Exec = (command, args, options = {}) =>
-	new Promise((resolveResult) => {
-		const child = spawn(command, args, { cwd: options.cwd, shell: false });
-		let stdout = "";
-		let stderr = "";
-		let killed = false;
-		let settled = false;
-		const finish = (result: CommandResult) => {
-			if (settled) return;
-			settled = true;
-			resolveResult(result);
-		};
-		const timer = options.timeout
-			? setTimeout(() => {
-					killed = true;
-					child.kill("SIGTERM");
-				}, options.timeout)
-			: undefined;
-		const onAbort = () => {
-			killed = true;
-			child.kill("SIGTERM");
-		};
-		options.signal?.addEventListener("abort", onAbort, { once: true });
-		child.stdout.on("data", (chunk: Buffer) => {
-			stdout += chunk.toString();
-		});
-		child.stderr.on("data", (chunk: Buffer) => {
-			stderr += chunk.toString();
-		});
-		child.on("error", (error) => {
-			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
-			finish({ stdout, stderr: `${stderr}${error.message}`, code: 1, killed });
-		});
-		child.on("close", (code) => {
-			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
-			finish({ stdout, stderr, code: code ?? 1, killed });
-		});
-	});
-
-function firstWorktreePath(output: string): string | null {
-	const line = output
-		.split(/\r?\n/)
-		.find((value) => value.startsWith("worktree "));
-	return line ? line.slice("worktree ".length).trim() : null;
-}
-
 export async function inspectWorktree(
 	exec: Exec,
 	cwd: string,
 ): Promise<WorktreeInfo> {
-	let rootResult: CommandResult;
-	let branchResult: CommandResult;
-	let listResult: CommandResult;
-	try {
-		[rootResult, branchResult, listResult] = await Promise.all([
-			exec("git", ["rev-parse", "--show-toplevel"], { cwd }),
-			exec("git", ["branch", "--show-current"], { cwd }),
-			exec("git", ["worktree", "list", "--porcelain"], { cwd }),
-		]);
-	} catch {
-		return { isWorktree: false, root: null, branch: null };
-	}
-	const root =
-		rootResult.code === 0 && rootResult.stdout.trim()
-			? resolve(rootResult.stdout.trim())
-			: null;
-	const branch =
-		branchResult.code === 0 && branchResult.stdout.trim()
-			? branchResult.stdout.trim()
-			: null;
-	const mainRoot =
-		listResult.code === 0 ? firstWorktreePath(listResult.stdout) : null;
-	return {
-		isWorktree:
-			root !== null && mainRoot !== null && root !== resolve(mainRoot),
-		root,
-		branch,
-	};
+	return inspectProject(exec, cwd);
 }
 
 export async function findPrState(

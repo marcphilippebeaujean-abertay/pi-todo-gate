@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
 	type CommandResult,
 	type Exec,
+} from "../src/shared/command.ts";
+import { inspectProject } from "../src/shared/project.ts";
+import {
 	findOpenPr,
 	findPrState,
-	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
 } from "../src/git.ts";
@@ -22,7 +24,7 @@ function fakeExec(results: Record<string, CommandResult>): Exec {
 		fail(`unexpected ${command} ${args.join(" ")}`);
 }
 
-describe("inspectWorktree", () => {
+describe("inspectProject", () => {
 	it("identifies a linked worktree and branch", async () => {
 		const exec = fakeExec({
 			"git rev-parse --show-toplevel": ok("/repo/.worktrees/feature\n"),
@@ -32,7 +34,7 @@ describe("inspectWorktree", () => {
 			),
 		});
 		await expect(
-			inspectWorktree(exec, "/repo/.worktrees/feature"),
+			inspectProject(exec, "/repo/.worktrees/feature"),
 		).resolves.toEqual({
 			isWorktree: true,
 			root: "/repo/.worktrees/feature",
@@ -44,7 +46,7 @@ describe("inspectWorktree", () => {
 		const exec: Exec = async () => {
 			throw new Error("git unavailable");
 		};
-		await expect(inspectWorktree(exec, "/repo")).resolves.toEqual({
+		await expect(inspectProject(exec, "/repo")).resolves.toEqual({
 			isWorktree: false,
 			root: null,
 			branch: null,
@@ -59,7 +61,7 @@ describe("inspectWorktree", () => {
 				"worktree /repo\nHEAD abc\nbranch refs/heads/main\n",
 			),
 		});
-		await expect(inspectWorktree(exec, "/repo")).resolves.toEqual({
+		await expect(inspectProject(exec, "/repo")).resolves.toEqual({
 			isWorktree: false,
 			root: "/repo",
 			branch: "main",
