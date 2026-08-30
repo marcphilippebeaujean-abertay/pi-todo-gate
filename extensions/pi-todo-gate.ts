@@ -271,6 +271,10 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
+	// Todoist state belongs to parent sessions; child sessions must not claim,
+	// sync, complete, or otherwise mutate the parent's work tracking.
+	if (process.env.PI_SUBAGENT_CHILD === "1") return;
+
 	let active: ActiveSession | null = null;
 	let registered = false;
 
