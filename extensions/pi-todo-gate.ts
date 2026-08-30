@@ -79,13 +79,14 @@ export default function extension(
 	};
 	const pr = createPrModule(pi, prDependencies);
 	let todoist: TodoistModule | null = null;
+	let todoistActive = false;
 	let sessionGeneration = 0;
 
 	pi.on("session_start", async (event, ctx) => {
 		const generation = ++sessionGeneration;
 		if (todoist) {
 			todoist.deactivate();
-			todoist = null;
+			todoistActive = false;
 		}
 		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
 		if (generation !== sessionGeneration) return;
@@ -94,23 +95,21 @@ export default function extension(
 		if (generation !== sessionGeneration) return;
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (project) {
-			const nextTodoist = createTodoistModule(
-				pi,
-				project,
-				config,
-				todoistDependencies,
-			);
+			const nextTodoist =
+				todoist ??
+				createTodoistModule(pi, project, config, todoistDependencies);
+			if (todoist) nextTodoist.reconfigure(project, config);
 			todoist = nextTodoist;
+			todoistActive = true;
 			await forwardSafely(ctx, "Todoist", () =>
 				nextTodoist.sessionStart(event, ctx),
 			);
 			if (generation !== sessionGeneration) {
-				nextTodoist.deactivate();
-				if (todoist === nextTodoist) todoist = null;
+				if (todoist !== nextTodoist) nextTodoist.deactivate();
 				return;
 			}
 		}
-		updateActiveTools(pi, todoist !== null);
+		updateActiveTools(pi, todoistActive);
 	});
 
 	pi.on("message_end", async (event, ctx) => {
@@ -121,7 +120,7 @@ export default function extension(
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		const generation = sessionGeneration;
-		const sessionTodoist = todoist;
+		const sessionTodoist = todoistActive ? todoist : null;
 		const messages: string[] = [];
 		await forwardSafely(ctx, "PR", async () => {
 			messages.push(...(await pr.beforeAgentStart()));
@@ -148,7 +147,7 @@ export default function extension(
 
 	pi.on("tool_result", async (event, ctx) => {
 		const generation = sessionGeneration;
-		const sessionTodoist = todoist;
+		const sessionTodoist = todoistActive ? todoist : null;
 		const input = {
 			toolName: String(event.toolName),
 			command:
@@ -170,6 +169,7 @@ export default function extension(
 		++sessionGeneration;
 		pr.deactivate();
 		todoist?.deactivate();
+		todoistActive = false;
 		todoist = null;
 	});
 }

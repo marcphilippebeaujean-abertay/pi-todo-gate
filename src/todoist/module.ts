@@ -38,6 +38,7 @@ export interface TodoistModuleDependencies {
 }
 
 export interface TodoistModule {
+	reconfigure(project: ResolvedProject, config: TodoistProjectMapping): void;
 	sessionStart(
 		event: { previousSessionFile?: string },
 		ctx: ExtensionContext,
@@ -169,6 +170,8 @@ export function createTodoistModule(
 	config: TodoistProjectMapping,
 	dependencies: TodoistModuleDependencies = {},
 ): TodoistModule {
+	let activeProject = project;
+	let activeConfig = config;
 	let context: SessionContext | null = null;
 	let state: TodoistState = {};
 	let registered = false;
@@ -205,7 +208,9 @@ export function createTodoistModule(
 		const generation = expectedGeneration ?? ++operationGeneration;
 		try {
 			const client = createClient(context as ExtensionContext, dependencies);
-			const resolved = await client.resolveProject(project.todoistProjectRef);
+			const resolved = await client.resolveProject(
+				activeProject.todoistProjectRef,
+			);
 			if (generation !== operationGeneration) return false;
 			const claimed = await client.claimTask(taskRef, {
 				id: resolved.id,
@@ -247,7 +252,7 @@ export function createTodoistModule(
 				if (!ready) throw new Error("Todoist tracking is initializing");
 				if (params.action === "status")
 					return extensionResult(
-						JSON.stringify({ ...state, codingRoot: project.codingRoot }),
+						JSON.stringify({ ...state, codingRoot: activeProject.codingRoot }),
 					);
 				if (params.action === "set_task") {
 					if (!params.task)
@@ -256,7 +261,7 @@ export function createTodoistModule(
 					try {
 						const client = createClient(ctx, dependencies);
 						const resolved = await client.resolveProject(
-							project.todoistProjectRef,
+							activeProject.todoistProjectRef,
 						);
 						if (generation !== operationGeneration)
 							return extensionResult("Todoist task change superseded");
@@ -294,6 +299,14 @@ export function createTodoistModule(
 	};
 
 	return {
+		reconfigure(nextProject, nextConfig) {
+			++operationGeneration;
+			ready = false;
+			activeProject = nextProject;
+			activeConfig = nextConfig;
+			state = {};
+			allowInference = true;
+		},
 		async sessionStart(event, nextContext) {
 			const generation = ++operationGeneration;
 			ready = false;
@@ -311,9 +324,9 @@ export function createTodoistModule(
 					SessionManager.open(event.previousSessionFile);
 				const previousProject = resolveConfiguredProject(
 					previous.getCwd(),
-					config,
+					activeConfig,
 				);
-				if (previousProject?.codingRoot === project.codingRoot) {
+				if (previousProject?.codingRoot === activeProject.codingRoot) {
 					const inherited = latestCustomState(
 						previous.getBranch(),
 						TODOIST_STATE_TYPE,
@@ -337,7 +350,7 @@ export function createTodoistModule(
 			const generation = ++operationGeneration;
 			await linkInferredTask(prompt, generation);
 			if (generation !== operationGeneration || !context || !ready) return "";
-			return todoistContext(state, project.todoistProjectRef);
+			return todoistContext(state, activeProject.todoistProjectRef);
 		},
 		async toolResult(input) {
 			if (!context || !ready || input.isError || input.toolName !== "bash")
