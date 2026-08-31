@@ -67,6 +67,9 @@ describe("startClaimWorker", () => {
 		expect(setupState.spawned?.args.at(-1)).toContain("Claim tab");
 		expect(setupState.spawned?.options.shell).toBe(false);
 		expect(setupState.spawned?.options.cwd).toBe("/repo/worktree");
+		expect(setupState.spawned?.options).toMatchObject({
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 		expect(setupState.spawned?.options.env.PI_SUBAGENT_CHILD).toBe("1");
 		expect(setupState.spawned?.options.env.HERDR_ENV).toBe(
 			process.env.HERDR_ENV,

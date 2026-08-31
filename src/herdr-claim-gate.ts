@@ -65,20 +65,15 @@ Do not run any other tool (\`read\`, \`edit\`, \`write\`, \`bash\`, or answering
 \`herdr-panes-and-tabs-management\` skill has been removed, so the procedure above is the source of
 truth.
 
-### This step is enforced by a hook, not just by prose
+### This step runs in an isolated background worker
 
-A global extension (\`~/.pi/agent/extensions/herdr-claim-gate.ts\`, auto-discovered) arms a gate at
-\`session_start\` for every non-subagent session inside Herdr (\`HERDR_ENV=1\`). While the gate is up,
-the only bash commands allowed are the Herdr claim commands and inspection commands above
-(\`echo HERDR_ENV=…\`, \`herdr pane current\`, \`herdr pane list …\`, \`herdr tab get …\`,
-\`herdr agent list\`, \`herdr tab rename …\`, \`herdr pane move … --new-tab …\`, and equivalent
-\`test\`/\`printf\` env probes). Every other tool call (bash or otherwise) is blocked.
+The integrated extension starts this prompt in an ephemeral worker with Herdr extensions disabled.
+Worker output stays private. The main session remains unblocked while this procedure runs.
 
-The gate lifts and persists a session marker once the background worker completes a claim, or when
-one of these happen in this session:
-- you run \`herdr tab rename …\` (claiming a generic tab),
-- you run \`herdr pane move … --new-tab …\` (moving out of a shared tab),
-- or a \`herdr tab get\` you ran returns a label that is already descriptive (tab already claimed).
+The worker completes the claim when one of these happens:
+- it renames the current generic tab with \`herdr tab rename …\`,
+- it moves its pane to a new tab with \`herdr pane move … --new-tab …\`,
+- or it confirms the current tab already has a descriptive label.
 `;
 
 export type CommandRunner = (command: string, args: string[]) => string;
