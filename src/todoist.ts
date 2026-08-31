@@ -1,11 +1,3 @@
-const TODOISTERROR = "TodoistError";
-const REDACTED_VALUE = "$1=[redacted]";
-const INVALID_JSON_RESPONSE = "invalid JSON response";
-const RESPONSE = "response";
-const UNEXPECTED_JSON_SHAPE = "unexpected JSON shape";
-const HTTP = "http:";
-const HTTPS = "https:";
-const TASK_HAS_NO_ID = "task has no id";
 const PROJECT = "project";
 const LIST = "list";
 const JSON_OUTPUT_FLAG = "--json";
@@ -31,6 +23,17 @@ const ADD = "add";
 const DESCRIPTION = "--description";
 
 import type { CommandResult } from "./git.ts";
+import {
+	childList,
+	parsePayload,
+	record,
+	sanitizeError,
+	stringValue,
+	TodoistError,
+	taskFromPayload,
+} from "./todoist-helpers.ts";
+
+export { TodoistError };
 
 export interface TodoistTask {
 	id: string;
@@ -50,87 +53,6 @@ export interface TodoistChild extends TodoistTask {
 
 export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;
-}
-
-export class TodoistError extends Error {
-	readonly commandFamily: string;
-
-	constructor(commandFamily: string, detail: string) {
-		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
-		this.name = TODOISTERROR;
-		this.commandFamily = commandFamily;
-	}
-}
-
-function sanitizeError(stderr: string): string {
-	return stderr
-		.replace(
-			/(?:token|password|secret|authorization|bearer)\s*[:=]?\s*[^\s,;]+/gi,
-			REDACTED_VALUE,
-		)
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, 300);
-}
-
-function parsePayload(stdout: string, family: string): unknown {
-	try {
-		return JSON.parse(stdout);
-	} catch {
-		throw new TodoistError(family, INVALID_JSON_RESPONSE);
-	}
-}
-
-function record(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value === null)
-		throw new TodoistError(RESPONSE, UNEXPECTED_JSON_SHAPE);
-	if (Array.isArray(value))
-		throw new TodoistError(RESPONSE, UNEXPECTED_JSON_SHAPE);
-	return value as Record<string, unknown>;
-}
-
-function stringValue(value: unknown, fallback = ""): string {
-	return typeof value === "string" ? value : fallback;
-}
-
-function safeHttpUrl(value: unknown): string | undefined {
-	if (typeof value !== "string") return undefined;
-	try {
-		const url = new URL(value);
-		return url.protocol === HTTP || url.protocol === HTTPS ? value : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function nullableString(value: unknown): string | null | undefined {
-	if (value === null) return null;
-	return typeof value === "string" ? value : undefined;
-}
-
-function taskFromPayload(value: unknown): TodoistTask {
-	const data = record(value);
-	const id = stringValue(data.id);
-	const isMissingTaskId: boolean = !id;
-	if (isMissingTaskId) throw new TodoistError(RESPONSE, TASK_HAS_NO_ID);
-	return {
-		id,
-		content: stringValue(data.content),
-		description: stringValue(data.description),
-		projectId: stringValue(data.projectId ?? data.project_id),
-		sectionId: nullableString(data.sectionId ?? data.section_id),
-		sectionName: nullableString(data.sectionName ?? data.section_name),
-		parentId: nullableString(data.parentId ?? data.parent_id),
-		url: safeHttpUrl(data.url),
-		webUrl: safeHttpUrl(data.webUrl ?? data.web_url),
-	};
-}
-
-function childList(value: unknown): unknown[] {
-	if (Array.isArray(value)) return value;
-	const data = record(value);
-	if (Array.isArray(data.tasks)) return data.tasks;
-	return Array.isArray(data.results) ? data.results : [];
 }
 
 export class TodoistClient {
@@ -155,16 +77,26 @@ export class TodoistClient {
 		const payload = await this.run([PROJECT, LIST, JSON_OUTPUT_FLAG]);
 		const rows = childList(payload).map(record);
 		const target = ref.startsWith(ID) ? ref.slice(3) : ref;
-		const match = rows.find(
-			(row) =>
-				stringValue(row.id) === target || stringValue(row.name) === target,
-		);
-		if (!match)
+		let match: Record<string, unknown> | undefined;
+		for (const row of rows) {
+			const isMatchingProject =
+				stringValue(row.id) === target || stringValue(row.name) === target;
+			if (isMatchingProject) {
+				match = row;
+				break;
+			}
+		}
+		const hasNoProjectMatch = !match;
+		if (hasNoProjectMatch)
 			throw new TodoistError(
 				PROJECT_LIST,
 				`configured project not found: ${target}`,
 			);
-		return { id: stringValue(match.id), name: stringValue(match.name) };
+		const projectMatch = match as Record<string, unknown>;
+		return {
+			id: stringValue(projectMatch.id),
+			name: stringValue(projectMatch.name),
+		};
 	}
 
 	async getTask(ref: string): Promise<TodoistTask> {
@@ -191,9 +123,14 @@ export class TodoistClient {
 			`id:${project.id}`,
 			JSON_OUTPUT_FLAG,
 		]);
-		const section = childList(sections)
-			.map(record)
-			.find((item) => stringValue(item.id) === task.sectionId);
+		let section: Record<string, unknown> | undefined;
+		for (const item of childList(sections).map(record)) {
+			const isMatchingSection = stringValue(item.id) === task.sectionId;
+			if (isMatchingSection) {
+				section = item;
+				break;
+			}
+		}
 		return section ? stringValue(section.name) || null : null;
 	}
 
@@ -202,7 +139,8 @@ export class TodoistClient {
 		project: { id: string; currentTaskId?: string },
 	): Promise<TodoistTask> {
 		const task = await this.getTask(ref);
-		if (task.projectId !== project.id) {
+		const isOutsideConfiguredProject = task.projectId !== project.id;
+		if (isOutsideConfiguredProject) {
 			throw new TodoistError(
 				TASK_CLAIM,
 				TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
@@ -211,10 +149,13 @@ export class TodoistClient {
 		let sectionName = await this.resolveClaimSection(task, project);
 		const isInProgress =
 			sectionName?.trim().toLowerCase() === IN_PROGRESS_VALUE;
-		if (isInProgress && task.id !== project.currentTaskId) {
+		const isClaimedByAnotherTask =
+			isInProgress && task.id !== project.currentTaskId;
+		if (isClaimedByAnotherTask) {
 			throw new TodoistError(TASK_CLAIM, TASK_IS_ALREADY_IN_PROGRESS);
 		}
-		if (sectionName !== TODOIST_IN_PROGRESS_LABEL) {
+		const needsInProgressMove = sectionName !== TODOIST_IN_PROGRESS_LABEL;
+		if (needsInProgressMove) {
 			await this.run(
 				[
 					TASK,
@@ -257,7 +198,8 @@ export class TodoistClient {
 	async deleteDescendants(children: readonly TodoistChild[]): Promise<void> {
 		for (const child of children) {
 			const childTasks = child.children;
-			if (childTasks) await this.deleteDescendants(childTasks);
+			const hasChildTasks = childTasks !== undefined;
+			if (hasChildTasks) await this.deleteDescendants(childTasks);
 			await this.run([TASK, VALUE_DELETE, `id:${child.id}`, YES]);
 		}
 	}
