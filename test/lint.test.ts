@@ -45,6 +45,9 @@ const DIRECTIVE_SOURCE = `function read() {
 	"use strict";
 	return true;
 }`;
+const EMPTY_STRING_SOURCE = `function read() {
+	return "";
+}`;
 const STANDALONE_STRING_SOURCE = `function read() {
 	"use strict";
 	void 0;
@@ -157,6 +160,9 @@ describe("lint diagnostics", () => {
 			),
 		).toHaveLength(1);
 		expect(ruleIds(await lintFixture(DIRECTIVE_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
+		expect(ruleIds(await lintFixture(EMPTY_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
 		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
