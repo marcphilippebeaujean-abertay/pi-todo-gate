@@ -66,7 +66,7 @@ describe("manual Todoist reevaluation", () => {
 		await todoist.sessionStart({}, h.ctx);
 		expect(h.statusCalls.at(-1)).toEqual({
 			key: "pi-todo-gate-task",
-			text: "Todoist Task: none",
+			text: "Todoist Task: none |",
 		});
 
 		await todoist.beforeAgentStart("initial");

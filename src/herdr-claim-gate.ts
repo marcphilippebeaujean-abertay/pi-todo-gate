@@ -81,9 +81,6 @@ one of these happen in this session:
 - or a \`herdr tab get\` you ran returns a label that is already descriptive (tab already claimed).
 `;
 
-const BLOCK_MESSAGE =
-	"You are not following the Herdr instructions. Follow the tab-claim procedure in your Herdr session context before doing other work.";
-
 export type CommandRunner = (command: string, args: string[]) => string;
 export type StartBackgroundWorker = (
 	request: ClaimWorkerRequest,
@@ -155,35 +152,8 @@ function claimWorktreeTab(commandRunner: CommandRunner, cwd: string): boolean {
 	}
 }
 
-const CHAINING_RE = /[;&|<>`\r\n]|\$\(/;
-const HERDR_ID = "[A-Za-z0-9_.:-]+";
-const SHORT_LABEL = "[A-Za-z0-9_.\\/-]+";
-const ALLOWED: RegExp[] = [
-	/^echo HERDR_ENV=\$\{?HERDR_ENV\}?$/,
-	/^echo HERDR_ENV=['"]?\$\{?HERDR_ENV\}?['"]?$/,
-	/^echo ['"]?\$\{?HERDR_ENV\}?['"]?$/,
-	/^test "\$\{HERDR_ENV:-\}" = 1$/,
-	/^printf '%s\\n' "\$HERDR_WORKSPACE_ID" "\$HERDR_TAB_ID" "\$HERDR_PANE_ID"$/,
-	/^herdr pane current$/,
-	/^herdr pane list(?: --workspace (?:\$HERDR_WORKSPACE_ID|"\$HERDR_WORKSPACE_ID"|'\$HERDR_WORKSPACE_ID'))?$/,
-	new RegExp(`^herdr tab get ${HERDR_ID}$`),
-	/^herdr agent list$/,
-	new RegExp(`^herdr tab rename ${HERDR_ID} ${SHORT_LABEL}$`),
-	new RegExp(
-		`^herdr pane move ${HERDR_ID} --new-tab --label ${SHORT_LABEL} --focus$`,
-	),
-];
-
 function normalize(command: string): string {
 	return command.trim().replace(/\s+/g, " ");
-}
-
-function allowedCommand(command: string): boolean {
-	if (CHAINING_RE.test(command)) return false;
-	const normalized = normalize(command);
-	return Boolean(
-		normalized && ALLOWED.some((pattern) => pattern.test(normalized)),
-	);
 }
 
 function completesClaim(command: string): boolean {
@@ -300,8 +270,8 @@ export function installHerdrClaimGate(
 		}
 		notify(
 			ctx,
-			"Herdr claim gate active; background worker will claim this tab before work continues.",
-			"warning",
+			"Herdr claim worker running in background; main session remains unblocked.",
+			"info",
 		);
 	});
 
@@ -330,17 +300,6 @@ export function installHerdrClaimGate(
 		}
 		// Deliberately return no BeforeAgentStartEventResult: worker prompt and output stay private.
 		return undefined;
-	});
-
-	pi.on("tool_call", async (event) => {
-		if (!gateActive) return;
-		if (event.toolName !== "bash") {
-			return { block: true, reason: BLOCK_MESSAGE };
-		}
-		const command =
-			(event.input as { command?: string } | undefined)?.command ?? "";
-		if (allowedCommand(command)) return undefined;
-		return { block: true, reason: BLOCK_MESSAGE };
 	});
 
 	pi.on("tool_result", async (event) => {

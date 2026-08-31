@@ -204,7 +204,10 @@ export function createTodoistModule(
 			return;
 		claimAnalysisComplete = true;
 		const generation = ++operationGeneration;
-		runContext.ui.setStatus("pi-todo-gate-task", "Todoist Task: ⠋ evaluating");
+		runContext.ui.setStatus(
+			"pi-todo-gate-task",
+			"Todoist Task: ⠋ evaluating |",
+		);
 		let feedback: "none" | "claimed" = "none";
 		let failure: unknown;
 		try {
@@ -294,7 +297,7 @@ export function createTodoistModule(
 					if (runContext)
 						runContext.ui.setStatus(
 							"pi-todo-gate-task",
-							"Todoist Task: ⠋ claiming",
+							"Todoist Task: ⠋ claiming |",
 						);
 					try {
 						const client = createClient(ctx, dependencies);
@@ -451,7 +454,7 @@ export function createTodoistModule(
 			if (choice !== "Yes") return;
 			runContext.ui.setStatus(
 				"pi-todo-gate-task",
-				"Todoist Task: ⠋ completing",
+				"Todoist Task: ⠋ completing |",
 			);
 			try {
 				await createClient(

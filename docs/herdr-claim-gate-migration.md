@@ -19,7 +19,7 @@ Integrated Herdr setup starts an ephemeral background worker:
 pi --mode json -p --no-session --no-extensions <worker-prompt>
 ```
 
-Worker instructions and output stay inside worker process. User sees completion or failure through notification only. Main agent receives no Herdr context, message, status, or result.
+Worker instructions and output stay inside worker process. User sees completion or failure through notification only. Main agent receives no Herdr context, message, status, or result, and its tool calls are never blocked while worker runs.
 
 ## Remove legacy gate
 
