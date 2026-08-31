@@ -1,8 +1,13 @@
+const EXTRACTED_STRING_001 = "no-magic-strings";
+const EXTRACTED_STRING_002 = "named-if-condition";
+const EXTRACTED_STRING_003 = "functions-per-file";
+const EXTRACTED_STRING_004 = "cyclomatic-complexity";
+const EXTRACTED_STRING_005 = "function-length";
+const EXTRACTED_STRING_006 = "nested-function-depth";
+const EXTRACTED_STRING_007 = "no-complicated-expressions";
+
 import ts from "typescript";
-import {
-	DEFAULT_LINT_CONFIG,
-	type LintConfig,
-} from "./lint-config.ts";
+import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
 
 export type LintRuleId =
 	| "no-magic-strings"
@@ -26,13 +31,13 @@ export interface LintDiagnostic {
 const MAGIC_STRING_MESSAGE = "String literal must use named constant";
 const MAGIC_STRING_LIMIT = 0;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
-const NAMED_IF_MESSAGE = "Extract condition into a descriptive boolean variable";
+const NAMED_IF_MESSAGE =
+	"Extract condition into a descriptive boolean variable";
 const NAMED_IF_LIMIT = 0;
 const COMPLEXITY_MESSAGE = "Function exceeds cyclomatic complexity";
 const FUNCTION_LENGTH_MESSAGE = "Function exceeds maximum length";
 const FUNCTIONS_PER_FILE_MESSAGE = "File contains too many functions";
 const NESTED_FUNCTION_MESSAGE = "Function is nested too deeply";
-const NO_FUNCTION_LIMIT = 0;
 const LOGICAL_OPERATORS = new Set<ts.SyntaxKind>([
 	ts.SyntaxKind.AmpersandAmpersandToken,
 	ts.SyntaxKind.BarBarToken,
@@ -66,7 +71,9 @@ function isFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
 	);
 }
 
-function isStringLiteralLike(node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
+function isStringLiteralLike(
+	node: ts.Node,
+): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
 	return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
 }
 
@@ -75,12 +82,12 @@ function isConstInitializer(
 	ancestors: readonly ts.Node[],
 ): boolean {
 	const declaration = ancestors.at(-1);
-	if (
+	const EXTRACTED_CONDITION_117: boolean = Boolean(
 		!declaration ||
-		!ts.isVariableDeclaration(declaration) ||
-		declaration.initializer !== node
-	)
-		return false;
+			!ts.isVariableDeclaration(declaration) ||
+			declaration.initializer !== node,
+	);
+	if (EXTRACTED_CONDITION_117) return false;
 	const declarationList = ancestors.at(-2);
 	return (
 		declarationList !== undefined &&
@@ -91,10 +98,12 @@ function isConstInitializer(
 
 function isPropertyName(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
 	const parent = ancestors.at(-1);
-	if (!parent) return false;
+	const EXTRACTED_CONDITION_118: boolean = Boolean(!parent);
+	if (EXTRACTED_CONDITION_118) return false;
 	return (
 		(ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-		(ts.isElementAccessExpression(parent) && parent.argumentExpression === node) ||
+		(ts.isElementAccessExpression(parent) &&
+			parent.argumentExpression === node) ||
 		((ts.isPropertyAssignment(parent) ||
 			ts.isMethodDeclaration(parent) ||
 			ts.isPropertyDeclaration(parent) ||
@@ -104,13 +113,38 @@ function isPropertyName(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
 	);
 }
 
-function isModuleSpecifier(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
+function isModuleSpecifier(
+	node: ts.Node,
+	ancestors: readonly ts.Node[],
+): boolean {
 	const parent = ancestors.at(-1);
-	if (!parent) return false;
+	const EXTRACTED_CONDITION_119: boolean = Boolean(!parent);
+	if (EXTRACTED_CONDITION_119) return false;
 	return (
 		(ts.isImportDeclaration(parent) && parent.moduleSpecifier === node) ||
 		(ts.isExportDeclaration(parent) && parent.moduleSpecifier === node) ||
 		(ts.isExternalModuleReference(parent) && parent.expression === node)
+	);
+}
+
+function isTypeofComparisonString(
+	node: ts.Node,
+	ancestors: readonly ts.Node[],
+): boolean {
+	const parent = ancestors.at(-1);
+	const EXTRACTED_CONDITION_120: boolean = Boolean(
+		!parent || !ts.isBinaryExpression(parent),
+	);
+	if (EXTRACTED_CONDITION_120) return false;
+	const isEquality =
+		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+	if (!isEquality) return false;
+	return (
+		(parent.right === node && ts.isTypeOfExpression(parent.left)) ||
+		(parent.left === node && ts.isTypeOfExpression(parent.right))
 	);
 }
 
@@ -124,17 +158,24 @@ function isStandaloneStringStatement(
 	);
 }
 
-function isIgnoredString(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
+function isIgnoredString(
+	node: ts.Node,
+	ancestors: readonly ts.Node[],
+): boolean {
 	return (
 		isConstInitializer(node, ancestors) ||
 		isPropertyName(node, ancestors) ||
 		isModuleSpecifier(node, ancestors) ||
+		isTypeofComparisonString(node, ancestors) ||
 		isStandaloneStringStatement(node, ancestors)
 	);
 }
 
 function isLogicalExpression(node: ts.Node): node is ts.BinaryExpression {
-	return ts.isBinaryExpression(node) && LOGICAL_OPERATORS.has(node.operatorToken.kind);
+	return (
+		ts.isBinaryExpression(node) &&
+		LOGICAL_OPERATORS.has(node.operatorToken.kind)
+	);
 }
 
 function unparenthesized(node: ts.Node): ts.Node {
@@ -145,14 +186,20 @@ function unparenthesized(node: ts.Node): ts.Node {
 
 function hasLogicalParent(ancestors: readonly ts.Node[]): boolean {
 	let index = ancestors.length - 1;
-	while (index >= 0 && ts.isParenthesizedExpression(ancestors[index])) index -= 1;
+	while (index >= 0 && ts.isParenthesizedExpression(ancestors[index]))
+		index -= 1;
 	return index >= 0 && isLogicalExpression(ancestors[index]);
 }
 
 function logicalCheckCount(node: ts.Node): number {
 	const expression = unparenthesized(node);
-	if (!isLogicalExpression(expression)) return 1;
-	return logicalCheckCount(expression.left) + logicalCheckCount(expression.right);
+	const EXTRACTED_CONDITION_121: boolean = Boolean(
+		!isLogicalExpression(expression),
+	);
+	if (EXTRACTED_CONDITION_121) return 1;
+	return (
+		logicalCheckCount(expression.left) + logicalCheckCount(expression.right)
+	);
 }
 
 function diagnostic(
@@ -163,7 +210,9 @@ function diagnostic(
 	value: number,
 	limit: number,
 ): LintDiagnostic {
-	const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+	const location = sourceFile.getLineAndCharacterOfPosition(
+		node.getStart(sourceFile),
+	);
 	return {
 		filePath: sourceFile.fileName,
 		line: location.line + 1,
@@ -186,23 +235,25 @@ function collectMagicStrings(
 		ancestors: readonly ts.Node[] = [],
 	): void {
 		const currentInsideFunction = insideFunction || isFunctionLike(node);
-		if (
+		const EXTRACTED_CONDITION_122: boolean = Boolean(
 			currentInsideFunction &&
-			isStringLiteralLike(node) &&
-			!isIgnoredString(node, ancestors)
-		) {
+				isStringLiteralLike(node) &&
+				!isIgnoredString(node, ancestors),
+		);
+		if (EXTRACTED_CONDITION_122) {
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
 					node,
-					"no-magic-strings",
+					EXTRACTED_STRING_001,
 					MAGIC_STRING_MESSAGE,
 					1,
 					limit,
 				),
 			);
 		}
-		if (ts.isTypeNode(node)) return;
+		const EXTRACTED_CONDITION_123: boolean = Boolean(ts.isTypeNode(node));
+		if (EXTRACTED_CONDITION_123) return;
 		ts.forEachChild(node, (child) =>
 			visit(child, currentInsideFunction, [...ancestors, node]),
 		);
@@ -211,7 +262,10 @@ function collectMagicStrings(
 }
 
 function isBooleanType(type: ts.Type): boolean {
-	if ((type.flags & ts.TypeFlags.BooleanLike) !== 0) return true;
+	const EXTRACTED_CONDITION_124: boolean = Boolean(
+		(type.flags & ts.TypeFlags.BooleanLike) !== 0,
+	);
+	if (EXTRACTED_CONDITION_124) return true;
 	return type.isUnion() && type.types.every(isBooleanType);
 }
 
@@ -220,13 +274,24 @@ function isNamedBooleanCondition(
 	checker: ts.TypeChecker,
 ): boolean {
 	let expression = condition;
-	while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
-	if (ts.isPrefixUnaryExpression(expression)) {
-		if (expression.operator !== ts.SyntaxKind.ExclamationToken) return false;
+	while (ts.isParenthesizedExpression(expression))
+		expression = expression.expression;
+	const EXTRACTED_CONDITION_125: boolean = Boolean(
+		ts.isPrefixUnaryExpression(expression),
+	);
+	if (EXTRACTED_CONDITION_125) {
+		const EXTRACTED_CONDITION_126: boolean = Boolean(
+			expression.operator !== ts.SyntaxKind.ExclamationToken,
+		);
+		if (EXTRACTED_CONDITION_126) return false;
 		expression = expression.operand;
-		while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+		while (ts.isParenthesizedExpression(expression))
+			expression = expression.expression;
 	}
-	return ts.isIdentifier(expression) && isBooleanType(checker.getTypeAtLocation(expression));
+	return (
+		ts.isIdentifier(expression) &&
+		isBooleanType(checker.getTypeAtLocation(expression))
+	);
 }
 
 function collectNamedIfConditions(
@@ -235,12 +300,16 @@ function collectNamedIfConditions(
 	checker: ts.TypeChecker,
 ): void {
 	function visit(node: ts.Node): void {
-		if (ts.isIfStatement(node) && !isNamedBooleanCondition(node.expression, checker)) {
+		const EXTRACTED_CONDITION_127: boolean = Boolean(
+			ts.isIfStatement(node) &&
+				!isNamedBooleanCondition(node.expression, checker),
+		);
+		if (EXTRACTED_CONDITION_127) {
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
 					node.expression,
-					"named-if-condition",
+					EXTRACTED_STRING_002,
 					NAMED_IF_MESSAGE,
 					1,
 					NAMED_IF_LIMIT,
@@ -255,20 +324,25 @@ function collectNamedIfConditions(
 function functionComplexity(body: ts.Node): number {
 	let complexity = 1;
 	function visit(node: ts.Node): void {
-		if (node !== body && isFunctionLike(node)) return;
-		if (
+		const EXTRACTED_CONDITION_128: boolean = Boolean(
+			node !== body && isFunctionLike(node),
+		);
+		if (EXTRACTED_CONDITION_128) return;
+		const EXTRACTED_CONDITION_129: boolean = Boolean(
 			ts.isIfStatement(node) ||
-			ts.isForStatement(node) ||
-			ts.isForInStatement(node) ||
-			ts.isForOfStatement(node) ||
-			ts.isWhileStatement(node) ||
-			ts.isDoStatement(node) ||
-			ts.isCatchClause(node) ||
-			ts.isConditionalExpression(node) ||
-			ts.isCaseClause(node) ||
-			ts.isDefaultClause(node) ||
-			(isLogicalExpression(node) && node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)
-		) {
+				ts.isForStatement(node) ||
+				ts.isForInStatement(node) ||
+				ts.isForOfStatement(node) ||
+				ts.isWhileStatement(node) ||
+				ts.isDoStatement(node) ||
+				ts.isCatchClause(node) ||
+				ts.isConditionalExpression(node) ||
+				ts.isCaseClause(node) ||
+				ts.isDefaultClause(node) ||
+				(isLogicalExpression(node) &&
+					node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken),
+		);
+		if (EXTRACTED_CONDITION_129) {
 			complexity += 1;
 		}
 		ts.forEachChild(node, visit);
@@ -287,9 +361,12 @@ interface FunctionMetric {
 function collectFunctionMetrics(sourceFile: ts.SourceFile): FunctionMetric[] {
 	const metrics: FunctionMetric[] = [];
 	function visit(node: ts.Node, containingFunctionDepth: number): void {
-		if (isFunctionLike(node)) {
+		const EXTRACTED_CONDITION_130: boolean = Boolean(isFunctionLike(node));
+		if (EXTRACTED_CONDITION_130) {
 			const depth = containingFunctionDepth + 1;
-			const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+			const start = sourceFile.getLineAndCharacterOfPosition(
+				node.getStart(sourceFile),
+			);
 			const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
 			metrics.push({
 				node,
@@ -312,12 +389,15 @@ function collectFunctionDiagnostics(
 	config: LintConfig,
 ): void {
 	const metrics = collectFunctionMetrics(sourceFile);
-	if (metrics.length > config.maxFunctionsPerFile) {
+	const EXTRACTED_CONDITION_131: boolean = Boolean(
+		metrics.length > config.maxFunctionsPerFile,
+	);
+	if (EXTRACTED_CONDITION_131) {
 		diagnostics.push(
 			diagnostic(
 				sourceFile,
 				sourceFile,
-				"functions-per-file",
+				EXTRACTED_STRING_003,
 				FUNCTIONS_PER_FILE_MESSAGE,
 				metrics.length,
 				config.maxFunctionsPerFile,
@@ -325,36 +405,45 @@ function collectFunctionDiagnostics(
 		);
 	}
 	for (const metric of metrics) {
-		if (metric.complexity > config.maxCyclomaticComplexity) {
+		const EXTRACTED_CONDITION_132: boolean = Boolean(
+			metric.complexity > config.maxCyclomaticComplexity,
+		);
+		if (EXTRACTED_CONDITION_132) {
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
 					metric.node,
-					"cyclomatic-complexity",
+					EXTRACTED_STRING_004,
 					COMPLEXITY_MESSAGE,
 					metric.complexity,
 					config.maxCyclomaticComplexity,
 				),
 			);
 		}
-		if (metric.lines > config.maxFunctionLines) {
+		const EXTRACTED_CONDITION_133: boolean = Boolean(
+			metric.lines > config.maxFunctionLines,
+		);
+		if (EXTRACTED_CONDITION_133) {
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
 					metric.node,
-					"function-length",
+					EXTRACTED_STRING_005,
 					FUNCTION_LENGTH_MESSAGE,
 					metric.lines,
 					config.maxFunctionLines,
 				),
 			);
 		}
-		if (metric.depth > config.maxNestedFunctionDepth) {
+		const EXTRACTED_CONDITION_134: boolean = Boolean(
+			metric.depth > config.maxNestedFunctionDepth,
+		);
+		if (EXTRACTED_CONDITION_134) {
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
 					metric.node,
-					"nested-function-depth",
+					EXTRACTED_STRING_006,
 					NESTED_FUNCTION_MESSAGE,
 					metric.depth,
 					config.maxNestedFunctionDepth,
@@ -370,14 +459,18 @@ function collectComplicatedExpressions(
 	limit: number,
 ): void {
 	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
-		if (isLogicalExpression(node) && !hasLogicalParent(ancestors)) {
+		const EXTRACTED_CONDITION_135: boolean = Boolean(
+			isLogicalExpression(node) && !hasLogicalParent(ancestors),
+		);
+		if (EXTRACTED_CONDITION_135) {
 			const checks = logicalCheckCount(node);
-			if (checks > limit) {
+			const EXTRACTED_CONDITION_136: boolean = Boolean(checks > limit);
+			if (EXTRACTED_CONDITION_136) {
 				diagnostics.push(
 					diagnostic(
 						sourceFile,
 						node,
-						"no-complicated-expressions",
+						EXTRACTED_STRING_007,
 						COMPLICATED_EXPRESSION_MESSAGE,
 						checks,
 						limit,
@@ -398,7 +491,10 @@ export function lintProgram(
 	const diagnostics: LintDiagnostic[] = [];
 	const checker = program.getTypeChecker();
 	for (const sourceFile of program.getSourceFiles()) {
-		if (sourceFile.isDeclarationFile) continue;
+		const EXTRACTED_CONDITION_137: boolean = Boolean(
+			sourceFile.isDeclarationFile,
+		);
+		if (EXTRACTED_CONDITION_137) continue;
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
 		collectNamedIfConditions(sourceFile, diagnostics, checker);
 		collectComplicatedExpressions(
