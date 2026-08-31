@@ -26,6 +26,8 @@ export interface LintDiagnostic {
 const MAGIC_STRING_MESSAGE = "String literal must use named constant";
 const MAGIC_STRING_LIMIT = 0;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
+const NAMED_IF_MESSAGE = "Extract condition into a descriptive boolean variable";
+const NAMED_IF_LIMIT = 0;
 const LOGICAL_OPERATORS = new Set<ts.SyntaxKind>([
 	ts.SyntaxKind.AmpersandAmpersandToken,
 	ts.SyntaxKind.BarBarToken,
@@ -203,6 +205,48 @@ function collectMagicStrings(
 	visit(sourceFile, false);
 }
 
+function isBooleanType(type: ts.Type): boolean {
+	if ((type.flags & ts.TypeFlags.BooleanLike) !== 0) return true;
+	return type.isUnion() && type.types.every(isBooleanType);
+}
+
+function isNamedBooleanCondition(
+	condition: ts.Expression,
+	checker: ts.TypeChecker,
+): boolean {
+	let expression = condition;
+	while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+	if (ts.isPrefixUnaryExpression(expression)) {
+		if (expression.operator !== ts.SyntaxKind.ExclamationToken) return false;
+		expression = expression.operand;
+		while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+	}
+	return ts.isIdentifier(expression) && isBooleanType(checker.getTypeAtLocation(expression));
+}
+
+function collectNamedIfConditions(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+	checker: ts.TypeChecker,
+): void {
+	function visit(node: ts.Node): void {
+		if (ts.isIfStatement(node) && !isNamedBooleanCondition(node.expression, checker)) {
+			diagnostics.push(
+				diagnostic(
+					sourceFile,
+					node.expression,
+					"named-if-condition",
+					NAMED_IF_MESSAGE,
+					1,
+					NAMED_IF_LIMIT,
+				),
+			);
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(sourceFile);
+}
+
 function collectComplicatedExpressions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
@@ -238,6 +282,7 @@ export function lintProgram(
 	for (const sourceFile of program.getSourceFiles()) {
 		if (sourceFile.isDeclarationFile) continue;
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
+		collectNamedIfConditions(sourceFile, diagnostics, program.getTypeChecker());
 		collectComplicatedExpressions(
 			sourceFile,
 			diagnostics,

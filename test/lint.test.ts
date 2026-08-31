@@ -39,6 +39,15 @@ const MAGIC_TEST = "flags executable string literals but permits const definitio
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
+const NAMED_IF_RULE = "named-if-condition";
+const NAMED_IF_TEST = "requires named boolean conditions";
+const IF_SOURCE = `function check(accountBalance: number, isClosed: boolean, count: number) {
+	if (accountBalance > 0) return true;
+	if (isClosed) return false;
+	if (!isClosed) return false;
+	if (count) return true;
+	return false;
+}`;
 
 function ruleIds(diagnostics: readonly LintDiagnostic[]): string[] {
 	return diagnostics.map((diagnostic) => diagnostic.ruleId);
@@ -90,5 +99,10 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(TWO_CHECKS_SOURCE))).not.toContain(
 			NO_EXPRESSION_RULE,
 		);
+	});
+
+	it(NAMED_IF_TEST, async () => {
+		const diagnostics = await lintFixture(IF_SOURCE);
+		expect(ruleIds(diagnostics).filter((id) => id === NAMED_IF_RULE)).toHaveLength(2);
 	});
 });
