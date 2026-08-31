@@ -10,6 +10,7 @@ Add event-driven exit handling to `pi-todo-gate` so merged sessions and real Pi 
 - Add an exit-protocol presenter with combined checkbox UI.
 - Add worktree lifecycle tracking and local cleanup.
 - Convert PR merge notification from direct Todoist coupling to `prMerged` event dispatch.
+- Keep merge detection in standalone `src/shared/merge-detection.ts`; it parses and validates merge commands without owning PR state or downstream behavior.
 - Convert Todoist merge completion handling to event-provided actions.
 - Preserve remote branches.
 - Do not clean up during session replacement, reload, fork, or other non-quit shutdowns.
@@ -29,8 +30,8 @@ The extension creates one bus per extension runtime and passes it to modules. Th
 
 ### Merge
 
-1. PR module detects and records a merge.
-2. PR module emits `prMerged`.
+1. Standalone merge-detection module parses and validates the observed merge command, returning a normalized `MergeEvent` when it matches the active PR.
+2. PR module consumes that result, records merged-PR state, and emits `prMerged`.
 3. Active Todoist and worktree modules register applicable actions.
 4. Exit-protocol module presents one combined action picker.
 5. All applicable actions start selected and focus starts on `Submit`.
@@ -96,9 +97,11 @@ Todoist remains owner of task state, API client, status rendering, persistence, 
 
 Executing the action calls the existing completion API, clears task state, refreshes status, and notifies success. Failures retain task state and notify a sanitized error. If no-work worktree auto-cleanup occurs, an active Todoist task still contributes its own action and remains independently selectable.
 
-## PR module and extension integration
+## Merge detection, PR module, and extension integration
 
-PR module no longer invokes Todoist behavior directly. Its merge event is forwarded through the shared bus. Extension shutdown emits `sessionWillClose` before calling `deactivate()` on PR, Todoist, and worktree modules.
+The standalone merge-detection module owns shell parsing, merge-target validation, and normalized `MergeEvent` creation. It remains independent of PR and Todoist state. The PR module consumes its result, owns PR state recording, and emits `prMerged`; it never invokes Todoist behavior directly.
+
+Extension shutdown emits `sessionWillClose` before calling `deactivate()` on PR, Todoist, and worktree modules.
 
 Generation/session guards prevent stale asynchronous merge or shutdown work from acting on a replacement session. Event listeners unsubscribe or become inert on deactivation.
 
