@@ -45,9 +45,10 @@ function contextFor(
 		data?: unknown;
 		customType?: string;
 	}> = pi.entries,
+	cwd = "/repo",
 ) {
 	return {
-		cwd: "/repo",
+		cwd,
 		mode: "tui",
 		ui: {
 			notify(message: string, level: string) {
@@ -246,6 +247,15 @@ describe("Herdr claim gate enforcement", () => {
 				contextFor(pi),
 			),
 		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+		expect(
+			await toolCall?.(
+				{
+					toolName: "bash",
+					input: { command: "herdr pane current > /tmp/herdr.json" },
+				},
+				contextFor(pi),
+			),
+		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
 	});
 
 	it("lifts gate when worker completes and cancels worker on shutdown", async () => {
@@ -268,6 +278,37 @@ describe("Herdr claim gate enforcement", () => {
 		expect(worker.wasCancelled()).toBe(false);
 	});
 
+	it("keeps gate active after worker startup failure and notifies user", async () => {
+		const pi = createFakePi();
+		const previousHerdr = process.env.HERDR_ENV;
+		process.env.HERDR_ENV = "1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner,
+				startBackgroundWorker: () => {
+					throw new Error("worker unavailable");
+				},
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi),
+			);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim tab" },
+				contextFor(pi),
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+		}
+
+		const toolCall = pi.handlers.get("tool_call")?.[0];
+		expect(
+			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
+		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+		expect(pi.notifications.at(-1)?.level).toBe("warning");
+	});
+
 	it("keeps gate active after worker failure and notifies user", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
@@ -287,15 +328,83 @@ describe("Herdr claim gate enforcement", () => {
 		expect(pi.notifications.at(-1)?.level).toBe("warning");
 	});
 
+	it("does not lift gate after failed tab rename", async () => {
+		const pi = createFakePi();
+		const runner: CommandRunner = (command, args) => {
+			if (command === "herdr" && args[0] === "tab" && args[1] === "rename")
+				throw new Error("rename failed");
+			return commandRunner(command, args);
+		};
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousTab = process.env.HERDR_TAB_ID;
+		process.env.HERDR_ENV = "1";
+		process.env.HERDR_TAB_ID = "w1:t1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner: runner,
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi),
+			);
+			const toolCall = pi.handlers.get("tool_call")?.[0];
+			await toolCall?.(
+				{
+					toolName: "bash",
+					input: { command: "herdr tab rename w1:t1 dialog-editor" },
+				},
+				contextFor(pi),
+			);
+			expect(pi.entries).toHaveLength(0);
+			expect(
+				await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
+			).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+			else process.env.HERDR_TAB_ID = previousTab;
+		}
+	});
+
+	it("does not lift gate from failed tab-get result", async () => {
+		const pi = createFakePi();
+		await startGate(pi);
+		await emit(
+			pi,
+			"tool_result",
+			{
+				toolName: "bash",
+				isError: true,
+				input: { command: "herdr tab get w1:t1" },
+				content: [
+					{
+						type: "text",
+						text: '{"result":{"tab":{"label":"descriptive"}}}',
+					},
+				],
+			},
+			contextFor(pi),
+		);
+		const toolCall = pi.handlers.get("tool_call")?.[0];
+		expect(
+			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
+		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+	});
+
 	it("lifts gate after allowed tab rename", async () => {
 		const pi = createFakePi();
 		await startGate(pi);
 		const toolCall = pi.handlers.get("tool_call")?.[0];
-		await toolCall?.(
-			{
-				toolName: "bash",
-				input: { command: "herdr tab rename w1:t1 dialog-editor" },
-			},
+		const renameEvent = {
+			toolName: "bash",
+			input: { command: "herdr tab rename w1:t1 dialog-editor" },
+		};
+		expect(await toolCall?.(renameEvent, contextFor(pi))).toBeUndefined();
+		await emit(
+			pi,
+			"tool_result",
+			{ ...renameEvent, isError: false, content: [] },
 			contextFor(pi),
 		);
 
@@ -306,6 +415,46 @@ describe("Herdr claim gate enforcement", () => {
 });
 
 describe("Herdr automatic linked-worktree claim", () => {
+	it("uses session cwd when comparing relative Git paths", async () => {
+		const pi = createFakePi();
+		const commands: string[] = [];
+		const runner: CommandRunner = (command, args) => {
+			commands.push([command, ...args].join(" "));
+			if (command === "git" && args.join(" ") === "rev-parse --git-dir")
+				return "/session/.git\n";
+			if (command === "git" && args.join(" ") === "rev-parse --git-common-dir")
+				return ".git\n";
+			if (command === "git" && args.join(" ") === "branch --show-current")
+				return "feature/dialog-editor\n";
+			if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+				return '{"result":{"tab":{"label":"7"}}}';
+			return "{}";
+		};
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousTab = process.env.HERDR_TAB_ID;
+		process.env.HERDR_ENV = "1";
+		process.env.HERDR_TAB_ID = "w1:t1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner: runner,
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi, pi.entries, "/session"),
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+			else process.env.HERDR_TAB_ID = previousTab;
+		}
+
+		expect(commands).not.toContain(
+			"herdr tab rename w1:t1 feature/dialog-editor",
+		);
+		expect(pi.entries).toHaveLength(0);
+	});
+
 	it("renames numeric default tab and skips worker instructions", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();

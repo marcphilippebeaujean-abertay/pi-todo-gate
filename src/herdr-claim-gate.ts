@@ -164,7 +164,7 @@ function claimWorktreeTab(commandRunner: CommandRunner, cwd: string): boolean {
 	}
 }
 
-const CHAINING_RE = /[;&|]|\$\(|`/;
+const CHAINING_RE = /[;&|<>`\r\n]|\$\(/;
 const ALLOWED: RegExp[] = [
 	/^echo HERDR_ENV=\$\{?HERDR_ENV\}?$/,
 	/^echo HERDR_ENV=['"]?\$\{?HERDR_ENV\}?['"]?$/,
@@ -184,11 +184,10 @@ function normalize(command: string): string {
 }
 
 function allowedCommand(command: string): boolean {
+	if (CHAINING_RE.test(command)) return false;
 	const normalized = normalize(command);
 	return Boolean(
-		normalized &&
-			!CHAINING_RE.test(normalized) &&
-			ALLOWED.some((pattern) => pattern.test(normalized)),
+		normalized && ALLOWED.some((pattern) => pattern.test(normalized)),
 	);
 }
 
@@ -211,7 +210,11 @@ function labelIsDescriptive(label: string | undefined | null): boolean {
 }
 
 function extractLabel(text: string): string | undefined {
-	return text.match(/"label"\s*:\s*"([^"]*)"/)?.[1];
+	const response = jsonResult<{
+		result?: { tab?: { label?: unknown } };
+	}>(text);
+	const label = response?.result?.tab?.label;
+	return typeof label === "string" ? label : undefined;
 }
 
 function textOf(value: unknown): string {
@@ -259,14 +262,17 @@ export function installHerdrClaimGate(
 	pi: ExtensionAPI,
 	options: ClaimGateOptions = {},
 ): void {
-	const cwd = options.cwd ?? process.cwd();
+	let sessionCwd = options.cwd ?? process.cwd();
 	const commandRunner =
 		options.commandRunner ??
-		((command, args) => runCommand(command, args, cwd));
+		((command, args) => runCommand(command, args, sessionCwd));
 	const startWorker =
 		options.startBackgroundWorker ??
 		((request: ClaimWorkerRequest) =>
-			startClaimWorker(request, { cwd, spawnWorker: options.spawnWorker }));
+			startClaimWorker(request, {
+				cwd: sessionCwd,
+				spawnWorker: options.spawnWorker,
+			}));
 	let gateActive = false;
 	let herdrAvailable = false;
 	let worker: ClaimWorkerHandle | undefined;
@@ -286,13 +292,14 @@ export function installHerdrClaimGate(
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
+		sessionCwd = typeof ctx.cwd === "string" ? ctx.cwd : sessionCwd;
 		gateActive = false;
 		herdrAvailable = isInsideHerdr() && !isSubagent();
 		worker = undefined;
 		if (!herdrAvailable || alreadyClaimed(ctx)) return;
 
 		gateActive = true;
-		if (claimWorktreeTab(commandRunner, cwd)) {
+		if (claimWorktreeTab(commandRunner, sessionCwd)) {
 			persistClaimed(ctx);
 			return;
 		}
@@ -305,18 +312,27 @@ export function installHerdrClaimGate(
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!herdrAvailable || !gateActive || worker) return;
-		worker = startWorker({
-			prompt: event.prompt ?? "",
-			instructions: HERDR_INSTRUCTIONS,
-			onClaimComplete: () => {
-				worker = undefined;
-				persistClaimed(ctx);
-			},
-			onFailure: (message) => {
-				worker = undefined;
-				notify(ctx, message, "warning");
-			},
-		});
+		try {
+			worker = startWorker({
+				prompt: event.prompt ?? "",
+				instructions: HERDR_INSTRUCTIONS,
+				onClaimComplete: () => {
+					worker = undefined;
+					persistClaimed(ctx);
+				},
+				onFailure: (message) => {
+					worker = undefined;
+					notify(ctx, message, "warning");
+				},
+			});
+		} catch (error) {
+			worker = undefined;
+			const detail =
+				error instanceof Error
+					? error.message
+					: String(error ?? "unknown error");
+			notify(ctx, `Herdr claim worker failed to start: ${detail}`, "warning");
+		}
 		// Deliberately return no BeforeAgentStartEventResult: worker prompt and output stay private.
 		return undefined;
 	});
@@ -328,17 +344,18 @@ export function installHerdrClaimGate(
 		}
 		const command =
 			(event.input as { command?: string } | undefined)?.command ?? "";
-		if (allowedCommand(command)) {
-			if (completesClaim(command)) persistClaimed();
-			return undefined;
-		}
+		if (allowedCommand(command)) return undefined;
 		return { block: true, reason: BLOCK_MESSAGE };
 	});
 
 	pi.on("tool_result", async (event) => {
-		if (!gateActive || event.toolName !== "bash") return;
+		if (!gateActive || event.toolName !== "bash" || event.isError) return;
 		const command =
 			(event.input as { command?: string } | undefined)?.command ?? "";
+		if (completesClaim(command)) {
+			persistClaimed();
+			return;
+		}
 		if (!isTabGet(command)) return;
 		const content = textOf(event.content);
 		if (labelIsDescriptive(extractLabel(content))) persistClaimed();

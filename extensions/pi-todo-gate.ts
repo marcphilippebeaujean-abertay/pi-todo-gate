@@ -19,7 +19,6 @@ import {
 	installHerdrClaimGate,
 	type StartBackgroundWorker,
 } from "../src/herdr-claim-gate.ts";
-import { startClaimWorker } from "../src/herdr-claim-worker.ts";
 import {
 	readPiTaskStore,
 	sessionTaskPath,
@@ -245,9 +244,7 @@ export default function extension(
 ): void {
 	installHerdrClaimGate(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
-		startBackgroundWorker:
-			dependencies.herdrStartBackgroundWorker ??
-			((request) => startClaimWorker(request, { cwd: process.cwd() })),
+		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 	});
 	let active: ActiveSession | null = null;
 	let registered = false;
