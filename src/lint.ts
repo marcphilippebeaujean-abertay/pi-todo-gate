@@ -322,6 +322,40 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
+function isNumericType(type: ts.Type): boolean {
+	if ((type.flags & ts.TypeFlags.NumberLike) !== 0) return true;
+	return type.isUnion() && type.types.every(isNumericType);
+}
+
+function isSimpleReference(expression: ts.Expression): boolean {
+	return (
+		ts.isIdentifier(expression) ||
+		ts.isPropertyAccessExpression(expression) ||
+		ts.isElementAccessExpression(expression)
+	);
+}
+
+function isReadableLogicalCondition(
+	expression: ts.Expression,
+	checker: ts.TypeChecker,
+): boolean {
+	if (isTypeGuardExpression(expression)) return true;
+	if (isLogicalExpression(expression)) {
+		return (
+			logicalCheckCount(expression) <= 2 &&
+			isReadableLogicalCondition(expression.left, checker) &&
+			isReadableLogicalCondition(expression.right, checker)
+		);
+	}
+	if (!ts.isBinaryExpression(expression)) return isSimpleReference(expression);
+	return (
+		!isNumericType(checker.getTypeAtLocation(expression.left)) &&
+		!isNumericType(checker.getTypeAtLocation(expression.right)) &&
+		isSimpleReference(expression.left) &&
+		isSimpleReference(expression.right)
+	);
+}
+
 function isNamedBooleanCondition(
 	condition: ts.Expression,
 	checker: ts.TypeChecker,
@@ -336,9 +370,18 @@ function isNamedBooleanCondition(
 		while (ts.isParenthesizedExpression(expression))
 			expression = expression.expression;
 	}
+	if (ts.isIdentifier(expression))
+		return isNamedConditionType(checker.getTypeAtLocation(expression));
+	if (ts.isCallExpression(expression)) return false;
+	if (isLogicalExpression(expression))
+		return isReadableLogicalCondition(expression, checker);
+	if (ts.isBinaryExpression(expression))
+		return isReadableLogicalCondition(expression, checker);
+	if (isSimpleReference(expression))
+		return isNamedConditionType(checker.getTypeAtLocation(expression));
 	return (
-		ts.isIdentifier(expression) &&
-		isNamedConditionType(checker.getTypeAtLocation(expression))
+		(checker.getTypeAtLocation(expression).flags & ts.TypeFlags.BooleanLike) !==
+		0
 	);
 }
 
