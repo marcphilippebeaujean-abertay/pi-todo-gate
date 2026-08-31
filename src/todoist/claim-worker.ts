@@ -2,6 +2,10 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import type { Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
+import {
+	buildPiWorkerArgs,
+	textFromAssistantMessage,
+} from "../shared/pi-worker.ts";
 
 export const TaskClaimWorkerInputSchema = Type.Object({
 	prompt: Type.String(),
@@ -58,21 +62,6 @@ function workerPrompt(input: TaskClaimWorkerInput): string {
 	].join("\n");
 }
 
-function textFromMessage(value: unknown): string {
-	if (typeof value !== "object" || value === null) return "";
-	const message = value as { role?: unknown; content?: unknown };
-	if (message.role !== "assistant") return "";
-	if (typeof message.content === "string") return message.content;
-	if (!Array.isArray(message.content)) return "";
-	return message.content
-		.map((part) =>
-			typeof part === "object" && part !== null && "text" in part
-				? String((part as { text?: unknown }).text ?? "")
-				: "",
-		)
-		.join("");
-}
-
 function sanitizeWorkerError(stderr: string): string {
 	return stderr
 		.replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
@@ -89,7 +78,7 @@ function parseResult(stdout: string): TaskClaimWorkerResult {
 		if (!line.trim()) continue;
 		try {
 			const event = JSON.parse(line) as { message?: unknown };
-			const text = textFromMessage(event.message);
+			const text = textFromAssistantMessage(event.message, "");
 			if (text) texts.push(text);
 		} catch {
 			// Ignore non-JSON process output.
@@ -147,18 +136,7 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 	return async (input) => {
 		const result = await exec(
 			"pi",
-			[
-				"--mode",
-				"json",
-				"-p",
-				"--no-extensions",
-				"--no-context-files",
-				"--tools",
-				"bash",
-				"--thinking",
-				"low",
-				workerPrompt(input),
-			],
+			buildPiWorkerArgs(workerPrompt(input), { thinking: "low" }),
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
 		if (result.code !== 0) {

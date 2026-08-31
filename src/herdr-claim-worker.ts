@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import {
+	buildPiWorkerArgs,
+	textFromAssistantMessage,
+} from "./shared/pi-worker.ts";
 
 export interface ClaimWorkerResult {
 	tabId: string;
@@ -62,25 +66,6 @@ function appendBounded(current: string, chunk: Buffer | string): string {
 		: next;
 }
 
-function workerPrompt(request: ClaimWorkerRequest): string {
-	return request.prompt;
-}
-
-function textFromMessage(value: unknown): string {
-	if (typeof value !== "object" || value === null) return "";
-	const message = value as { role?: unknown; content?: unknown };
-	if (message.role !== "assistant") return "";
-	if (typeof message.content === "string") return message.content;
-	if (!Array.isArray(message.content)) return "";
-	return message.content
-		.map((part) =>
-			typeof part === "object" && part !== null && "text" in part
-				? String((part as { text?: unknown }).text ?? "")
-				: "",
-		)
-		.join("\n");
-}
-
 function claimResult(value: unknown): ClaimWorkerResult | undefined {
 	if (typeof value !== "object" || value === null) return undefined;
 	const result = value as {
@@ -104,7 +89,7 @@ function parseClaimResult(stdout: string): ClaimWorkerResult | undefined {
 		if (!line.trim()) continue;
 		try {
 			const event = JSON.parse(line) as { message?: unknown };
-			const text = textFromMessage(event.message).trim();
+			const text = textFromAssistantMessage(event.message).trim();
 			if (text) return claimResult(JSON.parse(text));
 			return claimResult(event);
 		} catch {
@@ -120,18 +105,9 @@ export function startClaimWorker(
 ): ClaimWorkerHandle {
 	const child = (options.spawnWorker ?? defaultSpawnWorker)(
 		options.command ?? DEFAULT_COMMAND,
-		[
-			"--mode",
-			"json",
-			"-p",
-			"--no-extensions",
-			"--no-context-files",
-			"--tools",
-			"bash",
-			"--append-system-prompt",
-			request.instructions,
-			workerPrompt(request),
-		],
+		buildPiWorkerArgs(request.prompt, {
+			instructions: request.instructions,
+		}),
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
