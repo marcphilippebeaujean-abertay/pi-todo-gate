@@ -1,9 +1,18 @@
 import { spawn } from "node:child_process";
+import {
+	buildPiWorkerArgs,
+	textFromAssistantMessage,
+} from "./shared/pi-worker.ts";
+
+export interface ClaimWorkerResult {
+	tabId: string;
+	label: string;
+}
 
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	onClaimComplete: () => void;
+	onClaimComplete: (result?: ClaimWorkerResult) => void;
 	onFailure: (message: string) => void;
 }
 
@@ -57,8 +66,37 @@ function appendBounded(current: string, chunk: Buffer | string): string {
 		: next;
 }
 
-function workerPrompt(request: ClaimWorkerRequest): string {
-	return `${request.instructions}\n\nParent user prompt:\n${request.prompt}`;
+function claimResult(value: unknown): ClaimWorkerResult | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const result = value as {
+		status?: unknown;
+		tabId?: unknown;
+		label?: unknown;
+	};
+	if (
+		result.status !== "claimed" ||
+		typeof result.tabId !== "string" ||
+		!result.tabId.trim() ||
+		typeof result.label !== "string" ||
+		!result.label.trim()
+	)
+		return undefined;
+	return { tabId: result.tabId, label: result.label };
+}
+
+function parseClaimResult(stdout: string): ClaimWorkerResult | undefined {
+	for (const line of stdout.split(/\r?\n/).reverse()) {
+		if (!line.trim()) continue;
+		try {
+			const event = JSON.parse(line) as { message?: unknown };
+			const text = textFromAssistantMessage(event.message).trim();
+			if (text) return claimResult(JSON.parse(text));
+			return claimResult(event);
+		} catch {
+			// Keep searching earlier worker output.
+		}
+	}
+	return undefined;
 }
 
 export function startClaimWorker(
@@ -67,14 +105,9 @@ export function startClaimWorker(
 ): ClaimWorkerHandle {
 	const child = (options.spawnWorker ?? defaultSpawnWorker)(
 		options.command ?? DEFAULT_COMMAND,
-		[
-			"--mode",
-			"json",
-			"-p",
-			"--no-session",
-			"--no-extensions",
-			workerPrompt(request),
-		],
+		buildPiWorkerArgs(request.prompt, {
+			instructions: request.instructions,
+		}),
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
@@ -84,10 +117,12 @@ export function startClaimWorker(
 	);
 	let settled = false;
 	let cancelled = false;
+	let stdout = "";
 	let stderr = "";
 
-	child.stdout.on("data", () => {
+	child.stdout.on("data", (chunk) => {
 		// Worker output is intentionally private and never forwarded to the parent session.
+		stdout = appendBounded(stdout, chunk);
 	});
 	child.stderr.on("data", (chunk) => {
 		stderr = appendBounded(stderr, chunk);
@@ -110,7 +145,7 @@ export function startClaimWorker(
 		const code = args[0];
 		settled = true;
 		if (code === 0) {
-			request.onClaimComplete();
+			request.onClaimComplete(parseClaimResult(stdout));
 			return;
 		}
 		const detail = stderr.trim();

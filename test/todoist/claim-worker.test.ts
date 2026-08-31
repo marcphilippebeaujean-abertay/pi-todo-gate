@@ -3,13 +3,10 @@ import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	createTaskClaimWorker,
 	type TaskClaimWorkerInput,
-	TaskClaimWorkerInputSchema,
-	TaskClaimWorkerResultSchema,
 } from "../../src/todoist/claim-worker.ts";
 
 const input: TaskClaimWorkerInput = {
 	prompt: "Implement feature",
-	history: ["initial user request", "assistant response"],
 	cwd: "/repo/.worktrees/feature",
 	projectRef: "Pi Extensions",
 	worktree: {
@@ -34,24 +31,24 @@ describe("Todoist task claim worker", () => {
 				options?: { timeout?: number },
 			) => {
 				expect(command).toBe("pi");
-				expect(options?.timeout).toBe(30_000);
+				expect(options?.timeout).toBe(120_000);
 				expect(args).toEqual(
 					expect.arrayContaining([
 						"--mode",
 						"json",
-						"--no-session",
 						"--no-extensions",
 						"--no-context-files",
 						"--tools",
 						"bash",
+						"--thinking",
+						"low",
 					]),
 				);
 				const prompt = args.at(-1) ?? "";
-				expect(prompt).toContain("Input payload matching this schema:");
-				expect(prompt).toContain(JSON.stringify(TaskClaimWorkerInputSchema));
-				expect(prompt).toContain("Output JSON matching this schema:");
-				expect(prompt).toContain(JSON.stringify(TaskClaimWorkerResultSchema));
+				expect(prompt).toContain("create a new task");
+				expect(prompt).toContain("In Progress");
 				expect(prompt).toContain(input.prompt);
+				expect(prompt).not.toContain('"history"');
 				expect(prompt).toContain(input.projectRef);
 				expect(prompt).toContain(input.worktree.branch ?? "");
 				return result(
@@ -71,6 +68,46 @@ describe("Todoist task claim worker", () => {
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
 			status: "claimed",
 			taskRef: "42",
+		});
+	});
+
+	it("accepts the worker's claimed result wrapper", async () => {
+		const exec = async (): Promise<CommandResult> =>
+			result(
+				JSON.stringify({
+					type: "message_end",
+					message: {
+						role: "assistant",
+						content: [{ type: "text", text: '{"claimed":{"taskRef":"42"}}' }],
+					},
+				}),
+			);
+		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
+			status: "claimed",
+			taskRef: "42",
+		});
+	});
+
+	it("accepts the worker's collision result wrapper", async () => {
+		const exec = async (): Promise<CommandResult> =>
+			result(
+				JSON.stringify({
+					type: "message_end",
+					message: {
+						role: "assistant",
+						content: [
+							{
+								type: "text",
+								text: '{"collision":{"taskRef":"42","taskName":"Existing"}}',
+							},
+						],
+					},
+				}),
+			);
+		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
+			status: "collision",
+			taskRef: "42",
+			taskName: "Existing",
 		});
 	});
 
