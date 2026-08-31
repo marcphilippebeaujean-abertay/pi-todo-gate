@@ -66,7 +66,7 @@ export function installHerdrClaimGate(
 
 `extensions/pi-todo-gate.ts` invokes `installHerdrClaimGate(pi)` when its factory is created, then registers existing Todoist-gate behavior. This keeps policy code isolated while producing one installed extension package. `extensions/index.ts` continues to re-export the composed entry.
 
-The gate starts the claim worker as a separate background Pi process/session using the host's supported worker mechanism. The worker prompt contains the current user prompt plus `HERDR_INSTRUCTIONS`; those bytes exist only in the worker session. The gate may receive an internal completion callback to update its own blocked/unblocked state, but the main session agent receives no worker status or result. User-facing status uses a notification only. Worker startup, completion, and failure are injectable so tests do not launch a real child process.
+The gate starts the claim worker as a separate background Pi process/session using the host's supported worker mechanism with `--no-extensions`, so the child cannot load task-gate or Herdr extensions recursively. The worker prompt contains the current user prompt plus `HERDR_INSTRUCTIONS`; those bytes exist only in the worker session. The gate may receive an internal completion callback to update its own blocked/unblocked state, but the main session agent receives no worker status or result. User-facing status uses a notification only. Worker startup, completion, and failure are injectable so tests do not launch a real child process.
 
 ### Activation boundaries
 

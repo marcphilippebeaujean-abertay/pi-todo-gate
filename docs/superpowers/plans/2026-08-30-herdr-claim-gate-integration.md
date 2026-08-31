@@ -4,7 +4,7 @@
 
 **Goal:** Version custom Herdr tab-claim enforcement inside `pi-todo-gate`, run its setup in a separate background Pi worker, reuse task-gate Git helpers, and keep worker instructions/results out of the main agent conversation.
 
-**Architecture:** Extract the custom Herdr gate into `src/herdr-claim-gate.ts` and a cancellable `pi --mode json -p --no-session` worker adapter. Compose the gate from the existing `extensions/pi-todo-gate.ts` entry while keeping Herdr activation global and Todoist activation project-scoped. Share pure Git path/branch parsing helpers with `src/git.ts`; surface worker lifecycle through user UI notifications only.
+**Architecture:** Extract the custom Herdr gate into `src/herdr-claim-gate.ts` and a cancellable `pi --mode json -p --no-session --no-extensions` worker adapter. Compose the gate from the existing `extensions/pi-todo-gate.ts` entry while keeping Herdr activation global and Todoist activation project-scoped. Share pure Git path/branch parsing helpers with `src/git.ts`; surface worker lifecycle through user UI notifications only.
 
 **Tech Stack:** TypeScript, Node.js `child_process.spawn`, Pi ExtensionAPI, Vitest, existing `src/git.ts` command abstractions, and the installed `pi` CLI.
 
@@ -165,7 +165,7 @@ it("starts a separate ephemeral Pi process with isolated worker prompt", () => {
 
   expect(spawned.command).toBe("pi");
   expect(spawned.args).toEqual([
-    "--mode", "json", "-p", "--no-session",
+    "--mode", "json", "-p", "--no-session", "--no-extensions",
     expect.stringContaining("Fix dialog"),
   ]);
   expect(spawned.args.at(-1)).toContain("Claim tab");
@@ -208,7 +208,7 @@ Expected: FAIL because `src/herdr-claim-worker.ts` is absent.
 Compose one child prompt from current user prompt and Herdr instructions. Spawn default command `pi` with exactly:
 
 ```text
-pi --mode json -p --no-session <worker-prompt>
+pi --mode json -p --no-session --no-extensions <worker-prompt>
 ```
 
 Use `spawn(command, args, { cwd, env: { ...process.env, PI_SUBAGENT_CHILD: "1" }, shell: false })`. Preserve `HERDR_ENV`, Herdr workspace/tab/pane variables, and the configured project cwd. Capture stdout/stderr only for bounded failure diagnostics; never forward output to the parent agent. Treat close code `0` as completion and any nonzero/error event as failure. Make completion/failure idempotent. `cancel()` sends `SIGTERM` once and suppresses later callbacks.
@@ -398,7 +398,7 @@ git commit -m "feat: compose herdr gate with todo gate"
 Document this exact sequence:
 
 1. Run package tests and install the versioned `pi-todo-gate` extension directory.
-2. Confirm Herdr claim worker starts in a separate `pi --mode json -p --no-session` process.
+2. Confirm Herdr claim worker starts in a separate `pi --mode json -p --no-session --no-extensions` process.
 3. Manually remove `~/.pi/agent/extensions/herdr-claim-gate.ts` and its external test file to avoid duplicate handlers.
 4. Leave `~/.pi/agent/extensions/herdr-agent-state.ts` in place because Herdr owns and updates it.
 5. Restart Pi and verify user notification appears after worker claim while main agent context contains no Herdr instructions/results.

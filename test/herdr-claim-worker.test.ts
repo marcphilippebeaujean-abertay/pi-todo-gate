@@ -61,6 +61,7 @@ describe("startClaimWorker", () => {
 			"json",
 			"-p",
 			"--no-session",
+			"--no-extensions",
 			expect.stringContaining("Fix dialog"),
 		]);
 		expect(setupState.spawned?.args.at(-1)).toContain("Claim tab");
