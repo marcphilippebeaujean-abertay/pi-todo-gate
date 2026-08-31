@@ -1,3 +1,5 @@
+const MISSING_LINT_CONFIG_JSON = "missing-lint.config.json";
+
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +8,10 @@ import { DEFAULT_LINT_CONFIG, loadLintConfig } from "../src/lint-config.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-config-";
 const CONFIG_NAME = "lint.config.json";
-const INVALID_CONFIG = JSON.stringify({ maxFunctionLines: 0, maxFunctionsPerFile: "11" });
+const INVALID_CONFIG = JSON.stringify({
+	maxFunctionLines: 0,
+	maxFunctionsPerFile: "11",
+});
 const DEFAULTS = {
 	maxCyclomaticComplexity: 10,
 	maxFunctionLines: 50,
@@ -19,7 +24,9 @@ const INVALID_CONFIG_TEST = "ignores malformed and non-positive overrides";
 
 describe("lint configuration", () => {
 	it(MISSING_CONFIG_TEST, async () => {
-		await expect(loadLintConfig("missing-lint.config.json")).resolves.toEqual(DEFAULTS);
+		await expect(loadLintConfig(MISSING_LINT_CONFIG_JSON)).resolves.toEqual(
+			DEFAULTS,
+		);
 		expect(DEFAULT_LINT_CONFIG).toEqual(DEFAULTS);
 	});
 

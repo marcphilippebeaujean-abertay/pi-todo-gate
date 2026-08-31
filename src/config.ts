@@ -1,3 +1,10 @@
+const PI = ".pi";
+const AGENT = "agent";
+const PI_TODO_GATE_JSON = "pi-todo-gate.json";
+const UTF8_ENCODING = "utf8";
+const TEXT = "/";
+const TEXT_2 = "\\";
+
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -5,8 +12,8 @@ import type { ResolvedProject, TodoistProjectMapping } from "./types.ts";
 
 export function defaultConfigPath(): string {
 	const agentDir =
-		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-	return join(agentDir, "pi-todo-gate.json");
+		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), PI, AGENT);
+	return join(agentDir, PI_TODO_GATE_JSON);
 }
 
 export const DEFAULT_CONFIG_PATH = defaultConfigPath();
@@ -40,7 +47,7 @@ export async function loadConfig(
 	path = defaultConfigPath(),
 ): Promise<TodoistProjectMapping> {
 	try {
-		return parseConfig(await readFile(path, "utf8"));
+		return parseConfig(await readFile(path, UTF8_ENCODING));
 	} catch {
 		return { projects: {} };
 	}
@@ -54,7 +61,7 @@ function isPathAtOrBelow(path: string, ancestor: string): boolean {
 	const target = normalizedPath(path);
 	const parent = normalizedPath(ancestor);
 	const prefix =
-		parent.endsWith("/") || parent.endsWith("\\") ? parent : `${parent}/`;
+		parent.endsWith(TEXT) || parent.endsWith(TEXT_2) ? parent : `${parent}/`;
 	return target === parent || target.startsWith(prefix);
 }
 
@@ -78,7 +85,7 @@ export function resolveConfiguredProject(
 export function configPathForAgentDir(agentDir: string): string {
 	return join(
 		isAbsolute(agentDir) ? agentDir : resolve(agentDir),
-		"pi-todo-gate.json",
+		PI_TODO_GATE_JSON,
 	);
 }
 

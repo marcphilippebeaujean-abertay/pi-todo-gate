@@ -1,3 +1,61 @@
+const TEXT = "text";
+const EMPTY_STRING = "";
+const SPACE = " ";
+const CONTENT = "content";
+const CUSTOM = "custom";
+const TD = "td";
+const PI_TODO_GATE_PR = "pi-todo-gate-pr";
+const PI_TODO_GATE_TASK = "pi-todo-gate-task";
+const TODOIST_TASK_WAS_NOT_LINKED_FROM_SESSION =
+	"Todoist task was not linked from session history";
+const WARNING_VALUE = "warning";
+const TODOIST_TASK_UPDATE_FAILED = "Todoist task update failed";
+const PI_TODO_GATE_STATE = "pi_todo_gate_state";
+const TODO_GATE_STATE = "Todo Gate State";
+const INSPECT_OR_CHANGE_THIS_SESSION_S_PINNED =
+	"Inspect or change this session's pinned GitHub PR and claimed Todoist task.";
+const INSPECT_OR_UPDATE_THE_SESSION_PR_AND =
+	"inspect or update the session PR and Todoist task";
+const PI_TODO_GATE_IS_INACTIVE_FOR_THIS =
+	"pi-todo-gate is inactive for this project";
+const STATUS = "status";
+const SET_PR = "set_pr";
+const SET_PR_REQUIRES_A_VALID_GITHUB_PULL =
+	"set_pr requires a valid GitHub pull request URL";
+const CLEAR_PR = "clear_pr";
+const CLEARED_THE_PINNED_PR = "Cleared the pinned PR";
+const SET_TASK = "set_task";
+const SET_TASK_REQUIRES_A_TODOIST_TASK_REFERENCE =
+	"set_task requires a Todoist task reference";
+const CLEAR_TASK = "clear_task";
+const CLEARED_THE_CLAIMED_TODOIST_TASK = "Cleared the claimed Todoist task";
+const CLEARED_SESSION_PR_AND_TASK_LINKS = "Cleared session PR and task links";
+const SESSION_START = "session_start";
+const TUI = "tui";
+const TODOIST_TASK_RESTORE_FAILED = "Todoist task restore failed";
+const MESSAGE_END = "message_end";
+const BEFORE_AGENT_START = "before_agent_start";
+const NONE = "none";
+const UNKNOWN_VALUE = "unknown";
+const GITHUB_PR_LOOKUP_UNAVAILABLE_VERIFY_GH_AUTHENTICATION =
+	"GitHub PR lookup unavailable; verify gh authentication before creating the PR.";
+const WHEN_IMPLEMENTATION_IS_FINISHED_PUSH_THIS_BRANCH =
+	"When implementation is finished, push this branch and create a GitHub PR.";
+const PI_TODO_GATE_CONTEXT = "pi-todo-gate-context";
+const TEXT_2 = "\n";
+const TOOL_RESULT = "tool_result";
+const EDIT = "edit";
+const WRITE = "write";
+const BASH = "bash";
+const MERGED_PR_DETECTED_TODOIST_TASK_COMPLETED =
+	"Merged PR detected; Todoist task completed";
+const INFO_VALUE = "info";
+const MERGED_PR_DETECTED_BUT_TODOIST_TASK_COMPLETION =
+	"Merged PR detected, but Todoist task completion failed";
+const AGENT_SETTLED = "agent_settled";
+const SESSION_SHUTDOWN = "session_shutdown";
+const UNKNOWN_VALUE_2 = "UNKNOWN";
+
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	type ExtensionAPI,
@@ -92,22 +150,25 @@ function textOf(value: unknown): string {
 	if (Array.isArray(value))
 		return value
 			.map((part) =>
-				typeof part === "object" && part !== null && "text" in part
+				typeof part === "object" && part !== null && TEXT in part
 					? String(part.text)
-					: "",
+					: EMPTY_STRING,
 			)
-			.join(" ");
-	if (typeof value === "object" && value !== null && "content" in value) {
+			.join(SPACE);
+	if (typeof value === "object" && value !== null && CONTENT in value) {
 		return textOf((value as { content?: unknown }).content);
 	}
-	return "";
+	return EMPTY_STRING;
 }
 
 function extensionResult(text: string): {
 	content: [{ type: "text"; text: string }];
 	details: undefined;
 } {
-	return { content: [{ type: "text", text }], details: undefined };
+	return {
+		content: [{ type: TEXT, text }],
+		details: undefined,
+	};
 }
 
 function latestStateData(
@@ -122,7 +183,7 @@ function latestStateData(
 			data?: unknown;
 		};
 		if (
-			candidate.type === "custom" &&
+			candidate.type === CUSTOM &&
 			candidate.customType === STATE_TYPE &&
 			typeof candidate.data === "object" &&
 			candidate.data !== null
@@ -139,7 +200,7 @@ function branchTexts(entries: readonly unknown[]): string[] {
 			(entry) =>
 				typeof entry === "object" &&
 				entry !== null &&
-				(entry as { type?: unknown }).type !== "custom",
+				(entry as { type?: unknown }).type !== CUSTOM,
 		)
 		.map((entry) => JSON.stringify(entry));
 }
@@ -175,7 +236,7 @@ function addMatches(
 
 function inferClaimedTaskRef(
 	entries: readonly unknown[],
-	prompt = "",
+	prompt = EMPTY_STRING,
 ): string | undefined {
 	const texts = [...branchTexts(entries), prompt];
 	const allTaskRefs = new Set<string>();
@@ -208,7 +269,7 @@ function createClient(
 	return (
 		dependencies.createTodoistClient?.(ctx, exec) ??
 		new TodoistClient({
-			run: (args) => exec("td", [...args], { cwd: ctx.cwd }),
+			run: (args) => exec(TD, [...args], { cwd: ctx.cwd }),
 		})
 	);
 }
@@ -262,11 +323,11 @@ export default function extension(
 
 	const refreshFooterStatuses = (session: ActiveSession): void => {
 		session.context.ui.setStatus(
-			"pi-todo-gate-pr",
+			PI_TODO_GATE_PR,
 			renderPrStatus(session.state.prUrl, session.context.ui.theme),
 		);
 		session.context.ui.setStatus(
-			"pi-todo-gate-task",
+			PI_TODO_GATE_TASK,
 			renderTaskStatus(
 				session.state.taskUrl,
 				session.context.ui.theme,
@@ -276,8 +337,8 @@ export default function extension(
 	};
 
 	const clearFooterStatuses = (session: ActiveSession): void => {
-		session.context.ui.setStatus("pi-todo-gate-pr", undefined);
-		session.context.ui.setStatus("pi-todo-gate-task", undefined);
+		session.context.ui.setStatus(PI_TODO_GATE_PR, undefined);
+		session.context.ui.setStatus(PI_TODO_GATE_TASK, undefined);
 	};
 
 	const deactivate = (session: ActiveSession): void => {
@@ -288,7 +349,7 @@ export default function extension(
 
 	const linkInferredTask = async (
 		session: ActiveSession,
-		prompt = "",
+		prompt = EMPTY_STRING,
 	): Promise<boolean> => {
 		if (session.state.taskRef) return false;
 		const taskRef = inferClaimedTaskRef(
@@ -320,8 +381,8 @@ export default function extension(
 			return true;
 		} catch {
 			session.context.ui.notify(
-				"Todoist task was not linked from session history",
-				"warning",
+				TODOIST_TASK_WAS_NOT_LINKED_FROM_SESSION,
+				WARNING_VALUE,
 			);
 			return false;
 		}
@@ -349,7 +410,7 @@ export default function extension(
 				);
 			} catch {
 				if (isCurrent())
-					session.context.ui.notify("Todoist task update failed", "warning");
+					session.context.ui.notify(TODOIST_TASK_UPDATE_FAILED, WARNING_VALUE);
 			}
 		}, 25);
 	};
@@ -358,17 +419,15 @@ export default function extension(
 		if (registered) return;
 		registered = true;
 		pi.registerTool<typeof stateParameters>({
-			name: "pi_todo_gate_state",
-			label: "Todo Gate State",
-			description:
-				"Inspect or change this session's pinned GitHub PR and claimed Todoist task.",
-			promptSnippet: "inspect or update the session PR and Todoist task",
+			name: PI_TODO_GATE_STATE,
+			label: TODO_GATE_STATE,
+			description: INSPECT_OR_CHANGE_THIS_SESSION_S_PINNED,
+			promptSnippet: INSPECT_OR_UPDATE_THE_SESSION_PR_AND,
 			parameters: stateParameters,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				if (!active)
-					throw new Error("pi-todo-gate is inactive for this project");
+				if (!active) throw new Error(PI_TODO_GATE_IS_INACTIVE_FOR_THIS);
 				const session = active;
-				if (params.action === "status") {
+				if (params.action === STATUS) {
 					return extensionResult(
 						JSON.stringify({
 							...session.state,
@@ -376,10 +435,9 @@ export default function extension(
 						}),
 					);
 				}
-				if (params.action === "set_pr") {
-					const url = githubPrUrl(params.url ?? "");
-					if (!url)
-						throw new Error("set_pr requires a valid GitHub pull request URL");
+				if (params.action === SET_PR) {
+					const url = githubPrUrl(params.url ?? EMPTY_STRING);
+					if (!url) throw new Error(SET_PR_REQUIRES_A_VALID_GITHUB_PULL);
 					const prChanged = session.state.prUrl !== url;
 					session.state = applyStatePatch(session.state, {
 						prUrl: url,
@@ -395,7 +453,7 @@ export default function extension(
 					refreshFooterStatuses(session);
 					return extensionResult(`Pinned PR ${url}`);
 				}
-				if (params.action === "clear_pr") {
+				if (params.action === CLEAR_PR) {
 					session.state = applyStatePatch(session.state, {
 						prUrl: undefined,
 						mergeCompletedAt: undefined,
@@ -404,11 +462,11 @@ export default function extension(
 					session.allowPrDiscovery = false;
 					appendState(pi, session.state, true);
 					refreshFooterStatuses(session);
-					return extensionResult("Cleared the pinned PR");
+					return extensionResult(CLEARED_THE_PINNED_PR);
 				}
-				if (params.action === "set_task") {
+				if (params.action === SET_TASK) {
 					if (!params.task)
-						throw new Error("set_task requires a Todoist task reference");
+						throw new Error(SET_TASK_REQUIRES_A_TODOIST_TASK_REFERENCE);
 					cancelScheduledSync(session);
 					const client = createClient(ctx, dependencies);
 					const project = await client.resolveProject(
@@ -438,7 +496,7 @@ export default function extension(
 						`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
 					);
 				}
-				if (params.action === "clear_task") {
+				if (params.action === CLEAR_TASK) {
 					cancelScheduledSync(session);
 					session.state = applyStatePatch(session.state, {
 						taskRef: undefined,
@@ -450,7 +508,7 @@ export default function extension(
 					await clearLocalTasks(session);
 					appendState(pi, session.state, !session.allowPrDiscovery);
 					refreshFooterStatuses(session);
-					return extensionResult("Cleared the claimed Todoist task");
+					return extensionResult(CLEARED_THE_CLAIMED_TODOIST_TASK);
 				}
 				cancelScheduledSync(session);
 				session.state = {};
@@ -458,12 +516,12 @@ export default function extension(
 				await clearLocalTasks(session);
 				appendState(pi, session.state, true);
 				refreshFooterStatuses(session);
-				return extensionResult("Cleared session PR and task links");
+				return extensionResult(CLEARED_SESSION_PR_AND_TASK_LINKS);
 			},
 		});
 	};
 
-	pi.on("session_start", async (event, ctx) => {
+	pi.on(SESSION_START, async (event, ctx) => {
 		const config = await (dependencies.loadConfig ?? loadConfig)();
 		const project = resolveConfiguredProject(ctx.cwd, config);
 		if (!project) {
@@ -471,7 +529,7 @@ export default function extension(
 				deactivate(active);
 				if (pi.getActiveTools && pi.setActiveTools) {
 					pi.setActiveTools(
-						pi.getActiveTools().filter((name) => name !== "pi_todo_gate_state"),
+						pi.getActiveTools().filter((name) => name !== PI_TODO_GATE_STATE),
 					);
 				}
 			}
@@ -521,14 +579,16 @@ export default function extension(
 		installTool();
 		if (registered && pi.getActiveTools && pi.setActiveTools) {
 			const activeTools = pi.getActiveTools();
-			if (!activeTools.includes("pi_todo_gate_state")) {
-				pi.setActiveTools([...activeTools, "pi_todo_gate_state"]);
+			if (!activeTools.includes(PI_TODO_GATE_STATE)) {
+				pi.setActiveTools([...activeTools, PI_TODO_GATE_STATE]);
 			}
 		}
-		if (ctx.mode === "tui") ctx.ui.setFooter(undefined);
+		if (ctx.mode === TUI) ctx.ui.setFooter(undefined);
 		refreshFooterStatuses(active);
 		if (active.allowPrDiscovery)
-			persistPrIfAvailable(firstGithubPrUrl(branchTexts(branch)) ?? "");
+			persistPrIfAvailable(
+				firstGithubPrUrl(branchTexts(branch)) ?? EMPTY_STRING,
+			);
 		if (state.taskRef && !taskWasSynced) {
 			try {
 				await syncTodoistToPiTasks(
@@ -538,25 +598,25 @@ export default function extension(
 				);
 			} catch {
 				active.syncAvailable = false;
-				ctx.ui.notify("Todoist task restore failed", "warning");
+				ctx.ui.notify(TODOIST_TASK_RESTORE_FAILED, WARNING_VALUE);
 			}
 		}
 	});
 
-	pi.on("message_end", async (event) => {
+	pi.on(MESSAGE_END, async (event) => {
 		if (!active) return;
 		persistPrIfAvailable(textOf(event.message));
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	pi.on(BEFORE_AGENT_START, async (event, ctx) => {
 		if (!active) return;
 		if (!active.state.taskRef) {
-			await linkInferredTask(active, event.prompt ?? "");
+			await linkInferredTask(active, event.prompt ?? EMPTY_STRING);
 		}
 		const messages: string[] = [];
 		if (active.handoffContext) {
 			messages.push(
-				`This is the task and PR that we were working on.\nTask: ${active.state.taskUrl ?? "none"}\nPR: ${active.state.prUrl ?? "none"}`,
+				`This is the task and PR that we were working on.\nTask: ${active.state.taskUrl ?? NONE}\nPR: ${active.state.prUrl ?? NONE}`,
 			);
 			active.handoffContext = false;
 		}
@@ -572,34 +632,32 @@ export default function extension(
 					worktree.branch,
 					dependencies.exec ?? spawnExec,
 				);
-				if (pr === "unknown")
-					messages.push(
-						"GitHub PR lookup unavailable; verify gh authentication before creating the PR.",
-					);
+				if (pr === UNKNOWN_VALUE)
+					messages.push(GITHUB_PR_LOOKUP_UNAVAILABLE_VERIFY_GH_AUTHENTICATION);
 				else if (pr === null)
-					messages.push(
-						"When implementation is finished, push this branch and create a GitHub PR.",
-					);
+					messages.push(WHEN_IMPLEMENTATION_IS_FINISHED_PUSH_THIS_BRANCH);
 			}
 		}
 		return messages.length
 			? {
 					message: {
-						customType: "pi-todo-gate-context",
-						content: messages.join("\n"),
+						customType: PI_TODO_GATE_CONTEXT,
+						content: messages.join(TEXT_2),
 						display: false,
 					},
 				}
 			: undefined;
 	});
 
-	pi.on("tool_result", async (event, ctx) => {
+	pi.on(TOOL_RESULT, async (event, ctx) => {
 		if (!active || event.isError) return;
 		const toolName = String(event.toolName);
-		if (toolName === "edit" || toolName === "write") active.workChanged = true;
-		if (toolName === "bash") {
+		if (toolName === EDIT || toolName === WRITE) active.workChanged = true;
+		if (toolName === BASH) {
 			const command =
-				typeof event.input?.command === "string" ? event.input.command : "";
+				typeof event.input?.command === "string"
+					? event.input.command
+					: EMPTY_STRING;
 			const resultText = textOf(event.content);
 			if (!active.state.taskRef) {
 				await linkInferredTask(active, `${command}\n${resultText}`);
@@ -630,15 +688,18 @@ export default function extension(
 							todoistCompletionAttemptedAt: new Date().toISOString(),
 						});
 						appendState(pi, active.state);
-						ctx.ui.notify("Merged PR detected; Todoist task completed", "info");
+						ctx.ui.notify(
+							MERGED_PR_DETECTED_TODOIST_TASK_COMPLETED,
+							INFO_VALUE,
+						);
 					} catch {
 						active.state = applyStatePatch(active.state, {
 							todoistCompletionAttemptedAt: new Date().toISOString(),
 						});
 						appendState(pi, active.state);
 						ctx.ui.notify(
-							"Merged PR detected, but Todoist task completion failed",
-							"warning",
+							MERGED_PR_DETECTED_BUT_TODOIST_TASK_COMPLETION,
+							WARNING_VALUE,
 						);
 					}
 				}
@@ -647,11 +708,11 @@ export default function extension(
 		if (taskToolNames.has(toolName)) scheduleSync(active);
 	});
 
-	pi.on("agent_settled", () => {
+	pi.on(AGENT_SETTLED, () => {
 		if (active) scheduleSync(active);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on(SESSION_SHUTDOWN, () => {
 		if (!active) return;
 		deactivate(active);
 		active = null;
@@ -664,6 +725,6 @@ async function findOpenPrSafe(
 	exec: Exec,
 ): Promise<string | null | "unknown"> {
 	const result = await findOpenPr(exec, ctx.cwd, branch);
-	if (result.state === "UNKNOWN") return "unknown";
+	if (result.state === UNKNOWN_VALUE_2) return UNKNOWN_VALUE;
 	return result.url;
 }

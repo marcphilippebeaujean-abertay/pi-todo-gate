@@ -1,9 +1,11 @@
+const TEXT = "\n";
+
 import { existsSync, readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { loadLintConfig } from "./lint-config.ts";
 import { formatLintDiagnostic, lintProgram } from "./lint.ts";
+import { loadLintConfig } from "./lint-config.ts";
 
 const LINT_DIRECTORIES = ["extensions", "src", "test"];
 const TS_EXTENSION = ".ts";
@@ -46,11 +48,14 @@ function formatTypeScriptDiagnostic(
 	diagnostic: ts.Diagnostic,
 	root: string,
 ): string {
-	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, TEXT);
 	if (!diagnostic.file || diagnostic.start === undefined)
 		return `TypeScript ${message}`;
-	const location = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-	const filePath = relative(root, diagnostic.file.fileName) || diagnostic.file.fileName;
+	const location = diagnostic.file.getLineAndCharacterOfPosition(
+		diagnostic.start,
+	);
+	const filePath =
+		relative(root, diagnostic.file.fileName) || diagnostic.file.fileName;
 	return `${filePath}:${location.line + 1}:${location.character + 1} TypeScript ${message}`;
 }
 
@@ -65,7 +70,8 @@ export async function runLint(
 	const customDiagnostics = lintProgram(program, config);
 	for (const diagnostic of compilerDiagnostics)
 		output(formatTypeScriptDiagnostic(diagnostic, root));
-	for (const diagnostic of customDiagnostics) output(formatLintDiagnostic(diagnostic));
+	for (const diagnostic of customDiagnostics)
+		output(formatLintDiagnostic(diagnostic));
 	return compilerDiagnostics.length || customDiagnostics.length ? 1 : 0;
 }
 

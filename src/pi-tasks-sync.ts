@@ -1,3 +1,29 @@
+const PI = ".pi";
+const TASKS = "tasks";
+const EMPTY_STRING = "";
+const OFF_VALUE = "off";
+const MEMORY = "memory";
+const PI_TASK_STORE_IS_UNAVAILABLE_IN_THE =
+	"Pi task store is unavailable in the configured memory/off scope";
+const PI_TASK_STORE_USES_AN_INCOMPATIBLE_CONFIGURED =
+	"Pi task store uses an incompatible configured path";
+const PI_TASK_STORE_PATH_IS_REQUIRED = "Pi task store path is required";
+const INVALID_PI_TASK_STORE_TASK = "invalid Pi task store task";
+const PENDING_VALUE = "pending";
+const IN_PROGRESS_VALUE = "in_progress";
+const COMPLETED_VALUE = "completed";
+const UTF8_ENCODING = "utf8";
+const INVALID_PI_TASK_STORE_JSON = "invalid Pi task store JSON";
+const INVALID_PI_TASK_STORE = "invalid Pi task store";
+const TEXT = ",";
+const TEXT_2 = "\n";
+const X = "x";
+const TEXT_3 = "~";
+const X_2 = "[x]";
+const TEXT_4 = "[~]";
+const TEXT_5 = "[ ]";
+const SYNCHRONIZATION_CANCELLED = "synchronization cancelled";
+
 import {
 	access,
 	mkdir,
@@ -32,39 +58,37 @@ const PRIVATE_PREFIX = "<!-- pi-todo-gate:";
 const PRIVATE_LINE = /^<!-- pi-todo-gate:([a-zA-Z]+)=(.*?) -->$/;
 
 export function sessionTaskPath(cwd: string, sessionId: string): string {
-	return join(resolve(cwd), ".pi", "tasks", `tasks-${sessionId}.json`);
+	return join(resolve(cwd), PI, TASKS, `tasks-${sessionId}.json`);
 }
 
 function ensureFileBacked(path: string): void {
-	const scope = (process.env.PI_TASKS ?? "").toLowerCase();
-	if (scope === "off" || scope === "memory") {
-		throw new Error(
-			"Pi task store is unavailable in the configured memory/off scope",
-		);
+	const scope = (process.env.PI_TASKS ?? EMPTY_STRING).toLowerCase();
+	if (scope === OFF_VALUE || scope === MEMORY) {
+		throw new Error(PI_TASK_STORE_IS_UNAVAILABLE_IN_THE);
 	}
 	if (process.env.PI_TASK_LIST_ID || process.env.PI_TASKS_PATH) {
-		throw new Error("Pi task store uses an incompatible configured path");
+		throw new Error(PI_TASK_STORE_USES_AN_INCOMPATIBLE_CONFIGURED);
 	}
-	if (!path) throw new Error("Pi task store path is required");
+	if (!path) throw new Error(PI_TASK_STORE_PATH_IS_REQUIRED);
 }
 
 function normalizeTask(value: unknown): PiTask {
 	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Error("invalid Pi task store task");
+		throw new Error(INVALID_PI_TASK_STORE_TASK);
 	const data = value as Partial<PiTask>;
 	if (
 		typeof data.id !== "string" ||
 		typeof data.subject !== "string" ||
 		typeof data.description !== "string"
 	) {
-		throw new Error("invalid Pi task store task");
+		throw new Error(INVALID_PI_TASK_STORE_TASK);
 	}
 	const status =
-		data.status === "pending" ||
-		data.status === "in_progress" ||
-		data.status === "completed"
+		data.status === PENDING_VALUE ||
+		data.status === IN_PROGRESS_VALUE ||
+		data.status === COMPLETED_VALUE
 			? data.status
-			: "pending";
+			: PENDING_VALUE;
 	const now = Date.now();
 	return {
 		id: data.id,
@@ -102,14 +126,14 @@ export async function readPiTaskStore(
 	}
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(await readFile(path, "utf8"));
+		parsed = JSON.parse(await readFile(path, UTF8_ENCODING));
 	} catch {
-		throw new Error("invalid Pi task store JSON");
+		throw new Error(INVALID_PI_TASK_STORE_JSON);
 	}
 	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-		throw new Error("invalid Pi task store");
+		throw new Error(INVALID_PI_TASK_STORE);
 	const data = parsed as Partial<PiTaskStoreData>;
-	if (!Array.isArray(data.tasks)) throw new Error("invalid Pi task store");
+	if (!Array.isArray(data.tasks)) throw new Error(INVALID_PI_TASK_STORE);
 	const tasks = data.tasks.map(normalizeTask);
 	const maxId = tasks.reduce((max, task) => {
 		const value = Number(task.id);
@@ -131,7 +155,7 @@ export async function writePiTaskStore(
 	ensureFileBacked(path);
 	await mkdir(dirname(path), { recursive: true });
 	const temporary = `${path}.tmp`;
-	await writeFile(temporary, JSON.stringify(data, null, 2), "utf8");
+	await writeFile(temporary, JSON.stringify(data, null, 2), UTF8_ENCODING);
 	try {
 		await rename(temporary, path);
 	} catch (error) {
@@ -148,9 +172,9 @@ function metadataLines(task: PiTask): string[] {
 	const lines = [`${PRIVATE_PREFIX}id=${task.id} -->`];
 	if (task.owner) lines.push(`${PRIVATE_PREFIX}owner=${task.owner} -->`);
 	if (task.blocks.length)
-		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(",")} -->`);
+		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(TEXT)} -->`);
 	if (task.blockedBy.length)
-		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(",")} -->`);
+		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(TEXT)} -->`);
 	return lines;
 }
 
@@ -158,14 +182,16 @@ function withoutPrivateLines(description: string): string {
 	return description
 		.split(/\r?\n/)
 		.filter((line) => !line.trim().startsWith(PRIVATE_PREFIX))
-		.join("\n")
+		.join(TEXT_2)
 		.trim();
 }
 
 function descriptionWithMetadata(task: PiTask): string {
 	const original = withoutPrivateLines(task.description);
 	const metadata = metadataLines(task);
-	return original ? `${original}\n${metadata.join("\n")}` : metadata.join("\n");
+	return original
+		? `${original}\n${metadata.join(TEXT_2)}`
+		: metadata.join(TEXT_2);
 }
 
 function parseStatus(content: string): {
@@ -173,13 +199,13 @@ function parseStatus(content: string): {
 	subject: string;
 } {
 	const marker = content.match(/^\[([ x~])\]\s*(.*)$/i);
-	if (!marker) return { status: "pending", subject: content };
+	if (!marker) return { status: PENDING_VALUE, subject: content };
 	const status =
-		marker[1].toLowerCase() === "x"
-			? "completed"
-			: marker[1] === "~"
-				? "in_progress"
-				: "pending";
+		marker[1].toLowerCase() === X
+			? COMPLETED_VALUE
+			: marker[1] === TEXT_3
+				? IN_PROGRESS_VALUE
+				: PENDING_VALUE;
 	return { status, subject: marker[2] };
 }
 
@@ -194,7 +220,7 @@ function markerData(description: string): {
 		if (match) values[match[1]] = match[2];
 		else cleanLines.push(line);
 	}
-	return { clean: cleanLines.join("\n").trim(), values };
+	return { clean: cleanLines.join(TEXT_2).trim(), values };
 }
 
 function flattened(children: readonly TodoistChild[]): TodoistChild[] {
@@ -225,10 +251,10 @@ export function todoistSubtasksToPiTasks(
 		if (Number.isInteger(numericId) && numericId >= nextId)
 			nextId = numericId + 1;
 		const blocks = metadata.values.blocks
-			? metadata.values.blocks.split(",").filter(Boolean)
+			? metadata.values.blocks.split(TEXT).filter(Boolean)
 			: [];
 		const blockedBy = metadata.values.blockedBy
-			? metadata.values.blockedBy.split(",").filter(Boolean)
+			? metadata.values.blockedBy.split(TEXT).filter(Boolean)
 			: [];
 		tasks.push({
 			id,
@@ -250,14 +276,14 @@ export function piTasksToTodoistSubtasks(
 	tasks: readonly PiTask[],
 ): Array<{ content: string; description: string }> {
 	return tasks.map((task) => ({
-		content: `${task.status === "completed" ? "[x]" : task.status === "in_progress" ? "[~]" : "[ ]"} ${task.subject}`,
+		content: `${task.status === COMPLETED_VALUE ? X_2 : task.status === IN_PROGRESS_VALUE ? TEXT_4 : TEXT_5} ${task.subject}`,
 		description: descriptionWithMetadata(task),
 	}));
 }
 
 class SyncCancelledError extends Error {
 	constructor() {
-		super("synchronization cancelled");
+		super(SYNCHRONIZATION_CANCELLED);
 	}
 }
 

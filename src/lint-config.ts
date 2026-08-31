@@ -1,3 +1,6 @@
+const LINT_CONFIG_JSON = "lint.config.json";
+const UTF8_ENCODING = "utf8";
+
 import { readFile } from "node:fs/promises";
 
 export interface LintConfig {
@@ -33,10 +36,10 @@ function isPositiveInteger(value: unknown): value is number {
 }
 
 export async function loadLintConfig(
-	path = "lint.config.json",
+	path = LINT_CONFIG_JSON,
 ): Promise<LintConfig> {
 	try {
-		const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+		const parsed: unknown = JSON.parse(await readFile(path, UTF8_ENCODING));
 		if (!isRecord(parsed)) return { ...DEFAULT_LINT_CONFIG };
 		const config = { ...DEFAULT_LINT_CONFIG };
 		for (const key of CONFIG_KEYS) {

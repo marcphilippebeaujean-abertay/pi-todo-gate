@@ -1,3 +1,6 @@
+const CUSTOM = "custom";
+const PI_TODO_GATE_STATE = "pi-todo-gate-state";
+
 import type { WorkState } from "./types.ts";
 
 const STATE_KEYS: readonly (keyof WorkState)[] = [
@@ -24,8 +27,8 @@ function isWorkState(value: unknown): value is WorkState {
 function stateFromEntry(entry: unknown): WorkState | null {
 	if (
 		!isRecord(entry) ||
-		entry.type !== "custom" ||
-		entry.customType !== "pi-todo-gate-state"
+		entry.type !== CUSTOM ||
+		entry.customType !== PI_TODO_GATE_STATE
 	)
 		return null;
 	return isWorkState(entry.data) ? { ...entry.data } : null;

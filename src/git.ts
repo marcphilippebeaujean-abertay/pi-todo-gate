@@ -1,3 +1,48 @@
+const EMPTY_STRING = "";
+const SIGTERM = "SIGTERM";
+const ABORT = "abort";
+const DATA = "data";
+const ERROR_VALUE = "error";
+const CLOSE = "close";
+const WORKTREE = "worktree ";
+const GIT = "git";
+const REV_PARSE = "rev-parse";
+const SHOW_TOPLEVEL = "--show-toplevel";
+const BRANCH = "branch";
+const SHOW_CURRENT = "--show-current";
+const WORKTREE_2 = "worktree";
+const LIST = "list";
+const PORCELAIN = "--porcelain";
+const GH = "gh";
+const PR = "pr";
+const HEAD = "--head";
+const STATE = "--state";
+const OPEN = "open";
+const JSON_2 = "--json";
+const URL_STATE = "url,state";
+const LIMIT = "--limit";
+const VALUE_1 = "1";
+const UNKNOWN_VALUE = "UNKNOWN";
+const OPEN_2 = "OPEN";
+const CLOSED = "CLOSED";
+const MERGED = "MERGED";
+const TEXT = "\\";
+const TEXT_2 = "'";
+const TEXT_3 = '"';
+const TEXT_4 = ";";
+const TEXT_5 = "|";
+const TEXT_6 = "&";
+const TEXT_7 = "/";
+const MERGE = "merge";
+const TEXT_8 = "--";
+const TEXT_9 = "-";
+const REPO = "--repo";
+const R = "-R";
+const REPO_2 = "--repo=";
+const VIEW = "view";
+const HEADREFNAME = "headRefName";
+const URL_HEADREFNAME = "url,headRefName";
+
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { githubPrUrl } from "./pr-detection.ts";
@@ -29,8 +74,8 @@ export interface OpenPrInfo {
 export const spawnExec: Exec = (command, args, options = {}) =>
 	new Promise((resolveResult) => {
 		const child = spawn(command, args, { cwd: options.cwd, shell: false });
-		let stdout = "";
-		let stderr = "";
+		let stdout = EMPTY_STRING;
+		let stderr = EMPTY_STRING;
 		let killed = false;
 		let settled = false;
 		const finish = (result: CommandResult) => {
@@ -41,28 +86,30 @@ export const spawnExec: Exec = (command, args, options = {}) =>
 		const timer = options.timeout
 			? setTimeout(() => {
 					killed = true;
-					child.kill("SIGTERM");
+					child.kill(SIGTERM);
 				}, options.timeout)
 			: undefined;
 		const onAbort = () => {
 			killed = true;
-			child.kill("SIGTERM");
+			child.kill(SIGTERM);
 		};
-		options.signal?.addEventListener("abort", onAbort, { once: true });
-		child.stdout.on("data", (chunk: Buffer) => {
+		options.signal?.addEventListener(ABORT, onAbort, {
+			once: true,
+		});
+		child.stdout.on(DATA, (chunk: Buffer) => {
 			stdout += chunk.toString();
 		});
-		child.stderr.on("data", (chunk: Buffer) => {
+		child.stderr.on(DATA, (chunk: Buffer) => {
 			stderr += chunk.toString();
 		});
-		child.on("error", (error) => {
+		child.on(ERROR_VALUE, (error) => {
 			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
+			options.signal?.removeEventListener(ABORT, onAbort);
 			finish({ stdout, stderr: `${stderr}${error.message}`, code: 1, killed });
 		});
-		child.on("close", (code) => {
+		child.on(CLOSE, (code) => {
 			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
+			options.signal?.removeEventListener(ABORT, onAbort);
 			finish({ stdout, stderr, code: code ?? 1, killed });
 		});
 	});
@@ -70,8 +117,8 @@ export const spawnExec: Exec = (command, args, options = {}) =>
 function firstWorktreePath(output: string): string | null {
 	const line = output
 		.split(/\r?\n/)
-		.find((value) => value.startsWith("worktree "));
-	return line ? line.slice("worktree ".length).trim() : null;
+		.find((value) => value.startsWith(WORKTREE));
+	return line ? line.slice(WORKTREE.length).trim() : null;
 }
 
 export async function inspectWorktree(
@@ -79,9 +126,13 @@ export async function inspectWorktree(
 	cwd: string,
 ): Promise<WorktreeInfo> {
 	const [rootResult, branchResult, listResult] = await Promise.all([
-		exec("git", ["rev-parse", "--show-toplevel"], { cwd }),
-		exec("git", ["branch", "--show-current"], { cwd }),
-		exec("git", ["worktree", "list", "--porcelain"], { cwd }),
+		exec(GIT, [REV_PARSE, SHOW_TOPLEVEL], {
+			cwd,
+		}),
+		exec(GIT, [BRANCH, SHOW_CURRENT], {
+			cwd,
+		}),
+		exec(GIT, [WORKTREE_2, LIST, PORCELAIN], { cwd }),
 	]);
 	const root =
 		rootResult.code === 0 && rootResult.stdout.trim()
@@ -107,44 +158,33 @@ export async function findOpenPr(
 	branch: string,
 ): Promise<OpenPrInfo> {
 	const result = await exec(
-		"gh",
-		[
-			"pr",
-			"list",
-			"--head",
-			branch,
-			"--state",
-			"open",
-			"--json",
-			"url,state",
-			"--limit",
-			"1",
-		],
+		GH,
+		[PR, LIST, HEAD, branch, STATE, OPEN, JSON_2, URL_STATE, LIMIT, VALUE_1],
 		{ cwd },
 	);
-	if (result.code !== 0) return { url: null, state: "UNKNOWN" };
+	if (result.code !== 0) return { url: null, state: UNKNOWN_VALUE };
 	try {
 		const rows: unknown = JSON.parse(result.stdout);
-		if (!Array.isArray(rows)) return { url: null, state: "UNKNOWN" };
-		if (rows.length === 0) return { url: null, state: "OPEN" };
+		if (!Array.isArray(rows)) return { url: null, state: UNKNOWN_VALUE };
+		if (rows.length === 0) return { url: null, state: OPEN_2 };
 		if (typeof rows[0] !== "object" || rows[0] === null) {
-			return { url: null, state: "UNKNOWN" };
+			return { url: null, state: UNKNOWN_VALUE };
 		}
 		const row = rows[0] as { url?: unknown; state?: unknown };
 		const url = typeof row.url === "string" ? githubPrUrl(row.url) : null;
 		const state =
-			row.state === "OPEN" || row.state === "CLOSED" || row.state === "MERGED"
+			row.state === OPEN_2 || row.state === CLOSED || row.state === MERGED
 				? row.state
-				: "UNKNOWN";
+				: UNKNOWN_VALUE;
 		return { url, state };
 	} catch {
-		return { url: null, state: "UNKNOWN" };
+		return { url: null, state: UNKNOWN_VALUE };
 	}
 }
 
 function shellSegments(command: string): string[] {
 	const segments: string[] = [];
-	let current = "";
+	let current = EMPTY_STRING;
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 	for (const character of command) {
@@ -153,7 +193,7 @@ function shellSegments(command: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === "\\" && quote !== "'") {
+		if (character === TEXT && quote !== TEXT_2) {
 			current += character;
 			escaped = true;
 			continue;
@@ -163,14 +203,14 @@ function shellSegments(command: string): string[] {
 			if (character === quote) quote = null;
 			continue;
 		}
-		if (character === "'" || character === '"') {
+		if (character === TEXT_2 || character === TEXT_3) {
 			quote = character;
 			current += character;
 			continue;
 		}
-		if (character === ";" || character === "|" || character === "&") {
+		if (character === TEXT_4 || character === TEXT_5 || character === TEXT_6) {
 			if (current.trim()) segments.push(current.trim());
-			current = "";
+			current = EMPTY_STRING;
 			continue;
 		}
 		current += character;
@@ -181,12 +221,12 @@ function shellSegments(command: string): string[] {
 
 function shellWords(segment: string): string[] {
 	const words: string[] = [];
-	let current = "";
+	let current = EMPTY_STRING;
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 	const push = () => {
 		if (current || words.length === 0) words.push(current);
-		current = "";
+		current = EMPTY_STRING;
 	};
 	for (const character of segment) {
 		if (escaped) {
@@ -194,7 +234,7 @@ function shellWords(segment: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === "\\" && quote !== "'") {
+		if (character === TEXT && quote !== TEXT_2) {
 			escaped = true;
 			continue;
 		}
@@ -203,7 +243,7 @@ function shellWords(segment: string): string[] {
 			else current += character;
 			continue;
 		}
-		if (character === "'" || character === '"') {
+		if (character === TEXT_2 || character === TEXT_3) {
 			quote = character;
 			continue;
 		}
@@ -213,13 +253,13 @@ function shellWords(segment: string): string[] {
 		}
 		current += character;
 	}
-	if (escaped) current += "\\";
+	if (escaped) current += TEXT;
 	if (current) push();
 	return words;
 }
 
 function executableName(value: string): string {
-	return value.split("/").at(-1) ?? value;
+	return value.split(TEXT_7).at(-1) ?? value;
 }
 
 export function mergeCommand(
@@ -233,18 +273,18 @@ export function mergeCommand(
 		let candidate: { kind: "git" | "gh"; args: string[] } | null = null;
 		if (
 			words.length >= 2 &&
-			executableName(words[0]) === "git" &&
-			words[1] === "merge"
+			executableName(words[0]) === GIT &&
+			words[1] === MERGE
 		) {
-			candidate = { kind: "git", args: words.slice(2) };
+			candidate = { kind: GIT, args: words.slice(2) };
 		}
 		if (
 			words.length >= 3 &&
-			executableName(words[0]) === "gh" &&
-			words[1] === "pr" &&
-			words[2] === "merge"
+			executableName(words[0]) === GH &&
+			words[1] === PR &&
+			words[2] === MERGE
 		) {
-			candidate = { kind: "gh", args: words.slice(3) };
+			candidate = { kind: GH, args: words.slice(3) };
 		}
 		if (!candidate) continue;
 		if (parsed) return null;
@@ -254,7 +294,7 @@ export function mergeCommand(
 }
 
 function positionalArgs(args: string[]): string[] {
-	return args.filter((arg) => arg !== "--" && !arg.startsWith("-"));
+	return args.filter((arg) => arg !== TEXT_8 && !arg.startsWith(TEXT_9));
 }
 
 const GH_MERGE_VALUE_OPTIONS = new Set([
@@ -271,18 +311,17 @@ function ghMergeTargets(args: string[]): string[] | null {
 	const targets: string[] = [];
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
-		if (arg === "--") {
+		if (arg === TEXT_8) {
 			targets.push(...args.slice(index + 1));
 			break;
 		}
-		if (arg === "--repo" || arg === "-R" || arg.startsWith("--repo="))
-			return null;
+		if (arg === REPO || arg === R || arg.startsWith(REPO_2)) return null;
 		if (GH_MERGE_VALUE_OPTIONS.has(arg)) {
 			index += 1;
 			continue;
 		}
-		if (arg.startsWith("-")) {
-			if (index + 1 < args.length && !args[index + 1].startsWith("-"))
+		if (arg.startsWith(TEXT_9)) {
+			if (index + 1 < args.length && !args[index + 1].startsWith(TEXT_9))
 				return null;
 			continue;
 		}
@@ -300,11 +339,9 @@ async function queryPinnedHead(
 	cwd: string,
 	prUrl: string,
 ): Promise<string | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", prUrl, "--json", "headRefName"],
-		{ cwd },
-	);
+	const result = await exec(GH, [PR, VIEW, prUrl, JSON_2, HEADREFNAME], {
+		cwd,
+	});
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -323,11 +360,9 @@ async function queryCurrentPr(
 	cwd: string,
 	target: string,
 ): Promise<{ url: string; headRefName: string } | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", target, "--json", "url,headRefName"],
-		{ cwd },
-	);
+	const result = await exec(GH, [PR, VIEW, target, JSON_2, URL_HEADREFNAME], {
+		cwd,
+	});
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -351,7 +386,7 @@ export async function matchesPinnedPr(
 	const pinned = normalizedUrl(prUrl);
 	if (!parsed || !pinned) return false;
 
-	if (parsed.kind === "gh") {
+	if (parsed.kind === GH) {
 		const targets = ghMergeTargets(parsed.args);
 		if (targets?.length !== 1) return false;
 		const target = targets[0];

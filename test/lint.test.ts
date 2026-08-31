@@ -1,3 +1,9 @@
+const SRC_EXAMPLE_TS_4_7_FUNCTION_LENGTH =
+	"src/example.ts:4:7 function-length Function exceeds maximum length (51; 50)";
+const RETURNS_NO_DIAGNOSTICS_FOR_A_CLEAN_PROGRAM =
+	"returns no diagnostics for a clean program";
+const EXPORT_CONST_ANSWER_42 = "export const answer = 42;\n";
+
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,13 +11,14 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
 	formatLintDiagnostic,
-	lintProgram,
 	type LintDiagnostic,
+	lintProgram,
 } from "../src/lint.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-";
 const FIXTURE_NAME = "fixture.ts";
-const DIAGNOSTIC_TEST = "formats diagnostics with stable location and threshold";
+const DIAGNOSTIC_TEST =
+	"formats diagnostics with stable location and threshold";
 const DIAGNOSTIC: LintDiagnostic = {
 	filePath: "src/example.ts",
 	line: 4,
@@ -35,7 +42,8 @@ const TWO_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean) { return a && b; }";
 const THREE_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean, c: boolean) { return a && (b || c); }";
-const MAGIC_TEST = "flags executable string literals but permits const definitions";
+const MAGIC_TEST =
+	"flags executable string literals but permits const definitions";
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
@@ -113,19 +121,23 @@ async function fixtureProgram(source: string): Promise<ts.Program> {
 describe("lint diagnostics", () => {
 	it(DIAGNOSTIC_TEST, () => {
 		expect(formatLintDiagnostic(DIAGNOSTIC)).toBe(
-			"src/example.ts:4:7 function-length Function exceeds maximum length (51; 50)",
+			SRC_EXAMPLE_TS_4_7_FUNCTION_LENGTH,
 		);
 	});
 
-	it("returns no diagnostics for a clean program", async () => {
-		const program = await fixtureProgram("export const answer = 42;\n");
+	it(RETURNS_NO_DIAGNOSTICS_FOR_A_CLEAN_PROGRAM, async () => {
+		const program = await fixtureProgram(EXPORT_CONST_ANSWER_42);
 		expect(lintProgram(program)).toEqual([]);
 	});
 
 	it(MAGIC_TEST, async () => {
 		expect(ruleIds(await lintFixture(MAGIC_SOURCE))).toContain(NO_MAGIC_RULE);
-		expect(ruleIds(await lintFixture(CONSTANT_SOURCE))).not.toContain(NO_MAGIC_RULE);
-		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).not.toContain(NO_MAGIC_RULE);
+		expect(ruleIds(await lintFixture(CONSTANT_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
+		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
 	});
 
 	it(EXPRESSION_TEST, async () => {
@@ -139,16 +151,21 @@ describe("lint diagnostics", () => {
 
 	it(NAMED_IF_TEST, async () => {
 		const diagnostics = await lintFixture(IF_SOURCE);
-		expect(ruleIds(diagnostics).filter((id) => id === NAMED_IF_RULE)).toHaveLength(2);
+		expect(
+			ruleIds(diagnostics).filter((id) => id === NAMED_IF_RULE),
+		).toHaveLength(2);
 	});
 
 	it(METRIC_TEST, async () => {
-		const diagnostics = await lintFixture(`${COMPLEX_SOURCE}\n${NESTED_SOURCE}`, {
-			maxCyclomaticComplexity: 1,
-			maxFunctionLines: 1,
-			maxFunctionsPerFile: 1,
-			maxNestedFunctionDepth: 2,
-		});
+		const diagnostics = await lintFixture(
+			`${COMPLEX_SOURCE}\n${NESTED_SOURCE}`,
+			{
+				maxCyclomaticComplexity: 1,
+				maxFunctionLines: 1,
+				maxFunctionsPerFile: 1,
+				maxNestedFunctionDepth: 2,
+			},
+		);
 		expect(ruleIds(diagnostics)).toEqual(expect.arrayContaining(METRIC_RULES));
 	});
 });

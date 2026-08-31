@@ -1,3 +1,20 @@
+const ACCENT = "accent";
+const PR_NONE = "PR: none";
+const SPACE = " ";
+const OPEN = "open";
+const TODOIST_TASK_NONE = "Todoist Task: none";
+const HTTP = "http:";
+const HTTPS = "https:";
+const MUTED = "muted";
+const TEXT = "text";
+const PR_LINK = "| PR Link: ";
+const NONE = "none";
+const TEXT_2 = " |";
+const TODOIST_TASK = "Todoist Task: ";
+const EMPTY_STRING = "";
+const DIM = "dim";
+const TEXT_3 = " | ";
+
 import {
 	hyperlink,
 	truncateToWidth,
@@ -39,14 +56,14 @@ export type FooterFactory = (
 ) => FooterComponent;
 
 function linkText(text: string, theme?: FooterTheme): string {
-	const colored = theme?.fg("accent", text) ?? `\u001b[34m${text}\u001b[39m`;
+	const colored = theme?.fg(ACCENT, text) ?? `\u001b[34m${text}\u001b[39m`;
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
 function prLabel(url: string | undefined, theme?: FooterTheme): string {
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (!number) return "PR: none";
+	if (!number) return PR_NONE;
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
 	return hyperlink(linkText(`PR #${boundedNumber}`, theme), normalized);
 }
@@ -55,9 +72,9 @@ function displayTaskName(
 	taskName: string | undefined,
 	id: string | undefined,
 ): string {
-	const name = taskName?.replace(/\s+/g, " ").trim();
+	const name = taskName?.replace(/\s+/g, SPACE).trim();
 	if (name) return name.length > 15 ? `${name.slice(0, 15)}...` : name;
-	return id ? `#${id}` : "open";
+	return id ? `#${id}` : OPEN;
 }
 
 function taskLabel(
@@ -65,15 +82,15 @@ function taskLabel(
 	taskName?: string,
 	theme?: FooterTheme,
 ): string {
-	if (!url) return "Todoist Task: none";
+	if (!url) return TODOIST_TASK_NONE;
 	try {
 		const parsed = new URL(url);
-		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-			return "Todoist Task: none";
+		if (parsed.protocol !== HTTP && parsed.protocol !== HTTPS)
+			return TODOIST_TASK_NONE;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return `Todoist Task: ${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
-		return "Todoist Task: none";
+		return TODOIST_TASK_NONE;
 	}
 }
 
@@ -81,13 +98,13 @@ export function renderPrStatus(
 	url: string | undefined,
 	theme?: FooterTheme,
 ): string {
-	const muted = (text: string) => theme?.fg("muted", text) ?? text;
-	const value = (text: string) => theme?.fg("text", text) ?? text;
+	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
+	const value = (text: string) => theme?.fg(TEXT, text) ?? text;
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (!number) return `${muted("| PR Link: ")}${value("none")}${muted(" |")}`;
+	if (!number) return `${muted(PR_LINK)}${value(NONE)}${muted(TEXT_2)}`;
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted("| PR Link: ")}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(" |")}`;
+	return `${muted(PR_LINK)}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(TEXT_2)}`;
 }
 
 export function renderTaskStatus(
@@ -95,17 +112,17 @@ export function renderTaskStatus(
 	theme?: FooterTheme,
 	taskName?: string,
 ): string {
-	const muted = (text: string) => theme?.fg("muted", text) ?? text;
-	const value = (text: string) => theme?.fg("text", text) ?? text;
-	if (!url) return `${muted("Todoist Task: ")}${value("none")}`;
+	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
+	const value = (text: string) => theme?.fg(TEXT, text) ?? text;
+	if (!url) return `${muted(TODOIST_TASK)}${value(NONE)}`;
 	try {
 		const parsed = new URL(url);
-		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-			return `${muted("Todoist Task: ")}${value("none")}`;
+		if (parsed.protocol !== HTTP && parsed.protocol !== HTTPS)
+			return `${muted(TODOIST_TASK)}${value(NONE)}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${muted("Todoist Task: ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
+		return `${muted(TODOIST_TASK)}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
 	} catch {
-		return `${muted("Todoist Task: ")}${value("none")}`;
+		return `${muted(TODOIST_TASK)}${value(NONE)}`;
 	}
 }
 
@@ -115,7 +132,7 @@ export function renderFooterLine(
 	theme: FooterTheme,
 	statuses: ReadonlyMap<string, string>,
 ): string {
-	if (width <= 0) return "";
+	if (width <= 0) return EMPTY_STRING;
 	const parts = [
 		prLabel(state.prUrl, theme),
 		taskLabel(state.taskUrl, state.taskName, theme),
@@ -124,9 +141,9 @@ export function renderFooterLine(
 	for (const status of statuses.values()) {
 		if (status) parts.push(status);
 	}
-	const line = theme.fg("dim", parts.join(" | "));
+	const line = theme.fg(DIM, parts.join(TEXT_3));
 	if (visibleWidth(line) <= width) return line;
-	return truncateToWidth(line, width, "", false);
+	return truncateToWidth(line, width, EMPTY_STRING, false);
 }
 
 export function createFooterFactory(state: () => FooterState): FooterFactory {

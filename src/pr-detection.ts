@@ -1,12 +1,14 @@
+const EMPTY_STRING = "";
+const GITHUB_COM = "github.com";
 const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 
 export function githubPrUrl(text: string): string | null {
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
-		const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
+		const trimmed = candidate.replace(TRAILING_PUNCTUATION, EMPTY_STRING);
 		try {
 			const url = new URL(trimmed);
-			if (url.hostname.toLowerCase() !== "github.com") continue;
+			if (url.hostname.toLowerCase() !== GITHUB_COM) continue;
 			const match = url.pathname.match(
 				/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 			);
