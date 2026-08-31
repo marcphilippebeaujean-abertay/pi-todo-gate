@@ -16,6 +16,7 @@ export type Exec = (
 export const spawnExec: Exec = (command, args, options = {}) =>
 	new Promise((resolveResult) => {
 		const child = spawn(command, args, { cwd: options.cwd, shell: false });
+		child.stdin?.end();
 		let stdout = "";
 		let stderr = "";
 		let killed = false;
