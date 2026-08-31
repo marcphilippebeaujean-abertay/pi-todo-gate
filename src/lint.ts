@@ -282,10 +282,51 @@ function isNamedConditionType(type: ts.Type): boolean {
 	);
 }
 
+function isTypeGuardExpression(expression: ts.Expression): boolean {
+	while (ts.isParenthesizedExpression(expression))
+		expression = expression.expression;
+	if (ts.isBinaryExpression(expression)) {
+		const operator = expression.operatorToken.kind;
+		const isEquality =
+			operator === ts.SyntaxKind.EqualsEqualsToken ||
+			operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+			operator === ts.SyntaxKind.ExclamationEqualsToken ||
+			operator === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+		const isNullish = (node: ts.Expression): boolean =>
+			node.kind === ts.SyntaxKind.NullKeyword ||
+			(ts.isIdentifier(node) && node.text === "undefined");
+		if (
+			isEquality &&
+			(isTypeOfExpression(expression.left) ||
+				isTypeOfExpression(expression.right) ||
+				isNullish(expression.left) ||
+				isNullish(expression.right))
+		)
+			return true;
+		if (
+			operator === ts.SyntaxKind.InKeyword ||
+			operator === ts.SyntaxKind.InstanceOfKeyword
+		)
+			return true;
+	}
+	return (
+		ts.isCallExpression(expression) &&
+		ts.isPropertyAccessExpression(expression.expression) &&
+		ts.isIdentifier(expression.expression.expression) &&
+		expression.expression.expression.text === "Array" &&
+		expression.expression.name.text === "isArray"
+	);
+}
+
+function isTypeOfExpression(node: ts.Expression): boolean {
+	return ts.isTypeOfExpression(node);
+}
+
 function isNamedBooleanCondition(
 	condition: ts.Expression,
 	checker: ts.TypeChecker,
 ): boolean {
+	if (isTypeGuardExpression(condition)) return true;
 	let expression = condition;
 	while (ts.isParenthesizedExpression(expression))
 		expression = expression.expression;
