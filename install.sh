@@ -67,11 +67,19 @@ source_path="$source_dir/index.ts"
 target_path="$agent_dir/extensions/pi-todo-gate"
 legacy_file_path="$agent_dir/extensions/pi-todo-gate.ts"
 legacy_target_path="$agent_dir/extensions/pi-todo-gate"
+legacy_herdr_gate_path="$agent_dir/extensions/herdr-claim-gate.ts"
+legacy_herdr_test_path="$agent_dir/extensions/tests/herdr-claim-gate.test.ts"
 if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
 fi
 mkdir -p "$(dirname -- "$target_path")"
+for legacy_path in "$legacy_herdr_gate_path" "$legacy_herdr_test_path"; do
+  if [ -f "$legacy_path" ] || [ -L "$legacy_path" ]; then
+    rm -- "$legacy_path"
+    printf 'removed legacy file %s\n' "$legacy_path"
+  fi
+done
 if [ -L "$legacy_file_path" ] && [ "$(readlink "$legacy_file_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
   rm -- "$legacy_file_path"
 fi

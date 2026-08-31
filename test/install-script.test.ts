@@ -32,6 +32,26 @@ describe("install.sh", () => {
 		);
 	});
 
+	it("removes obsolete Herdr gate files during install", async () => {
+		const agentDir = await mkdtemp(join("/tmp", "pi-todo-gate-agent-"));
+		const legacyGate = join(agentDir, "extensions", "herdr-claim-gate.ts");
+		const legacyTest = join(
+			agentDir,
+			"extensions",
+			"tests",
+			"herdr-claim-gate.test.ts",
+		);
+		await mkdir(dirname(legacyGate), { recursive: true });
+		await mkdir(dirname(legacyTest), { recursive: true });
+		await writeFile(legacyGate, "obsolete gate", "utf8");
+		await writeFile(legacyTest, "obsolete test", "utf8");
+
+		await execute([], { PI_CODING_AGENT_DIR: agentDir });
+
+		await expect(readFile(legacyGate, "utf8")).rejects.toThrow();
+		await expect(readFile(legacyTest, "utf8")).rejects.toThrow();
+	});
+
 	it("does not replace an unrelated non-symlink without --force", async () => {
 		const agentDir = await mkdtemp(join("/tmp", "pi-todo-gate-agent-"));
 		const target = join(agentDir, "extensions", "pi-todo-gate");
