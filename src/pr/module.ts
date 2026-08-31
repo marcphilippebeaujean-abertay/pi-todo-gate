@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Exec, spawnExec } from "../shared/command.ts";
+import { detectMerge, type MergeEvent } from "../shared/merge-detection.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	appendCustomState,
@@ -13,7 +14,7 @@ import {
 } from "../shared/session-state.ts";
 import { githubPrUrl, githubPrUrls } from "./detection.ts";
 import { renderPrStatus } from "./footer.ts";
-import { findOpenPr, findPrState, matchesPinnedPr } from "./git.ts";
+import { findOpenPr, findPrState } from "./git.ts";
 import {
 	isPrState,
 	markRemindersDelivered,
@@ -49,7 +50,8 @@ export interface PrModule {
 		command?: string;
 		content?: unknown;
 		isError: boolean;
-	}): Promise<void>;
+	}): Promise<MergeEvent | null>;
+	drainMergeEvents(): MergeEvent[];
 	deactivate(): void;
 }
 
@@ -126,6 +128,7 @@ export function createPrModule(
 	let registered = false;
 	let operationGeneration = 0;
 	let ready = false;
+	let mergeEvents: MergeEvent[] = [];
 
 	const appendState = (): void => {
 		appendCustomState(
@@ -164,12 +167,15 @@ export function createPrModule(
 		}
 	};
 
-	const recordMerge = (): void => {
-		if (!state.prUrl) return;
+	const recordMerge = (): MergeEvent | null => {
+		if (!state.prUrl) return null;
+		const event = { prUrl: state.prUrl };
 		state = recordMergedPr(state, new Date().toISOString());
+		mergeEvents.push(event);
 		allowDiscovery = true;
 		appendState();
 		refreshStatus();
+		return event;
 	};
 
 	const checkExternalMerge = async (
@@ -238,6 +244,7 @@ export function createPrModule(
 		async sessionStart(event, nextContext) {
 			const generation = ++operationGeneration;
 			ready = false;
+			mergeEvents = [];
 			context = nextContext;
 			state = {};
 			workChanged = false;
@@ -338,10 +345,10 @@ export function createPrModule(
 			return messages;
 		},
 		async toolResult(input) {
-			if (!context || !ready || input.isError) return;
+			if (!context || !ready || input.isError) return null;
 			if (input.toolName === "edit" || input.toolName === "write")
 				workChanged = true;
-			if (input.toolName !== "bash") return;
+			if (input.toolName !== "bash") return null;
 			const command = input.command ?? "";
 			const generation = operationGeneration;
 			const prUrl = state.prUrl;
@@ -351,24 +358,33 @@ export function createPrModule(
 				)
 			)
 				workChanged = true;
+			const mergeEvent = prUrl
+				? await detectMerge(
+						dependencies.exec ?? spawnExec,
+						context.cwd,
+						command,
+						prUrl,
+					)
+				: null;
 			if (
-				prUrl &&
-				(await matchesPinnedPr(
-					dependencies.exec ?? spawnExec,
-					context.cwd,
-					command,
-					prUrl,
-				)) &&
+				mergeEvent &&
 				generation === operationGeneration &&
 				context &&
-				state.prUrl === prUrl
+				state.prUrl === mergeEvent.prUrl
 			)
-				recordMerge();
+				return recordMerge();
+			return null;
+		},
+		drainMergeEvents() {
+			const events = mergeEvents;
+			mergeEvents = [];
+			return events;
 		},
 		deactivate() {
 			++operationGeneration;
 			ready = false;
 			workChanged = false;
+			mergeEvents = [];
 			state = {};
 			if (context) context.ui.setStatus("pi-todo-gate-pr", undefined);
 			context = null;

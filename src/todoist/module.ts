@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Exec, spawnExec } from "../shared/command.ts";
+import type { MergeEvent } from "../shared/merge-detection.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	appendCustomState,
@@ -46,6 +47,7 @@ export interface TodoistModule {
 		ctx: ExtensionContext,
 	): Promise<void>;
 	beforeAgentStart(prompt: string): Promise<string>;
+	mergeDetected(event: MergeEvent): Promise<void>;
 	toolResult(input: {
 		toolName: string;
 		command?: string;
@@ -158,6 +160,7 @@ export function createTodoistModule(
 				claimed.webUrl ??
 				claimed.url ??
 				`https://app.todoist.com/app/task/${claimed.id}`,
+			mergePromptedPrUrl: undefined,
 		});
 		appendState();
 		refreshStatus();
@@ -334,6 +337,64 @@ export function createTodoistModule(
 			if (!context || !ready) return "";
 			void analyzeTaskClaim(prompt);
 			return "";
+		},
+		async mergeDetected(event) {
+			const runContext = context;
+			if (
+				!runContext ||
+				!ready ||
+				!runContext.hasUI ||
+				!state.taskRef ||
+				state.mergePromptedPrUrl === event.prUrl
+			)
+				return;
+			const generation = operationGeneration;
+			const taskRef = state.taskRef;
+			const taskName = state.taskName ?? taskRef;
+			state = applyTodoistStatePatch(state, {
+				mergePromptedPrUrl: event.prUrl,
+			});
+			appendState();
+			const choice = await runContext.ui.select(
+				`Do you wish to mark task ${taskName} as complete?`,
+				["Yes", "No", "No and clear session task"],
+			);
+			if (
+				generation !== operationGeneration ||
+				context !== runContext ||
+				state.taskRef !== taskRef ||
+				state.mergePromptedPrUrl !== event.prUrl
+			)
+				return;
+			if (choice === "No and clear session task") {
+				++operationGeneration;
+				claimAnalysisComplete = true;
+				state = {};
+				appendState();
+				refreshStatus();
+				return;
+			}
+			if (choice !== "Yes") return;
+			try {
+				await createClient(
+					runContext as ExtensionContext,
+					dependencies,
+				).completeTask(taskRef);
+				if (generation !== operationGeneration || context !== runContext)
+					return;
+				appendState();
+				runContext.ui.notify(
+					"Merged PR detected; Todoist task completed",
+					"info",
+				);
+			} catch {
+				if (generation !== operationGeneration || context !== runContext)
+					return;
+				runContext.ui.notify(
+					"Merged PR detected, but Todoist task completion failed",
+					"warning",
+				);
+			}
 		},
 		async toolResult(_input) {
 			// Task claims are analyzed once before the first main-agent turn.
