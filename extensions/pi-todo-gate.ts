@@ -2,6 +2,11 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import {
+	type CommandRunner as HerdrCommandRunner,
+	installHerdrClaimGate,
+	type StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
 import { createPrModule, type PrModuleDependencies } from "../src/pr/module.ts";
 import type { Exec } from "../src/shared/command.ts";
 import type { TaskClaimWorker } from "../src/todoist/claim-worker.ts";
@@ -23,6 +28,8 @@ export interface ExtensionDependencies {
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
 	claimTaskWorker?: TaskClaimWorker;
+	herdrCommandRunner?: HerdrCommandRunner;
+	herdrStartBackgroundWorker?: StartBackgroundWorker;
 }
 
 function textOf(value: unknown): string {
@@ -71,7 +78,13 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
-	if (process.env.PI_SUBAGENT_CHILD === "1") return;
+	const isInSubagentSession = process.env.PI_SUBAGENT_CHILD === "1";
+	if (isInSubagentSession) return;
+
+	installHerdrClaimGate(pi, {
+		commandRunner: dependencies.herdrCommandRunner,
+		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
+	});
 
 	const prDependencies: PrModuleDependencies = {
 		openSession: dependencies.openSession,
