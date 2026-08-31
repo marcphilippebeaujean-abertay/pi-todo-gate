@@ -25,14 +25,14 @@ export function renderTaskStatus(
 ): string {
 	const muted = (text: string) => theme?.fg("muted", text) ?? text;
 	const value = (text: string) => theme?.fg("text", text) ?? text;
-	if (!url) return `${muted("Todoist Task | ")}${value("none")}`;
+	if (!url) return `${muted("Todoist Task: ")}${value("none")}${muted(" |")}`;
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-			return `${muted("Todoist Task | ")}${value("none")}`;
+			return `${muted("Todoist Task: ")}${value("none")}${muted(" |")}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${muted("Todoist Task | ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
+		return `${muted("Todoist Task: ")}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}${muted(" |")}`;
 	} catch {
-		return `${muted("Todoist Task | ")}${value("none")}`;
+		return `${muted("Todoist Task: ")}${value("none")}${muted(" |")}`;
 	}
 }

@@ -393,7 +393,9 @@ describe("deferred Todoist task claiming", () => {
 
 		expect(h.statusCalls.some(({ text }) => text?.includes("⠋"))).toBe(true);
 		expect(
-			h.statusCalls.some(({ text }) => text?.includes("Todoist Task | ⠋")),
+			h.statusCalls.some(({ text }) =>
+				text?.includes("Todoist Task: ⠋ evaluating |"),
+			),
 		).toBe(true);
 		expect(h.notifications).toContain("No task update");
 	});
@@ -545,7 +547,9 @@ describe("deferred Todoist task claiming", () => {
 		});
 		expect(h.statusCalls.some(({ text }) => text?.includes("⠋"))).toBe(true);
 		expect(
-			h.statusCalls.some(({ text }) => text?.includes("Todoist Task | ⠋")),
+			h.statusCalls.some(({ text }) =>
+				text?.includes("Todoist Task: ⠋ claiming |"),
+			),
 		).toBe(true);
 		expect(h.statusCalls.at(-1)?.text).toContain("Implement featu");
 		expect(
