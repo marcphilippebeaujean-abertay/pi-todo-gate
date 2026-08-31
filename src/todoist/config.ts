@@ -1,13 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+export interface TodoistProjectSettings {
+	todoistProjectRef: string;
+	triggersOnlyOnWorktree?: boolean;
+}
+
 export interface TodoistProjectMapping {
-	projects: Record<string, string>;
+	projects: Record<string, string | TodoistProjectSettings>;
 }
 
 export interface ResolvedProject {
 	codingRoot: string;
 	todoistProjectRef: string;
+	triggersOnlyOnWorktree?: boolean;
 }
 
 export function defaultConfigPath(): string {
@@ -28,14 +34,25 @@ export function parseConfig(raw: string): TodoistProjectMapping {
 		if (!isRecord(parsed) || !isRecord(parsed.projects))
 			return { projects: {} };
 
-		const projects: Record<string, string> = {};
+		const projects: Record<string, string | TodoistProjectSettings> = {};
 		for (const [path, project] of Object.entries(parsed.projects)) {
-			if (typeof path !== "string" || typeof project !== "string") continue;
+			if (typeof path !== "string") continue;
 			const normalizedPath = path.trim();
-			const normalizedProject = project.trim();
-			if (normalizedPath && normalizedProject) {
-				projects[normalizedPath] = normalizedProject;
+			if (!normalizedPath) continue;
+			if (typeof project === "string") {
+				const normalizedProject = project.trim();
+				if (normalizedProject) projects[normalizedPath] = normalizedProject;
+				continue;
 			}
+			if (!isRecord(project)) continue;
+			const projectRef = project.todoistProjectRef;
+			if (typeof projectRef !== "string" || !projectRef.trim()) continue;
+			projects[normalizedPath] = {
+				todoistProjectRef: projectRef.trim(),
+				...(typeof project.triggersOnlyOnWorktree === "boolean"
+					? { triggersOnlyOnWorktree: project.triggersOnlyOnWorktree }
+					: {}),
+			};
 		}
 		return { projects };
 	} catch {
@@ -71,9 +88,14 @@ export function resolveConfiguredProject(
 ): ResolvedProject | null {
 	const current = normalizedPath(cwd);
 	const candidates = Object.entries(config.projects)
-		.map(([codingRoot, todoistProjectRef]) => ({
+		.map(([codingRoot, project]) => ({
 			codingRoot: normalizedPath(codingRoot),
-			todoistProjectRef,
+			todoistProjectRef:
+				typeof project === "string" ? project : project.todoistProjectRef,
+			triggersOnlyOnWorktree:
+				typeof project === "string"
+					? true
+					: project.triggersOnlyOnWorktree !== false,
 		}))
 		.filter(({ codingRoot }) => isPathAtOrBelow(current, codingRoot))
 		.sort((a, b) => b.codingRoot.length - a.codingRoot.length);

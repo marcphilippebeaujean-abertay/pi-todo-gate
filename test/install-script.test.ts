@@ -69,6 +69,41 @@ describe("install.sh", () => {
 		);
 	});
 
+	it("preserves project settings when reconfiguring a project", async () => {
+		const agentDir = await mkdtemp(join("/tmp", "pi-todo-gate-agent-"));
+		await writeFile(
+			join(agentDir, "pi-todo-gate.json"),
+			JSON.stringify({
+				projects: {
+					"/repo": {
+						todoistProjectRef: "old-project",
+						triggersOnlyOnWorktree: false,
+					},
+				},
+			}),
+			"utf8",
+		);
+		await execute(["configure", "/repo", "new-project"], {
+			PI_CODING_AGENT_DIR: agentDir,
+		});
+		await expect(
+			readFile(join(agentDir, "pi-todo-gate.json"), "utf8"),
+		).resolves.toEqual(
+			`${JSON.stringify(
+				{
+					projects: {
+						"/repo": {
+							todoistProjectRef: "new-project",
+							triggersOnlyOnWorktree: false,
+						},
+					},
+				},
+				null,
+				2,
+			)}\n`,
+		);
+	});
+
 	it("refuses a copied script with no extension source", async () => {
 		const directory = await mkdtemp(join("/tmp", "pi-todo-gate-install-"));
 		const copied = join(directory, "install.sh");

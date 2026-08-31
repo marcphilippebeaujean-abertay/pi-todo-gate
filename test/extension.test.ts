@@ -2,7 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
 import type { TodoistClient } from "../src/todoist/client.ts";
 import { createTodoistModule } from "../src/todoist/module.ts";
@@ -12,18 +12,21 @@ type TestTool = {
 	name: string;
 	execute(...args: unknown[]): Promise<unknown>;
 };
+type CommandHandler = (args: string, ctx: unknown) => Promise<void>;
 
-function harness(cwd: string, branch: unknown[] = [], selectChoice = "No") {
+function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<string, Handler>();
+	const commands = new Map<string, CommandHandler>();
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const notifications: string[] = [];
-	const selections: Array<{ title: string; options: string[] }> = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
 	let activeTools: string[] = [];
 	const pi = {
 		on: (event: string, handler: Handler) => handlers.set(event, handler),
 		registerTool: (tool: TestTool) => tools.push(tool),
+		registerCommand: (name: string, options: { handler: CommandHandler }) =>
+			commands.set(name, options.handler),
 		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
 		getActiveTools: () => activeTools,
 		setActiveTools: (names: string[]) => {
@@ -33,13 +36,11 @@ function harness(cwd: string, branch: unknown[] = [], selectChoice = "No") {
 	const ctx = {
 		cwd,
 		mode: "print",
+		hasUI: true,
 		ui: {
 			theme: { fg: (_color: string, text: string) => text },
 			notify: (message: string) => notifications.push(message),
-			select: async (title: string, options: string[]) => {
-				selections.push({ title, options: [...options] });
-				return selectChoice;
-			},
+			confirm: async () => true,
 			setStatus: (key: string, text: string | undefined) =>
 				statusCalls.push({ key, text }),
 		},
@@ -53,10 +54,10 @@ function harness(cwd: string, branch: unknown[] = [], selectChoice = "No") {
 		pi,
 		ctx,
 		handlers,
+		commands,
 		tools,
 		appended,
 		notifications,
-		selections,
 		statusCalls,
 	};
 }
@@ -77,6 +78,7 @@ async function start(
 ) {
 	extension(h.pi, {
 		loadConfig: async () => config(projects),
+		claimTaskWorker: async () => ({ status: "none" as const }),
 		...dependencies,
 	});
 	await h.handlers.get("session_start")?.(
@@ -84,6 +86,21 @@ async function start(
 		h.ctx,
 	);
 }
+
+const projectExec = async (command: string, args: string[]) => {
+	const key = [command, ...args].join(" ");
+	if (key === "git rev-parse --show-toplevel")
+		return { stdout: "/configured/project\n", stderr: "", code: 0 };
+	if (key === "git branch --show-current")
+		return { stdout: "feature\n", stderr: "", code: 0 };
+	if (key === "git worktree list --porcelain")
+		return {
+			stdout: "worktree /configured\nHEAD abc\nbranch refs/heads/main\n",
+			stderr: "",
+			code: 0,
+		};
+	return { stdout: "", stderr: "", code: 0 };
+};
 
 describe("extension activation", () => {
 	it("does not register behavior inside dispatched subagents", () => {
@@ -148,27 +165,18 @@ describe("extension activation", () => {
 	});
 });
 
-describe("Todoist context composition", () => {
-	it("adds new-task workflow when no task is tracked", async () => {
+describe("Todoist prompt isolation", () => {
+	it("does not add Todoist workflow when no task is tracked", async () => {
 		const h = harness("/configured/project");
 		await start(h, { "/configured": "Merge TD" });
 		const result = await h.handlers.get("before_agent_start")?.(
 			{ type: "before_agent_start", prompt: "implement feature" },
 			h.ctx,
 		);
-		expect(contextContent(result)).toContain("# Todoist Task Gate (MANDATORY)");
-		expect(contextContent(result)).toContain(
-			"Configured Todoist project: Merge TD",
-		);
-		expect(contextContent(result)).toContain(
-			"Find or create a Todoist task matching this work",
-		);
-		expect(contextContent(result)).toContain(
-			"pi_todoist_gate_state using set_task",
-		);
+		expect(contextContent(result)).toBe("");
 	});
 
-	it("continues current task tracking without new-task instructions", async () => {
+	it("does not add Todoist workflow for an active task", async () => {
 		const h = harness("/configured/project", [
 			{
 				type: "custom",
@@ -185,13 +193,7 @@ describe("Todoist context composition", () => {
 			{ type: "before_agent_start", prompt: "continue" },
 			h.ctx,
 		);
-		expect(contextContent(result)).toContain(
-			"We are tracking tasks with Todoist and you are currently working on task 42.",
-		);
-		expect(contextContent(result)).toContain(
-			"Continue working on and tracking this task in Todoist.",
-		);
-		expect(contextContent(result)).not.toContain("Find or create");
+		expect(contextContent(result)).toBe("");
 	});
 
 	it("inherits task state after context reset in the same configured project", async () => {
@@ -222,9 +224,7 @@ describe("Todoist context composition", () => {
 			{ type: "before_agent_start", prompt: "continue" },
 			h.ctx,
 		);
-		expect(contextContent(result)).toContain(
-			"currently working on task previous-task",
-		);
+		expect(contextContent(result)).toBe("");
 	});
 
 	it("does not inherit Todoist state after explicit clear", async () => {
@@ -278,8 +278,270 @@ describe("Todoist context composition", () => {
 			{ type: "before_agent_start", prompt: "continue" },
 			h.ctx,
 		);
-		expect(contextContent(result)).toContain("# Todoist Task Gate (MANDATORY)");
+		expect(contextContent(result)).toBe("");
 		expect(contextContent(result)).not.toContain("previous-task");
+	});
+});
+
+describe("deferred Todoist task claiming", () => {
+	it("runs claim worker once with first prompt, history, and project details", async () => {
+		const h = harness("/configured/.worktrees/project", [
+			{
+				type: "message",
+				message: { role: "user", content: "initial request" },
+			},
+		]);
+		const inputs: unknown[] = [];
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				claimTaskWorker: async (input) => {
+					inputs.push(input);
+					return { status: "none" };
+				},
+			},
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("Implement feature");
+		await todoist.beforeAgentStart("second prompt");
+		await vi.waitFor(() => expect(inputs).toHaveLength(1));
+
+		expect(inputs).toHaveLength(1);
+		expect(inputs[0]).toMatchObject({
+			prompt: "Implement feature",
+			history: [expect.stringContaining("initial request")],
+			cwd: "/configured/.worktrees/project",
+			projectRef: "Pi Extensions",
+			worktree: { isWorktree: true, branch: "feature" },
+		});
+	});
+
+	it("does not block agent start and notifies user when evaluation fails", async () => {
+		const h = harness("/configured/project");
+		let rejectWorker: (error: Error) => void = () => {};
+		const worker = vi.fn(
+			() =>
+				new Promise<never>((_, reject) => {
+					rejectWorker = reject;
+				}),
+		);
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ exec: projectExec, claimTaskWorker: worker },
+		);
+		await todoist.sessionStart({}, h.ctx);
+
+		await expect(todoist.beforeAgentStart("Implement feature")).resolves.toBe(
+			"",
+		);
+		await vi.waitFor(() => expect(worker).toHaveBeenCalled());
+		rejectWorker(new Error("interrupted"));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain("Todoist task evaluation failed"),
+		);
+	});
+
+	it("skips automatic evaluation on repository root by default", async () => {
+		const h = harness("/configured");
+		const worker = vi.fn(async () => ({ status: "none" as const }));
+		const rootExec = async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return { stdout: "/configured\n", stderr: "", code: 0 };
+			if (key === "git branch --show-current")
+				return { stdout: "main\n", stderr: "", code: 0 };
+			if (key === "git worktree list --porcelain")
+				return {
+					stdout: "worktree /configured\nHEAD abc\nbranch refs/heads/main\n",
+					stderr: "",
+					code: 0,
+				};
+			return { stdout: "", stderr: "", code: 0 };
+		};
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: true,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ exec: rootExec, claimTaskWorker: worker },
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("Implement feature");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
+	it("re-evaluates task on explicit command", async () => {
+		const h = harness("/configured/project");
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Pi Extensions" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+		} as unknown as TodoistClient;
+		const worker = vi
+			.fn()
+			.mockResolvedValueOnce({ status: "none" as const })
+			.mockResolvedValueOnce({ status: "claimed" as const, taskRef: "42" });
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				createTodoistClient: () => client,
+				claimTaskWorker: worker,
+			},
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("initial");
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+
+		const command = h.commands.get("todoist-reevaluate");
+		expect(command).toBeDefined();
+		await command?.("focus now", h.ctx);
+
+		expect(worker).toHaveBeenCalledTimes(2);
+		expect(worker.mock.calls[1][0]).toMatchObject({ prompt: "focus now" });
+		expect(h.appended.at(-1)).toMatchObject({ data: { taskRef: "42" } });
+	});
+
+	it("persists claimed task without adding Todoist context", async () => {
+		const h = harness("/configured/project");
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Pi Extensions" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+		} as unknown as TodoistClient;
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				createTodoistClient: () => client,
+				claimTaskWorker: async () => ({
+					status: "claimed",
+					taskRef: "42",
+				}),
+			},
+		);
+		await todoist.sessionStart({}, h.ctx);
+
+		expect(await todoist.beforeAgentStart("claim 42")).toBe("");
+		await vi.waitFor(() => expect(h.appended.at(-1)).toBeDefined());
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todoist-gate-state",
+			data: {
+				taskRef: "42",
+				taskName: "Implement feature",
+				taskUrl: "https://app.todoist.com/app/task/42",
+			},
+		});
+	});
+
+	it("asks before switching to colliding task", async () => {
+		const h = harness("/configured/project");
+		const confirm = vi.fn(async () => true);
+		(h.ctx as unknown as { ui: { confirm: typeof confirm } }).ui.confirm =
+			confirm;
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Pi Extensions" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+		} as unknown as TodoistClient;
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				createTodoistClient: () => client,
+				claimTaskWorker: async () => ({
+					status: "collision",
+					taskRef: "42",
+					taskName: "Implement feature",
+				}),
+			},
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("claim 42");
+		await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+
+		expect(confirm).toHaveBeenCalled();
+		expect(h.appended.at(-1)).toMatchObject({
+			data: { taskRef: "42" },
+		});
+	});
+
+	it("skips worker when inherited task exists after new session", async () => {
+		const h = harness("/configured/project");
+		const worker = vi.fn(async () => ({ status: "none" as const }));
+		const todoist = createTodoistModule(
+			h.pi,
+			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				claimTaskWorker: worker,
+				openSession: () => ({
+					getBranch: () => [
+						{
+							type: "custom",
+							customType: "pi-todoist-gate-state",
+							data: { taskRef: "42" },
+						},
+					],
+					getCwd: () => "/configured/project",
+				}),
+			},
+		);
+		await todoist.sessionStart(
+			{ previousSessionFile: "/sessions/previous.jsonl" },
+			h.ctx,
+		);
+		await todoist.beforeAgentStart("continue");
+
+		expect(worker).not.toHaveBeenCalled();
 	});
 });
 
@@ -398,168 +660,6 @@ describe("merge reminder", () => {
 			},
 		);
 		expect(completions).toBe(0);
-	});
-
-	it("prompts before completing a task when PR merge is detected", async () => {
-		const h = harness(
-			"/configured/project",
-			[
-				{
-					type: "custom",
-					customType: "pi-pr-gate-state",
-					data: { prUrl: "https://github.com/o/r/pull/42" },
-				},
-				{
-					type: "custom",
-					customType: "pi-todoist-gate-state",
-					data: {
-						taskRef: "task-1",
-						taskName: "Implement feature",
-					},
-				},
-			],
-			"Yes",
-		);
-		let completions = 0;
-		const client = {
-			completeTask: async () => {
-				completions += 1;
-			},
-		} as unknown as TodoistClient;
-		const exec = async (_command: string, args: string[]) => {
-			if (args.includes("state,mergedAt"))
-				return {
-					stdout: JSON.stringify({ state: "MERGED", mergedAt: "now" }),
-					stderr: "",
-					code: 0,
-				};
-			return { stdout: "", stderr: "", code: 0 };
-		};
-		await start(
-			h,
-			{ "/configured": "Merge TD" },
-			{
-				exec,
-				createTodoistClient: () => client,
-			},
-		);
-		await h.handlers.get("before_agent_start")?.(
-			{ type: "before_agent_start", prompt: "continue" },
-			h.ctx,
-		);
-
-		expect(h.selections).toEqual([
-			{
-				title: "Do you wish to mark task Implement feature as complete?",
-				options: ["Yes", "No", "No and clear session task"],
-			},
-		]);
-		expect(completions).toBe(1);
-	});
-
-	it("keeps task linked when user declines completion", async () => {
-		const h = harness(
-			"/configured/project",
-			[
-				{
-					type: "custom",
-					customType: "pi-pr-gate-state",
-					data: { prUrl: "https://github.com/o/r/pull/42" },
-				},
-				{
-					type: "custom",
-					customType: "pi-todoist-gate-state",
-					data: { taskRef: "task-1", taskName: "Implement feature" },
-				},
-			],
-			"No",
-		);
-		let completions = 0;
-		const client = {
-			completeTask: async () => {
-				completions += 1;
-			},
-		} as unknown as TodoistClient;
-		const exec = async (_command: string, args: string[]) =>
-			args.includes("state,mergedAt")
-				? { stdout: '{"state":"MERGED","mergedAt":"now"}', stderr: "", code: 0 }
-				: { stdout: "", stderr: "", code: 0 };
-		await start(
-			h,
-			{ "/configured": "Merge TD" },
-			{
-				exec,
-				createTodoistClient: () => client,
-			},
-		);
-		await h.handlers.get("before_agent_start")?.(
-			{ type: "before_agent_start", prompt: "continue" },
-			h.ctx,
-		);
-		expect(completions).toBe(0);
-		expect(h.selections).toHaveLength(1);
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todoist-gate-state",
-			data: {
-				taskRef: "task-1",
-				taskName: "Implement feature",
-				mergePromptedPrUrl: "https://github.com/o/r/pull/42",
-			},
-		});
-	});
-
-	it("clears task and prevents historical relinking when user declines and clears", async () => {
-		const h = harness(
-			"/configured/project",
-			[
-				{
-					type: "custom",
-					customType: "pi-pr-gate-state",
-					data: { prUrl: "https://github.com/o/r/pull/42" },
-				},
-				{
-					type: "custom",
-					customType: "pi-todoist-gate-state",
-					data: { taskRef: "task-1", taskName: "Implement feature" },
-				},
-				{
-					type: "message",
-					message: {
-						role: "assistant",
-						content:
-							"Claimed Todoist task https://app.todoist.com/app/task/task-1",
-					},
-				},
-			],
-			"No and clear session task",
-		);
-		const client = {} as TodoistClient;
-		const exec = async (_command: string, args: string[]) =>
-			args.includes("state,mergedAt")
-				? { stdout: '{"state":"MERGED","mergedAt":"now"}', stderr: "", code: 0 }
-				: { stdout: "", stderr: "", code: 0 };
-		await start(
-			h,
-			{ "/configured": "Merge TD" },
-			{
-				exec,
-				createTodoistClient: () => client,
-			},
-		);
-		await h.handlers.get("before_agent_start")?.(
-			{ type: "before_agent_start", prompt: "continue" },
-			h.ctx,
-		);
-		expect(h.appended.at(-1)).toEqual({
-			type: "pi-todoist-gate-state",
-			data: {},
-		});
-		const appendedCount = h.appended.length;
-		await h.handlers.get("before_agent_start")?.(
-			{ type: "before_agent_start", prompt: "continue" },
-			h.ctx,
-		);
-		expect(h.appended).toHaveLength(appendedCount);
 	});
 });
 
@@ -848,16 +948,19 @@ describe("PR lifecycle isolation", () => {
 			h.pi,
 			{ codingRoot: "/configured", todoistProjectRef: "Merge TD" },
 			{ projects: { "/configured": "Merge TD" } },
-			{ createTodoistClient: () => client },
+			{
+				createTodoistClient: () => client,
+				exec: projectExec,
+				claimTaskWorker: async () => ({ status: "none" as const }),
+			},
 		);
 		const startup = todoist.sessionStart({}, h.ctx);
 		let beforeSettled = false;
 		const beforeStartup = todoist.beforeAgentStart("continue").then(() => {
 			beforeSettled = true;
 		});
-		await Promise.resolve();
-		expect(beforeSettled).toBe(true);
 		await beforeStartup;
+		expect(beforeSettled).toBe(true);
 		resolveProject({ id: "project-1", name: "Merge TD" });
 		await startup;
 
@@ -949,8 +1052,7 @@ describe("PR lifecycle isolation", () => {
 			h.ctx,
 		);
 
-		expect(contextContent(result)).toContain("# Todoist Task Gate (MANDATORY)");
-		expect(contextContent(result)).not.toContain("Stale task");
+		expect(contextContent(result)).toBe("");
 		expect(h.appended).toHaveLength(0);
 	});
 
