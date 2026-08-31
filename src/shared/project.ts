@@ -7,6 +7,26 @@ export interface ProjectInfo {
 	branch: string | null;
 }
 
+export function resolveGitPath(cwd: string, output: string): string | null {
+	const value = output.trim();
+	return value ? resolve(cwd, value) : null;
+}
+
+export function parseBranchName(output: string): string | null {
+	const value = output.trim();
+	return value || null;
+}
+
+export function isLinkedWorktreePaths(
+	cwd: string,
+	gitDirOutput: string,
+	commonDirOutput: string,
+): boolean {
+	const gitDir = resolveGitPath(cwd, gitDirOutput);
+	const commonDir = resolveGitPath(cwd, commonDirOutput);
+	return gitDir !== null && commonDir !== null && gitDir !== commonDir;
+}
+
 function firstWorktreePath(output: string): string | null {
 	const line = output
 		.split(/\r?\n/)
@@ -31,15 +51,13 @@ export async function inspectProject(
 		return { isWorktree: false, root: null, branch: null };
 	}
 	const root =
-		rootResult.code === 0 && rootResult.stdout.trim()
-			? resolve(rootResult.stdout.trim())
-			: null;
+		rootResult.code === 0 ? resolveGitPath(cwd, rootResult.stdout) : null;
 	const branch =
-		branchResult.code === 0 && branchResult.stdout.trim()
-			? branchResult.stdout.trim()
-			: null;
+		branchResult.code === 0 ? parseBranchName(branchResult.stdout) : null;
 	const mainRoot =
-		listResult.code === 0 ? firstWorktreePath(listResult.stdout) : null;
+		listResult.code === 0
+			? resolveGitPath(cwd, firstWorktreePath(listResult.stdout) ?? "")
+			: null;
 	return {
 		isWorktree:
 			root !== null && mainRoot !== null && root !== resolve(mainRoot),

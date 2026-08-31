@@ -4,6 +4,10 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
+import type {
+	CommandRunner as HerdrCommandRunner,
+	StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
 import type { TodoistClient } from "../src/todoist/client.ts";
 import { createTodoistModule } from "../src/todoist/module.ts";
 
@@ -23,7 +27,17 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
 	let activeTools: string[] = [];
 	const pi = {
-		on: (event: string, handler: Handler) => handlers.set(event, handler),
+		on: (event: string, handler: Handler) => {
+			const previous = handlers.get(event);
+			if (!previous) {
+				handlers.set(event, handler);
+				return;
+			}
+			handlers.set(event, async (eventValue, contextValue) => {
+				await previous(eventValue, contextValue);
+				return handler(eventValue, contextValue);
+			});
+		},
 		registerTool: (tool: TestTool) => tools.push(tool),
 		registerCommand: (name: string, options: { handler: CommandHandler }) =>
 			commands.set(name, options.handler),
@@ -115,6 +129,43 @@ describe("extension activation", () => {
 		}
 		expect(h.handlers.size).toBe(0);
 		expect(h.tools).toHaveLength(0);
+	});
+
+	it("runs Herdr worker globally while Todoist stays project-scoped", async () => {
+		const h = harness("/unconfigured/project");
+		const workerStart: StartBackgroundWorker = vi.fn(() => ({
+			cancel: () => undefined,
+		}));
+		const herdrRunner: HerdrCommandRunner = () => "{}";
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousSubagent = process.env.PI_SUBAGENT_CHILD;
+		process.env.HERDR_ENV = "1";
+		delete process.env.PI_SUBAGENT_CHILD;
+		try {
+			extension(h.pi, {
+				loadConfig: async () => config({ "/configured": "merge-td" }),
+				exec: projectExec,
+				claimTaskWorker: async () => ({ status: "none" as const }),
+				herdrCommandRunner: herdrRunner,
+				herdrStartBackgroundWorker: workerStart,
+			});
+			await h.handlers.get("session_start")?.(
+				{ type: "session_start", reason: "startup" },
+				h.ctx,
+			);
+			const result = await h.handlers.get("before_agent_start")?.(
+				{ prompt: "Fix Herdr worker" },
+				h.ctx,
+			);
+			expect(workerStart).toHaveBeenCalledOnce();
+			expect(contextContent(result)).not.toContain("STEP 0 — Setup Herdr");
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previousSubagent;
+		}
+		expect(h.tools.map((tool) => tool.name)).toEqual(["pi_pr_gate_state"]);
 	});
 
 	it("loads PR behavior without Todoist configuration", async () => {
