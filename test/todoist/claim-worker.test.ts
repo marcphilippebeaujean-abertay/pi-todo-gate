@@ -3,6 +3,8 @@ import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	createTaskClaimWorker,
 	type TaskClaimWorkerInput,
+	TaskClaimWorkerInputSchema,
+	TaskClaimWorkerResultSchema,
 } from "../../src/todoist/claim-worker.ts";
 
 const input: TaskClaimWorkerInput = {
@@ -45,6 +47,10 @@ describe("Todoist task claim worker", () => {
 					]),
 				);
 				const prompt = args.at(-1) ?? "";
+				expect(prompt).toContain("Input payload matching this schema:");
+				expect(prompt).toContain(JSON.stringify(TaskClaimWorkerInputSchema));
+				expect(prompt).toContain("Output JSON matching this schema:");
+				expect(prompt).toContain(JSON.stringify(TaskClaimWorkerResultSchema));
 				expect(prompt).toContain(input.prompt);
 				expect(prompt).toContain(input.projectRef);
 				expect(prompt).toContain(input.worktree.branch ?? "");

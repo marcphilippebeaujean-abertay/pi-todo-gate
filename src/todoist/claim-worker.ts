@@ -1,24 +1,41 @@
+import { Type } from "typebox";
+import { Value } from "typebox/value";
 import type { Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
-import type { ProjectInfo } from "../shared/project.ts";
 
-export interface TaskClaimWorkerInput {
-	prompt: string;
-	history: string[];
-	cwd: string;
-	projectRef: string;
-	worktree: ProjectInfo;
-}
+export const TaskClaimWorkerInputSchema = Type.Object({
+	prompt: Type.String(),
+	history: Type.Array(Type.String()),
+	cwd: Type.String(),
+	projectRef: Type.String(),
+	worktree: Type.Object({
+		isWorktree: Type.Boolean(),
+		root: Type.Union([Type.String(), Type.Null()]),
+		branch: Type.Union([Type.String(), Type.Null()]),
+	}),
+});
 
-export type TaskClaimWorkerResult =
-	| { status: "none" }
-	| { status: "claimed"; taskRef: string }
-	| {
-			status: "collision";
-			taskRef: string;
-			taskName?: string;
-			collisionReason?: string;
-	  };
+export type TaskClaimWorkerInput = Type.Static<
+	typeof TaskClaimWorkerInputSchema
+>;
+
+export const TaskClaimWorkerResultSchema = Type.Union([
+	Type.Object({ status: Type.Literal("none") }),
+	Type.Object({
+		status: Type.Literal("claimed"),
+		taskRef: Type.String({ minLength: 1 }),
+	}),
+	Type.Object({
+		status: Type.Literal("collision"),
+		taskRef: Type.String({ minLength: 1 }),
+		taskName: Type.Optional(Type.String()),
+		collisionReason: Type.Optional(Type.String()),
+	}),
+]);
+
+export type TaskClaimWorkerResult = Type.Static<
+	typeof TaskClaimWorkerResultSchema
+>;
 
 export type TaskClaimWorker = (
 	input: TaskClaimWorkerInput,
@@ -36,8 +53,12 @@ function workerPrompt(input: TaskClaimWorkerInput): string {
 		'If no positive claim exists, output exactly {"status":"none"} and do not run td.',
 		"If a candidate exists, use td to view and validate it belongs to configured project.",
 		'If candidate is not in In Progress, move it to In Progress with td, then output {"status":"claimed","taskRef":"..."}.',
-		'If candidate is already In Progress, do not move it. Output {"status":"collision","taskRef":"...","taskName":"...","collisionReason":"..."}.',
+		"If candidate is already In Progress, do not move it. Output a collision result.",
 		"Return one JSON object only. No markdown, explanation, or extra output.",
+		"Input payload matching this schema:",
+		JSON.stringify(TaskClaimWorkerInputSchema),
+		"Output JSON matching this schema:",
+		JSON.stringify(TaskClaimWorkerResultSchema),
 		"",
 		"Activity payload:",
 		JSON.stringify(input),
@@ -78,29 +99,8 @@ function parseResult(stdout: string): TaskClaimWorkerResult {
 		const end = text.lastIndexOf("}");
 		if (start < 0 || end <= start) continue;
 		try {
-			const value = JSON.parse(text.slice(start, end + 1)) as Record<
-				string,
-				unknown
-			>;
-			if (value.status === "none") return { status: "none" };
-			if (
-				(value.status === "claimed" || value.status === "collision") &&
-				typeof value.taskRef === "string" &&
-				value.taskRef.trim()
-			) {
-				if (value.status === "claimed")
-					return { status: "claimed", taskRef: value.taskRef };
-				return {
-					status: "collision",
-					taskRef: value.taskRef,
-					taskName:
-						typeof value.taskName === "string" ? value.taskName : undefined,
-					collisionReason:
-						typeof value.collisionReason === "string"
-							? value.collisionReason
-							: undefined,
-				};
-			}
+			const value: unknown = JSON.parse(text.slice(start, end + 1));
+			if (Value.Check(TaskClaimWorkerResultSchema, value)) return value;
 		} catch {
 			// Try earlier assistant output.
 		}
