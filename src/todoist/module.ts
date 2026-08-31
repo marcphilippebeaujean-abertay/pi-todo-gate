@@ -451,6 +451,11 @@ export function createTodoistModule(
 				).completeTask(taskRef);
 				if (generation !== operationGeneration || context !== runContext)
 					return;
+				state = applyTodoistStatePatch(state, {
+					taskRef: undefined,
+					taskName: undefined,
+					taskUrl: undefined,
+				});
 				appendState();
 				runContext.ui.notify("Task marked as complete", "info");
 			} catch (error) {

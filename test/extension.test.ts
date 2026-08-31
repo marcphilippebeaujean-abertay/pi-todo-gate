@@ -913,6 +913,45 @@ describe("deferred Todoist task claiming", () => {
 });
 
 describe("merge reminder", () => {
+	it("clears task fields after successful merge completion", async () => {
+		const h = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: {
+					taskRef: "42",
+					taskName: "Implement feature",
+					taskUrl: "https://app.todoist.com/app/task/42",
+				},
+			},
+		]);
+		const completeTask = vi.fn(async () => {});
+		const client = { completeTask } as unknown as TodoistClient;
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ createTodoistClient: () => client },
+		);
+		await todoist.sessionStart({}, h.ctx);
+
+		await todoist.mergeDetected({ prUrl: "https://github.com/o/r/pull/42" });
+
+		expect(completeTask).toHaveBeenCalledWith("42");
+		expect(h.appended.at(-1)).toEqual({
+			type: "pi-todoist-gate-state",
+			data: { mergePromptedPrUrl: "https://github.com/o/r/pull/42" },
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-task",
+			text: "Todoist Task: none |",
+		});
+	});
+
 	it("notifies after marking merged task complete", async () => {
 		const h = harness("/configured/project", [
 			{
