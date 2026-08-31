@@ -18,6 +18,8 @@ export type {
 } from "./herdr-claim-worker.ts";
 
 const CLAIM_CUSTOM_TYPE = "herdr-claim-gate";
+const HERDR_STATUS_KEY = "pi-todo-gate-herdr";
+const HERDR_WORKING_STATUS = "Herdr: ⠋ working |";
 const HERDR_INSTRUCTIONS = `# STEP 0 — Setup Herdr (FIRST, NOT SKIPPABLE)
 
 > The very first thing you do in every session — before any other command, before reading any
@@ -201,6 +203,17 @@ function notify(
 	}
 }
 
+function setHerdrStatus(
+	ctx: Pick<ExtensionContext, "ui">,
+	text: string | undefined,
+): void {
+	try {
+		ctx.ui.setStatus(HERDR_STATUS_KEY, text);
+	} catch {
+		// Headless sessions may not expose status UI.
+	}
+}
+
 function alreadyClaimed(ctx: {
 	sessionManager: {
 		getEntries: () => Array<{ type?: string; customType?: string }>;
@@ -278,15 +291,19 @@ export function installHerdrClaimGate(
 				instructions: HERDR_INSTRUCTIONS,
 				onClaimComplete: () => {
 					worker = undefined;
+					setHerdrStatus(ctx, undefined);
 					persistClaimed(ctx);
 				},
 				onFailure: (message) => {
 					worker = undefined;
+					setHerdrStatus(ctx, undefined);
 					notify(ctx, message, "warning");
 				},
 			});
+			setHerdrStatus(ctx, HERDR_WORKING_STATUS);
 		} catch (error) {
 			worker = undefined;
+			setHerdrStatus(ctx, undefined);
 			const detail =
 				error instanceof Error
 					? error.message
@@ -310,9 +327,10 @@ export function installHerdrClaimGate(
 		if (labelIsDescriptive(extractLabel(content))) persistClaimed();
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (_event, ctx) => {
 		worker?.cancel();
 		worker = undefined;
+		setHerdrStatus(ctx, undefined);
 		gateActive = false;
 		herdrAvailable = false;
 	});

@@ -11,6 +11,7 @@ interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
 	entries: Array<{ type: string; data?: unknown; customType?: string }>;
 	notifications: Array<{ message: string; level: string }>;
+	statusCalls: Array<{ key: string; text: string | undefined }>;
 	sentMessages: unknown[];
 	contextMessages: unknown[];
 	on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
@@ -24,6 +25,7 @@ function createFakePi(): FakePi {
 		handlers: new Map(),
 		entries,
 		notifications: [],
+		statusCalls: [],
 		sentMessages: [],
 		contextMessages: [],
 		on(event, handler) {
@@ -53,6 +55,9 @@ function contextFor(
 		ui: {
 			notify(message: string, level: string) {
 				pi.notifications.push({ message, level });
+			},
+			setStatus(key: string, text: string | undefined) {
+				pi.statusCalls.push({ key, text });
 			},
 		},
 		sessionManager: {
@@ -156,6 +161,30 @@ describe("Herdr claim gate activation", () => {
 			"Dispatched subagents skip all of that",
 		);
 		expect(pi.contextMessages).toHaveLength(0);
+	});
+
+	it("shows Herdr working status and clears it after worker completion", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		await startGate(pi, { worker });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "Fix dialog editor" },
+			contextFor(pi),
+		);
+
+		expect(pi.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-herdr",
+			text: "Herdr: ⠋ working |",
+		});
+
+		worker.complete();
+
+		expect(pi.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-herdr",
+			text: undefined,
+		});
 	});
 
 	it("notifies user on worker completion without informing main agent", async () => {
