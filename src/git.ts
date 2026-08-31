@@ -9,7 +9,7 @@ const REV_PARSE = "rev-parse";
 const SHOW_TOPLEVEL = "--show-toplevel";
 const BRANCH = "branch";
 const SHOW_CURRENT = "--show-current";
-const WORKTREE_2 = "worktree";
+const WORKTREE_COMMAND = "worktree";
 const LIST = "list";
 const PORCELAIN = "--porcelain";
 const GH = "gh";
@@ -17,18 +17,18 @@ const PR = "pr";
 const HEAD = "--head";
 const STATE = "--state";
 const OPEN = "open";
-const JSON_2 = "--json";
+const JSON_OUTPUT_FLAG = "--json";
 const URL_STATE = "url,state";
 const LIMIT = "--limit";
 const UNKNOWN_VALUE = "UNKNOWN";
-const OPEN_2 = "OPEN";
+const OPEN_PR_STATE = "OPEN";
 const CLOSED = "CLOSED";
 const MERGED = "MERGED";
 const MERGE = "merge";
 const DOUBLE_DASH = "--";
 const REPO = "--repo";
-const R = "-R";
-const REPO_2 = "--repo=";
+const SHORT_REPOSITORY_FLAG = "-R";
+const REPOSITORY_FLAG_PREFIX = "--repo=";
 const VIEW = "view";
 const HEADREFNAME = "headRefName";
 const URL_HEADREFNAME = "url,headRefName";
@@ -122,7 +122,7 @@ export async function inspectWorktree(
 		exec(GIT, [BRANCH, SHOW_CURRENT], {
 			cwd,
 		}),
-		exec(GIT, [WORKTREE_2, LIST, PORCELAIN], { cwd }),
+		exec(GIT, [WORKTREE_COMMAND, LIST, PORCELAIN], { cwd }),
 	]);
 	const root =
 		rootResult.code === 0 && rootResult.stdout.trim()
@@ -147,7 +147,18 @@ export async function findOpenPr(
 ): Promise<OpenPrInfo> {
 	const result = await exec(
 		GH,
-		[PR, LIST, HEAD, branch, STATE, OPEN, JSON_2, URL_STATE, LIMIT, "1"],
+		[
+			PR,
+			LIST,
+			HEAD,
+			branch,
+			STATE,
+			OPEN,
+			JSON_OUTPUT_FLAG,
+			URL_STATE,
+			LIMIT,
+			"1",
+		],
 		{ cwd },
 	);
 	const commandFailed: boolean = !!(result.code !== 0);
@@ -156,14 +167,14 @@ export async function findOpenPr(
 		const rows: unknown = JSON.parse(result.stdout);
 		if (!Array.isArray(rows)) return { url: null, state: UNKNOWN_VALUE };
 		const hasNoPullRequests: boolean = !!(rows.length === 0);
-		if (hasNoPullRequests) return { url: null, state: OPEN_2 };
+		if (hasNoPullRequests) return { url: null, state: OPEN_PR_STATE };
 		if (typeof rows[0] !== "object" || rows[0] === null) {
 			return { url: null, state: UNKNOWN_VALUE };
 		}
 		const row = rows[0] as { url?: unknown; state?: unknown };
 		const url = typeof row.url === "string" ? githubPrUrl(row.url) : null;
 		let state: OpenPrInfo["state"] = UNKNOWN_VALUE;
-		if (row.state === OPEN_2) state = OPEN_2;
+		if (row.state === OPEN_PR_STATE) state = OPEN_PR_STATE;
 		else if (row.state === CLOSED) state = CLOSED;
 		else if (row.state === MERGED) state = MERGED;
 		return { url, state };
@@ -339,7 +350,7 @@ const GH_MERGE_VALUE_OPTIONS = new Set([
 	"--match-head-commit",
 	"--subject",
 	"--repo",
-	"-R",
+	SHORT_REPOSITORY_FLAG,
 ]);
 
 function ghMergeTargets(args: string[]): string[] | null {
@@ -350,8 +361,9 @@ function ghMergeTargets(args: string[]): string[] | null {
 			targets.push(...args.slice(index + 1));
 			break;
 		}
-		const isRepoFlag = arg === REPO || arg === R;
-		const isRepositoryFlag: boolean = isRepoFlag || arg.startsWith(REPO_2);
+		const isRepoFlag = arg === REPO || arg === SHORT_REPOSITORY_FLAG;
+		const isRepositoryFlag: boolean =
+			isRepoFlag || arg.startsWith(REPOSITORY_FLAG_PREFIX);
 		if (isRepositoryFlag) return null;
 		const isMergeOption: boolean = !!GH_MERGE_VALUE_OPTIONS.has(arg);
 		if (isMergeOption) {
@@ -380,9 +392,13 @@ async function queryPinnedHead(
 	cwd: string,
 	prUrl: string,
 ): Promise<string | null> {
-	const result = await exec(GH, [PR, VIEW, prUrl, JSON_2, HEADREFNAME], {
-		cwd,
-	});
+	const result = await exec(
+		GH,
+		[PR, VIEW, prUrl, JSON_OUTPUT_FLAG, HEADREFNAME],
+		{
+			cwd,
+		},
+	);
 	const commandFailed: boolean = !!(result.code !== 0);
 	if (commandFailed) return null;
 	try {
@@ -400,9 +416,13 @@ async function queryCurrentPr(
 	cwd: string,
 	target: string,
 ): Promise<{ url: string; headRefName: string } | null> {
-	const result = await exec(GH, [PR, VIEW, target, JSON_2, URL_HEADREFNAME], {
-		cwd,
-	});
+	const result = await exec(
+		GH,
+		[PR, VIEW, target, JSON_OUTPUT_FLAG, URL_HEADREFNAME],
+		{
+			cwd,
+		},
+	);
 	const commandFailed: boolean = !!(result.code !== 0);
 	if (commandFailed) return null;
 	try {

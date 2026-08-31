@@ -1,4 +1,4 @@
-const TEXT = "\n";
+const OUTPUT_SEPARATOR = "\n";
 const NO_MAGIC_STRINGS = "no-magic-strings";
 
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -58,7 +58,7 @@ describe("lint CLI", () => {
 		const output: string[] = [];
 		const root = await makeRoot(MAGIC_SOURCE);
 		expect(await runLint(root, (line) => output.push(line))).toBe(1);
-		expect(output.join(TEXT)).toContain(NO_MAGIC_STRINGS);
+		expect(output.join(OUTPUT_SEPARATOR)).toContain(NO_MAGIC_STRINGS);
 	});
 
 	it(PASS_TEST, async () => {

@@ -1,5 +1,5 @@
 const TODOISTERROR = "TodoistError";
-const VALUE_1_REDACTED = "$1=[redacted]";
+const REDACTED_VALUE = "$1=[redacted]";
 const INVALID_JSON_RESPONSE = "invalid JSON response";
 const RESPONSE = "response";
 const UNEXPECTED_JSON_SHAPE = "unexpected JSON shape";
@@ -8,7 +8,7 @@ const HTTPS = "https:";
 const TASK_HAS_NO_ID = "task has no id";
 const PROJECT = "project";
 const LIST = "list";
-const JSON_2 = "--json";
+const JSON_OUTPUT_FLAG = "--json";
 const ID = "id:";
 const PROJECT_LIST = "project list";
 const TASK = "task";
@@ -17,12 +17,12 @@ const TASK_CLAIM = "task claim";
 const TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT =
 	"task is outside the configured project";
 const SECTION = "section";
-const PROJECT_2 = "--project";
+const PROJECT_FLAG = "--project";
 const IN_PROGRESS_VALUE = "in progress";
 const TASK_IS_ALREADY_IN_PROGRESS = "task is already in progress";
-const IN_PROGRESS_VALUE_2 = "In Progress";
+const TODOIST_IN_PROGRESS_LABEL = "In Progress";
 const MOVE = "move";
-const SECTION_2 = "--section";
+const SECTION_FLAG = "--section";
 const COMPLETE = "complete";
 const PARENT = "--parent";
 const VALUE_DELETE = "delete";
@@ -66,7 +66,7 @@ function sanitizeError(stderr: string): string {
 	return stderr
 		.replace(
 			/(?:token|password|secret|authorization|bearer)\s*[:=]?\s*[^\s,;]+/gi,
-			VALUE_1_REDACTED,
+			REDACTED_VALUE,
 		)
 		.replace(/\s+/g, " ")
 		.trim()
@@ -152,7 +152,7 @@ export class TodoistClient {
 	}
 
 	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
-		const payload = await this.run([PROJECT, LIST, JSON_2]);
+		const payload = await this.run([PROJECT, LIST, JSON_OUTPUT_FLAG]);
 		const rows = childList(payload).map(record);
 		const target = ref.startsWith(ID) ? ref.slice(3) : ref;
 		const match = rows.find(
@@ -168,7 +168,9 @@ export class TodoistClient {
 	}
 
 	async getTask(ref: string): Promise<TodoistTask> {
-		const task = taskFromPayload(await this.run([TASK, VIEW, ref, JSON_2]));
+		const task = taskFromPayload(
+			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG]),
+		);
 		const hasNoTaskUrl: boolean = !!(!task.url && !task.webUrl);
 		if (hasNoTaskUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
 		return task;
@@ -185,9 +187,9 @@ export class TodoistClient {
 		const sections = await this.run([
 			SECTION,
 			LIST,
-			PROJECT_2,
+			PROJECT_FLAG,
 			`id:${project.id}`,
-			JSON_2,
+			JSON_OUTPUT_FLAG,
 		]);
 		const section = childList(sections)
 			.map(record)
@@ -212,20 +214,20 @@ export class TodoistClient {
 		if (isInProgress && task.id !== project.currentTaskId) {
 			throw new TodoistError(TASK_CLAIM, TASK_IS_ALREADY_IN_PROGRESS);
 		}
-		if (sectionName !== IN_PROGRESS_VALUE_2) {
+		if (sectionName !== TODOIST_IN_PROGRESS_LABEL) {
 			await this.run(
 				[
 					TASK,
 					MOVE,
 					ref,
-					SECTION_2,
-					IN_PROGRESS_VALUE_2,
-					PROJECT_2,
+					SECTION_FLAG,
+					TODOIST_IN_PROGRESS_LABEL,
+					PROJECT_FLAG,
 					`id:${project.id}`,
 				],
 				false,
 			);
-			sectionName = IN_PROGRESS_VALUE_2;
+			sectionName = TODOIST_IN_PROGRESS_LABEL;
 		}
 		return {
 			...task,
@@ -242,7 +244,7 @@ export class TodoistClient {
 	}
 
 	async listDescendants(ref: string): Promise<TodoistChild[]> {
-		const payload = await this.run([TASK, LIST, PARENT, ref, JSON_2]);
+		const payload = await this.run([TASK, LIST, PARENT, ref, JSON_OUTPUT_FLAG]);
 		const children: TodoistChild[] = [];
 		for (const item of childList(payload)) {
 			const child = taskFromPayload(item) as TodoistChild;
@@ -273,7 +275,7 @@ export class TodoistClient {
 				parentRef,
 				DESCRIPTION,
 				input.description,
-				JSON_2,
+				JSON_OUTPUT_FLAG,
 			]),
 		);
 	}

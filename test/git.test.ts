@@ -23,7 +23,7 @@ const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42";
 const OPEN = "OPEN";
 const RETURNS_OPEN_WITH_NO_URL_WHEN_THERE =
 	"returns open with no URL when there is no open pull request";
-const TEXT = "[]";
+const EMPTY_LIST_JSON = "[]";
 const RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE =
 	"returns unknown rather than throwing on unavailable gh";
 const UNKNOWN_VALUE = "UNKNOWN";
@@ -146,7 +146,7 @@ describe("findOpenPr", () => {
 	it(RETURNS_OPEN_WITH_NO_URL_WHEN_THERE, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1":
-				ok(TEXT),
+				ok(EMPTY_LIST_JSON),
 		});
 		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
 			url: null,

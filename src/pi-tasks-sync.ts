@@ -14,7 +14,7 @@ const COMPLETED_VALUE = "completed";
 const UTF8_ENCODING = "utf8";
 const INVALID_PI_TASK_STORE_JSON = "invalid Pi task store JSON";
 const INVALID_PI_TASK_STORE = "invalid Pi task store";
-const X_2 = "[x]";
+const COMPLETED_MARKER = "[x]";
 const IN_PROGRESS_MARKER = "[~]";
 const PENDING_MARKER = "[ ]";
 const SYNCHRONIZATION_CANCELLED = "synchronization cancelled";
@@ -276,7 +276,7 @@ export function piTasksToTodoistSubtasks(
 	tasks: readonly PiTask[],
 ): Array<{ content: string; description: string }> {
 	return tasks.map((task) => ({
-		content: `${task.status === COMPLETED_VALUE ? X_2 : task.status === IN_PROGRESS_VALUE ? IN_PROGRESS_MARKER : PENDING_MARKER} ${task.subject}`,
+		content: `${task.status === COMPLETED_VALUE ? COMPLETED_MARKER : task.status === IN_PROGRESS_VALUE ? IN_PROGRESS_MARKER : PENDING_MARKER} ${task.subject}`,
 		description: descriptionWithMetadata(task),
 	}));
 }

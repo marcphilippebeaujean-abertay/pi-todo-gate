@@ -40,7 +40,7 @@ const LINKS_A_CLAIMED_TASK_FROM_SESSION_HISTORY =
 const PI_TODO_GATE_AUTO_LINK = "pi-todo-gate-auto-link-";
 const MESSAGE = "message";
 const ASSISTANT = "assistant";
-const TEXT = "text";
+const TEXT_CONTENT_TYPE = "text";
 const CLAIMED_TODOIST_TASK_HTTPS_APP_TODOIST_COM =
 	"Claimed Todoist task https://app.todoist.com/app/task/42";
 const PROJECT_1 = "project-1";
@@ -298,7 +298,7 @@ describe("automatic Todoist task linking", () => {
 					role: ASSISTANT,
 					content: [
 						{
-							type: TEXT,
+							type: TEXT_CONTENT_TYPE,
 							text: CLAIMED_TODOIST_TASK_HTTPS_APP_TODOIST_COM,
 						},
 					],
@@ -423,7 +423,9 @@ describe("automatic Todoist task linking", () => {
 				type: TOOL_RESULT,
 				toolName: BASH,
 				input: { command: TD_TASK_VIEW_42 },
-				content: [{ type: TEXT, text: TODOIST_TASK_IS_CLAIMED_42 }],
+				content: [
+					{ type: TEXT_CONTENT_TYPE, text: TODOIST_TASK_IS_CLAIMED_42 },
+				],
 				isError: false,
 			},
 			h.ctx,
@@ -496,7 +498,9 @@ describe("hidden lifecycle context", () => {
 				type: MESSAGE,
 				message: {
 					role: USER,
-					content: [{ type: TEXT, text: HTTPS_GITHUB_COM_O_R_PULL_1 }],
+					content: [
+						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_1 },
+					],
 				},
 			},
 		]);
@@ -506,7 +510,9 @@ describe("hidden lifecycle context", () => {
 				type: MESSAGE_END,
 				message: {
 					role: ASSISTANT,
-					content: [{ type: TEXT, text: HTTPS_GITHUB_COM_O_R_PULL_2 }],
+					content: [
+						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_2 },
+					],
 				},
 			},
 			h.ctx,
