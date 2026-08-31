@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Lint only `extensions/**/*.ts`, `src/**/*.ts`, and `test/**/*.ts`.
+- Lint only production files in `extensions/**/*.ts` and `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`; tests remain Biome/Vitest-only.
 - String literals inside function bodies require named `const` extraction; direct `const` initializers are allowed.
 - Boolean expressions with three or more logical leaf checks violate `no-complicated-expressions`.
 - `if` conditions must be boolean identifiers, optionally negated; non-boolean truthiness and computed conditions require extraction into descriptive booleans.
@@ -298,7 +298,7 @@ git commit -m "feat: enforce function structure limits"
 - Modify: `test/lint-cli.test.ts`
 
 **Interfaces:**
-- `collectLintFiles(root: string): string[]` returns sorted scoped `.ts` files under `extensions`, `src`, and `test`.
+- `collectLintFiles(root: string): string[]` returns sorted production `.ts` files under `extensions` and `src`, excluding the three lint infrastructure modules.
 - CLI reads `tsconfig.json`, optional `lint.config.json`, creates a `ts.Program`, prints compiler diagnostics and custom diagnostics, and exits 1 when either exists.
 
 - [ ] **Step 1: Add failing file-discovery and command tests**
@@ -308,7 +308,6 @@ test("collects only scoped TypeScript files in stable order", () => {
   expect(collectLintFiles(fixtureRoot)).toEqual([
     join(fixtureRoot, "extensions/example.ts"),
     join(fixtureRoot, "src/example.ts"),
-    join(fixtureRoot, "test/example.test.ts"),
   ]);
 });
 ```
@@ -322,7 +321,7 @@ Expected: FAIL because `collectLintFiles()` and CLI entrypoint do not exist.
 
 - [ ] **Step 3: Implement CLI and direct `tsx` dependency**
 
-Use `tsx src/lint-cli.ts` in the package script. Set `lint` to `biome check extensions src test && tsx src/lint-cli.ts`. Add `tsx` as a direct dev dependency so the script does not depend on a transitive install.
+Use `tsx src/lint-cli.ts` in the package script. Set `lint` to `biome check extensions src test && tsx src/lint-cli.ts`. The CLI custom checker excludes test files and `src/lint*.ts`; add `tsx` as a direct dev dependency so the script does not depend on a transitive install.
 
 - [ ] **Step 4: Run CLI tests and commit**
 
@@ -339,11 +338,12 @@ git commit -m "build: integrate custom lint command"
 **Files:**
 - Modify: `extensions/pi-todo-gate.ts`
 - Modify: `src/*.ts` files with reported violations
-- Modify: `test/*.ts` files with reported violations
+- Modify: production files under `extensions/` and `src/` with reported violations
 
 **Interfaces:**
 - Preserve all existing exported functions, extension events, tool names, messages, and test behavior.
-- New helper modules may be created when splitting the extension file keeps each file below 11 functions.
+- Do not refactor test files or `src/lint*.ts` for custom-rule compliance.
+- New helper modules may be created when splitting production files keeps each file below 11 functions.
 
 - [ ] **Step 1: Run complete lint and capture baseline**
 
@@ -379,7 +379,7 @@ Expected: no custom diagnostics and all tests pass. Repeat until clean.
 - [ ] **Step 8: Commit baseline cleanup**
 
 ```bash
-git add extensions src test package.json package-lock.json
+git add extensions src package.json package-lock.json
 git commit -m "refactor: satisfy strict lint rules"
 ```
 

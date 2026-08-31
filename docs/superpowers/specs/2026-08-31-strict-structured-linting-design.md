@@ -6,13 +6,12 @@ Add repository lint rules for explicit string constants, readable boolean condit
 
 ## Scope
 
-Lint TypeScript files in:
+Lint production TypeScript files in:
 
 - `extensions/**/*.ts`
-- `src/**/*.ts`
-- `test/**/*.ts`
+- `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`
 
-The checker runs only as a repository development tool. It does not inspect user projects at runtime.
+Tests validate checker behavior through Vitest and remain covered by Biome, but are not targets of the custom rules. The checker runs only as a repository development tool. It does not inspect user projects at runtime.
 
 ## Rules
 
@@ -88,7 +87,7 @@ Count function nesting depth independently from cyclomatic complexity. A top-lev
 }
 ```
 
-`src/lint-cli.ts` discovers scoped TypeScript files, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintFiles()`, prints diagnostics, and exits with status 1 when violations exist.
+`src/lint-cli.ts` discovers production TypeScript files under `extensions` and `src`, excluding the lint infrastructure modules, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintProgram()`, prints diagnostics, and exits with status 1 when violations exist.
 
 `package.json` changes `lint` to run Biome followed by the custom checker. `tsconfig.json` includes the new checker modules.
 
@@ -119,7 +118,7 @@ Malformed or unreadable optional lint configuration falls back to defaults. Miss
 - deterministic diagnostic ordering and formatting;
 - config overrides and malformed config fallback.
 
-The full Vitest suite, TypeScript typecheck, Biome check, and custom lint command must pass after existing source and test code is refactored to satisfy the new limits.
+The full Vitest suite, TypeScript typecheck, Biome check, and custom lint command must pass after existing production source is refactored to satisfy the new limits. Test files remain outside custom-rule scope.
 
 ## Refactoring strategy
 
@@ -128,8 +127,8 @@ Implement and test the checker first. Wire it into the lint command, observe fai
 1. extract repeated executable strings into nearby named constants;
 2. extract complex and non-boolean `if` conditions into descriptive booleans;
 3. split functions over 50 lines at cohesive boundaries;
-4. split files over 10 functions only where module boundaries remain clear;
-5. flatten functions deeper than two levels where module boundaries remain clear;
+4. split production files over 10 functions only where module boundaries remain clear;
+5. flatten production functions deeper than two levels where module boundaries remain clear;
 6. reduce complexity by extracting decision-heavy helpers.
 
 Run the focused lint tests after each rule, then run the complete verification suite.

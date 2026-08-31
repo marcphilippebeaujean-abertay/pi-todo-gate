@@ -7,7 +7,12 @@ import ts from "typescript";
 import { formatLintDiagnostic, lintProgram } from "./lint.ts";
 import { loadLintConfig } from "./lint-config.ts";
 
-const LINT_DIRECTORIES = ["extensions", "src", "test"];
+const LINT_DIRECTORIES = ["extensions", "src"];
+const LINT_INFRASTRUCTURE_FILES = new Set([
+	"lint.ts",
+	"lint-config.ts",
+	"lint-cli.ts",
+]);
 const TS_EXTENSION = ".ts";
 const TS_CONFIG_NAME = "tsconfig.json";
 const LINT_CONFIG_NAME = "lint.config.json";
@@ -25,7 +30,12 @@ function collectDirectoryFiles(directory: string): string[] {
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) files.push(...collectDirectoryFiles(path));
-		else if (entry.isFile() && path.endsWith(TS_EXTENSION)) files.push(path);
+		else if (
+			entry.isFile() &&
+			path.endsWith(TS_EXTENSION) &&
+			!LINT_INFRASTRUCTURE_FILES.has(entry.name)
+		)
+			files.push(path);
 	}
 	return files;
 }

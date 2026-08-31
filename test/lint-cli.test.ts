@@ -12,8 +12,8 @@ const SRC_DIRECTORY = "src";
 const EXTENSIONS_DIRECTORY = "extensions";
 const TEST_DIRECTORY = "test";
 const OTHER_DIRECTORY = "other";
+const LINT_INFRASTRUCTURE_NAME = "lint.ts";
 const SOURCE_NAME = "example.ts";
-const TEST_SOURCE_NAME = "example.test.ts";
 const MAGIC_SOURCE = `export function check(name: string) {
 	return name === "Bob";
 }`;
@@ -40,14 +40,17 @@ describe("lint CLI", () => {
 		]);
 		await Promise.all([
 			writeFile(join(root, SRC_DIRECTORY, SOURCE_NAME), CLEAN_SOURCE),
+			writeFile(
+				join(root, SRC_DIRECTORY, LINT_INFRASTRUCTURE_NAME),
+				MAGIC_SOURCE,
+			),
 			writeFile(join(root, EXTENSIONS_DIRECTORY, SOURCE_NAME), CLEAN_SOURCE),
-			writeFile(join(root, TEST_DIRECTORY, TEST_SOURCE_NAME), CLEAN_SOURCE),
+			writeFile(join(root, TEST_DIRECTORY, SOURCE_NAME), MAGIC_SOURCE),
 			writeFile(join(root, OTHER_DIRECTORY, SOURCE_NAME), MAGIC_SOURCE),
 		]);
 		expect(collectLintFiles(root)).toEqual([
 			join(root, EXTENSIONS_DIRECTORY, SOURCE_NAME),
 			join(root, SRC_DIRECTORY, SOURCE_NAME),
-			join(root, TEST_DIRECTORY, TEST_SOURCE_NAME),
 		]);
 	});
 
