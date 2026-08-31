@@ -145,6 +145,10 @@ export class TodoistClient {
 		return task;
 	}
 
+	async completeTask(ref: string): Promise<void> {
+		await this.run(["task", "complete", ref], false);
+	}
+
 	async claimTask(
 		ref: string,
 		project: { id: string; currentTaskId?: string },

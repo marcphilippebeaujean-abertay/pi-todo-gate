@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Exec, spawnExec } from "../shared/command.ts";
+import type { MergeEvent } from "../shared/merge-detection.ts";
 import {
 	appendCustomState,
 	latestCustomState,
@@ -44,6 +45,7 @@ export interface TodoistModule {
 		ctx: ExtensionContext,
 	): Promise<void>;
 	beforeAgentStart(prompt: string): Promise<string>;
+	mergeDetected(event: MergeEvent): Promise<void>;
 	toolResult(input: {
 		toolName: string;
 		command?: string;
@@ -224,6 +226,7 @@ export function createTodoistModule(
 					claimed.webUrl ??
 					claimed.url ??
 					`https://app.todoist.com/app/task/${claimed.id}`,
+				mergePromptedPrUrl: undefined,
 			});
 			appendState();
 			refreshStatus();
@@ -275,6 +278,7 @@ export function createTodoistModule(
 							taskRef: claimed.id,
 							taskName: claimed.content,
 							taskUrl: claimed.webUrl ?? claimed.url,
+							mergePromptedPrUrl: undefined,
 						});
 						allowInference = false;
 						appendState();
@@ -351,6 +355,57 @@ export function createTodoistModule(
 			await linkInferredTask(prompt, generation);
 			if (generation !== operationGeneration || !context || !ready) return "";
 			return todoistContext(state, activeProject.todoistProjectRef);
+		},
+		async mergeDetected(event) {
+			if (
+				!context ||
+				!ready ||
+				!state.taskRef ||
+				state.mergePromptedPrUrl === event.prUrl
+			)
+				return;
+			const generation = operationGeneration;
+			const taskRef = state.taskRef;
+			const taskName = state.taskName ?? taskRef;
+			state = applyTodoistStatePatch(state, {
+				mergePromptedPrUrl: event.prUrl,
+			});
+			appendState();
+			const choice = await context.ui.select(
+				`Do you wish to mark task ${taskName} as complete?`,
+				["Yes", "No", "No and clear session task"],
+			);
+			if (
+				generation !== operationGeneration ||
+				!context ||
+				state.taskRef !== taskRef ||
+				state.mergePromptedPrUrl !== event.prUrl
+			)
+				return;
+			if (choice === "No and clear session task") {
+				++operationGeneration;
+				allowInference = false;
+				state = {};
+				appendState();
+				refreshStatus();
+				return;
+			}
+			if (choice !== "Yes") return;
+			try {
+				await createClient(
+					context as ExtensionContext,
+					dependencies,
+				).completeTask(taskRef);
+				if (generation !== operationGeneration || !context) return;
+				appendState();
+				context.ui.notify("Merged PR detected; Todoist task completed", "info");
+			} catch {
+				if (generation !== operationGeneration || !context) return;
+				context.ui.notify(
+					"Merged PR detected, but Todoist task completion failed",
+					"warning",
+				);
+			}
 		},
 		async toolResult(input) {
 			if (!context || !ready || input.isError || input.toolName !== "bash")

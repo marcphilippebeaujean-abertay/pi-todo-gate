@@ -14,13 +14,17 @@ After a confirmed PR merge, the extension must add this hidden context to the ne
 
 > Please ensure you have closed all completed tasks for this session if you have been using task tracking
 
-The extension must not automatically complete Todoist tasks after a merge.
+When a session task is active, Todoist must prompt the user:
+
+> Do you wish to mark task <task name> as complete?
+
+with `Yes`, `No`, and `No and clear session task` choices. The extension must not automatically complete Todoist tasks without user confirmation.
 
 ## Non-goals
 
 - Do not split behavior into multiple Pi plugins.
 - Do not preserve the combined public state tool or state-entry format.
-- Do not add a new Todoist completion workflow.
+- Do not add automatic Todoist completion without user confirmation.
 - Do not enable tracking inside dispatched subagent sessions.
 - Do not change GitHub or Todoist CLI behavior beyond the tracking boundaries.
 
@@ -35,12 +39,13 @@ src/shared/
   command.ts          # Exec, CommandResult, spawnExec
   session-state.ts    # generic custom-entry read/write helpers
   project.ts          # Git project-root identity
+  merge-detection.ts  # shared merge command parsing and PR matching
 
 src/pr/
   module.ts           # PR lifecycle, tool, context, merge reminder
   state.ts            # PrState and merged-PR records
   detection.ts        # GitHub URL parsing
-  git.ts              # PR lookup and merge matching
+  git.ts              # PR lookup and shared merge exports
   footer.ts           # PR status rendering
 
 src/todoist/
@@ -82,6 +87,7 @@ type TodoistState = {
   taskRef?: string;
   taskName?: string;
   taskUrl?: string;
+  mergePromptedPrUrl?: string;
 };
 ```
 
@@ -194,7 +200,7 @@ The new-task context must identify the configured Todoist project and must not c
 
 `set_task` validates the task, ensures it belongs to the configured project, and moves it to `In Progress`. `clear_task` removes task state and returns the module to new-task mode.
 
-The Todoist module never receives merge events and never completes tasks because a PR merged.
+The Todoist module receives normalized merge events through the composition root. It prompts the user once per merged PR when a session task is active. `Yes` completes the task; `No` keeps it linked; `No and clear session task` clears session task state without changing Todoist.
 
 ### Context composition
 
@@ -225,7 +231,9 @@ If multiple merges occur before the next prompt, one reminder context is suffici
 - Todoist CLI errors are contained within Todoist behavior and may notify the user without disabling PR behavior.
 - No Todoist failure can block PR discovery or reminder generation.
 - No PR failure can mutate Todoist state.
-- Remove Todoist completion retry timers and completion metadata from state and runtime.
+- Todoist completion requires explicit user choice; failures notify the user.
+- Repeated merge events do not repeat the completion prompt.
+- Shared merge detection must remain independent of PR and Todoist implementations.
 
 ## Testing strategy
 
@@ -264,7 +272,7 @@ Cover:
 - Independent tools, statuses, and state entries.
 - Combined context composition.
 - Merge reminder without Todoist activation.
-- No automatic Todoist completion or retry after merge.
+- User-confirmed Todoist completion choices after merge; no automatic completion or retry.
 - Subagent exclusion.
 
 ### Architecture tests
@@ -288,5 +296,5 @@ npm run lint
 - Static architecture tests enforce no cross-domain imports.
 - A merged PR clears the displayed PR and records its exact URL in merged history.
 - A later distinct PR becomes the displayed active PR.
-- Merge detection adds the exact reminder context and does not complete Todoist tasks.
+- Merge detection adds the exact reminder context and emits a shared event; Todoist prompts for user-confirmed completion when a task is active.
 - Existing tests are updated or replaced to reflect intentional removal of combined state/tool compatibility.
