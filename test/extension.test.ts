@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
 import {
+	type CommandRunner as HerdrCommandRunner,
+	type StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
+import {
 	readPiTaskStore,
 	sessionTaskPath,
 	writePiTaskStore,
@@ -20,7 +24,17 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const footerCalls: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
 	const pi: any = {
-		on: (event: string, handler: any) => handlers.set(event, handler),
+		on: (event: string, handler: any) => {
+			const previous = handlers.get(event);
+			if (!previous) {
+				handlers.set(event, handler);
+				return;
+			}
+			handlers.set(event, async (eventValue: any, contextValue: any) => {
+				await previous(eventValue, contextValue);
+				return handler(eventValue, contextValue);
+			});
+		},
 		registerTool: (tool: any) => tools.push(tool),
 		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
 	};
@@ -92,6 +106,45 @@ describe("lazy activation", () => {
 			{ key: "pi-todo-gate-pr", text: "| PR Link: none |" },
 			{ key: "pi-todo-gate-task", text: "Todoist Task: none" },
 		]);
+	});
+});
+
+describe("composed Herdr activation", () => {
+	it("keeps Herdr gate global while Todoist gate stays project-scoped", async () => {
+		const h = harness("/unconfigured/project");
+		let workerStarted = false;
+		const worker: StartBackgroundWorker = () => {
+			workerStarted = true;
+			return { cancel: () => undefined };
+		};
+		const herdrRunner: HerdrCommandRunner = () => "{}";
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousSubagent = process.env.PI_SUBAGENT_CHILD;
+		process.env.HERDR_ENV = "1";
+		delete process.env.PI_SUBAGENT_CHILD;
+		try {
+			extension(h.pi, {
+				loadConfig: async () => config({ "/configured": "merge-td" }),
+				herdrCommandRunner: herdrRunner,
+				herdrStartBackgroundWorker: worker,
+			});
+			await h.handlers.get("session_start")?.(
+				{ type: "session_start", reason: "startup" },
+				h.ctx,
+			);
+			await h.handlers.get("before_agent_start")?.(
+				{ prompt: "Fix Herdr worker" },
+				h.ctx,
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previousSubagent;
+		}
+
+		expect(workerStarted).toBe(true);
+		expect(h.tools).toHaveLength(0);
 	});
 });
 

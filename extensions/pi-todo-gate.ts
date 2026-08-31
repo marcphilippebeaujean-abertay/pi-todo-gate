@@ -5,6 +5,12 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import {
+	installHerdrClaimGate,
+	type CommandRunner as HerdrCommandRunner,
+	type StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
+import { startClaimWorker } from "../src/herdr-claim-worker.ts";
 import { loadConfig, resolveConfiguredProject } from "../src/config.ts";
 import { renderPrStatus, renderTaskStatus } from "../src/footer.ts";
 import {
@@ -47,6 +53,8 @@ export interface ExtensionDependencies {
 	openSession?: (path: string) => SessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	herdrCommandRunner?: HerdrCommandRunner;
+	herdrStartBackgroundWorker?: StartBackgroundWorker;
 }
 
 const STATE_TYPE = "pi-todo-gate-state";
@@ -235,6 +243,12 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
+	installHerdrClaimGate(pi, {
+		commandRunner: dependencies.herdrCommandRunner,
+		startBackgroundWorker:
+			dependencies.herdrStartBackgroundWorker ??
+			((request) => startClaimWorker(request, { cwd: process.cwd() })),
+	});
 	let active: ActiveSession | null = null;
 	let registered = false;
 
