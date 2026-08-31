@@ -80,6 +80,16 @@ function textFromMessage(value: unknown): string {
 		.join("");
 }
 
+function sanitizeWorkerError(stderr: string): string {
+	return stderr
+		.replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+		.replace(/(bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+		.replace(/(token|password|secret)\s*[:=]?\s*[^\s,;]+/gi, "$1=[redacted]")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 300);
+}
+
 function parseResult(stdout: string): TaskClaimWorkerResult {
 	const texts: string[] = [];
 	for (const line of stdout.split(/\r?\n/)) {
@@ -125,8 +135,14 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 			],
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
-		if (result.code !== 0)
-			throw new Error(`claim worker exited with code ${result.code}`);
+		if (result.code !== 0) {
+			const detail = sanitizeWorkerError(result.stderr);
+			const timeout = result.killed ? "timed out" : "";
+			const reason = detail || timeout;
+			throw new Error(
+				`claim worker exited with code ${result.code}${reason ? `: ${reason}` : ""}`,
+			);
+		}
 		return parseResult(result.stdout);
 	};
 }

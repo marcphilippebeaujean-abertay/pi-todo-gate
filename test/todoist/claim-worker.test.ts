@@ -19,9 +19,9 @@ const input: TaskClaimWorkerInput = {
 	},
 };
 
-const result = (stdout: string, code = 0): CommandResult => ({
+const result = (stdout: string, code = 0, stderr = ""): CommandResult => ({
 	stdout,
-	stderr: "",
+	stderr,
 	code,
 });
 
@@ -74,10 +74,11 @@ describe("Todoist task claim worker", () => {
 		});
 	});
 
-	it("throws when worker process fails", async () => {
-		const exec = async (): Promise<CommandResult> => result("", 1);
+	it("redacts bearer credentials from worker failure details", async () => {
+		const exec = async (): Promise<CommandResult> =>
+			result("", 1, "provider unavailable Authorization: Bearer secret");
 		await expect(createTaskClaimWorker(exec)(input)).rejects.toThrow(
-			"claim worker exited with code 1",
+			"claim worker exited with code 1: provider unavailable Authorization: Bearer [redacted]",
 		);
 	});
 
