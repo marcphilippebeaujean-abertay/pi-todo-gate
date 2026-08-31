@@ -149,6 +149,12 @@ describe("Herdr claim gate activation", () => {
 		expect(result).toEqual([undefined]);
 		expect(worker.request?.prompt).toBe("Fix dialog editor");
 		expect(worker.request?.instructions).toContain("# STEP 0 — Setup Herdr");
+		expect(worker.request?.instructions).not.toContain(
+			"Subagent detection matches pi-subagents",
+		);
+		expect(worker.request?.instructions).not.toContain(
+			"Dispatched subagents skip all of that",
+		);
 		expect(pi.contextMessages).toHaveLength(0);
 	});
 

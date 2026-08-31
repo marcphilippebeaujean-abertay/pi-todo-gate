@@ -78,7 +78,8 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
-	if (process.env.PI_SUBAGENT_CHILD === "1") return;
+	const isInSubagentSession = process.env.PI_SUBAGENT_CHILD === "1";
+	if (isInSubagentSession) return;
 
 	installHerdrClaimGate(pi, {
 		commandRunner: dependencies.herdrCommandRunner,

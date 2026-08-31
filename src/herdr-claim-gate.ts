@@ -79,15 +79,6 @@ one of these happen in this session:
 - you run \`herdr tab rename …\` (claiming a generic tab),
 - you run \`herdr pane move … --new-tab …\` (moving out of a shared tab),
 - or a \`herdr tab get\` you ran returns a label that is already descriptive (tab already claimed).
-
-Subagent detection matches pi-subagents: the hook and both skills key on \`PI_SUBAGENT_CHILD=1\`.
-Dispatched children never arm the gate. There is no other detection path — Herdr's own integration does
-not distinguish subagents, so the subagent exemption is keyed on this same \`PI_SUBAGENT_CHILD=1\` marker.
-
-**Dispatched subagents skip all of that.** If \`PI_SUBAGENT_CHILD=1\`, or your prompt says you were
-_dispatched by another agent_, run no Herdr command at all: no tab claim, rename, or pane move. The
-agent that spawned you owns the tab and pane you are in; moving or renaming either destroys its
-claim.
 `;
 
 const BLOCK_MESSAGE =
