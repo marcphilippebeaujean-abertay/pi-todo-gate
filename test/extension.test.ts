@@ -12,9 +12,11 @@ type TestTool = {
 	name: string;
 	execute(...args: unknown[]): Promise<unknown>;
 };
+type CommandHandler = (args: string, ctx: unknown) => Promise<void>;
 
 function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<string, Handler>();
+	const commands = new Map<string, CommandHandler>();
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const notifications: string[] = [];
@@ -23,6 +25,8 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const pi = {
 		on: (event: string, handler: Handler) => handlers.set(event, handler),
 		registerTool: (tool: TestTool) => tools.push(tool),
+		registerCommand: (name: string, options: { handler: CommandHandler }) =>
+			commands.set(name, options.handler),
 		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
 		getActiveTools: () => activeTools,
 		setActiveTools: (names: string[]) => {
@@ -46,7 +50,16 @@ function harness(cwd: string, branch: unknown[] = []) {
 			getCwd: () => cwd,
 		},
 	} as unknown as ExtensionContext;
-	return { pi, ctx, handlers, tools, appended, notifications, statusCalls };
+	return {
+		pi,
+		ctx,
+		handlers,
+		commands,
+		tools,
+		appended,
+		notifications,
+		statusCalls,
+	};
 }
 
 const config = (projects: Record<string, string>) => ({ projects });
@@ -294,6 +307,7 @@ describe("deferred Todoist task claiming", () => {
 		await todoist.sessionStart({}, h.ctx);
 		await todoist.beforeAgentStart("Implement feature");
 		await todoist.beforeAgentStart("second prompt");
+		await vi.waitFor(() => expect(inputs).toHaveLength(1));
 
 		expect(inputs).toHaveLength(1);
 		expect(inputs[0]).toMatchObject({
@@ -303,6 +317,105 @@ describe("deferred Todoist task claiming", () => {
 			projectRef: "Pi Extensions",
 			worktree: { isWorktree: true, branch: "feature" },
 		});
+	});
+
+	it("does not block agent start and notifies user when evaluation fails", async () => {
+		const h = harness("/configured/project");
+		let rejectWorker: (error: Error) => void = () => {};
+		const worker = vi.fn(
+			() =>
+				new Promise<never>((_, reject) => {
+					rejectWorker = reject;
+				}),
+		);
+		const todoist = createTodoistModule(
+			h.pi,
+			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ exec: projectExec, claimTaskWorker: worker },
+		);
+		await todoist.sessionStart({}, h.ctx);
+
+		await expect(todoist.beforeAgentStart("Implement feature")).resolves.toBe(
+			"",
+		);
+		await vi.waitFor(() => expect(worker).toHaveBeenCalled());
+		rejectWorker(new Error("interrupted"));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain("Todoist task evaluation failed"),
+		);
+	});
+
+	it("skips automatic evaluation on repository root by default", async () => {
+		const h = harness("/configured");
+		const worker = vi.fn(async () => ({ status: "none" as const }));
+		const rootExec = async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return { stdout: "/configured\n", stderr: "", code: 0 };
+			if (key === "git branch --show-current")
+				return { stdout: "main\n", stderr: "", code: 0 };
+			if (key === "git worktree list --porcelain")
+				return {
+					stdout: "worktree /configured\nHEAD abc\nbranch refs/heads/main\n",
+					stderr: "",
+					code: 0,
+				};
+			return { stdout: "", stderr: "", code: 0 };
+		};
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggerOnlyOnBranches: true,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ exec: rootExec, claimTaskWorker: worker },
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("Implement feature");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
+	it("re-evaluates task on explicit command", async () => {
+		const h = harness("/configured/project");
+		const client = {
+			resolveProject: async () => ({ id: "project-1", name: "Pi Extensions" }),
+			claimTask: async () => ({
+				id: "42",
+				content: "Implement feature",
+				webUrl: "https://app.todoist.com/app/task/42",
+				projectId: "project-1",
+			}),
+		} as unknown as TodoistClient;
+		const worker = vi
+			.fn()
+			.mockResolvedValueOnce({ status: "none" as const })
+			.mockResolvedValueOnce({ status: "claimed" as const, taskRef: "42" });
+		const todoist = createTodoistModule(
+			h.pi,
+			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				exec: projectExec,
+				createTodoistClient: () => client,
+				claimTaskWorker: worker,
+			},
+		);
+		await todoist.sessionStart({}, h.ctx);
+		await todoist.beforeAgentStart("initial");
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+
+		const command = h.commands.get("todoist-reevaluate");
+		expect(command).toBeDefined();
+		await command?.("focus now", h.ctx);
+
+		expect(worker).toHaveBeenCalledTimes(2);
+		expect(worker.mock.calls[1][0]).toMatchObject({ prompt: "focus now" });
+		expect(h.appended.at(-1)).toMatchObject({ data: { taskRef: "42" } });
 	});
 
 	it("persists claimed task without adding Todoist context", async () => {
@@ -332,6 +445,7 @@ describe("deferred Todoist task claiming", () => {
 		await todoist.sessionStart({}, h.ctx);
 
 		expect(await todoist.beforeAgentStart("claim 42")).toBe("");
+		await vi.waitFor(() => expect(h.appended.at(-1)).toBeDefined());
 		expect(h.appended.at(-1)).toEqual({
 			type: "pi-todoist-gate-state",
 			data: {
@@ -372,6 +486,7 @@ describe("deferred Todoist task claiming", () => {
 		);
 		await todoist.sessionStart({}, h.ctx);
 		await todoist.beforeAgentStart("claim 42");
+		await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
 
 		expect(confirm).toHaveBeenCalled();
 		expect(h.appended.at(-1)).toMatchObject({

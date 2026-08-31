@@ -159,32 +159,39 @@ export function createTodoistModule(
 		refreshStatus();
 	};
 
-	const analyzeTaskClaim = async (prompt: string): Promise<void> => {
-		if (!context || claimAnalysisComplete || state.taskRef) return;
+	const analyzeTaskClaim = async (
+		prompt: string,
+		force = false,
+	): Promise<void> => {
+		const runContext = context;
+		if (!runContext || (!force && (claimAnalysisComplete || state.taskRef)))
+			return;
 		claimAnalysisComplete = true;
 		const generation = ++operationGeneration;
 		try {
+			const worktree = await inspectProject(
+				dependencies.exec ?? spawnExec,
+				runContext.cwd,
+			);
+			if (generation !== operationGeneration || context !== runContext) return;
+			if (activeProject.triggerOnlyOnBranches !== false && !worktree.isWorktree)
+				return;
 			const worker =
 				dependencies.claimTaskWorker ??
 				createTaskClaimWorker(dependencies.exec ?? spawnExec);
-			const worktree = await inspectProject(
-				dependencies.exec ?? spawnExec,
-				context.cwd,
-			);
-			if (generation !== operationGeneration || !context) return;
 			const result = await worker({
 				prompt,
-				history: branchTexts(context.sessionManager.getBranch()),
-				cwd: context.cwd,
+				history: branchTexts(runContext.sessionManager.getBranch()),
+				cwd: runContext.cwd,
 				projectRef: activeProject.todoistProjectRef,
 				worktree,
 			});
-			if (generation !== operationGeneration || !context) return;
+			if (generation !== operationGeneration || context !== runContext) return;
 			if (result.status === "none") return;
 			if (result.status === "collision") {
-				if (!context.hasUI) return;
+				if (!runContext.hasUI) return;
 				const taskName = result.taskName ? `\nTask: ${result.taskName}` : "";
-				const accepted = await context.ui.confirm(
+				const accepted = await runContext.ui.confirm(
 					"Todoist task collision",
 					`Detected task is already In Progress.${taskName}\n\nSwitch to this task?`,
 				);
@@ -192,13 +199,28 @@ export function createTodoistModule(
 			}
 			await persistClaimedTask(result.taskRef, generation);
 		} catch {
-			// Claim handling is isolated from the main agent and non-fatal.
+			if (
+				generation === operationGeneration &&
+				context === runContext &&
+				runContext.hasUI
+			)
+				runContext.ui.notify("Todoist task evaluation failed", "warning");
 		}
 	};
 
 	const registerTool = (): void => {
 		if (registered) return;
 		registered = true;
+		pi.registerCommand("todoist-reevaluate", {
+			description: "Re-evaluate the Todoist task for current work.",
+			handler: async (args) => {
+				if (!context || !ready) return;
+				await analyzeTaskClaim(
+					args.trim() || "Re-evaluate the Todoist task for current work.",
+					true,
+				);
+			},
+		});
 		pi.registerTool<typeof stateParameters>({
 			name: "pi_todoist_gate_state",
 			label: "Todoist Gate State",
@@ -303,7 +325,7 @@ export function createTodoistModule(
 		},
 		async beforeAgentStart(prompt) {
 			if (!context || !ready) return "";
-			await analyzeTaskClaim(prompt);
+			void analyzeTaskClaim(prompt);
 			return "";
 		},
 		async toolResult(_input) {

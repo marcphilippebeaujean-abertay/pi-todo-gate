@@ -16,6 +16,21 @@ describe("parseConfig", () => {
 		});
 	});
 
+	it("accepts per-project branch trigger settings", () => {
+		expect(
+			parseConfig(
+				'{"projects":{"/repo":{"todoistProjectRef":"merge-td","triggerOnlyOnBranches":false}}}',
+			),
+		).toEqual({
+			projects: {
+				"/repo": {
+					todoistProjectRef: "merge-td",
+					triggerOnlyOnBranches: false,
+				},
+			},
+		});
+	});
+
 	it("returns empty configuration for malformed input", () => {
 		expect(parseConfig("not json")).toEqual({ projects: {} });
 		expect(parseConfig('{"projects":["/repo"]}')).toEqual({ projects: {} });
@@ -35,7 +50,33 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve("/repo"),
 			todoistProjectRef: "merge-td",
+			triggerOnlyOnBranches: true,
 		});
+	});
+
+	it("defaults branch-only triggering on", () => {
+		expect(
+			resolveConfiguredProject("/repo", {
+				projects: {
+					"/repo": {
+						todoistProjectRef: "merge-td",
+					},
+				},
+			}),
+		).toMatchObject({ triggerOnlyOnBranches: true });
+	});
+
+	it("allows task claiming from repository root when disabled", () => {
+		expect(
+			resolveConfiguredProject("/repo", {
+				projects: {
+					"/repo": {
+						todoistProjectRef: "merge-td",
+						triggerOnlyOnBranches: false,
+					},
+				},
+			}),
+		).toMatchObject({ triggerOnlyOnBranches: false });
 	});
 
 	it("resolves the nearest configured parent", () => {
@@ -49,6 +90,7 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve("/repo/packages"),
 			todoistProjectRef: "packages-project",
+			triggerOnlyOnBranches: true,
 		});
 	});
 

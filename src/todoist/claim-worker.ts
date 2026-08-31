@@ -125,6 +125,8 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 			],
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
-		return result.code === 0 ? parseResult(result.stdout) : { status: "none" };
+		if (result.code !== 0)
+			throw new Error(`claim worker exited with code ${result.code}`);
+		return parseResult(result.stdout);
 	};
 }

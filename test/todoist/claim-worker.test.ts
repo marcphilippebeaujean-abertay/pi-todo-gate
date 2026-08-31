@@ -74,6 +74,13 @@ describe("Todoist task claim worker", () => {
 		});
 	});
 
+	it("throws when worker process fails", async () => {
+		const exec = async (): Promise<CommandResult> => result("", 1);
+		await expect(createTaskClaimWorker(exec)(input)).rejects.toThrow(
+			"claim worker exited with code 1",
+		);
+	});
+
 	it("returns none for malformed worker output", async () => {
 		const exec = async (): Promise<CommandResult> => result("not json");
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
