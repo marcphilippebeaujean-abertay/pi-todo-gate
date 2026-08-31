@@ -13,7 +13,7 @@ import {
 	latestCustomState,
 } from "../shared/session-state.ts";
 import { createTaskClaimWorker, type TaskClaimWorker } from "./claim-worker.ts";
-import { TodoistClient } from "./client.ts";
+import { TodoistClient, TodoistError, type TodoistTask } from "./client.ts";
 import {
 	type ResolvedProject,
 	resolveConfiguredProject,
@@ -87,6 +87,24 @@ function branchTexts(entries: readonly unknown[]): string[] {
 		.map((entry) => JSON.stringify(entry));
 }
 
+function isTaskAlreadyInProgress(error: unknown): boolean {
+	return (
+		error instanceof TodoistError &&
+		error.message.toLowerCase().includes("already in progress")
+	);
+}
+
+function displayError(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	return message
+		.replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+		.replace(/(bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+		.replace(/(token|password|secret)\s*[:=]?\s*[^\s,;]+/gi, "$1=[redacted]")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 300);
+}
+
 function extensionResult(text: string): {
 	content: [{ type: "text"; text: string }];
 	details: undefined;
@@ -121,6 +139,17 @@ export function createTodoistModule(
 	let operationGeneration = 0;
 	let ready = false;
 	let claimAnalysisComplete = false;
+
+	const promptToClaimInProgressTask = async (
+		runContext: SessionContext,
+	): Promise<boolean> => {
+		if (!runContext.hasUI) return false;
+		const choice = await runContext.ui.select(
+			"Todoist task already in progress",
+			["Claim", "Skip"],
+		);
+		return choice === "Claim";
+	};
 
 	const refreshStatus = (): void => {
 		if (!context) return;
@@ -175,8 +204,12 @@ export function createTodoistModule(
 			return;
 		claimAnalysisComplete = true;
 		const generation = ++operationGeneration;
+		runContext.ui.setStatus("pi-todo-gate-task", "Todoist Task: ⠋ evaluating");
+		let feedback: "none" | "claimed" = "none";
+		let failure: unknown;
 		try {
 			if (
+				!force &&
 				activeProject.triggersOnlyOnWorktree !== false &&
 				!isWorktreePath(runContext.cwd)
 			)
@@ -199,22 +232,31 @@ export function createTodoistModule(
 			if (generation !== operationGeneration || context !== runContext) return;
 			if (result.status === "none") return;
 			if (result.status === "collision") {
-				if (!runContext.hasUI) return;
-				const taskName = result.taskName ? `\nTask: ${result.taskName}` : "";
-				const accepted = await runContext.ui.confirm(
-					"Todoist task collision",
-					`Detected task is already In Progress.${taskName}\n\nSwitch to this task?`,
-				);
-				if (!accepted || generation !== operationGeneration) return;
+				if (!(await promptToClaimInProgressTask(runContext))) return;
+				if (generation !== operationGeneration) return;
 			}
 			await persistClaimedTask(result.taskRef, generation);
-		} catch {
-			if (
-				generation === operationGeneration &&
-				context === runContext &&
-				runContext.hasUI
-			)
-				runContext.ui.notify("Todoist task evaluation failed", "warning");
+			feedback = "claimed";
+		} catch (error) {
+			failure = error;
+		} finally {
+			const isCurrentOperation =
+				generation === operationGeneration && context === runContext;
+			if (isCurrentOperation) {
+				refreshStatus();
+				if (runContext.hasUI) {
+					if (failure)
+						runContext.ui.notify(
+							`Todoist task evaluation failed: ${displayError(failure)}`,
+							"warning",
+						);
+					else
+						runContext.ui.notify(
+							feedback === "claimed" ? "New task claimed" : "No task update",
+							"info",
+						);
+				}
+			}
 		}
 	};
 
@@ -248,6 +290,12 @@ export function createTodoistModule(
 					if (!params.task)
 						throw new Error("set_task requires a Todoist task reference");
 					const generation = ++operationGeneration;
+					const runContext = context;
+					if (runContext)
+						runContext.ui.setStatus(
+							"pi-todo-gate-task",
+							"Todoist Task: ⠋ claiming",
+						);
 					try {
 						const client = createClient(ctx, dependencies);
 						const resolved = await client.resolveProject(
@@ -255,27 +303,53 @@ export function createTodoistModule(
 						);
 						if (generation !== operationGeneration)
 							return extensionResult("Todoist task change superseded");
-						const claimed = await client.claimTask(params.task, {
-							id: resolved.id,
-							currentTaskId: state.taskRef,
-						});
+						let claimed: TodoistTask;
+						try {
+							claimed = await client.claimTask(params.task, {
+								id: resolved.id,
+								currentTaskId: state.taskRef,
+							});
+						} catch (error) {
+							if (!isTaskAlreadyInProgress(error) || !runContext) throw error;
+							const shouldClaim = await promptToClaimInProgressTask(runContext);
+							if (!shouldClaim) {
+								runContext.ui.notify("No task update", "info");
+								return extensionResult("No task update");
+							}
+							if (generation !== operationGeneration || context !== runContext)
+								return extensionResult("Todoist task change superseded");
+							claimed = await client.claimTask(params.task, {
+								id: resolved.id,
+								allowInProgress: true,
+							});
+						}
 						if (generation !== operationGeneration)
 							return extensionResult("Todoist task change superseded");
 						state = applyTodoistStatePatch(state, {
 							taskRef: claimed.id,
 							taskName: claimed.content,
 							taskUrl: claimed.webUrl ?? claimed.url,
+							mergePromptedPrUrl: undefined,
 						});
 						claimAnalysisComplete = true;
 						appendState();
-						refreshStatus();
+						if (runContext?.hasUI)
+							runContext.ui.notify("New task claimed", "info");
 						return extensionResult(
 							`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
 						);
 					} catch (error) {
 						if (generation !== operationGeneration)
 							return extensionResult("Todoist task change superseded");
+						if (runContext?.hasUI)
+							runContext.ui.notify(
+								`Todoist task claim failed: ${displayError(error)}`,
+								"warning",
+							);
 						throw error;
+					} finally {
+						if (generation === operationGeneration && context === runContext)
+							refreshStatus();
 					}
 				}
 				++operationGeneration;
@@ -375,6 +449,10 @@ export function createTodoistModule(
 				return;
 			}
 			if (choice !== "Yes") return;
+			runContext.ui.setStatus(
+				"pi-todo-gate-task",
+				"Todoist Task: ⠋ completing",
+			);
 			try {
 				await createClient(
 					runContext as ExtensionContext,
@@ -383,17 +461,17 @@ export function createTodoistModule(
 				if (generation !== operationGeneration || context !== runContext)
 					return;
 				appendState();
-				runContext.ui.notify(
-					"Merged PR detected; Todoist task completed",
-					"info",
-				);
-			} catch {
+				runContext.ui.notify("Task marked as complete", "info");
+			} catch (error) {
 				if (generation !== operationGeneration || context !== runContext)
 					return;
 				runContext.ui.notify(
-					"Merged PR detected, but Todoist task completion failed",
+					`Todoist task completion failed: ${displayError(error)}`,
 					"warning",
 				);
+			} finally {
+				if (generation === operationGeneration && context === runContext)
+					refreshStatus();
 			}
 		},
 		async toolResult(_input) {
