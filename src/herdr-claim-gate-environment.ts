@@ -1,24 +1,45 @@
 import { execFileSync } from "node:child_process";
 import { isLinkedWorktreePaths, parseBranchName } from "./git.ts";
-import type { CommandRunner } from "./herdr-claim-gate.ts";
+import type {
+	CommandRunner,
+	StartBackgroundWorker,
+} from "./herdr-claim-gate.ts";
+import {
+	type ClaimWorkerRequest,
+	startClaimWorker,
+	type WorkerSpawner,
+} from "./herdr-claim-worker.ts";
 
+const ENABLED_VALUE = "1";
+const GIT_COMMAND = "git";
+const HERDR_COMMAND = "herdr";
+const HERDR_ENVIRONMENT = "HERDR_ENV";
+const SUBAGENT_ENVIRONMENT = "PI_SUBAGENT_CHILD";
+const UTF8_ENCODING = "utf8";
+const STDIO_IGNORE = "ignore";
+const STDIO_PIPE = "pipe";
+const GIT_DIRECTORY_ARGS = ["rev-parse", "--git-dir"];
+const COMMON_DIRECTORY_ARGS = ["rev-parse", "--git-common-dir"];
+const CURRENT_BRANCH_ARGS = ["branch", "--show-current"];
+const TAB_GET_COMMAND = ["tab", "get"];
+const TAB_RENAME_COMMAND = ["tab", "rename"];
 export function isSubagent(): boolean {
-	return process.env.PI_SUBAGENT_CHILD === "1";
+	return process.env[SUBAGENT_ENVIRONMENT] === ENABLED_VALUE;
 }
 
 export function isInsideHerdr(): boolean {
-	return process.env.HERDR_ENV === "1";
+	return process.env[HERDR_ENVIRONMENT] === ENABLED_VALUE;
 }
 
 export function runCommand(
+	cwd: string,
 	command: string,
 	args: string[],
-	cwd: string,
 ): string {
 	return execFileSync(command, args, {
 		cwd,
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "ignore"],
+		encoding: UTF8_ENCODING,
+		stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_IGNORE],
 	});
 }
 
@@ -32,9 +53,10 @@ function jsonResult<T>(output: string): T | undefined {
 
 export function tabLabel(commandRunner: CommandRunner): string | undefined {
 	const tabId = process.env.HERDR_TAB_ID;
-	if (!tabId) return undefined;
+	const hasTabId = Boolean(tabId);
+	if (!hasTabId) return undefined;
 	const response = jsonResult<{ result?: { tab?: { label?: string } } }>(
-		commandRunner("herdr", ["tab", "get", tabId]),
+		commandRunner(HERDR_COMMAND, [...TAB_GET_COMMAND, tabId ?? ""]),
 	);
 	const label = response?.result?.tab?.label?.trim();
 	return label || undefined;
@@ -44,24 +66,41 @@ export function isDefaultTabLabel(label: string | undefined): boolean {
 	return label !== undefined && /^\d+$/.test(label);
 }
 
+export function defaultStartWorker(
+	cwd: string,
+	spawnWorker: WorkerSpawner | undefined,
+	request: ClaimWorkerRequest,
+): ReturnType<StartBackgroundWorker> {
+	return startClaimWorker(request, { cwd, spawnWorker });
+}
+
 export function claimWorktreeTab(
 	commandRunner: CommandRunner,
 	cwd: string,
 ): boolean {
 	try {
-		const gitDir = commandRunner("git", ["rev-parse", "--git-dir"]);
-		const commonDir = commandRunner("git", ["rev-parse", "--git-common-dir"]);
-		if (!isLinkedWorktreePaths(cwd, gitDir, commonDir)) return false;
+		const gitDir = commandRunner(GIT_COMMAND, GIT_DIRECTORY_ARGS);
+		const commonDir = commandRunner(GIT_COMMAND, COMMON_DIRECTORY_ARGS);
+		const isLinkedWorktree = isLinkedWorktreePaths(cwd, gitDir, commonDir);
+		if (!isLinkedWorktree) return false;
 
 		const tabId = process.env.HERDR_TAB_ID;
 		const branchName = parseBranchName(
-			commandRunner("git", ["branch", "--show-current"]),
+			commandRunner(GIT_COMMAND, CURRENT_BRANCH_ARGS),
 		);
 		const defaultTabLabel = tabLabel(commandRunner);
-		if (!tabId || !branchName || !isDefaultTabLabel(defaultTabLabel))
-			return false;
+		const hasTab = Boolean(tabId);
+		const hasBranch = Boolean(branchName);
+		const hasDefaultTabLabel = isDefaultTabLabel(defaultTabLabel);
+		const canRenameTab = hasTab && hasBranch;
+		if (!canRenameTab) return false;
+		if (!hasDefaultTabLabel) return false;
 
-		commandRunner("herdr", ["tab", "rename", tabId, branchName]);
+		commandRunner(HERDR_COMMAND, [
+			...TAB_RENAME_COMMAND,
+			tabId ?? "",
+			branchName ?? "",
+		]);
 		return true;
 	} catch {
 		return false;

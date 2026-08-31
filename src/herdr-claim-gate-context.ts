@@ -1,30 +1,45 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 const CLAIM_CUSTOM_TYPE = "herdr-claim-gate";
 const CUSTOM_ENTRY_TYPE = "custom";
 const EMPTY_TEXT = "";
 const NEWLINE = "\n";
 const INFO_LEVEL = "info";
+const LABEL_PATTERN = /"label"\s*:\s*"([^"]*)"/;
+const TEXT_PROPERTY = "text";
+const STRING_TYPE = "string";
+const OBJECT_TYPE = "object";
+const CLAIM_COMPLETE_MESSAGE = "Herdr claim complete";
 
 export function labelIsDescriptive(label: string | undefined | null): boolean {
-	if (!label) return false;
+	const hasNoLabel = !label;
+	if (hasNoLabel) return false;
 	const value = label.trim();
-	return Boolean(value) && !/^\d+$/.test(value);
+	const hasValue = Boolean(value);
+	const isNotNumeric = !/^\d+$/.test(value);
+	return hasValue && isNotNumeric;
 }
 
 export function extractLabel(text: string): string | undefined {
-	return text.match(/"label"\s*:\s*"([^"]*)"/)?.[1];
+	return text.match(LABEL_PATTERN)?.[1];
 }
 
 export function textOf(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (!Array.isArray(value)) return EMPTY_TEXT;
+	const isText = typeof value === STRING_TYPE;
+	if (isText) return value as string;
+	const isNotArray = !Array.isArray(value);
+	if (isNotArray) return EMPTY_TEXT;
 	return value
-		.map((part) =>
-			typeof part === "object" && part !== null && "text" in part
-				? String(part.text)
-				: EMPTY_TEXT,
-		)
+		.map((part) => {
+			const isNotObject = typeof part !== OBJECT_TYPE || part === null;
+			if (isNotObject) return EMPTY_TEXT;
+			const hasText = TEXT_PROPERTY in part;
+			if (!hasText) return EMPTY_TEXT;
+			return String(part.text);
+		})
 		.join(NEWLINE);
 }
 
@@ -40,19 +55,39 @@ export function notify(
 	}
 }
 
+export function liftGate(
+	state: { gateActive: boolean },
+	ctx?: Pick<ExtensionContext, "ui">,
+): void {
+	state.gateActive = false;
+	if (ctx === undefined) return;
+	notify(ctx, CLAIM_COMPLETE_MESSAGE, INFO_LEVEL);
+}
+
+export function persistClaimed(
+	pi: Pick<ExtensionAPI, "appendEntry">,
+	state: { gateActive: boolean },
+	ctx?: Pick<ExtensionContext, "ui">,
+): void {
+	try {
+		pi.appendEntry(CLAIM_CUSTOM_TYPE, { at: Date.now() });
+	} catch {
+		// Gate state still lifts in memory when persistence is unavailable.
+	}
+	liftGate(state, ctx);
+}
+
 export function alreadyClaimed(ctx: {
 	sessionManager: {
 		getEntries: () => Array<{ type?: string; customType?: string }>;
 	};
 }): boolean {
 	try {
-		return ctx.sessionManager
-			.getEntries()
-			.some(
-				(entry) =>
-					entry?.type === CUSTOM_ENTRY_TYPE &&
-					entry?.customType === CLAIM_CUSTOM_TYPE,
-			);
+		return ctx.sessionManager.getEntries().some((entry) => {
+			const isCustomEntry = entry?.type === CUSTOM_ENTRY_TYPE;
+			const isClaimEntry = entry?.customType === CLAIM_CUSTOM_TYPE;
+			return isCustomEntry && isClaimEntry;
+		});
 	} catch {
 		return false;
 	}

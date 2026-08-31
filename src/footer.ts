@@ -1,24 +1,10 @@
-const ACCENT = "accent";
-const PR_NONE = "PR: none";
-const OPEN = "open";
-const TODOIST_TASK_NONE = "Todoist Task: none";
-const HTTP = "http:";
-const HTTPS = "https:";
-const MUTED = "muted";
-const TEXT_COLOR = "text";
-const PR_LINK = "| PR Link: ";
-const NONE = "none";
-const LINK_SEPARATOR_SUFFIX = " |";
-const TODOIST_TASK = "Todoist Task: ";
 const DIM = "dim";
 const STATUS_SEPARATOR = " | ";
 
-import {
-	hyperlink,
-	truncateToWidth,
-	visibleWidth,
-} from "@earendil-works/pi-tui";
-import { githubPrUrl } from "./pr-detection.ts";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { prLabel, taskLabel } from "./footer-status.ts";
+
+export { renderPrStatus, renderTaskStatus } from "./footer-status.ts";
 
 export interface FooterState {
 	prUrl?: string;
@@ -53,79 +39,6 @@ export type FooterFactory = (
 	footerData: FooterData,
 ) => FooterComponent;
 
-function linkText(text: string, theme?: FooterTheme): string {
-	const colored = theme?.fg(ACCENT, text) ?? `\u001b[34m${text}\u001b[39m`;
-	return `\u001b[4m${colored}\u001b[24m`;
-}
-
-function prLabel(url: string | undefined, theme?: FooterTheme): string {
-	const normalized = url ? githubPrUrl(url) : null;
-	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (number === undefined || normalized === null) return PR_NONE;
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return hyperlink(linkText(`PR #${boundedNumber}`, theme), normalized);
-}
-
-function displayTaskName(
-	taskName: string | undefined,
-	id: string | undefined,
-): string {
-	const name = taskName?.replace(/\s+/g, " ").trim();
-	if (name === undefined) return id ? `#${id}` : OPEN;
-	if (name === "") return id ? `#${id}` : OPEN;
-	return name.length > 15 ? `${name.slice(0, 15)}...` : name;
-}
-
-function taskLabel(
-	url: string | undefined,
-	taskName?: string,
-	theme?: FooterTheme,
-): string {
-	if (url === undefined) return TODOIST_TASK_NONE;
-	try {
-		const parsed = new URL(url);
-		if (parsed.protocol !== HTTP && parsed.protocol !== HTTPS)
-			return TODOIST_TASK_NONE;
-		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `Todoist Task: ${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
-	} catch {
-		return TODOIST_TASK_NONE;
-	}
-}
-
-export function renderPrStatus(
-	url: string | undefined,
-	theme?: FooterTheme,
-): string {
-	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
-	const normalized = url ? githubPrUrl(url) : null;
-	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	if (number === undefined || normalized === null)
-		return `${muted(PR_LINK)}${value(NONE)}${muted(LINK_SEPARATOR_SUFFIX)}`;
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted(PR_LINK)}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(LINK_SEPARATOR_SUFFIX)}`;
-}
-
-export function renderTaskStatus(
-	url: string | undefined,
-	theme?: FooterTheme,
-	taskName?: string,
-): string {
-	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
-	if (url === undefined) return `${muted(TODOIST_TASK)}${value(NONE)}`;
-	try {
-		const parsed = new URL(url);
-		if (parsed.protocol !== HTTP && parsed.protocol !== HTTPS)
-			return `${muted(TODOIST_TASK)}${value(NONE)}`;
-		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${muted(TODOIST_TASK)}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
-	} catch {
-		return `${muted(TODOIST_TASK)}${value(NONE)}`;
-	}
-}
-
 export function renderFooterLine(
 	state: FooterState,
 	width: number,
@@ -152,6 +65,10 @@ export function renderFooterLine(
 
 function noop(): void {}
 
+function requestRender(tui: FooterTui): () => void {
+	return () => tui.requestRender();
+}
+
 function renderFooterComponent(
 	state: () => FooterState,
 	footerData: FooterData,
@@ -172,7 +89,7 @@ function renderFooterComponent(
 
 export function createFooterFactory(state: () => FooterState): FooterFactory {
 	return (tui, theme, footerData) => {
-		const unsubscribe = footerData.onBranchChange(() => tui.requestRender());
+		const unsubscribe = footerData.onBranchChange(requestRender(tui));
 		return {
 			dispose: unsubscribe,
 			invalidate: noop,

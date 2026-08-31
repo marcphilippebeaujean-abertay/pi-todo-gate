@@ -12,19 +12,20 @@ import {
 	extractLabel,
 	labelIsDescriptive,
 	notify,
+	persistClaimed,
 	textOf,
 } from "./herdr-claim-gate-context.ts";
 import {
 	claimWorktreeTab,
+	defaultStartWorker,
 	isInsideHerdr,
 	isSubagent,
 	runCommand,
 } from "./herdr-claim-gate-environment.ts";
-import {
-	type ClaimWorkerHandle,
-	type ClaimWorkerRequest,
-	startClaimWorker,
-	type WorkerSpawner,
+import type {
+	ClaimWorkerHandle,
+	ClaimWorkerRequest,
+	WorkerSpawner,
 } from "./herdr-claim-worker.ts";
 
 export type CommandRunner = (command: string, args: string[]) => string;
@@ -39,7 +40,6 @@ export interface ClaimGateOptions {
 	spawnWorker?: WorkerSpawner;
 }
 
-const CLAIM_CUSTOM_TYPE = "herdr-claim-gate";
 const HERDR_INSTRUCTIONS = `# STEP 0 — Setup Herdr (FIRST, NOT SKIPPABLE)
 
 > The very first thing you do in every session — before any other command, before reading any
@@ -114,100 +114,132 @@ claim.
 
 const BLOCK_MESSAGE =
 	"You are not following the Herdr instructions. Follow the tab-claim procedure in your Herdr session context before doing other work.";
+const SESSION_START_EVENT = "session_start";
+const BEFORE_AGENT_START_EVENT = "before_agent_start";
+const TOOL_CALL_EVENT = "tool_call";
+const TOOL_RESULT_EVENT = "tool_result";
+const SESSION_SHUTDOWN_EVENT = "session_shutdown";
+const BASH_TOOL = "bash";
+const EMPTY_PROMPT = "";
+const WARNING_LEVEL = "warning";
+const CLAIM_GATE_MESSAGE =
+	"Herdr claim gate active; background worker will claim this tab before work continues.";
+
+class HerdrClaimGate {
+	private readonly pi: ExtensionAPI;
+	private readonly cwd: string;
+	private readonly commandRunner: CommandRunner;
+	private readonly startWorker: StartBackgroundWorker;
+	gateActive = false;
+	private herdrAvailable = false;
+	private worker: ClaimWorkerHandle | undefined;
+
+	constructor(pi: ExtensionAPI, options: ClaimGateOptions) {
+		this.pi = pi;
+		this.cwd = options.cwd ?? process.cwd();
+		this.commandRunner =
+			options.commandRunner ?? runCommand.bind(undefined, this.cwd);
+		this.startWorker =
+			options.startBackgroundWorker ??
+			defaultStartWorker.bind(undefined, this.cwd, options.spawnWorker);
+		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
+		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
+		pi.on(TOOL_CALL_EVENT, this.toolCall.bind(this));
+		pi.on(TOOL_RESULT_EVENT, this.toolResult.bind(this));
+		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
+	}
+
+	private sessionStart(_event: unknown, ctx: ExtensionContext): void {
+		this.gateActive = false;
+		this.herdrAvailable = isInsideHerdr() && !isSubagent();
+		this.worker = undefined;
+		const isNotHerdrSession = !this.herdrAvailable;
+		const hasClaim = alreadyClaimed(ctx);
+		const shouldSkip = isNotHerdrSession || hasClaim;
+		if (shouldSkip) return;
+		this.gateActive = true;
+		const claimedByWorktree = claimWorktreeTab(this.commandRunner, this.cwd);
+		if (claimedByWorktree) {
+			persistClaimed(this.pi, this, ctx);
+			return;
+		}
+		notify(ctx, CLAIM_GATE_MESSAGE, WARNING_LEVEL);
+	}
+
+	private beforeAgentStart(
+		event: { prompt?: string },
+		ctx: ExtensionContext,
+	): void {
+		const isUnavailable = !this.herdrAvailable;
+		const isInactive = !this.gateActive;
+		const hasWorker = Boolean(this.worker);
+		const isSessionUnavailable = isUnavailable || isInactive;
+		const shouldSkip = isSessionUnavailable || hasWorker;
+		if (shouldSkip) return;
+		this.worker = this.startWorker({
+			prompt: event.prompt ?? EMPTY_PROMPT,
+			instructions: HERDR_INSTRUCTIONS,
+			onClaimComplete: this.completeClaim.bind(this, ctx),
+			onFailure: this.failClaim.bind(this, ctx),
+		});
+	}
+
+	private completeClaim(ctx: ExtensionContext): void {
+		this.worker = undefined;
+		persistClaimed(this.pi, this, ctx);
+	}
+
+	private failClaim(ctx: ExtensionContext, message: string): void {
+		this.worker = undefined;
+		notify(ctx, message, WARNING_LEVEL);
+	}
+
+	private toolCall(event: {
+		toolName: string;
+		input?: unknown;
+	}): { block: boolean; reason: string } | undefined {
+		const isInactive = !this.gateActive;
+		if (isInactive) return undefined;
+		const isBash = event.toolName === BASH_TOOL;
+		if (!isBash) return { block: true, reason: BLOCK_MESSAGE };
+		const command =
+			(event.input as { command?: string } | undefined)?.command ?? "";
+		const isAllowed = allowedCommand(command);
+		if (isAllowed) {
+			const isClaimComplete = completesClaim(command);
+			if (isClaimComplete) persistClaimed(this.pi, this);
+			return undefined;
+		}
+		return { block: true, reason: BLOCK_MESSAGE };
+	}
+
+	private toolResult(event: {
+		toolName: string;
+		input?: unknown;
+		content: unknown;
+	}): void {
+		const isBashResult = this.gateActive && event.toolName === BASH_TOOL;
+		if (!isBashResult) return;
+		const command =
+			(event.input as { command?: string } | undefined)?.command ?? "";
+		const isTabGetCommand = isTabGet(command);
+		if (!isTabGetCommand) return;
+		const content = textOf(event.content);
+		const isDescriptive = labelIsDescriptive(extractLabel(content));
+		if (isDescriptive) persistClaimed(this.pi, this);
+	}
+
+	private sessionShutdown(): void {
+		this.worker?.cancel();
+		this.worker = undefined;
+		this.gateActive = false;
+		this.herdrAvailable = false;
+	}
+}
 
 export function installHerdrClaimGate(
 	pi: ExtensionAPI,
 	options: ClaimGateOptions = {},
 ): void {
-	const cwd = options.cwd ?? process.cwd();
-	const commandRunner =
-		options.commandRunner ??
-		((command, args) => runCommand(command, args, cwd));
-	const startWorker =
-		options.startBackgroundWorker ??
-		((request: ClaimWorkerRequest) =>
-			startClaimWorker(request, { cwd, spawnWorker: options.spawnWorker }));
-	let gateActive = false;
-	let herdrAvailable = false;
-	let worker: ClaimWorkerHandle | undefined;
-
-	const lift = (ctx?: Pick<ExtensionContext, "ui">): void => {
-		gateActive = false;
-		if (ctx) notify(ctx, "Herdr claim complete", "info");
-	};
-
-	const persistClaimed = (ctx?: Pick<ExtensionContext, "ui">): void => {
-		try {
-			pi.appendEntry(CLAIM_CUSTOM_TYPE, { at: Date.now() });
-		} catch {
-			// Gate state still lifts in memory when persistence is unavailable.
-		}
-		lift(ctx);
-	};
-
-	pi.on("session_start", async (_event, ctx) => {
-		gateActive = false;
-		herdrAvailable = isInsideHerdr() && !isSubagent();
-		worker = undefined;
-		if (!herdrAvailable || alreadyClaimed(ctx)) return;
-
-		gateActive = true;
-		if (claimWorktreeTab(commandRunner, cwd)) {
-			persistClaimed(ctx);
-			return;
-		}
-		notify(
-			ctx,
-			"Herdr claim gate active; background worker will claim this tab before work continues.",
-			"warning",
-		);
-	});
-
-	pi.on("before_agent_start", async (event, ctx) => {
-		if (!herdrAvailable || !gateActive || worker) return;
-		worker = startWorker({
-			prompt: event.prompt ?? "",
-			instructions: HERDR_INSTRUCTIONS,
-			onClaimComplete: () => {
-				worker = undefined;
-				persistClaimed(ctx);
-			},
-			onFailure: (message) => {
-				worker = undefined;
-				notify(ctx, message, "warning");
-			},
-		});
-		// Deliberately return no BeforeAgentStartEventResult: worker prompt and output stay private.
-		return undefined;
-	});
-
-	pi.on("tool_call", async (event) => {
-		if (!gateActive) return;
-		if (event.toolName !== "bash") {
-			return { block: true, reason: BLOCK_MESSAGE };
-		}
-		const command =
-			(event.input as { command?: string } | undefined)?.command ?? "";
-		if (allowedCommand(command)) {
-			if (completesClaim(command)) persistClaimed();
-			return undefined;
-		}
-		return { block: true, reason: BLOCK_MESSAGE };
-	});
-
-	pi.on("tool_result", async (event) => {
-		if (!gateActive || event.toolName !== "bash") return;
-		const command =
-			(event.input as { command?: string } | undefined)?.command ?? "";
-		if (!isTabGet(command)) return;
-		const content = textOf(event.content);
-		if (labelIsDescriptive(extractLabel(content))) persistClaimed();
-	});
-
-	pi.on("session_shutdown", async () => {
-		worker?.cancel();
-		worker = undefined;
-		gateActive = false;
-		herdrAvailable = false;
-	});
+	new HerdrClaimGate(pi, options);
 }
