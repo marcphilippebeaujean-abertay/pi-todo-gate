@@ -86,9 +86,10 @@ function parsePayload(stdout: string, family: string): unknown {
 }
 
 function record(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+	if (typeof value !== "object" || value === null)
 		throw new TodoistError(RESPONSE, UNEXPECTED_JSON_SHAPE);
-	}
+	if (Array.isArray(value))
+		throw new TodoistError(RESPONSE, UNEXPECTED_JSON_SHAPE);
 	return value as Record<string, unknown>;
 }
 
@@ -114,7 +115,8 @@ function nullableString(value: unknown): string | null | undefined {
 function taskFromPayload(value: unknown): TodoistTask {
 	const data = record(value);
 	const id = stringValue(data.id);
-	if (!id) throw new TodoistError(RESPONSE, TASK_HAS_NO_ID);
+	const isMissingTaskId: boolean = !id;
+	if (isMissingTaskId) throw new TodoistError(RESPONSE, TASK_HAS_NO_ID);
 	return {
 		id,
 		content: stringValue(data.content),
@@ -143,7 +145,8 @@ export class TodoistClient {
 		parseJson = true,
 	): Promise<unknown> {
 		const result = await this.exec.run(args);
-		if (result.code !== 0) {
+		const commandFailed: boolean = !!(result.code !== 0);
+		if (commandFailed) {
 			const family = args.slice(0, 2).join(SPACE);
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
@@ -170,9 +173,30 @@ export class TodoistClient {
 
 	async getTask(ref: string): Promise<TodoistTask> {
 		const task = taskFromPayload(await this.run([TASK, VIEW, ref, JSON_2]));
-		if (!task.url && !task.webUrl)
-			task.url = `https://app.todoist.com/app/task/${task.id}`;
+		const hasNoTaskUrl: boolean = !!(!task.url && !task.webUrl);
+		if (hasNoTaskUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
 		return task;
+	}
+
+	private async resolveClaimSection(
+		task: TodoistTask,
+		project: { id: string },
+	): Promise<string | null | undefined> {
+		const hasSectionName = Boolean(task.sectionName);
+		if (hasSectionName) return task.sectionName;
+		const hasSectionId = Boolean(task.sectionId);
+		if (!hasSectionId) return task.sectionName;
+		const sections = await this.run([
+			SECTION,
+			LIST,
+			PROJECT_2,
+			`id:${project.id}`,
+			JSON_2,
+		]);
+		const section = childList(sections)
+			.map(record)
+			.find((item) => stringValue(item.id) === task.sectionId);
+		return section ? stringValue(section.name) || null : null;
 	}
 
 	async claimTask(
@@ -186,20 +210,7 @@ export class TodoistClient {
 				TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 			);
 		}
-		let sectionName = task.sectionName;
-		if (!sectionName && task.sectionId) {
-			const sections = await this.run([
-				SECTION,
-				LIST,
-				PROJECT_2,
-				`id:${project.id}`,
-				JSON_2,
-			]);
-			const section = childList(sections)
-				.map(record)
-				.find((item) => stringValue(item.id) === task.sectionId);
-			sectionName = section ? stringValue(section.name) || null : null;
-		}
+		let sectionName = await this.resolveClaimSection(task, project);
 		const isInProgress =
 			sectionName?.trim().toLowerCase() === IN_PROGRESS_VALUE;
 		if (isInProgress && task.id !== project.currentTaskId) {
@@ -247,7 +258,8 @@ export class TodoistClient {
 
 	async deleteDescendants(children: readonly TodoistChild[]): Promise<void> {
 		for (const child of children) {
-			if (child.children?.length) await this.deleteDescendants(child.children);
+			const childTasks = child.children;
+			if (childTasks) await this.deleteDescendants(childTasks);
 			await this.run([TASK, VALUE_DELETE, `id:${child.id}`, YES]);
 		}
 	}

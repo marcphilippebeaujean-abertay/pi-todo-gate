@@ -149,16 +149,15 @@ function textOf(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (Array.isArray(value))
 		return value
-			.map((part) =>
-				typeof part === "object" && part !== null && TEXT in part
-					? String(part.text)
-					: EMPTY_STRING,
-			)
+			.map((part: unknown) => {
+				if (typeof part !== "object" || part === null) return EMPTY_STRING;
+				if (!(TEXT in part)) return EMPTY_STRING;
+				return String(part.text);
+			})
 			.join(SPACE);
-	if (typeof value === "object" && value !== null && CONTENT in value) {
-		return textOf((value as { content?: unknown }).content);
-	}
-	return EMPTY_STRING;
+	if (typeof value !== "object" || value === null) return EMPTY_STRING;
+	if (!(CONTENT in value)) return EMPTY_STRING;
+	return textOf((value as { content?: unknown }).content);
 }
 
 function extensionResult(text: string): {
@@ -182,26 +181,20 @@ function latestStateData(
 			customType?: unknown;
 			data?: unknown;
 		};
-		if (
-			candidate.type === CUSTOM &&
-			candidate.customType === STATE_TYPE &&
-			typeof candidate.data === "object" &&
-			candidate.data !== null
-		) {
-			return candidate.data as Record<string, unknown>;
-		}
+		if (candidate.type !== CUSTOM) continue;
+		if (candidate.customType !== STATE_TYPE) continue;
+		if (typeof candidate.data !== "object" || candidate.data === null) continue;
+		return candidate.data as Record<string, unknown>;
 	}
 	return null;
 }
 
 function branchTexts(entries: readonly unknown[]): string[] {
 	return entries
-		.filter(
-			(entry) =>
-				typeof entry === "object" &&
-				entry !== null &&
-				(entry as { type?: unknown }).type !== CUSTOM,
-		)
+		.filter((entry) => {
+			if (typeof entry !== "object" || entry === null) return false;
+			return (entry as { type?: unknown }).type !== CUSTOM;
+		})
 		.map((entry) => JSON.stringify(entry));
 }
 
@@ -230,7 +223,8 @@ function addMatches(
 		match = expression.exec(text)
 	) {
 		const value = match.slice(1).find((candidate) => candidate);
-		if (value) matches.add(value);
+		if (value === undefined) continue;
+		matches.add(value);
 	}
 }
 
@@ -253,7 +247,8 @@ function inferClaimedTaskRef(
 			CLAIMED_TASK_RE.test(text) && !NEGATED_CLAIM_RE.test(text);
 		if (!isPositiveClaim) continue;
 		const associatedTaskRef = textTaskRefs.values().next().value;
-		if (associatedTaskRef) return associatedTaskRef;
+		const hasAssociatedTaskRef: boolean = associatedTaskRef !== undefined;
+		if (hasAssociatedTaskRef) return associatedTaskRef;
 		hasUnboundClaimEvidence = true;
 	}
 	return hasUnboundClaimEvidence
@@ -292,6 +287,17 @@ function taskPath(active: ActiveSession): string {
 	);
 }
 
+function isCurrentSync(
+	active: ActiveSession | null,
+	session: ActiveSession,
+	generation: number,
+): boolean {
+	if (active !== session) return false;
+	const isCurrentGeneration = generation === session.syncGeneration;
+	if (!isCurrentGeneration) return false;
+	return session.syncAvailable;
+}
+
 export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
@@ -300,9 +306,13 @@ export default function extension(
 	let registered = false;
 
 	const persistPrIfAvailable = (text: string): void => {
-		if (!active?.allowPrDiscovery || active.state.prUrl) return;
+		const shouldSkipPrPersistence: boolean = !!(
+			!active?.allowPrDiscovery || active.state.prUrl
+		);
+		if (shouldSkipPrPersistence) return;
+		if (!active) return;
 		const url = githubPrUrl(text);
-		if (!url) return;
+		if (url === null) return;
 		active.state = applyStatePatch(active.state, { prUrl: url });
 		active.allowPrDiscovery = false;
 		appendState(pi, active.state);
@@ -351,12 +361,13 @@ export default function extension(
 		session: ActiveSession,
 		prompt = EMPTY_STRING,
 	): Promise<boolean> => {
-		if (session.state.taskRef) return false;
+		const hasExistingTaskRef: boolean = !!session.state.taskRef;
+		if (hasExistingTaskRef) return false;
 		const taskRef = inferClaimedTaskRef(
 			session.context.sessionManager.getBranch(),
 			prompt,
 		);
-		if (!taskRef) return false;
+		if (taskRef === undefined) return false;
 		try {
 			const client = createClient(session.context, dependencies);
 			const project = await client.resolveProject(
@@ -390,26 +401,29 @@ export default function extension(
 
 	const scheduleSync = (session: ActiveSession): void => {
 		const parentRef = session.state.taskRef;
-		if (!parentRef || !session.syncAvailable) return;
+		if (parentRef === undefined) return;
+		if (!session.syncAvailable) return;
 		cancelScheduledSync(session);
 		const generation = session.syncGeneration;
-		const isCurrent = (): boolean =>
-			active === session &&
-			generation === session.syncGeneration &&
-			session.syncAvailable;
 		session.syncTimer = setTimeout(async () => {
 			session.syncTimer = undefined;
-			if (!isCurrent()) return;
+			const isSyncStale: boolean = !isCurrentSync(active, session, generation);
+			if (isSyncStale) return;
 			try {
 				const store = await readPiTaskStore(taskPath(session));
 				await syncPiTasksToTodoist(
 					createClient(session.context, dependencies),
 					parentRef,
 					store ?? { nextId: 1, tasks: [] },
-					isCurrent,
+					() => isCurrentSync(active, session, generation),
 				);
 			} catch {
-				if (isCurrent())
+				const isSyncCurrent: boolean = isCurrentSync(
+					active,
+					session,
+					generation,
+				);
+				if (isSyncCurrent)
 					session.context.ui.notify(TODOIST_TASK_UPDATE_FAILED, WARNING_VALUE);
 			}
 		}, 25);
@@ -437,7 +451,8 @@ export default function extension(
 				}
 				if (params.action === SET_PR) {
 					const url = githubPrUrl(params.url ?? EMPTY_STRING);
-					if (!url) throw new Error(SET_PR_REQUIRES_A_VALID_GITHUB_PULL);
+					if (url === null)
+						throw new Error(SET_PR_REQUIRES_A_VALID_GITHUB_PULL);
 					const prChanged = session.state.prUrl !== url;
 					session.state = applyStatePatch(session.state, {
 						prUrl: url,
@@ -465,7 +480,7 @@ export default function extension(
 					return extensionResult(CLEARED_THE_PINNED_PR);
 				}
 				if (params.action === SET_TASK) {
-					if (!params.task)
+					if (params.task === undefined)
 						throw new Error(SET_TASK_REQUIRES_A_TODOIST_TASK_REFERENCE);
 					cancelScheduledSync(session);
 					const client = createClient(ctx, dependencies);
@@ -577,9 +592,15 @@ export default function extension(
 			? false
 			: await linkInferredTask(active);
 		installTool();
-		if (registered && pi.getActiveTools && pi.setActiveTools) {
+		const hasActiveToolReader = typeof pi.getActiveTools === "function";
+		const hasActiveToolWriter = typeof pi.setActiveTools === "function";
+		const canManageActiveTools = hasActiveToolReader && hasActiveToolWriter;
+		const shouldRegisterStateTool = registered && canManageActiveTools;
+		if (shouldRegisterStateTool) {
 			const activeTools = pi.getActiveTools();
-			if (!activeTools.includes(PI_TODO_GATE_STATE)) {
+			const shouldAddStateTool: boolean =
+				!activeTools.includes(PI_TODO_GATE_STATE);
+			if (shouldAddStateTool) {
 				pi.setActiveTools([...activeTools, PI_TODO_GATE_STATE]);
 			}
 		}
@@ -589,17 +610,16 @@ export default function extension(
 			persistPrIfAvailable(
 				firstGithubPrUrl(branchTexts(branch)) ?? EMPTY_STRING,
 			);
-		if (state.taskRef && !taskWasSynced) {
-			try {
-				await syncTodoistToPiTasks(
-					createClient(ctx, dependencies),
-					state.taskRef,
-					taskPath(active),
-				);
-			} catch {
-				active.syncAvailable = false;
-				ctx.ui.notify(TODOIST_TASK_RESTORE_FAILED, WARNING_VALUE);
-			}
+		if (state.taskRef === undefined || taskWasSynced) return;
+		try {
+			await syncTodoistToPiTasks(
+				createClient(ctx, dependencies),
+				state.taskRef,
+				taskPath(active),
+			);
+		} catch {
+			active.syncAvailable = false;
+			ctx.ui.notify(TODOIST_TASK_RESTORE_FAILED, WARNING_VALUE);
 		}
 	});
 
@@ -610,7 +630,8 @@ export default function extension(
 
 	pi.on(BEFORE_AGENT_START, async (event, ctx) => {
 		if (!active) return;
-		if (!active.state.taskRef) {
+		const isMissingTaskRef: boolean = !active.state.taskRef;
+		if (isMissingTaskRef) {
 			await linkInferredTask(active, event.prompt ?? EMPTY_STRING);
 		}
 		const messages: string[] = [];
@@ -620,7 +641,8 @@ export default function extension(
 			);
 			active.handoffContext = false;
 		}
-		if (!active.state.taskRef) messages.push(MISSING_TASK_WARNING);
+		const isMissingTaskRefForPrompt: boolean = !active.state.taskRef;
+		if (isMissingTaskRefForPrompt) messages.push(MISSING_TASK_WARNING);
 		if (active.workChanged) {
 			const worktree = await inspectWorktree(
 				dependencies.exec ?? spawnExec,
@@ -650,62 +672,63 @@ export default function extension(
 	});
 
 	pi.on(TOOL_RESULT, async (event, ctx) => {
-		if (!active || event.isError) return;
+		const shouldIgnoreToolResult = !active || event.isError;
+		if (shouldIgnoreToolResult) return;
+		if (!active) return;
+		const session = active;
 		const toolName = String(event.toolName);
-		if (toolName === EDIT || toolName === WRITE) active.workChanged = true;
+		if (toolName === EDIT || toolName === WRITE) session.workChanged = true;
 		if (toolName === BASH) {
 			const command =
 				typeof event.input?.command === "string"
 					? event.input.command
 					: EMPTY_STRING;
 			const resultText = textOf(event.content);
-			if (!active.state.taskRef) {
-				await linkInferredTask(active, `${command}\n${resultText}`);
+			const isMissingTaskRef: boolean = !session.state.taskRef;
+			if (isMissingTaskRef) {
+				await linkInferredTask(session, `${command}\n${resultText}`);
 			}
-			if (
-				/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/.test(
+			const isGitMutation: boolean =
+				!!/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/.test(
 					command,
-				)
-			)
-				active.workChanged = true;
+				);
+			if (isGitMutation) session.workChanged = true;
 			if (
-				active.state.prUrl &&
-				active.state.taskRef &&
-				(await matchesPinnedPr(
+				session.state.prUrl !== undefined &&
+				session.state.taskRef !== undefined
+			) {
+				const isPinnedPr = await matchesPinnedPr(
 					dependencies.exec ?? spawnExec,
 					ctx.cwd,
 					command,
-					active.state.prUrl,
-				))
-			) {
-				if (!active.state.todoistCompletionAttemptedAt) {
-					try {
-						await createClient(ctx, dependencies).completeTask(
-							active.state.taskRef,
-						);
-						active.state = applyStatePatch(active.state, {
-							mergeCompletedAt: new Date().toISOString(),
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify(
-							MERGED_PR_DETECTED_TODOIST_TASK_COMPLETED,
-							INFO_VALUE,
-						);
-					} catch {
-						active.state = applyStatePatch(active.state, {
-							todoistCompletionAttemptedAt: new Date().toISOString(),
-						});
-						appendState(pi, active.state);
-						ctx.ui.notify(
-							MERGED_PR_DETECTED_BUT_TODOIST_TASK_COMPLETION,
-							WARNING_VALUE,
-						);
-					}
+					session.state.prUrl,
+				);
+				if (!isPinnedPr) return;
+				if (session.state.todoistCompletionAttemptedAt !== undefined) return;
+				try {
+					await createClient(ctx, dependencies).completeTask(
+						session.state.taskRef,
+					);
+					session.state = applyStatePatch(session.state, {
+						mergeCompletedAt: new Date().toISOString(),
+						todoistCompletionAttemptedAt: new Date().toISOString(),
+					});
+					appendState(pi, session.state);
+					ctx.ui.notify(MERGED_PR_DETECTED_TODOIST_TASK_COMPLETED, INFO_VALUE);
+				} catch {
+					session.state = applyStatePatch(session.state, {
+						todoistCompletionAttemptedAt: new Date().toISOString(),
+					});
+					appendState(pi, session.state);
+					ctx.ui.notify(
+						MERGED_PR_DETECTED_BUT_TODOIST_TASK_COMPLETION,
+						WARNING_VALUE,
+					);
 				}
 			}
 		}
-		if (taskToolNames.has(toolName)) scheduleSync(active);
+		const usesTaskTool: boolean = !!taskToolNames.has(toolName);
+		if (usesTaskTool) scheduleSync(session);
 	});
 
 	pi.on(AGENT_SETTLED, () => {

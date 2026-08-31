@@ -8,7 +8,10 @@ export function githubPrUrl(text: string): string | null {
 		const trimmed = candidate.replace(TRAILING_PUNCTUATION, EMPTY_STRING);
 		try {
 			const url = new URL(trimmed);
-			if (url.hostname.toLowerCase() !== GITHUB_COM) continue;
+			const isWrongHost: boolean = !!(
+				url.hostname.toLowerCase() !== GITHUB_COM
+			);
+			if (isWrongHost) continue;
 			const match = url.pathname.match(
 				/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 			);
@@ -24,7 +27,8 @@ export function githubPrUrl(text: string): string | null {
 export function firstGithubPrUrl(texts: readonly string[]): string | null {
 	for (const text of texts) {
 		const url = githubPrUrl(text);
-		if (url) return url;
+		const hasPullRequestUrl: boolean = !!url;
+		if (hasPullRequestUrl) return url;
 	}
 	return null;
 }

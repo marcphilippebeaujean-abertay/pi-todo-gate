@@ -19,14 +19,15 @@ export function defaultConfigPath(): string {
 export const DEFAULT_CONFIG_PATH = defaultConfigPath();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	if (typeof value !== "object" || value === null) return false;
+	return !Array.isArray(value);
 }
 
 export function parseConfig(raw: string): TodoistProjectMapping {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		if (!isRecord(parsed) || !isRecord(parsed.projects))
-			return { projects: {} };
+		if (!isRecord(parsed)) return { projects: {} };
+		if (!isRecord(parsed.projects)) return { projects: {} };
 
 		const projects: Record<string, string> = {};
 		for (const [path, project] of Object.entries(parsed.projects)) {
@@ -70,16 +71,19 @@ export function resolveConfiguredProject(
 	config: TodoistProjectMapping,
 ): ResolvedProject | null {
 	const current = normalizedPath(cwd);
-	const candidates = Object.entries(config.projects)
-		.map(([codingRoot, todoistProjectRef]) => ({
-			codingRoot: normalizedPath(codingRoot),
-			todoistProjectRef,
-		}))
-		.filter(({ codingRoot }) => isPathAtOrBelow(current, codingRoot))
-		.sort((a, b) => b.codingRoot.length - a.codingRoot.length);
-
-	const match = candidates[0];
-	return match ? match : null;
+	let match: ResolvedProject | null = null;
+	for (const [codingRoot, todoistProjectRef] of Object.entries(
+		config.projects,
+	)) {
+		const normalizedRoot = normalizedPath(codingRoot);
+		const isWithinConfiguredRoot = isPathAtOrBelow(current, normalizedRoot);
+		if (!isWithinConfiguredRoot) continue;
+		const isMoreSpecific =
+			match === null || normalizedRoot.length > match.codingRoot.length;
+		if (isMoreSpecific)
+			match = { codingRoot: normalizedRoot, todoistProjectRef };
+	}
+	return match;
 }
 
 export function configPathForAgentDir(agentDir: string): string {

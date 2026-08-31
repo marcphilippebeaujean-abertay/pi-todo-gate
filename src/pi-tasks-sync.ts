@@ -69,26 +69,29 @@ function ensureFileBacked(path: string): void {
 	if (process.env.PI_TASK_LIST_ID || process.env.PI_TASKS_PATH) {
 		throw new Error(PI_TASK_STORE_USES_AN_INCOMPATIBLE_CONFIGURED);
 	}
-	if (!path) throw new Error(PI_TASK_STORE_PATH_IS_REQUIRED);
+	const isMissingTaskStorePath: boolean = !path;
+	if (isMissingTaskStorePath) throw new Error(PI_TASK_STORE_PATH_IS_REQUIRED);
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> {
+	if (typeof value !== "object" || value === null) return {};
+	if (Array.isArray(value)) return {};
+	return value as Record<string, unknown>;
 }
 
 function normalizeTask(value: unknown): PiTask {
-	if (typeof value !== "object" || value === null || Array.isArray(value))
+	if (typeof value !== "object" || value === null)
 		throw new Error(INVALID_PI_TASK_STORE_TASK);
+	if (Array.isArray(value)) throw new Error(INVALID_PI_TASK_STORE_TASK);
 	const data = value as Partial<PiTask>;
-	if (
-		typeof data.id !== "string" ||
-		typeof data.subject !== "string" ||
-		typeof data.description !== "string"
-	) {
+	if (typeof data.id !== "string") throw new Error(INVALID_PI_TASK_STORE_TASK);
+	if (typeof data.subject !== "string")
 		throw new Error(INVALID_PI_TASK_STORE_TASK);
-	}
-	const status =
-		data.status === PENDING_VALUE ||
-		data.status === IN_PROGRESS_VALUE ||
-		data.status === COMPLETED_VALUE
-			? data.status
-			: PENDING_VALUE;
+	if (typeof data.description !== "string")
+		throw new Error(INVALID_PI_TASK_STORE_TASK);
+	let status: PiTask["status"] = PENDING_VALUE;
+	if (data.status === IN_PROGRESS_VALUE) status = IN_PROGRESS_VALUE;
+	if (data.status === COMPLETED_VALUE) status = COMPLETED_VALUE;
 	const now = Date.now();
 	return {
 		id: data.id,
@@ -98,12 +101,7 @@ function normalizeTask(value: unknown): PiTask {
 		activeForm:
 			typeof data.activeForm === "string" ? data.activeForm : undefined,
 		owner: typeof data.owner === "string" ? data.owner : undefined,
-		metadata:
-			data.metadata &&
-			typeof data.metadata === "object" &&
-			!Array.isArray(data.metadata)
-				? data.metadata
-				: {},
+		metadata: metadataRecord(data.metadata),
 		blocks: Array.isArray(data.blocks)
 			? data.blocks.filter((id): id is string => typeof id === "string")
 			: [],
@@ -130,8 +128,9 @@ export async function readPiTaskStore(
 	} catch {
 		throw new Error(INVALID_PI_TASK_STORE_JSON);
 	}
-	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+	if (typeof parsed !== "object" || parsed === null)
 		throw new Error(INVALID_PI_TASK_STORE);
+	if (Array.isArray(parsed)) throw new Error(INVALID_PI_TASK_STORE);
 	const data = parsed as Partial<PiTaskStoreData>;
 	if (!Array.isArray(data.tasks)) throw new Error(INVALID_PI_TASK_STORE);
 	const tasks = data.tasks.map(normalizeTask);
@@ -139,12 +138,12 @@ export async function readPiTaskStore(
 		const value = Number(task.id);
 		return Number.isInteger(value) && value > max ? value : max;
 	}, 0);
-	const nextId =
-		typeof data.nextId === "number" &&
-		Number.isInteger(data.nextId) &&
-		data.nextId > maxId
-			? data.nextId
-			: maxId + 1;
+	let nextId = maxId + 1;
+	if (typeof data.nextId === "number") {
+		const isIntegerNextId = Number.isInteger(data.nextId);
+		const hasLargerNextId = isIntegerNextId && data.nextId > maxId;
+		if (hasLargerNextId) nextId = data.nextId;
+	}
 	return { nextId, tasks };
 }
 
@@ -170,10 +169,13 @@ export async function writePiTaskStore(
 
 function metadataLines(task: PiTask): string[] {
 	const lines = [`${PRIVATE_PREFIX}id=${task.id} -->`];
-	if (task.owner) lines.push(`${PRIVATE_PREFIX}owner=${task.owner} -->`);
-	if (task.blocks.length)
+	const hasOwner: boolean = !!task.owner;
+	if (hasOwner) lines.push(`${PRIVATE_PREFIX}owner=${task.owner} -->`);
+	const hasBlockedTasks: boolean = !!task.blocks.length;
+	if (hasBlockedTasks)
 		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(TEXT)} -->`);
-	if (task.blockedBy.length)
+	const hasBlockingTasks: boolean = !!task.blockedBy.length;
+	if (hasBlockingTasks)
 		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(TEXT)} -->`);
 	return lines;
 }
@@ -227,7 +229,9 @@ function flattened(children: readonly TodoistChild[]): TodoistChild[] {
 	const result: TodoistChild[] = [];
 	for (const child of children) {
 		result.push(child);
-		if (child.children?.length) result.push(...flattened(child.children));
+		const children = child.children;
+		if (!children) continue;
+		result.push(...flattened(children));
 	}
 	return result;
 }
@@ -242,14 +246,17 @@ export function todoistSubtasksToPiTasks(
 		const parsed = parseStatus(child.content);
 		const metadata = markerData(child.description);
 		let id = metadata.values.id;
-		if (!id || used.has(id)) {
+		const needsTaskId: boolean = !!(!id || used.has(id));
+		if (needsTaskId) {
 			while (used.has(String(nextId))) nextId += 1;
 			id = String(nextId);
 		}
 		used.add(id);
 		const numericId = Number(id);
-		if (Number.isInteger(numericId) && numericId >= nextId)
-			nextId = numericId + 1;
+		const hasNumericTaskId: boolean = !!(
+			Number.isInteger(numericId) && numericId >= nextId
+		);
+		if (hasNumericTaskId) nextId = numericId + 1;
 		const blocks = metadata.values.blocks
 			? metadata.values.blocks.split(TEXT).filter(Boolean)
 			: [];
@@ -294,7 +301,8 @@ export async function syncPiTasksToTodoist(
 	isCurrent?: () => boolean,
 ): Promise<void> {
 	const assertCurrent = (): void => {
-		if (isCurrent && !isCurrent()) throw new SyncCancelledError();
+		const isSyncCancelled: boolean = !!(isCurrent && !isCurrent());
+		if (isSyncCancelled) throw new SyncCancelledError();
 	};
 	assertCurrent();
 	const descendants = await client.listDescendants(parentRef);

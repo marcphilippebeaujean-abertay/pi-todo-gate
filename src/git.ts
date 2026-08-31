@@ -144,12 +144,10 @@ export async function inspectWorktree(
 			: null;
 	const mainRoot =
 		listResult.code === 0 ? firstWorktreePath(listResult.stdout) : null;
-	return {
-		isWorktree:
-			root !== null && mainRoot !== null && root !== resolve(mainRoot),
-		root,
-		branch,
-	};
+	let isWorktree = false;
+	if (root !== null && mainRoot !== null)
+		isWorktree = root !== resolve(mainRoot);
+	return { isWorktree, root, branch };
 }
 
 export async function findOpenPr(
@@ -162,20 +160,22 @@ export async function findOpenPr(
 		[PR, LIST, HEAD, branch, STATE, OPEN, JSON_2, URL_STATE, LIMIT, VALUE_1],
 		{ cwd },
 	);
-	if (result.code !== 0) return { url: null, state: UNKNOWN_VALUE };
+	const commandFailed: boolean = !!(result.code !== 0);
+	if (commandFailed) return { url: null, state: UNKNOWN_VALUE };
 	try {
 		const rows: unknown = JSON.parse(result.stdout);
 		if (!Array.isArray(rows)) return { url: null, state: UNKNOWN_VALUE };
-		if (rows.length === 0) return { url: null, state: OPEN_2 };
+		const hasNoPullRequests: boolean = !!(rows.length === 0);
+		if (hasNoPullRequests) return { url: null, state: OPEN_2 };
 		if (typeof rows[0] !== "object" || rows[0] === null) {
 			return { url: null, state: UNKNOWN_VALUE };
 		}
 		const row = rows[0] as { url?: unknown; state?: unknown };
 		const url = typeof row.url === "string" ? githubPrUrl(row.url) : null;
-		const state =
-			row.state === OPEN_2 || row.state === CLOSED || row.state === MERGED
-				? row.state
-				: UNKNOWN_VALUE;
+		let state: OpenPrInfo["state"] = UNKNOWN_VALUE;
+		if (row.state === OPEN_2) state = OPEN_2;
+		else if (row.state === CLOSED) state = CLOSED;
+		else if (row.state === MERGED) state = MERGED;
 		return { url, state };
 	} catch {
 		return { url: null, state: UNKNOWN_VALUE };
@@ -198,7 +198,8 @@ function shellSegments(command: string): string[] {
 			escaped = true;
 			continue;
 		}
-		if (quote) {
+		const isInsideQuote: boolean = !!quote;
+		if (isInsideQuote) {
 			current += character;
 			if (character === quote) quote = null;
 			continue;
@@ -208,14 +209,18 @@ function shellSegments(command: string): string[] {
 			current += character;
 			continue;
 		}
-		if (character === TEXT_4 || character === TEXT_5 || character === TEXT_6) {
-			if (current.trim()) segments.push(current.trim());
+		const isBasicWhitespace = character === TEXT_4 || character === TEXT_5;
+		const isWhitespace: boolean = isBasicWhitespace || character === TEXT_6;
+		if (isWhitespace) {
+			const hasCurrentToken: boolean = !!current.trim();
+			if (hasCurrentToken) segments.push(current.trim());
 			current = EMPTY_STRING;
 			continue;
 		}
 		current += character;
 	}
-	if (current.trim()) segments.push(current.trim());
+	const hasCurrentSegment: boolean = !!current.trim();
+	if (hasCurrentSegment) segments.push(current.trim());
 	return segments;
 }
 
@@ -225,7 +230,8 @@ function shellWords(segment: string): string[] {
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 	const push = () => {
-		if (current || words.length === 0) words.push(current);
+		const shouldPushWord: boolean = !!(current || words.length === 0);
+		if (shouldPushWord) words.push(current);
 		current = EMPTY_STRING;
 	};
 	for (const character of segment) {
@@ -238,7 +244,8 @@ function shellWords(segment: string): string[] {
 			escaped = true;
 			continue;
 		}
-		if (quote) {
+		const isInsideQuote: boolean = !!quote;
+		if (isInsideQuote) {
 			if (character === quote) quote = null;
 			else current += character;
 			continue;
@@ -247,14 +254,17 @@ function shellWords(segment: string): string[] {
 			quote = character;
 			continue;
 		}
-		if (/\s/.test(character)) {
-			if (current) push();
+		const isWhitespace: boolean = !!/\s/.test(character);
+		if (isWhitespace) {
+			const hasCurrentWord: boolean = !!current;
+			if (hasCurrentWord) push();
 			continue;
 		}
 		current += character;
 	}
 	if (escaped) current += TEXT;
-	if (current) push();
+	const hasCurrentWord: boolean = !!current;
+	if (hasCurrentWord) push();
 	return words;
 }
 
@@ -266,25 +276,24 @@ export function mergeCommand(
 	command: string,
 ): { kind: "git" | "gh"; args: string[] } | null {
 	const segments = shellSegments(command);
-	if (segments.length !== 1) return null;
+	const hasUnexpectedSegmentCount: boolean = !!(segments.length !== 1);
+	if (hasUnexpectedSegmentCount) return null;
 	let parsed: { kind: "git" | "gh"; args: string[] } | null = null;
 	for (const segment of segments) {
 		const words = shellWords(segment);
 		let candidate: { kind: "git" | "gh"; args: string[] } | null = null;
-		if (
-			words.length >= 2 &&
-			executableName(words[0]) === GIT &&
-			words[1] === MERGE
-		) {
-			candidate = { kind: GIT, args: words.slice(2) };
+		const hasGitMergeWords = words.length >= 2;
+		if (hasGitMergeWords) {
+			const isGitExecutable = executableName(words[0]) === GIT;
+			if (isGitExecutable && words[1] === MERGE)
+				candidate = { kind: GIT, args: words.slice(2) };
 		}
-		if (
-			words.length >= 3 &&
-			executableName(words[0]) === GH &&
-			words[1] === PR &&
-			words[2] === MERGE
-		) {
-			candidate = { kind: GH, args: words.slice(3) };
+		const hasGhMergeWords = words.length >= 3;
+		if (hasGhMergeWords) {
+			const isGhExecutable = executableName(words[0]) === GH;
+			if (isGhExecutable && words[1] === PR) {
+				if (words[2] === MERGE) candidate = { kind: GH, args: words.slice(3) };
+			}
 		}
 		if (!candidate) continue;
 		if (parsed) return null;
@@ -294,7 +303,10 @@ export function mergeCommand(
 }
 
 function positionalArgs(args: string[]): string[] {
-	return args.filter((arg) => arg !== TEXT_8 && !arg.startsWith(TEXT_9));
+	return args.filter((arg) => {
+		if (arg === TEXT_8) return false;
+		return !arg.startsWith(TEXT_9);
+	});
 }
 
 const GH_MERGE_VALUE_OPTIONS = new Set([
@@ -315,14 +327,20 @@ function ghMergeTargets(args: string[]): string[] | null {
 			targets.push(...args.slice(index + 1));
 			break;
 		}
-		if (arg === REPO || arg === R || arg.startsWith(REPO_2)) return null;
-		if (GH_MERGE_VALUE_OPTIONS.has(arg)) {
+		const isRepoFlag = arg === REPO || arg === R;
+		const isRepositoryFlag: boolean = isRepoFlag || arg.startsWith(REPO_2);
+		if (isRepositoryFlag) return null;
+		const isMergeOption: boolean = !!GH_MERGE_VALUE_OPTIONS.has(arg);
+		if (isMergeOption) {
 			index += 1;
 			continue;
 		}
-		if (arg.startsWith(TEXT_9)) {
-			if (index + 1 < args.length && !args[index + 1].startsWith(TEXT_9))
-				return null;
+		const isLongOption: boolean = !!arg.startsWith(TEXT_9);
+		if (isLongOption) {
+			const hasInvalidOptionValue: boolean = !!(
+				index + 1 < args.length && !args[index + 1].startsWith(TEXT_9)
+			);
+			if (hasInvalidOptionValue) return null;
 			continue;
 		}
 		targets.push(arg);
@@ -342,14 +360,13 @@ async function queryPinnedHead(
 	const result = await exec(GH, [PR, VIEW, prUrl, JSON_2, HEADREFNAME], {
 		cwd,
 	});
-	if (result.code !== 0) return null;
+	const commandFailed: boolean = !!(result.code !== 0);
+	if (commandFailed) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
-		return typeof data === "object" &&
-			data !== null &&
-			typeof (data as { headRefName?: unknown }).headRefName === "string"
-			? (data as { headRefName: string }).headRefName
-			: null;
+		if (typeof data !== "object" || data === null) return null;
+		const headRefName = (data as { headRefName?: unknown }).headRefName;
+		return typeof headRefName === "string" ? headRefName : null;
 	} catch {
 		return null;
 	}
@@ -363,7 +380,8 @@ async function queryCurrentPr(
 	const result = await exec(GH, [PR, VIEW, target, JSON_2, URL_HEADREFNAME], {
 		cwd,
 	});
-	if (result.code !== 0) return null;
+	const commandFailed: boolean = !!(result.code !== 0);
+	if (commandFailed) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
 		if (typeof data !== "object" || data === null) return null;
@@ -384,24 +402,29 @@ export async function matchesPinnedPr(
 ): Promise<boolean> {
 	const parsed = mergeCommand(command);
 	const pinned = normalizedUrl(prUrl);
-	if (!parsed || !pinned) return false;
+	if (parsed === null || pinned === null) return false;
 
 	if (parsed.kind === GH) {
 		const targets = ghMergeTargets(parsed.args);
-		if (targets?.length !== 1) return false;
+		if (targets === null) return false;
+		const hasSingleTarget = targets.length === 1;
+		if (!hasSingleTarget) return false;
 		const target = targets[0];
-		if (normalizedUrl(target) === pinned) return true;
+		const targetUrl = normalizedUrl(target);
+		const matchesPinnedUrl = targetUrl === pinned;
+		if (matchesPinnedUrl) return true;
 		const currentPr = await queryCurrentPr(exec, cwd, target);
-		if (currentPr === null || normalizedUrl(currentPr.url) !== pinned)
-			return false;
+		if (currentPr === null) return false;
+		const isCurrentPrPinned = normalizedUrl(currentPr.url) === pinned;
+		if (!isCurrentPrPinned) return false;
 		return /^\d+$/.test(target) || currentPr.headRefName === target;
 	}
 
 	const targets = positionalArgs(parsed.args);
-	if (targets.length !== 1) return false;
+	if (targets === null) return false;
+	const hasSingleTarget = targets.length === 1;
+	if (!hasSingleTarget) return false;
 	const head = await queryPinnedHead(exec, cwd, pinned);
-	return (
-		head !== null &&
-		(targets[0] === head || targets[0] === `refs/heads/${head}`)
-	);
+	if (head === null) return false;
+	return targets[0] === head || targets[0] === `refs/heads/${head}`;
 }

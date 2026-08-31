@@ -14,7 +14,8 @@ const STATE_KEYS: readonly (keyof WorkState)[] = [
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	if (typeof value !== "object" || value === null) return false;
+	return !Array.isArray(value);
 }
 
 function isWorkState(value: unknown): value is WorkState {
@@ -25,12 +26,9 @@ function isWorkState(value: unknown): value is WorkState {
 }
 
 function stateFromEntry(entry: unknown): WorkState | null {
-	if (
-		!isRecord(entry) ||
-		entry.type !== CUSTOM ||
-		entry.customType !== PI_TODO_GATE_STATE
-	)
-		return null;
+	if (!isRecord(entry)) return null;
+	if (entry.type !== CUSTOM) return null;
+	if (entry.customType !== PI_TODO_GATE_STATE) return null;
 	return isWorkState(entry.data) ? { ...entry.data } : null;
 }
 
@@ -44,7 +42,8 @@ export function applyStatePatch(
 ): WorkState {
 	const next: WorkState = { ...state };
 	for (const key of STATE_KEYS) {
-		if (!Object.hasOwn(patch, key)) continue;
+		const isMissingPatchKey: boolean = !Object.hasOwn(patch, key);
+		if (isMissingPatchKey) continue;
 		const value = patch[key];
 		if (value === undefined) delete next[key];
 		else next[key] = value;

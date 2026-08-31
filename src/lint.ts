@@ -358,11 +358,27 @@ function isSimpleReference(expression: ts.Expression): boolean {
 	);
 }
 
+function isUserDefinedTypeGuard(
+	expression: ts.Expression,
+	checker: ts.TypeChecker,
+): boolean {
+	if (!ts.isCallExpression(expression)) return false;
+	const signature = checker.getResolvedSignature(expression);
+	return (
+		signature !== undefined &&
+		checker.getTypePredicateOfSignature(signature) !== undefined
+	);
+}
+
 function isReadableLogicalCondition(
 	expression: ts.Expression,
 	checker: ts.TypeChecker,
 ): boolean {
-	if (isTypeGuardExpression(expression)) return true;
+	if (
+		isTypeGuardExpression(expression) ||
+		isUserDefinedTypeGuard(expression, checker)
+	)
+		return true;
 	if (isLogicalExpression(expression)) {
 		return (
 			logicalCheckCount(expression) <= 2 &&
@@ -395,7 +411,11 @@ function isNamedBooleanCondition(
 	}
 	if (ts.isIdentifier(expression))
 		return isNamedConditionType(checker.getTypeAtLocation(expression));
-	if (ts.isCallExpression(expression)) return false;
+	if (
+		ts.isCallExpression(expression) &&
+		!isUserDefinedTypeGuard(expression, checker)
+	)
+		return false;
 	if (isLogicalExpression(expression))
 		return isReadableLogicalCondition(expression, checker);
 	if (ts.isBinaryExpression(expression))
@@ -448,9 +468,7 @@ function functionComplexity(body: ts.Node): number {
 			ts.isCatchClause(node) ||
 			ts.isConditionalExpression(node) ||
 			ts.isCaseClause(node) ||
-			ts.isDefaultClause(node) ||
-			(isLogicalExpression(node) &&
-				node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)
+			ts.isDefaultClause(node)
 		) {
 			complexity += 1;
 		}
@@ -467,10 +485,23 @@ interface FunctionMetric {
 	lines: number;
 }
 
+function isCallbackFunction(node: ts.FunctionLikeDeclaration): boolean {
+	if (!ts.isFunctionExpression(node) && !ts.isArrowFunction(node)) return false;
+	const parent = node.parent;
+	return (
+		(ts.isCallExpression(parent) && parent.arguments.includes(node)) ||
+		(ts.isNewExpression(parent) && parent.arguments?.includes(node) === true)
+	);
+}
+
 function collectFunctionMetrics(sourceFile: ts.SourceFile): FunctionMetric[] {
 	const metrics: FunctionMetric[] = [];
 	function visit(node: ts.Node, containingFunctionDepth: number): void {
 		if (isFunctionLike(node)) {
+			if (isCallbackFunction(node)) {
+				ts.forEachChild(node, (child) => visit(child, containingFunctionDepth));
+				return;
+			}
 			const depth = containingFunctionDepth + 1;
 			const start = sourceFile.getLineAndCharacterOfPosition(
 				node.getStart(sourceFile),
