@@ -130,37 +130,6 @@ function isModuleSpecifier(
 	);
 }
 
-function isTypeofComparisonString(
-	node: ts.Node,
-	ancestors: readonly ts.Node[],
-): boolean {
-	const parent = ancestors.at(-1);
-	if (!parent || !ts.isBinaryExpression(parent)) return false;
-	const isEquality =
-		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
-		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
-		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
-	if (!isEquality) return false;
-	return (
-		(parent.right === node && ts.isTypeOfExpression(parent.left)) ||
-		(parent.left === node && ts.isTypeOfExpression(parent.right))
-	);
-}
-
-function isConstAssertionString(
-	node: ts.Node,
-	ancestors: readonly ts.Node[],
-): boolean {
-	const parent = ancestors.at(-1);
-	return Boolean(
-		parent &&
-			ts.isAsExpression(parent) &&
-			parent.expression === node &&
-			parent.type.kind === ts.SyntaxKind.ConstKeyword,
-	);
-}
-
 function isStandaloneStringStatement(
 	node: ts.Node,
 	ancestors: readonly ts.Node[],
@@ -197,8 +166,6 @@ function isIgnoredString(
 		isConstInitializer(node, ancestors) ||
 		isPropertyName(node, ancestors) ||
 		isModuleSpecifier(node, ancestors) ||
-		isTypeofComparisonString(node, ancestors) ||
-		isConstAssertionString(node, ancestors) ||
 		isStandaloneStringStatement(node, ancestors)
 	);
 }
@@ -345,56 +312,6 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
-function isNumericType(type: ts.Type): boolean {
-	if ((type.flags & ts.TypeFlags.NumberLike) !== 0) return true;
-	return type.isUnion() && type.types.every(isNumericType);
-}
-
-function isSimpleReference(expression: ts.Expression): boolean {
-	return (
-		ts.isIdentifier(expression) ||
-		ts.isPropertyAccessExpression(expression) ||
-		ts.isElementAccessExpression(expression)
-	);
-}
-
-function isUserDefinedTypeGuard(
-	expression: ts.Expression,
-	checker: ts.TypeChecker,
-): boolean {
-	if (!ts.isCallExpression(expression)) return false;
-	const signature = checker.getResolvedSignature(expression);
-	return (
-		signature !== undefined &&
-		checker.getTypePredicateOfSignature(signature) !== undefined
-	);
-}
-
-function isReadableLogicalCondition(
-	expression: ts.Expression,
-	checker: ts.TypeChecker,
-): boolean {
-	if (
-		isTypeGuardExpression(expression) ||
-		isUserDefinedTypeGuard(expression, checker)
-	)
-		return true;
-	if (isLogicalExpression(expression)) {
-		return (
-			logicalCheckCount(expression) <= 2 &&
-			isReadableLogicalCondition(expression.left, checker) &&
-			isReadableLogicalCondition(expression.right, checker)
-		);
-	}
-	if (!ts.isBinaryExpression(expression)) return isSimpleReference(expression);
-	return (
-		!isNumericType(checker.getTypeAtLocation(expression.left)) &&
-		!isNumericType(checker.getTypeAtLocation(expression.right)) &&
-		isSimpleReference(expression.left) &&
-		isSimpleReference(expression.right)
-	);
-}
-
 function isNamedBooleanCondition(
 	condition: ts.Expression,
 	checker: ts.TypeChecker,
@@ -411,20 +328,9 @@ function isNamedBooleanCondition(
 	}
 	if (ts.isIdentifier(expression))
 		return isNamedConditionType(checker.getTypeAtLocation(expression));
-	if (
-		ts.isCallExpression(expression) &&
-		!isUserDefinedTypeGuard(expression, checker)
-	)
-		return false;
-	if (isLogicalExpression(expression))
-		return isReadableLogicalCondition(expression, checker);
-	if (ts.isBinaryExpression(expression))
-		return isReadableLogicalCondition(expression, checker);
-	if (isSimpleReference(expression))
-		return isNamedConditionType(checker.getTypeAtLocation(expression));
 	return (
-		(checker.getTypeAtLocation(expression).flags & ts.TypeFlags.BooleanLike) !==
-		0
+		ts.isIdentifier(expression) &&
+		isNamedConditionType(checker.getTypeAtLocation(expression))
 	);
 }
 
@@ -468,7 +374,9 @@ function functionComplexity(body: ts.Node): number {
 			ts.isCatchClause(node) ||
 			ts.isConditionalExpression(node) ||
 			ts.isCaseClause(node) ||
-			ts.isDefaultClause(node)
+			ts.isDefaultClause(node) ||
+			(isLogicalExpression(node) &&
+				node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)
 		) {
 			complexity += 1;
 		}
@@ -485,23 +393,10 @@ interface FunctionMetric {
 	lines: number;
 }
 
-function isCallbackFunction(node: ts.FunctionLikeDeclaration): boolean {
-	if (!ts.isFunctionExpression(node) && !ts.isArrowFunction(node)) return false;
-	const parent = node.parent;
-	return (
-		(ts.isCallExpression(parent) && parent.arguments.includes(node)) ||
-		(ts.isNewExpression(parent) && parent.arguments?.includes(node) === true)
-	);
-}
-
 function collectFunctionMetrics(sourceFile: ts.SourceFile): FunctionMetric[] {
 	const metrics: FunctionMetric[] = [];
 	function visit(node: ts.Node, containingFunctionDepth: number): void {
 		if (isFunctionLike(node)) {
-			if (isCallbackFunction(node)) {
-				ts.forEachChild(node, (child) => visit(child, containingFunctionDepth));
-				return;
-			}
 			const depth = containingFunctionDepth + 1;
 			const start = sourceFile.getLineAndCharacterOfPosition(
 				node.getStart(sourceFile),

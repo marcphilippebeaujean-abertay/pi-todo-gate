@@ -42,7 +42,7 @@ Count leaf checks in logical boolean expressions joined by `&&` and `||`. Report
 
 ### `named-if-condition`
 
-An `if` condition must be a boolean identifier, optionally negated. Numeric comparisons, arithmetic, calls, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. TypeScript type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing. Comparisons between named references are accepted; numeric checks remain subject to extraction.
+An `if` condition must be a boolean identifier, optionally negated. Numeric comparisons, arithmetic, calls, logical combinations, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. TypeScript built-in type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing.
 
 ```ts
 const hasAccountBalance = accountBalance > 0;
@@ -51,7 +51,7 @@ if (hasAccountBalance) {
 }
 ```
 
-The TypeScript type checker determines whether identifier conditions are boolean-like, object guards, or numeric truthiness. The rule does not enforce a naming prefix because intent naming is semantic and cannot be reliably inferred; its diagnostic instructs the author to choose a descriptive boolean name.
+The TypeScript type checker determines whether identifier conditions are boolean-like or object guards. The rule does not enforce a naming prefix because intent naming is semantic and cannot be reliably inferred; its diagnostic instructs the author to choose a descriptive boolean name.
 
 ### `cyclomatic-complexity`
 
