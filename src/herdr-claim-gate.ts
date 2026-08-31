@@ -167,20 +167,67 @@ function paneTabId(
 	return typeof tabId === "string" && tabId ? tabId : undefined;
 }
 
+function promptTabLabel(prompt: string): string {
+	const words = prompt.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+	return words.slice(0, 4).join("-").slice(0, 32) || "task";
+}
+
+function claimPromptTab(
+	commandRunner: CommandRunner,
+	tabId: string | undefined,
+	paneId: string | undefined,
+	prompt: string,
+): boolean {
+	if (!tabId || !paneId) return false;
+	try {
+		const workspaceId = tabId.split(":")[0];
+		const response = jsonResult<{
+			result?: {
+				panes?: Array<{ pane_id?: unknown; tab_id?: unknown; agent?: unknown }>;
+			};
+		}>(commandRunner("herdr", ["pane", "list", "--workspace", workspaceId]));
+		const shared = response?.result?.panes?.some(
+			(pane) =>
+				pane.pane_id !== paneId &&
+				pane.tab_id === tabId &&
+				typeof pane.agent === "string" &&
+				pane.agent.length > 0,
+		);
+		const label = promptTabLabel(prompt);
+		if (shared) {
+			commandRunner("herdr", [
+				"pane",
+				"move",
+				paneId,
+				"--new-tab",
+				"--label",
+				label,
+				"--focus",
+			]);
+		} else {
+			commandRunner("herdr", ["tab", "rename", tabId, label]);
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function hasValidatedTabClaim(
 	commandRunner: CommandRunner,
 	initialLabel: string | undefined,
 	paneId: string | undefined,
-	claim: { tabId: string; label: string },
+	claim?: { tabId: string; label: string },
 ): boolean {
 	if (initialLabel === undefined) return false;
 	try {
-		const currentLabel = tabLabel(commandRunner, claim.tabId);
+		const observedTabId = paneTabId(commandRunner, paneId);
+		if (!observedTabId) return false;
+		const currentLabel = tabLabel(commandRunner, observedTabId);
+		if (!labelIsDescriptive(currentLabel) || currentLabel === initialLabel)
+			return false;
 		return (
-			paneTabId(commandRunner, paneId) === claim.tabId &&
-			labelIsDescriptive(currentLabel) &&
-			currentLabel === claim.label &&
-			currentLabel !== initialLabel
+			!claim || (claim.tabId === observedTabId && claim.label === currentLabel)
 		);
 	} catch {
 		return false;
@@ -299,21 +346,33 @@ export function installHerdrClaimGate(
 					worker = undefined;
 					setHerdrStatus(ctx, undefined);
 					if (
-						!hasValidatedTabClaim(
+						hasValidatedTabClaim(
 							commandRunner,
 							sessionTabLabel,
 							sessionPaneId,
 							claim,
-						)
+						) ||
+						(claimPromptTab(
+							commandRunner,
+							sessionTabId,
+							sessionPaneId,
+							event.prompt ?? "",
+						) &&
+							hasValidatedTabClaim(
+								commandRunner,
+								sessionTabLabel,
+								sessionPaneId,
+								undefined,
+							))
 					) {
-						notify(
-							ctx,
-							"Herdr claim worker completed but could not validate tab claim.",
-							"warning",
-						);
+						persistClaimed(ctx);
 						return;
 					}
-					persistClaimed(ctx);
+					notify(
+						ctx,
+						"Herdr claim worker completed but could not validate tab claim.",
+						"warning",
+					);
 				},
 				onFailure: (message) => {
 					worker = undefined;

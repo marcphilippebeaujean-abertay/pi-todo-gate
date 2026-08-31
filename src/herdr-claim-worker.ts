@@ -8,7 +8,7 @@ export interface ClaimWorkerResult {
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	onClaimComplete: (result: ClaimWorkerResult) => void;
+	onClaimComplete: (result?: ClaimWorkerResult) => void;
 	onFailure: (message: string) => void;
 }
 
@@ -63,7 +63,7 @@ function appendBounded(current: string, chunk: Buffer | string): string {
 }
 
 function workerPrompt(request: ClaimWorkerRequest): string {
-	return `${request.instructions}\n\nParent user prompt:\n${request.prompt}`;
+	return request.prompt;
 }
 
 function textFromMessage(value: unknown): string {
@@ -120,7 +120,18 @@ export function startClaimWorker(
 ): ClaimWorkerHandle {
 	const child = (options.spawnWorker ?? defaultSpawnWorker)(
 		options.command ?? DEFAULT_COMMAND,
-		["--mode", "json", "-p", "--no-extensions", workerPrompt(request)],
+		[
+			"--mode",
+			"json",
+			"-p",
+			"--no-extensions",
+			"--no-context-files",
+			"--tools",
+			"bash",
+			"--append-system-prompt",
+			request.instructions,
+			workerPrompt(request),
+		],
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
@@ -158,12 +169,7 @@ export function startClaimWorker(
 		const code = args[0];
 		settled = true;
 		if (code === 0) {
-			const result = parseClaimResult(stdout);
-			if (result) {
-				request.onClaimComplete(result);
-				return;
-			}
-			request.onFailure("Herdr claim worker completed without claim evidence.");
+			request.onClaimComplete(parseClaimResult(stdout));
 			return;
 		}
 		const detail = stderr.trim();

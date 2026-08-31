@@ -97,6 +97,9 @@ function fakeWorker() {
 		complete(result = { tabId: "w1:t1", label: "dialog-editor" }) {
 			request?.onClaimComplete(result);
 		},
+		completeWithoutEvidence() {
+			request?.onClaimComplete();
+		},
 		fail(message: string) {
 			request?.onFailure(message);
 		},
@@ -266,6 +269,44 @@ describe("Herdr claim gate activation", () => {
 		expect(worker.start).toHaveBeenCalledTimes(2);
 	});
 
+	it("falls back to moving its pane after an unvalidated worker completion", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		let tabId = "w1:t1";
+		let label = "old-tab";
+		const runner: CommandRunner = (command, args) => {
+			if (command !== "herdr") return commandRunner(command, args);
+			if (args.join(" ") === "tab get w1:t1")
+				return JSON.stringify({ result: { tab: { label } } });
+			if (args.join(" ") === "tab get w1:t2")
+				return JSON.stringify({ result: { tab: { label } } });
+			if (args.join(" ") === "pane get w1:p1")
+				return JSON.stringify({ result: { pane: { tab_id: tabId } } });
+			if (args.join(" ") === "pane list --workspace w1")
+				return '{"result":{"panes":[{"pane_id":"w1:p1","tab_id":"w1:t1","agent":"pi"},{"pane_id":"w1:p2","tab_id":"w1:t1","agent":"pi"}]}}';
+			if (
+				args.join(" ") ===
+				"pane move w1:p1 --new-tab --label probe-fallback --focus"
+			) {
+				tabId = "w1:t2";
+				label = "probe-fallback";
+				return "{}";
+			}
+			return "{}";
+		};
+		await startGate(pi, { worker, commandRunner: runner });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "probe fallback" },
+			contextFor(pi),
+		);
+
+		worker.completeWithoutEvidence();
+
+		expect(pi.entries).toHaveLength(1);
+	});
+
 	it("persists a worker claim after its pane moves to a new tab", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
@@ -287,7 +328,7 @@ describe("Herdr claim gate activation", () => {
 			contextFor(pi),
 		);
 
-		worker.complete({ tabId: "w1:t2", label: "dialog-editor" });
+		worker.completeWithoutEvidence();
 
 		expect(pi.entries).toHaveLength(1);
 	});

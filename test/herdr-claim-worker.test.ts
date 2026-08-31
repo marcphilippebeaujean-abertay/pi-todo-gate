@@ -61,9 +61,13 @@ describe("startClaimWorker", () => {
 			"json",
 			"-p",
 			"--no-extensions",
-			expect.stringContaining("Fix dialog"),
+			"--no-context-files",
+			"--tools",
+			"bash",
+			"--append-system-prompt",
+			"Claim tab",
+			"Fix dialog",
 		]);
-		expect(setupState.spawned?.args.at(-1)).toContain("Claim tab");
 		expect(setupState.spawned?.options.shell).toBe(false);
 		expect(setupState.spawned?.options.cwd).toBe("/repo/worktree");
 		expect(setupState.spawned?.options).toMatchObject({
@@ -103,6 +107,18 @@ describe("startClaimWorker", () => {
 			tabId: "w1:t1",
 			label: "dialog-editor",
 		});
+		expect(setupState.onFailure).not.toHaveBeenCalled();
+	});
+
+	it("completes without worker JSON when observed state can validate claim", () => {
+		const setupState = setup();
+		startClaimWorker(setupState.request, {
+			spawnWorker: setupState.spawnWorker,
+		});
+
+		setupState.process.emit("close", 0);
+
+		expect(setupState.onClaimComplete).toHaveBeenCalledWith(undefined);
 		expect(setupState.onFailure).not.toHaveBeenCalled();
 	});
 
