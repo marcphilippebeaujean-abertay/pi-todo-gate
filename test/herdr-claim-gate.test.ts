@@ -216,75 +216,8 @@ describe("Herdr claim gate activation", () => {
 	});
 });
 
-describe("Herdr claim gate enforcement", () => {
-	it("blocks non-bash and non-allow-listed bash calls", async () => {
-		const pi = createFakePi();
-		await startGate(pi);
-		const toolCall = pi.handlers.get("tool_call")?.[0];
-		expect(toolCall).toBeDefined();
-
-		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({
-			block: true,
-			reason: expect.stringContaining("Herdr instructions"),
-		});
-		expect(
-			await toolCall?.(
-				{ toolName: "bash", input: { command: "git status" } },
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "herdr pane list --workspace $HERDR_WORKSPACE_ID" },
-				},
-				contextFor(pi),
-			),
-		).toBeUndefined();
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "echo $HERDR_ENV && git status" },
-				},
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "herdr pane current > /tmp/herdr.json" },
-				},
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "herdr pane current $HOME" },
-				},
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: {
-						command: 'herdr pane list --workspace "$HERDR_WORKSPACE_ID" extra',
-					},
-				},
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-	});
-
-	it("lifts gate when worker completes and cancels worker on shutdown", async () => {
+describe("Herdr claim gate background behavior", () => {
+	it("does not block main-session tools while worker runs", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
 		await startGate(pi, { worker });
@@ -294,17 +227,50 @@ describe("Herdr claim gate enforcement", () => {
 			{ prompt: "claim tab" },
 			contextFor(pi),
 		);
-		worker.complete();
 
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toBeUndefined();
-		await emit(pi, "session_shutdown", {}, contextFor(pi));
-		expect(worker.wasCancelled()).toBe(false);
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "bash", input: { command: "git status" } },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		worker.complete();
 	});
 
-	it("keeps gate active after worker startup failure and notifies user", async () => {
+	it("cancels background worker on shutdown without blocking tools", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		await startGate(pi, { worker });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "claim tab" },
+			contextFor(pi),
+		);
+
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		await emit(pi, "session_shutdown", {}, contextFor(pi));
+		expect(worker.wasCancelled()).toBe(true);
+	});
+
+	it("notifies on worker startup failure without blocking tools", async () => {
 		const pi = createFakePi();
 		const previousHerdr = process.env.HERDR_ENV;
 		process.env.HERDR_ENV = "1";
@@ -328,14 +294,18 @@ describe("Herdr claim gate enforcement", () => {
 			else process.env.HERDR_ENV = previousHerdr;
 		}
 
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 		expect(pi.notifications.at(-1)?.level).toBe("warning");
 	});
 
-	it("keeps gate active after worker failure and notifies user", async () => {
+	it("notifies on worker failure without blocking tools", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
 		await startGate(pi, { worker });
@@ -347,53 +317,44 @@ describe("Herdr claim gate enforcement", () => {
 		);
 		worker.fail("worker unavailable");
 
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 		expect(pi.notifications.at(-1)?.level).toBe("warning");
 	});
 
-	it("does not lift gate after failed tab rename", async () => {
+	it("does not persist failed tab rename and keeps tools available", async () => {
 		const pi = createFakePi();
-		const runner: CommandRunner = (command, args) => {
-			if (command === "herdr" && args[0] === "tab" && args[1] === "rename")
-				throw new Error("rename failed");
-			return commandRunner(command, args);
-		};
-		const previousHerdr = process.env.HERDR_ENV;
-		const previousTab = process.env.HERDR_TAB_ID;
-		process.env.HERDR_ENV = "1";
-		process.env.HERDR_TAB_ID = "w1:t1";
-		try {
-			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
-				commandRunner: runner,
-			});
-			await pi.handlers.get("session_start")?.[0]?.(
-				{ reason: "startup" },
+		await startGate(pi);
+		await emit(
+			pi,
+			"tool_result",
+			{
+				toolName: "bash",
+				isError: true,
+				input: { command: "herdr tab rename w1:t1 dialog-editor" },
+				content: [],
+			},
+			contextFor(pi),
+		);
+
+		expect(pi.entries).toHaveLength(0);
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
 				contextFor(pi),
-			);
-			const toolCall = pi.handlers.get("tool_call")?.[0];
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "herdr tab rename w1:t1 dialog-editor" },
-				},
-				contextFor(pi),
-			);
-			expect(pi.entries).toHaveLength(0);
-			expect(
-				await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-			).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		} finally {
-			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
-			else process.env.HERDR_ENV = previousHerdr;
-			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
-			else process.env.HERDR_TAB_ID = previousTab;
-		}
+			),
+		).toEqual([]);
 	});
 
-	it("does not lift gate from failed tab-get result", async () => {
+	it("does not persist failed tab-get result and keeps tools available", async () => {
 		const pi = createFakePi();
 		await startGate(pi);
 		await emit(
@@ -412,21 +373,25 @@ describe("Herdr claim gate enforcement", () => {
 			},
 			contextFor(pi),
 		);
-		const toolCall = pi.handlers.get("tool_call")?.[0];
+
+		expect(pi.entries).toHaveLength(0);
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 	});
 
-	it("lifts gate after allowed tab rename", async () => {
+	it("persists successful tab rename without blocking tools", async () => {
 		const pi = createFakePi();
 		await startGate(pi);
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		const renameEvent = {
 			toolName: "bash",
 			input: { command: "herdr tab rename w1:t1 dialog-editor" },
 		};
-		expect(await toolCall?.(renameEvent, contextFor(pi))).toBeUndefined();
 		await emit(
 			pi,
 			"tool_result",
@@ -434,9 +399,15 @@ describe("Herdr claim gate enforcement", () => {
 			contextFor(pi),
 		);
 
+		expect(pi.entries).toHaveLength(1);
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toBeUndefined();
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 	});
 });
 
