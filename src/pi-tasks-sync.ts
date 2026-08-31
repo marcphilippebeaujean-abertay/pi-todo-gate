@@ -1,34 +1,22 @@
 const PI = ".pi";
 const TASKS = "tasks";
-const OFF_VALUE = "off";
-const MEMORY = "memory";
-const PI_TASK_STORE_IS_UNAVAILABLE_IN_THE =
-	"Pi task store is unavailable in the configured memory/off scope";
-const PI_TASK_STORE_USES_AN_INCOMPATIBLE_CONFIGURED =
-	"Pi task store uses an incompatible configured path";
-const PI_TASK_STORE_PATH_IS_REQUIRED = "Pi task store path is required";
-const INVALID_PI_TASK_STORE_TASK = "invalid Pi task store task";
-const PENDING_VALUE = "pending";
-const IN_PROGRESS_VALUE = "in_progress";
-const COMPLETED_VALUE = "completed";
-const UTF8_ENCODING = "utf8";
-const INVALID_PI_TASK_STORE_JSON = "invalid Pi task store JSON";
-const INVALID_PI_TASK_STORE = "invalid Pi task store";
-const COMPLETED_MARKER = "[x]";
-const IN_PROGRESS_MARKER = "[~]";
-const PENDING_MARKER = "[ ]";
 const SYNCHRONIZATION_CANCELLED = "synchronization cancelled";
 
+import { join, resolve } from "node:path";
+import { readPiTaskStore, writePiTaskStore } from "./pi-task-store.ts";
 import {
-	access,
-	mkdir,
-	readFile,
-	rename,
-	unlink,
-	writeFile,
-} from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import type { TodoistChild, TodoistClient } from "./todoist.ts";
+	piTasksToTodoistSubtasks,
+	todoistSubtasksToPiTasks,
+} from "./pi-tasks-sync-helpers.ts";
+
+export { readPiTaskStore, writePiTaskStore } from "./pi-task-store.ts";
+
+export {
+	piTasksToTodoistSubtasks,
+	todoistSubtasksToPiTasks,
+} from "./pi-tasks-sync-helpers.ts";
+
+import type { TodoistClient } from "./todoist.ts";
 
 export interface PiTask {
 	id: string;
@@ -54,231 +42,6 @@ const PRIVATE_LINE = /^<!-- pi-todo-gate:([a-zA-Z]+)=(.*?) -->$/;
 
 export function sessionTaskPath(cwd: string, sessionId: string): string {
 	return join(resolve(cwd), PI, TASKS, `tasks-${sessionId}.json`);
-}
-
-function ensureFileBacked(path: string): void {
-	const scope = (process.env.PI_TASKS ?? "").toLowerCase();
-	if (scope === OFF_VALUE || scope === MEMORY) {
-		throw new Error(PI_TASK_STORE_IS_UNAVAILABLE_IN_THE);
-	}
-	if (process.env.PI_TASK_LIST_ID || process.env.PI_TASKS_PATH) {
-		throw new Error(PI_TASK_STORE_USES_AN_INCOMPATIBLE_CONFIGURED);
-	}
-	const isMissingTaskStorePath: boolean = !path;
-	if (isMissingTaskStorePath) throw new Error(PI_TASK_STORE_PATH_IS_REQUIRED);
-}
-
-function metadataRecord(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value === null) return {};
-	if (Array.isArray(value)) return {};
-	return value as Record<string, unknown>;
-}
-
-function normalizeTask(value: unknown): PiTask {
-	if (typeof value !== "object" || value === null)
-		throw new Error(INVALID_PI_TASK_STORE_TASK);
-	if (Array.isArray(value)) throw new Error(INVALID_PI_TASK_STORE_TASK);
-	const data = value as Partial<PiTask>;
-	if (typeof data.id !== "string") throw new Error(INVALID_PI_TASK_STORE_TASK);
-	if (typeof data.subject !== "string")
-		throw new Error(INVALID_PI_TASK_STORE_TASK);
-	if (typeof data.description !== "string")
-		throw new Error(INVALID_PI_TASK_STORE_TASK);
-	let status: PiTask["status"] = PENDING_VALUE;
-	if (data.status === IN_PROGRESS_VALUE) status = IN_PROGRESS_VALUE;
-	if (data.status === COMPLETED_VALUE) status = COMPLETED_VALUE;
-	const now = Date.now();
-	return {
-		id: data.id,
-		subject: data.subject,
-		description: data.description,
-		status,
-		activeForm:
-			typeof data.activeForm === "string" ? data.activeForm : undefined,
-		owner: typeof data.owner === "string" ? data.owner : undefined,
-		metadata: metadataRecord(data.metadata),
-		blocks: Array.isArray(data.blocks)
-			? data.blocks.filter((id): id is string => typeof id === "string")
-			: [],
-		blockedBy: Array.isArray(data.blockedBy)
-			? data.blockedBy.filter((id): id is string => typeof id === "string")
-			: [],
-		createdAt: typeof data.createdAt === "number" ? data.createdAt : now,
-		updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : now,
-	};
-}
-
-export async function readPiTaskStore(
-	path: string,
-): Promise<PiTaskStoreData | null> {
-	ensureFileBacked(path);
-	try {
-		await access(path);
-	} catch {
-		return null;
-	}
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(await readFile(path, UTF8_ENCODING));
-	} catch {
-		throw new Error(INVALID_PI_TASK_STORE_JSON);
-	}
-	if (typeof parsed !== "object" || parsed === null)
-		throw new Error(INVALID_PI_TASK_STORE);
-	if (Array.isArray(parsed)) throw new Error(INVALID_PI_TASK_STORE);
-	const data = parsed as Partial<PiTaskStoreData>;
-	if (!Array.isArray(data.tasks)) throw new Error(INVALID_PI_TASK_STORE);
-	const tasks = data.tasks.map(normalizeTask);
-	const maxId = tasks.reduce((max, task) => {
-		const value = Number(task.id);
-		return Number.isInteger(value) && value > max ? value : max;
-	}, 0);
-	let nextId = maxId + 1;
-	if (typeof data.nextId === "number") {
-		const isIntegerNextId = Number.isInteger(data.nextId);
-		const hasLargerNextId = isIntegerNextId && data.nextId > maxId;
-		if (hasLargerNextId) nextId = data.nextId;
-	}
-	return { nextId, tasks };
-}
-
-export async function writePiTaskStore(
-	path: string,
-	data: PiTaskStoreData,
-): Promise<void> {
-	ensureFileBacked(path);
-	await mkdir(dirname(path), { recursive: true });
-	const temporary = `${path}.tmp`;
-	await writeFile(temporary, JSON.stringify(data, null, 2), UTF8_ENCODING);
-	try {
-		await rename(temporary, path);
-	} catch (error) {
-		try {
-			await unlink(temporary);
-		} catch {
-			/* preserve the original rename error */
-		}
-		throw error;
-	}
-}
-
-function metadataLines(task: PiTask): string[] {
-	const lines = [`${PRIVATE_PREFIX}id=${task.id} -->`];
-	const hasOwner: boolean = !!task.owner;
-	if (hasOwner) lines.push(`${PRIVATE_PREFIX}owner=${task.owner} -->`);
-	const hasBlockedTasks: boolean = !!task.blocks.length;
-	if (hasBlockedTasks)
-		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(",")} -->`);
-	const hasBlockingTasks: boolean = !!task.blockedBy.length;
-	if (hasBlockingTasks)
-		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(",")} -->`);
-	return lines;
-}
-
-function withoutPrivateLines(description: string): string {
-	return description
-		.split(/\r?\n/)
-		.filter((line) => !line.trim().startsWith(PRIVATE_PREFIX))
-		.join("\n")
-		.trim();
-}
-
-function descriptionWithMetadata(task: PiTask): string {
-	const original = withoutPrivateLines(task.description);
-	const metadata = metadataLines(task);
-	return original ? `${original}\n${metadata.join("\n")}` : metadata.join("\n");
-}
-
-function parseStatus(content: string): {
-	status: PiTask["status"];
-	subject: string;
-} {
-	const marker = content.match(/^\[([ x~])\]\s*(.*)$/i);
-	if (!marker) return { status: PENDING_VALUE, subject: content };
-	const status =
-		marker[1].toLowerCase() === "x"
-			? COMPLETED_VALUE
-			: marker[1] === "~"
-				? IN_PROGRESS_VALUE
-				: PENDING_VALUE;
-	return { status, subject: marker[2] };
-}
-
-function markerData(description: string): {
-	clean: string;
-	values: Record<string, string>;
-} {
-	const values: Record<string, string> = {};
-	const cleanLines: string[] = [];
-	for (const line of description.split(/\r?\n/)) {
-		const match = line.trim().match(PRIVATE_LINE);
-		if (match) values[match[1]] = match[2];
-		else cleanLines.push(line);
-	}
-	return { clean: cleanLines.join("\n").trim(), values };
-}
-
-function flattened(children: readonly TodoistChild[]): TodoistChild[] {
-	const result: TodoistChild[] = [];
-	for (const child of children) {
-		result.push(child);
-		const children = child.children;
-		if (!children) continue;
-		result.push(...flattened(children));
-	}
-	return result;
-}
-
-export function todoistSubtasksToPiTasks(
-	children: readonly TodoistChild[],
-): PiTaskStoreData {
-	const tasks: PiTask[] = [];
-	const used = new Set<string>();
-	let nextId = 1;
-	for (const child of flattened(children)) {
-		const parsed = parseStatus(child.content);
-		const metadata = markerData(child.description);
-		let id = metadata.values.id;
-		const needsTaskId: boolean = !!(!id || used.has(id));
-		if (needsTaskId) {
-			while (used.has(String(nextId))) nextId += 1;
-			id = String(nextId);
-		}
-		used.add(id);
-		const numericId = Number(id);
-		const hasNumericTaskId: boolean = !!(
-			Number.isInteger(numericId) && numericId >= nextId
-		);
-		if (hasNumericTaskId) nextId = numericId + 1;
-		const blocks = metadata.values.blocks
-			? metadata.values.blocks.split(",").filter(Boolean)
-			: [];
-		const blockedBy = metadata.values.blockedBy
-			? metadata.values.blockedBy.split(",").filter(Boolean)
-			: [];
-		tasks.push({
-			id,
-			subject: parsed.subject,
-			description: metadata.clean,
-			status: parsed.status,
-			owner: metadata.values.owner || undefined,
-			metadata: {},
-			blocks,
-			blockedBy,
-			createdAt: Date.now(),
-			updatedAt: Date.now(),
-		});
-	}
-	return { nextId, tasks };
-}
-
-export function piTasksToTodoistSubtasks(
-	tasks: readonly PiTask[],
-): Array<{ content: string; description: string }> {
-	return tasks.map((task) => ({
-		content: `${task.status === COMPLETED_VALUE ? COMPLETED_MARKER : task.status === IN_PROGRESS_VALUE ? IN_PROGRESS_MARKER : PENDING_MARKER} ${task.subject}`,
-		description: descriptionWithMetadata(task),
-	}));
 }
 
 class SyncCancelledError extends Error {
