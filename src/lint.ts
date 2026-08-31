@@ -28,6 +28,11 @@ const MAGIC_STRING_LIMIT = 0;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
 const NAMED_IF_MESSAGE = "Extract condition into a descriptive boolean variable";
 const NAMED_IF_LIMIT = 0;
+const COMPLEXITY_MESSAGE = "Function exceeds cyclomatic complexity";
+const FUNCTION_LENGTH_MESSAGE = "Function exceeds maximum length";
+const FUNCTIONS_PER_FILE_MESSAGE = "File contains too many functions";
+const NESTED_FUNCTION_MESSAGE = "Function is nested too deeply";
+const NO_FUNCTION_LIMIT = 0;
 const LOGICAL_OPERATORS = new Set<ts.SyntaxKind>([
 	ts.SyntaxKind.AmpersandAmpersandToken,
 	ts.SyntaxKind.BarBarToken,
@@ -247,6 +252,118 @@ function collectNamedIfConditions(
 	visit(sourceFile);
 }
 
+function functionComplexity(body: ts.Node): number {
+	let complexity = 1;
+	function visit(node: ts.Node): void {
+		if (node !== body && isFunctionLike(node)) return;
+		if (
+			ts.isIfStatement(node) ||
+			ts.isForStatement(node) ||
+			ts.isForInStatement(node) ||
+			ts.isForOfStatement(node) ||
+			ts.isWhileStatement(node) ||
+			ts.isDoStatement(node) ||
+			ts.isCatchClause(node) ||
+			ts.isConditionalExpression(node) ||
+			ts.isCaseClause(node) ||
+			ts.isDefaultClause(node) ||
+			(isLogicalExpression(node) && node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)
+		) {
+			complexity += 1;
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(body);
+	return complexity;
+}
+
+interface FunctionMetric {
+	node: ts.FunctionLikeDeclaration;
+	depth: number;
+	complexity: number;
+	lines: number;
+}
+
+function collectFunctionMetrics(sourceFile: ts.SourceFile): FunctionMetric[] {
+	const metrics: FunctionMetric[] = [];
+	function visit(node: ts.Node, containingFunctionDepth: number): void {
+		if (isFunctionLike(node)) {
+			const depth = containingFunctionDepth + 1;
+			const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+			const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+			metrics.push({
+				node,
+				depth,
+				complexity: node.body ? functionComplexity(node.body) : 1,
+				lines: end.line - start.line + 1,
+			});
+			ts.forEachChild(node, (child) => visit(child, depth));
+			return;
+		}
+		ts.forEachChild(node, (child) => visit(child, containingFunctionDepth));
+	}
+	visit(sourceFile, 0);
+	return metrics;
+}
+
+function collectFunctionDiagnostics(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+	config: LintConfig,
+): void {
+	const metrics = collectFunctionMetrics(sourceFile);
+	if (metrics.length > config.maxFunctionsPerFile) {
+		diagnostics.push(
+			diagnostic(
+				sourceFile,
+				sourceFile,
+				"functions-per-file",
+				FUNCTIONS_PER_FILE_MESSAGE,
+				metrics.length,
+				config.maxFunctionsPerFile,
+			),
+		);
+	}
+	for (const metric of metrics) {
+		if (metric.complexity > config.maxCyclomaticComplexity) {
+			diagnostics.push(
+				diagnostic(
+					sourceFile,
+					metric.node,
+					"cyclomatic-complexity",
+					COMPLEXITY_MESSAGE,
+					metric.complexity,
+					config.maxCyclomaticComplexity,
+				),
+			);
+		}
+		if (metric.lines > config.maxFunctionLines) {
+			diagnostics.push(
+				diagnostic(
+					sourceFile,
+					metric.node,
+					"function-length",
+					FUNCTION_LENGTH_MESSAGE,
+					metric.lines,
+					config.maxFunctionLines,
+				),
+			);
+		}
+		if (metric.depth > config.maxNestedFunctionDepth) {
+			diagnostics.push(
+				diagnostic(
+					sourceFile,
+					metric.node,
+					"nested-function-depth",
+					NESTED_FUNCTION_MESSAGE,
+					metric.depth,
+					config.maxNestedFunctionDepth,
+				),
+			);
+		}
+	}
+}
+
 function collectComplicatedExpressions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
@@ -279,15 +396,17 @@ export function lintProgram(
 ): LintDiagnostic[] {
 	const resolvedConfig = { ...DEFAULT_LINT_CONFIG, ...config };
 	const diagnostics: LintDiagnostic[] = [];
+	const checker = program.getTypeChecker();
 	for (const sourceFile of program.getSourceFiles()) {
 		if (sourceFile.isDeclarationFile) continue;
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
-		collectNamedIfConditions(sourceFile, diagnostics, program.getTypeChecker());
+		collectNamedIfConditions(sourceFile, diagnostics, checker);
 		collectComplicatedExpressions(
 			sourceFile,
 			diagnostics,
 			resolvedConfig.maxBooleanChecks,
 		);
+		collectFunctionDiagnostics(sourceFile, diagnostics, resolvedConfig);
 	}
 	return diagnostics.sort(compareDiagnostics);
 }

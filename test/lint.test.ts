@@ -48,6 +48,42 @@ const IF_SOURCE = `function check(accountBalance: number, isClosed: boolean, cou
 	if (count) return true;
 	return false;
 }`;
+const METRIC_TEST = "reports function metrics over configured limits";
+const COMPLEX_SOURCE = `function complex(value: number) {
+	if (value > 0 && value < 10) {
+		for (const item of [value]) {
+			if (item) {
+				try {
+					return item;
+				} catch {
+					return 0;
+				}
+			}
+		}
+	}
+	if (value === 1) return 1;
+	if (value === 2) return 2;
+	if (value === 3) return 3;
+	if (value === 4) return 4;
+	if (value === 5) return 5;
+	return 0;
+}`;
+const NESTED_SOURCE = `function outer() {
+	const one = () => {
+		const two = () => {
+			const three = () => true;
+			return three();
+		};
+		return two();
+	};
+	return one();
+}`;
+const METRIC_RULES = [
+	"cyclomatic-complexity",
+	"function-length",
+	"functions-per-file",
+	"nested-function-depth",
+];
 
 function ruleIds(diagnostics: readonly LintDiagnostic[]): string[] {
 	return diagnostics.map((diagnostic) => diagnostic.ruleId);
@@ -104,5 +140,15 @@ describe("lint diagnostics", () => {
 	it(NAMED_IF_TEST, async () => {
 		const diagnostics = await lintFixture(IF_SOURCE);
 		expect(ruleIds(diagnostics).filter((id) => id === NAMED_IF_RULE)).toHaveLength(2);
+	});
+
+	it(METRIC_TEST, async () => {
+		const diagnostics = await lintFixture(`${COMPLEX_SOURCE}\n${NESTED_SOURCE}`, {
+			maxCyclomaticComplexity: 1,
+			maxFunctionLines: 1,
+			maxFunctionsPerFile: 1,
+			maxNestedFunctionDepth: 2,
+		});
+		expect(ruleIds(diagnostics)).toEqual(expect.arrayContaining(METRIC_RULES));
 	});
 });
