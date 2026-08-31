@@ -139,6 +139,27 @@ function isModuleSpecifier(
 	);
 }
 
+function isTypeofComparisonString(
+	node: ts.Node,
+	ancestors: readonly ts.Node[],
+): boolean {
+	const parent = ancestors.at(-1);
+	if (!parent || !ts.isBinaryExpression(parent)) return false;
+	const isEquality =
+		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
+		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+	if (!isEquality) return false;
+	const other = parent.left === node ? parent.right : parent.left;
+	return (
+		(parent.right === node && ts.isTypeOfExpression(parent.left)) ||
+		(parent.left === node && ts.isTypeOfExpression(parent.right)) ||
+		ts.isPropertyAccessExpression(other) ||
+		ts.isElementAccessExpression(other)
+	);
+}
+
 function isStandaloneStringStatement(
 	node: ts.Node,
 	ancestors: readonly ts.Node[],
@@ -176,6 +197,7 @@ function isIgnoredString(
 		isConstInitializer(node, ancestors) ||
 		isPropertyName(node, ancestors) ||
 		isModuleSpecifier(node, ancestors) ||
+		isTypeofComparisonString(node, ancestors) ||
 		isStandaloneStringStatement(node, ancestors)
 	);
 }
@@ -281,6 +303,12 @@ function isNamedConditionType(type: ts.Type): boolean {
 function isTypeGuardExpression(expression: ts.Expression): boolean {
 	while (ts.isParenthesizedExpression(expression))
 		expression = expression.expression;
+	if (ts.isPrefixUnaryExpression(expression)) {
+		return (
+			expression.operator === ts.SyntaxKind.ExclamationToken &&
+			isTypeGuardExpression(expression.operand)
+		);
+	}
 	if (ts.isBinaryExpression(expression)) {
 		const operator = expression.operatorToken.kind;
 		const isEquality =
@@ -288,7 +316,7 @@ function isTypeGuardExpression(expression: ts.Expression): boolean {
 			operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
 			operator === ts.SyntaxKind.ExclamationEqualsToken ||
 			operator === ts.SyntaxKind.ExclamationEqualsEqualsToken;
-		const isNullish = (node: ts.Expression): boolean =>
+		const isNullish = (node: ts.Expression) =>
 			node.kind === ts.SyntaxKind.NullKeyword ||
 			(ts.isIdentifier(node) && node.text === "undefined");
 		if (
@@ -318,11 +346,117 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
+function isNarrowingComparison(expression: ts.Expression): boolean {
+	if (!ts.isBinaryExpression(expression)) return false;
+	const operators = new Set<ts.SyntaxKind>([
+		ts.SyntaxKind.EqualsEqualsToken,
+		ts.SyntaxKind.EqualsEqualsEqualsToken,
+		ts.SyntaxKind.ExclamationEqualsToken,
+		ts.SyntaxKind.ExclamationEqualsEqualsToken,
+	]);
+	if (!operators.has(expression.operatorToken.kind)) return false;
+	return (
+		ts.isPropertyAccessExpression(expression.left) ||
+		ts.isElementAccessExpression(expression.left) ||
+		ts.isPropertyAccessExpression(expression.right) ||
+		ts.isElementAccessExpression(expression.right)
+	);
+}
+
+function isSafeConditionExpression(
+	expression: ts.Expression,
+	checker: ts.TypeChecker,
+): boolean {
+	while (ts.isParenthesizedExpression(expression))
+		expression = expression.expression;
+	if (isTypeGuardExpression(expression) || isNarrowingComparison(expression))
+		return true;
+	if (isNullableIdentifier(expression, checker)) return true;
+	if (
+		ts.isIdentifier(expression) &&
+		isNamedConditionType(checker.getTypeAtLocation(expression))
+	)
+		return true;
+	if (
+		ts.isCallExpression(expression) ||
+		ts.isPropertyAccessExpression(expression) ||
+		ts.isElementAccessExpression(expression)
+	)
+		return true;
+	if (ts.isPrefixUnaryExpression(expression))
+		return (
+			expression.operator === ts.SyntaxKind.ExclamationToken &&
+			isSafeConditionExpression(expression.operand, checker)
+		);
+	if (!ts.isBinaryExpression(expression)) return false;
+	if (
+		expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+		expression.operatorToken.kind === ts.SyntaxKind.BarBarToken
+	)
+		return (
+			isSafeConditionExpression(expression.left, checker) &&
+			isSafeConditionExpression(expression.right, checker)
+		);
+	const hasPropertyOrCall =
+		ts.isCallExpression(expression.left) ||
+		ts.isCallExpression(expression.right) ||
+		ts.isPropertyAccessExpression(expression.left) ||
+		ts.isPropertyAccessExpression(expression.right) ||
+		ts.isElementAccessExpression(expression.left) ||
+		ts.isElementAccessExpression(expression.right);
+	if (hasPropertyOrCall) return true;
+	const equalityOperators = new Set<ts.SyntaxKind>([
+		ts.SyntaxKind.EqualsEqualsToken,
+		ts.SyntaxKind.EqualsEqualsEqualsToken,
+		ts.SyntaxKind.ExclamationEqualsToken,
+		ts.SyntaxKind.ExclamationEqualsEqualsToken,
+	]);
+	const leftIsIdentifier = ts.isIdentifier(expression.left);
+	const rightIsIdentifier = ts.isIdentifier(expression.right);
+	const hasLiteral =
+		ts.isStringLiteralLike(expression.left) ||
+		ts.isNumericLiteral(expression.left) ||
+		expression.left.kind === ts.SyntaxKind.NullKeyword ||
+		(ts.isIdentifier(expression.left) &&
+			expression.left.text === "undefined") ||
+		ts.isStringLiteralLike(expression.right) ||
+		ts.isNumericLiteral(expression.right) ||
+		expression.right.kind === ts.SyntaxKind.NullKeyword ||
+		(ts.isIdentifier(expression.right) &&
+			expression.right.text === "undefined");
+	return (
+		(leftIsIdentifier &&
+			rightIsIdentifier &&
+			(equalityOperators.has(expression.operatorToken.kind) || !hasLiteral)) ||
+		(equalityOperators.has(expression.operatorToken.kind) &&
+			hasLiteral &&
+			(leftIsIdentifier || rightIsIdentifier))
+	);
+}
+
+function isNullableIdentifier(
+	expression: ts.Expression,
+	checker: ts.TypeChecker,
+): boolean {
+	if (!ts.isIdentifier(expression)) return false;
+	const type = checker.getTypeAtLocation(expression);
+	if ((type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) !== 0)
+		return true;
+	return (
+		type.isUnion() &&
+		type.types.some(
+			(member) =>
+				(member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) !== 0,
+		)
+	);
+}
+
 function isNamedBooleanCondition(
 	condition: ts.Expression,
 	checker: ts.TypeChecker,
 ): boolean {
-	if (isTypeGuardExpression(condition)) return true;
+	if (isSafeConditionExpression(condition, checker)) return true;
+	if (isLogicalExpression(condition)) return true;
 	let expression = condition;
 	while (ts.isParenthesizedExpression(expression))
 		expression = expression.expression;
@@ -332,6 +466,7 @@ function isNamedBooleanCondition(
 		while (ts.isParenthesizedExpression(expression))
 			expression = expression.expression;
 	}
+	if (isNullableIdentifier(expression, checker)) return true;
 	if (ts.isIdentifier(expression))
 		return isNamedConditionType(checker.getTypeAtLocation(expression));
 	return (
@@ -481,13 +616,26 @@ function collectFunctionDiagnostics(
 	}
 }
 
+function isIfCondition(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
+	const parent = ancestors.at(-1);
+	return (
+		parent !== undefined &&
+		ts.isIfStatement(parent) &&
+		parent.expression === node
+	);
+}
+
 function collectComplicatedExpressions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
 	limit: number,
 ): void {
 	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
-		if (isLogicalExpression(node) && !hasLogicalParent(ancestors)) {
+		if (
+			isLogicalExpression(node) &&
+			!hasLogicalParent(ancestors) &&
+			!isIfCondition(node, ancestors)
+		) {
 			const checks = logicalCheckCount(node);
 			if (checks > limit) {
 				diagnostics.push(

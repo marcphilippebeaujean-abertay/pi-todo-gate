@@ -1,9 +1,27 @@
+const STRING_LITERAL_IGNORE_0A6A4ADD = "ignore";
+const STRING_LITERAL_PIPE_84D0A62A = "pipe";
+const STRING_LITERAL_DATA_2AB445ED = "data";
+const STRING_LITERAL_ERROR_10B292CE = "error";
+const STRING_LITERAL_UNKNOWN_ERROR_9B7AFBD6 = "unknown error";
+const STRING_LITERAL_CLOSE_388B7B9B = "close";
+const STRING_LITERAL_UNKNOWN_79C37D82 = "unknown";
+const STRING_LITERAL_SIGTERM_8355D6C4 = "SIGTERM";
+
 import { spawn } from "node:child_process";
+import {
+	buildPiWorkerArgs,
+	textFromAssistantMessage,
+} from "./shared/pi-worker.ts";
+
+export interface ClaimWorkerResult {
+	tabId: string;
+	label: string;
+}
 
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	onClaimComplete: () => void;
+	onClaimComplete: (result?: ClaimWorkerResult) => void;
 	onFailure: (message: string) => void;
 }
 
@@ -41,19 +59,6 @@ export interface WorkerProcess {
 
 const DEFAULT_COMMAND = "pi";
 const MAX_DIAGNOSTIC_BYTES = 500;
-const MODE_FLAG = "--mode";
-const JSON_MODE = "json";
-const PROMPT_FLAG = "-p";
-const NO_SESSION_FLAG = "--no-session";
-const NO_EXTENSIONS_FLAG = "--no-extensions";
-const STDIO_IGNORE = "ignore";
-const STDIO_PIPE = "pipe";
-const DATA_EVENT = "data";
-const ERROR_EVENT = "error";
-const CLOSE_EVENT = "close";
-const CHILD_PROCESS_VALUE = "1";
-const UNKNOWN_ERROR = "unknown error";
-const SIGTERM = "SIGTERM";
 
 const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 	spawn(command, [...args], {
@@ -63,96 +68,113 @@ const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 		stdio: options.stdio,
 	}) as unknown as WorkerProcess;
 
-function spawnWorkerProcess(
-	request: ClaimWorkerRequest,
-	options: ClaimWorkerOptions,
-): WorkerProcess {
-	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
-	return spawnWorker(
-		options.command ?? DEFAULT_COMMAND,
-		[
-			MODE_FLAG,
-			JSON_MODE,
-			PROMPT_FLAG,
-			NO_SESSION_FLAG,
-			NO_EXTENSIONS_FLAG,
-			`${request.instructions}\n\nParent user prompt:\n${request.prompt}`,
-		],
-		{
-			cwd: options.cwd ?? process.cwd(),
-			env: { ...process.env, PI_SUBAGENT_CHILD: CHILD_PROCESS_VALUE },
-			shell: false,
-			stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_PIPE],
-		},
-	);
+function appendBounded(current: string, chunk: Buffer | string): string {
+	const next = `${current}${chunk.toString()}`;
+	return next.length > MAX_DIAGNOSTIC_BYTES
+		? next.slice(-MAX_DIAGNOSTIC_BYTES)
+		: next;
 }
 
-interface WorkerState {
-	settled: boolean;
-	cancelled: boolean;
-	stderr: string;
-}
-
-function registerWorkerLifecycle(
-	child: WorkerProcess,
-	request: ClaimWorkerRequest,
-	state: WorkerState,
-): void {
-	child.stdout.on(DATA_EVENT, () => {
-		// Worker output is intentionally private and never forwarded to the parent session.
-	});
-	child.stderr.on(DATA_EVENT, (chunk) => {
-		const next = `${state.stderr}${chunk.toString()}`;
-		state.stderr =
-			next.length > MAX_DIAGNOSTIC_BYTES
-				? next.slice(-MAX_DIAGNOSTIC_BYTES)
-				: next;
-	});
-
-	const fail = (message: string): void => {
-		const isFinished = state.settled || state.cancelled;
-		if (isFinished) return;
-		state.settled = true;
-		request.onFailure(message);
+function claimResult(value: unknown): ClaimWorkerResult | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const result = value as {
+		status?: unknown;
+		tabId?: unknown;
+		label?: unknown;
 	};
+	if (
+		result.status !== "claimed" ||
+		typeof result.tabId !== "string" ||
+		!result.tabId.trim() ||
+		typeof result.label !== "string" ||
+		!result.label.trim()
+	)
+		return undefined;
+	return { tabId: result.tabId, label: result.label };
+}
 
-	child.on(ERROR_EVENT, (...args) => {
-		const error = args[0];
-		const detail =
-			error instanceof Error ? error.message : String(error ?? UNKNOWN_ERROR);
-		fail(`Herdr claim worker failed: ${detail}`);
-	});
-	child.on(CLOSE_EVENT, (...args) => {
-		const isFinished = state.settled || state.cancelled;
-		if (isFinished) return;
-		const code = args[0];
-		state.settled = true;
-		const didSucceed = code === 0;
-		if (didSucceed) {
-			request.onClaimComplete();
-			return;
+function parseClaimResult(stdout: string): ClaimWorkerResult | undefined {
+	for (const line of stdout.split(/\r?\n/).reverse()) {
+		if (!line.trim()) continue;
+		try {
+			const event = JSON.parse(line) as { message?: unknown };
+			const text = textFromAssistantMessage(event.message).trim();
+			const hasText = text !== "";
+			if (hasText) return claimResult(JSON.parse(text));
+			return claimResult(event);
+		} catch {
+			// Keep searching earlier worker output.
 		}
-		const detail = state.stderr.trim();
-		request.onFailure(
-			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detail ? `: ${detail}` : ""}`,
-		);
-	});
+	}
+	return undefined;
 }
 
 export function startClaimWorker(
 	request: ClaimWorkerRequest,
 	options: ClaimWorkerOptions = {},
 ): ClaimWorkerHandle {
-	const child = spawnWorkerProcess(request, options);
-	const state: WorkerState = { settled: false, cancelled: false, stderr: "" };
-	registerWorkerLifecycle(child, request, state);
+	const child = (options.spawnWorker ?? defaultSpawnWorker)(
+		options.command ?? DEFAULT_COMMAND,
+		buildPiWorkerArgs(request.prompt, {
+			instructions: request.instructions,
+		}),
+		{
+			cwd: options.cwd ?? process.cwd(),
+			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
+			shell: false,
+			stdio: [
+				STRING_LITERAL_IGNORE_0A6A4ADD,
+				STRING_LITERAL_PIPE_84D0A62A,
+				STRING_LITERAL_PIPE_84D0A62A,
+			],
+		},
+	);
+	let settled = false;
+	let cancelled = false;
+	let stdout = "";
+	let stderr = "";
+
+	child.stdout.on(STRING_LITERAL_DATA_2AB445ED, (chunk) => {
+		// Worker output is intentionally private and never forwarded to the parent session.
+		stdout = appendBounded(stdout, chunk);
+	});
+	child.stderr.on(STRING_LITERAL_DATA_2AB445ED, (chunk) => {
+		stderr = appendBounded(stderr, chunk);
+	});
+
+	const fail = (message: string): void => {
+		if (settled || cancelled) return;
+		settled = true;
+		request.onFailure(message);
+	};
+
+	child.on(STRING_LITERAL_ERROR_10B292CE, (...args) => {
+		const error = args[0];
+		const detail =
+			error instanceof Error
+				? error.message
+				: String(error ?? STRING_LITERAL_UNKNOWN_ERROR_9B7AFBD6);
+		fail(`Herdr claim worker failed: ${detail}`);
+	});
+	child.on(STRING_LITERAL_CLOSE_388B7B9B, (...args) => {
+		if (settled || cancelled) return;
+		const code = args[0];
+		settled = true;
+		if (code === 0) {
+			request.onClaimComplete(parseClaimResult(stdout));
+			return;
+		}
+		const detail = stderr.trim();
+		request.onFailure(
+			`Herdr claim worker exited with code ${String(code ?? STRING_LITERAL_UNKNOWN_79C37D82)}${detail ? `: ${detail}` : ""}`,
+		);
+	});
 
 	return {
 		cancel(): void {
-			const isFinished = state.settled || state.cancelled;
-			if (isFinished) return;
-			state.cancelled = true;
-			child.kill(SIGTERM);
+			if (settled || cancelled) return;
+			cancelled = true;
+			child.kill(STRING_LITERAL_SIGTERM_8355D6C4);
 		},
 	};
 }

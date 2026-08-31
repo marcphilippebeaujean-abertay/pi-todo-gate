@@ -1,126 +1,42 @@
-const STARTS_EMPTY = "starts empty";
-const USES_THE_LATEST_VALID_CUSTOM_STATE_ENTRY =
-	"uses the latest valid custom state entry";
-const CUSTOM = "custom";
-const PI_TODO_GATE_STATE = "pi-todo-gate-state";
-const OLD = "old";
-const MESSAGE = "message";
-const IGNORED = "ignored";
-const VALUE_NEW = "new";
-const NEW_TASK = "New task";
-const TREATS_AN_EXPLICIT_EMPTY_STATE_AS_A =
-	"treats an explicit empty state as a clear";
-const IGNORES_BRANCH_ONLY_AND_MALFORMED_ENTRIES =
-	"ignores branch-only and malformed entries";
-const BRANCH = "branch";
-const BRANCH_ONLY = "branch-only";
-const WRONG = "wrong";
-const OTHER = "other";
-const CLEARS_PATCHED_KEYS_WHEN_UNDEFINED_IS_SUPPLIED =
-	"clears patched keys when undefined is supplied";
-const PR = "pr";
-const TASK = "task";
-const PRESERVES_INHERITED_SESSION_IDS = "preserves inherited session IDs";
-const SESSION_123 = "session-123";
-const HTTPS_GITHUB_COM_A_B_PULL_1 = "https://github.com/a/b/pull/1";
-
 import { describe, expect, it } from "vitest";
 import {
-	applyStatePatch,
-	emptyWorkState,
-	extractInheritedState,
-	latestState,
-} from "../src/session-state.ts";
+	appendCustomState,
+	latestCustomState,
+} from "../src/shared/session-state.ts";
 
-describe("session state", () => {
-	it(STARTS_EMPTY, () => {
-		expect(emptyWorkState()).toEqual({});
+describe("shared session state", () => {
+	it("reads only the requested custom state type", () => {
+		const entries = [
+			{ type: "custom", customType: "pi-pr-gate-state", data: { prUrl: "pr" } },
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: { taskRef: "task" },
+			},
+		];
+
+		expect(
+			latestCustomState(
+				entries,
+				"pi-pr-gate-state",
+				(value): value is Record<string, unknown> =>
+					typeof value === "object" && value !== null && !Array.isArray(value),
+			),
+		).toEqual({ prUrl: "pr" });
 	});
 
-	it(USES_THE_LATEST_VALID_CUSTOM_STATE_ENTRY, () => {
-		expect(
-			latestState([
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: { prUrl: OLD },
-				},
-				{ type: MESSAGE, message: IGNORED },
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: {
-						taskRef: VALUE_NEW,
-						taskName: NEW_TASK,
-					},
-				},
-			]),
-		).toEqual({
-			taskRef: VALUE_NEW,
-			taskName: NEW_TASK,
-		});
-	});
+	it("writes the requested custom type and payload unchanged", () => {
+		const appended: Array<{ customType: string; data: { taskRef: string } }> =
+			[];
 
-	it(TREATS_AN_EXPLICIT_EMPTY_STATE_AS_A, () => {
-		expect(
-			latestState([
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: { prUrl: OLD },
-				},
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: {},
-				},
-			]),
-		).toEqual({});
-	});
+		appendCustomState(
+			(customType, data) => appended.push({ customType, data }),
+			"pi-todoist-gate-state",
+			{ taskRef: "task" },
+		);
 
-	it(IGNORES_BRANCH_ONLY_AND_MALFORMED_ENTRIES, () => {
-		expect(
-			latestState([
-				{
-					type: BRANCH,
-					id: BRANCH_ONLY,
-					data: { prUrl: WRONG },
-				},
-				{
-					type: CUSTOM,
-					customType: OTHER,
-					data: { prUrl: WRONG },
-				},
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: { prUrl: 42 },
-				},
-			]),
-		).toEqual({});
-	});
-
-	it(CLEARS_PATCHED_KEYS_WHEN_UNDEFINED_IS_SUPPLIED, () => {
-		expect(
-			applyStatePatch({ prUrl: PR, taskRef: TASK }, { prUrl: undefined }),
-		).toEqual({ taskRef: TASK });
-	});
-
-	it(PRESERVES_INHERITED_SESSION_IDS, () => {
-		expect(
-			extractInheritedState([
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE,
-					data: {
-						inheritedFrom: SESSION_123,
-						prUrl: HTTPS_GITHUB_COM_A_B_PULL_1,
-					},
-				},
-			]),
-		).toEqual({
-			inheritedFrom: SESSION_123,
-			prUrl: HTTPS_GITHUB_COM_A_B_PULL_1,
-		});
+		expect(appended).toEqual([
+			{ customType: "pi-todoist-gate-state", data: { taskRef: "task" } },
+		]);
 	});
 });

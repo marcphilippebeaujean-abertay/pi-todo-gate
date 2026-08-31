@@ -11,6 +11,7 @@ interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
 	entries: Array<{ type: string; data?: unknown; customType?: string }>;
 	notifications: Array<{ message: string; level: string }>;
+	statusCalls: Array<{ key: string; text: string | undefined }>;
 	sentMessages: unknown[];
 	contextMessages: unknown[];
 	on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
@@ -24,6 +25,7 @@ function createFakePi(): FakePi {
 		handlers: new Map(),
 		entries,
 		notifications: [],
+		statusCalls: [],
 		sentMessages: [],
 		contextMessages: [],
 		on(event, handler) {
@@ -45,13 +47,17 @@ function contextFor(
 		data?: unknown;
 		customType?: string;
 	}> = pi.entries,
+	cwd = "/repo",
 ) {
 	return {
-		cwd: "/repo",
+		cwd,
 		mode: "tui",
 		ui: {
 			notify(message: string, level: string) {
 				pi.notifications.push({ message, level });
+			},
+			setStatus(key: string, text: string | undefined) {
+				pi.statusCalls.push({ key, text });
 			},
 		},
 		sessionManager: {
@@ -65,6 +71,10 @@ const commandRunner: CommandRunner = (command, args) => {
 		return "/repo/.git\n";
 	if (command === "git" && args.join(" ") === "rev-parse --git-common-dir")
 		return "/repo/.git\n";
+	if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+		return '{"result":{"tab":{"label":"probe"}}}';
+	if (command === "herdr" && args.join(" ") === "pane get w1:p1")
+		return '{"result":{"pane":{"tab_id":"w1:t1"}}}';
 	return "{}";
 };
 
@@ -84,7 +94,10 @@ function fakeWorker() {
 		get request() {
 			return request;
 		},
-		complete() {
+		complete(result = { tabId: "w1:t1", label: "dialog-editor" }) {
+			request?.onClaimComplete(result);
+		},
+		completeWithoutEvidence() {
 			request?.onClaimComplete();
 		},
 		fail(message: string) {
@@ -102,16 +115,21 @@ async function startGate(
 		subagent?: boolean;
 		entries?: Array<{ type: string; data: unknown }>;
 		worker?: ReturnType<typeof fakeWorker>;
+		commandRunner?: CommandRunner;
 	} = {},
 ) {
 	const previousHerdr = process.env.HERDR_ENV;
 	const previousSubagent = process.env.PI_SUBAGENT_CHILD;
+	const previousTab = process.env.HERDR_TAB_ID;
+	const previousPane = process.env.HERDR_PANE_ID;
 	process.env.HERDR_ENV = "1";
+	process.env.HERDR_TAB_ID = "w1:t1";
+	process.env.HERDR_PANE_ID = "w1:p1";
 	if (options.subagent) process.env.PI_SUBAGENT_CHILD = "1";
 	else delete process.env.PI_SUBAGENT_CHILD;
 
 	installHerdrClaimGate(pi as unknown as ExtensionAPI, {
-		commandRunner,
+		commandRunner: options.commandRunner ?? commandRunner,
 		startBackgroundWorker: options.worker?.start,
 	});
 	const handler = pi.handlers.get("session_start")?.[0];
@@ -125,6 +143,10 @@ async function startGate(
 	else process.env.HERDR_ENV = previousHerdr;
 	if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
 	else process.env.PI_SUBAGENT_CHILD = previousSubagent;
+	if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+	else process.env.HERDR_TAB_ID = previousTab;
+	if (previousPane === undefined) delete process.env.HERDR_PANE_ID;
+	else process.env.HERDR_PANE_ID = previousPane;
 }
 
 async function emit(pi: FakePi, event: string, value: unknown, ctx: unknown) {
@@ -148,10 +170,16 @@ describe("Herdr claim gate activation", () => {
 		expect(result).toEqual([undefined]);
 		expect(worker.request?.prompt).toBe("Fix dialog editor");
 		expect(worker.request?.instructions).toContain("# STEP 0 — Setup Herdr");
+		expect(worker.request?.instructions).not.toContain(
+			"Subagent detection matches pi-subagents",
+		);
+		expect(worker.request?.instructions).not.toContain(
+			"Dispatched subagents skip all of that",
+		);
 		expect(pi.contextMessages).toHaveLength(0);
 	});
 
-	it("notifies user on worker completion without informing main agent", async () => {
+	it("shows Herdr working status and clears it after worker completion", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
 		await startGate(pi, { worker });
@@ -162,7 +190,38 @@ describe("Herdr claim gate activation", () => {
 			contextFor(pi),
 		);
 
+		expect(pi.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-herdr",
+			text: "Herdr: ⠋ working |",
+		});
+
 		worker.complete();
+
+		expect(pi.statusCalls.at(-1)).toEqual({
+			key: "pi-todo-gate-herdr",
+			text: undefined,
+		});
+	});
+
+	it("notifies user on worker completion without informing main agent", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		let label = "probe";
+		const runner: CommandRunner = (command, args) => {
+			if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+				return JSON.stringify({ result: { tab: { label } } });
+			return commandRunner(command, args);
+		};
+		await startGate(pi, { worker, commandRunner: runner });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "Fix dialog editor" },
+			contextFor(pi),
+		);
+
+		label = "dialog-editor";
+		worker.complete({ tabId: "w1:t1", label });
 
 		expect(pi.notifications.at(-1)).toEqual(
 			expect.objectContaining({
@@ -174,6 +233,104 @@ describe("Herdr claim gate activation", () => {
 		expect(pi.contextMessages).toHaveLength(0);
 		expect(pi.entries).toHaveLength(1);
 		expect(pi.entries[0].type).toBe("herdr-claim-gate");
+	});
+
+	it("keeps gate active when worker exits without a validated claim", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		const runner: CommandRunner = (command, args) => {
+			if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+				return '{"result":{"tab":{"label":"old-tab-branch"}}}';
+			return commandRunner(command, args);
+		};
+		await startGate(pi, { worker, commandRunner: runner });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "rename tab" },
+			contextFor(pi),
+		);
+
+		worker.complete();
+
+		expect(pi.entries).toHaveLength(0);
+		expect(pi.notifications.at(-1)).toEqual(
+			expect.objectContaining({
+				message: expect.stringContaining("could not validate"),
+				level: "warning",
+			}),
+		);
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "retry rename" },
+			contextFor(pi),
+		);
+		expect(worker.start).toHaveBeenCalledTimes(2);
+	});
+
+	it("falls back to moving its pane after an unvalidated worker completion", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		let tabId = "w1:t1";
+		let label = "old-tab";
+		const runner: CommandRunner = (command, args) => {
+			if (command !== "herdr") return commandRunner(command, args);
+			if (args.join(" ") === "tab get w1:t1")
+				return JSON.stringify({ result: { tab: { label } } });
+			if (args.join(" ") === "tab get w1:t2")
+				return JSON.stringify({ result: { tab: { label } } });
+			if (args.join(" ") === "pane get w1:p1")
+				return JSON.stringify({ result: { pane: { tab_id: tabId } } });
+			if (args.join(" ") === "pane list --workspace w1")
+				return '{"result":{"panes":[{"pane_id":"w1:p1","tab_id":"w1:t1","agent":"pi"},{"pane_id":"w1:p2","tab_id":"w1:t1","agent":"pi"}]}}';
+			if (
+				args.join(" ") ===
+				"pane move w1:p1 --new-tab --label probe-fallback --focus"
+			) {
+				tabId = "w1:t2";
+				label = "probe-fallback";
+				return "{}";
+			}
+			return "{}";
+		};
+		await startGate(pi, { worker, commandRunner: runner });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "probe fallback" },
+			contextFor(pi),
+		);
+
+		worker.completeWithoutEvidence();
+
+		expect(pi.entries).toHaveLength(1);
+	});
+
+	it("persists a worker claim after its pane moves to a new tab", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		const runner: CommandRunner = (command, args) => {
+			if (command !== "herdr") return commandRunner(command, args);
+			if (args.join(" ") === "tab get w1:t1")
+				return '{"result":{"tab":{"label":"7"}}}';
+			if (args.join(" ") === "tab get w1:t2")
+				return '{"result":{"tab":{"label":"dialog-editor"}}}';
+			if (args.join(" ") === "pane get w1:p1")
+				return '{"result":{"pane":{"tab_id":"w1:t2"}}}';
+			return "{}";
+		};
+		await startGate(pi, { worker, commandRunner: runner });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "rename tab" },
+			contextFor(pi),
+		);
+
+		worker.completeWithoutEvidence();
+
+		expect(pi.entries).toHaveLength(1);
 	});
 
 	it("does not start worker or inject instructions for dispatched child", async () => {
@@ -209,46 +366,8 @@ describe("Herdr claim gate activation", () => {
 	});
 });
 
-describe("Herdr claim gate enforcement", () => {
-	it("blocks non-bash and non-allow-listed bash calls", async () => {
-		const pi = createFakePi();
-		await startGate(pi);
-		const toolCall = pi.handlers.get("tool_call")?.[0];
-		expect(toolCall).toBeDefined();
-
-		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({
-			block: true,
-			reason: expect.stringContaining("Herdr instructions"),
-		});
-		expect(
-			await toolCall?.(
-				{ toolName: "bash", input: { command: "git status" } },
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "herdr pane list --workspace $HERDR_WORKSPACE_ID" },
-				},
-				contextFor(pi),
-			),
-		).toBeUndefined();
-		expect(
-			await toolCall?.(
-				{
-					toolName: "bash",
-					input: { command: "echo $HERDR_ENV && git status" },
-				},
-				contextFor(pi),
-			),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
-	});
-
-	it("lifts gate when worker completes and cancels worker on shutdown", async () => {
+describe("Herdr claim gate background behavior", () => {
+	it("does not block main-session tools while worker runs", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
 		await startGate(pi, { worker });
@@ -258,17 +377,85 @@ describe("Herdr claim gate enforcement", () => {
 			{ prompt: "claim tab" },
 			contextFor(pi),
 		);
-		worker.complete();
 
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toBeUndefined();
-		await emit(pi, "session_shutdown", {}, contextFor(pi));
-		expect(worker.wasCancelled()).toBe(false);
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "bash", input: { command: "git status" } },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		worker.complete();
 	});
 
-	it("keeps gate active after worker failure and notifies user", async () => {
+	it("cancels background worker on shutdown without blocking tools", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		await startGate(pi, { worker });
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "claim tab" },
+			contextFor(pi),
+		);
+
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		await emit(pi, "session_shutdown", {}, contextFor(pi));
+		expect(worker.wasCancelled()).toBe(true);
+	});
+
+	it("notifies on worker startup failure without blocking tools", async () => {
+		const pi = createFakePi();
+		const previousHerdr = process.env.HERDR_ENV;
+		process.env.HERDR_ENV = "1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner,
+				startBackgroundWorker: () => {
+					throw new Error("worker unavailable");
+				},
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi),
+			);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim tab" },
+				contextFor(pi),
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+		}
+
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+		expect(pi.notifications.at(-1)?.level).toBe("warning");
+	});
+
+	it("notifies on worker failure without blocking tools", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
 		await startGate(pi, { worker });
@@ -280,32 +467,141 @@ describe("Herdr claim gate enforcement", () => {
 		);
 		worker.fail("worker unavailable");
 
-		const toolCall = pi.handlers.get("tool_call")?.[0];
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 		expect(pi.notifications.at(-1)?.level).toBe("warning");
 	});
 
-	it("lifts gate after allowed tab rename", async () => {
+	it("does not persist failed tab rename and keeps tools available", async () => {
 		const pi = createFakePi();
 		await startGate(pi);
-		const toolCall = pi.handlers.get("tool_call")?.[0];
-		await toolCall?.(
+		await emit(
+			pi,
+			"tool_result",
 			{
 				toolName: "bash",
+				isError: true,
 				input: { command: "herdr tab rename w1:t1 dialog-editor" },
+				content: [],
 			},
 			contextFor(pi),
 		);
 
+		expect(pi.entries).toHaveLength(0);
 		expect(
-			await toolCall?.({ toolName: "read", input: {} }, contextFor(pi)),
-		).toBeUndefined();
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+	});
+
+	it("does not persist failed tab-get result and keeps tools available", async () => {
+		const pi = createFakePi();
+		await startGate(pi);
+		await emit(
+			pi,
+			"tool_result",
+			{
+				toolName: "bash",
+				isError: true,
+				input: { command: "herdr tab get w1:t1" },
+				content: [
+					{
+						type: "text",
+						text: '{"result":{"tab":{"label":"descriptive"}}}',
+					},
+				],
+			},
+			contextFor(pi),
+		);
+
+		expect(pi.entries).toHaveLength(0);
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
+	});
+
+	it("does not trust a main-agent tab rename as worker claim evidence", async () => {
+		const pi = createFakePi();
+		await startGate(pi);
+		const renameEvent = {
+			toolName: "bash",
+			input: { command: "herdr tab rename w1:t1 dialog-editor" },
+		};
+		await emit(
+			pi,
+			"tool_result",
+			{ ...renameEvent, isError: false, content: [] },
+			contextFor(pi),
+		);
+
+		expect(pi.entries).toHaveLength(0);
+		expect(
+			await emit(
+				pi,
+				"tool_call",
+				{ toolName: "read", input: {} },
+				contextFor(pi),
+			),
+		).toEqual([]);
 	});
 });
 
 describe("Herdr automatic linked-worktree claim", () => {
+	it("uses session cwd when comparing relative Git paths", async () => {
+		const pi = createFakePi();
+		const commands: string[] = [];
+		const runner: CommandRunner = (command, args) => {
+			commands.push([command, ...args].join(" "));
+			if (command === "git" && args.join(" ") === "rev-parse --git-dir")
+				return "/session/.git\n";
+			if (command === "git" && args.join(" ") === "rev-parse --git-common-dir")
+				return ".git\n";
+			if (command === "git" && args.join(" ") === "branch --show-current")
+				return "feature/dialog-editor\n";
+			if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+				return '{"result":{"tab":{"label":"7"}}}';
+			return "{}";
+		};
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousTab = process.env.HERDR_TAB_ID;
+		process.env.HERDR_ENV = "1";
+		process.env.HERDR_TAB_ID = "w1:t1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner: runner,
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi, pi.entries, "/session"),
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+			else process.env.HERDR_TAB_ID = previousTab;
+		}
+
+		expect(commands).not.toContain(
+			"herdr tab rename w1:t1 feature/dialog-editor",
+		);
+		expect(pi.entries).toHaveLength(0);
+	});
+
 	it("renames numeric default tab and skips worker instructions", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
@@ -321,10 +617,8 @@ describe("Herdr automatic linked-worktree claim", () => {
 			return "{}";
 		};
 		const previousHerdr = process.env.HERDR_ENV;
-		const previousSubagent = process.env.PI_SUBAGENT_CHILD;
 		const previousTab = process.env.HERDR_TAB_ID;
 		process.env.HERDR_ENV = "1";
-		delete process.env.PI_SUBAGENT_CHILD;
 		process.env.HERDR_TAB_ID = "w1:t1";
 		try {
 			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
@@ -338,8 +632,6 @@ describe("Herdr automatic linked-worktree claim", () => {
 		} finally {
 			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
 			else process.env.HERDR_ENV = previousHerdr;
-			if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
-			else process.env.PI_SUBAGENT_CHILD = previousSubagent;
 			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
 			else process.env.HERDR_TAB_ID = previousTab;
 		}
