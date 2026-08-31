@@ -4,9 +4,9 @@
 
 **Goal:** Version custom Herdr tab-claim enforcement inside `pi-todo-gate`, run its setup in a separate background Pi worker, reuse task-gate Git helpers, and keep worker instructions/results out of the main agent conversation.
 
-**Architecture:** Extract the custom Herdr gate into `src/herdr-claim-gate.ts` and a cancellable `pi --mode json -p --no-session --no-extensions` worker adapter. Compose the gate from the existing `extensions/pi-todo-gate.ts` entry while keeping Herdr activation global and Todoist activation project-scoped. Share pure Git path/branch parsing helpers with `src/git.ts`; surface worker lifecycle through user UI notifications only.
+**Architecture:** Extract the custom Herdr gate into `src/herdr-claim-gate.ts` and a cancellable `pi --mode json -p --no-session --no-extensions` worker adapter. Compose the gate from the existing `extensions/pi-todo-gate.ts` entry while keeping Herdr activation global and Todoist activation project-scoped. Share pure Git path/branch parsing helpers with `src/shared/project.ts`; surface worker lifecycle through user UI notifications only.
 
-**Tech Stack:** TypeScript, Node.js `child_process.spawn`, Pi ExtensionAPI, Vitest, existing `src/git.ts` command abstractions, and the installed `pi` CLI.
+**Tech Stack:** TypeScript, Node.js `child_process.spawn`, Pi ExtensionAPI, Vitest, existing `src/shared/command.ts` command abstractions, and the installed `pi` CLI.
 
 **Spec:** `docs/superpowers/specs/2026-08-30-herdr-claim-gate-integration-design.md`
 
@@ -29,7 +29,7 @@
 ### Task 1: Extract shared Git path and branch helpers
 
 **Files:**
-- Modify: `src/git.ts`
+- Modify: `src/shared/project.ts`
 - Modify: `test/git.test.ts`
 
 **Interfaces:**
@@ -87,7 +87,7 @@ Expected: FAIL with missing exports or undefined helper behavior. Existing Git t
 
 - [ ] **Step 3: Implement minimal pure helpers**
 
-In `src/git.ts`, normalize non-empty output with `resolve(cwd, output.trim())`; return `null` for empty output. Implement `parseBranchName` with trim and null for empty output. Implement `isLinkedWorktreePaths` by resolving both outputs through `resolveGitPath` and comparing resolved paths; return `false` when either path is unavailable.
+In `src/shared/project.ts`, normalize non-empty output with `resolve(cwd, output.trim())`; return `null` for empty output. Implement `parseBranchName` with trim and null for empty output. Implement `isLinkedWorktreePaths` by resolving both outputs through `resolveGitPath` and comparing resolved paths; return `false` when either path is unavailable.
 
 Refactor `inspectWorktree` to use `resolveGitPath(cwd, rootResult.stdout)` and `parseBranchName(branchResult.stdout)`. Keep existing worktree-list comparison and return shape unchanged.
 
@@ -105,7 +105,7 @@ Expected: all Git tests and typecheck pass.
 - [ ] **Step 5: Commit shared helper change**
 
 ```bash
-git add src/git.ts test/git.test.ts
+git add src/shared/project.ts test/git.test.ts
 git commit -m "refactor: share git path helpers with herdr gate"
 ```
 
@@ -367,7 +367,7 @@ Expected: new composition assertion fails because existing entry does not instal
 
 - [ ] **Step 3: Install Herdr gate from existing package entry**
 
-Call `installHerdrClaimGate(pi, { startBackgroundWorker: (request) => startClaimWorker(request, { cwd: process.cwd() }) })` at the beginning of the default export in `extensions/pi-todo-gate.ts`, before Todoist lifecycle handlers are registered. Keep Todoist dependency injection unchanged. Do not change `extensions/index.ts` export or package metadata unless tests show the installed entry bypasses composition.
+Call `installHerdrClaimGate(pi, { startBackgroundWorker: (request) => startClaimWorker(request, { cwd: process.cwd() }) })` after the subagent guard and before PR/Todoist lifecycle handlers are registered in `extensions/pi-todo-gate.ts`. Keep Todoist dependency injection unchanged. Do not change `extensions/index.ts` export or package metadata unless tests show the installed entry bypasses composition.
 
 Ensure the Herdr worker's child environment preserves current Herdr variables and sets `PI_SUBAGENT_CHILD=1`, so child extension loading cannot recursively arm another gate.
 

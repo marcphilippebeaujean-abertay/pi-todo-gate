@@ -27,7 +27,7 @@ Custom Herdr code currently lives outside the repository at:
 - `~/.pi/agent/extensions/herdr-claim-gate.ts`
 - `~/.pi/agent/extensions/tests/herdr-claim-gate.test.ts`
 
-Task-gate Git helpers currently live in `src/git.ts`, including command execution, worktree inspection, branch extraction, and safe merge-command parsing. The custom Herdr gate independently checks linked worktrees and branch names with synchronous command execution. These overlapping path/branch decisions must share pure helpers.
+Task-gate Git helpers currently live in `src/shared/project.ts` and `src/pr/git.ts`, including worktree inspection, branch extraction, and safe merge-command parsing. The custom Herdr gate independently checks linked worktrees and branch names with synchronous command execution. These overlapping path/branch decisions must share pure helpers.
 
 ## Architecture
 
@@ -82,7 +82,7 @@ The Todoist gate still resolves the nearest configured coding-project ancestor i
 
 ### Shared helpers
 
-Extend `src/git.ts` with pure functions used by both task-gate and Herdr code:
+Extend `src/shared/project.ts` with pure functions used by both task-gate and Herdr code:
 
 ```ts
 export function resolveGitPath(cwd: string, output: string): string | null;
@@ -94,7 +94,7 @@ export function isLinkedWorktreePaths(
 ): boolean;
 ```
 
-The existing async `inspectWorktree` uses these helpers for root and branch normalization. Herdr's synchronous runner uses the same path comparison and branch parsing. No shared helper invokes commands or embeds Herdr policy.
+The existing async `inspectProject` uses these helpers for root and branch normalization. Herdr's synchronous runner uses the same path comparison and branch parsing. No shared helper invokes commands or embeds Herdr policy.
 
 ## Herdr Behavior
 
@@ -169,7 +169,7 @@ git diff --check
 ### Modify
 
 - `extensions/pi-todo-gate.ts`
-- `src/git.ts`
+- `src/shared/project.ts`
 - `test/git.test.ts`
 - `test/extension.test.ts` only if composition coverage requires it
 

@@ -7,12 +7,27 @@ import {
 	loadConfig,
 	parseConfig,
 	resolveConfiguredProject,
-} from "../src/config.ts";
+} from "../src/todoist/config.ts";
 
 describe("parseConfig", () => {
 	it("accepts project mappings", () => {
 		expect(parseConfig('{"projects":{"/repo":"merge-td"}}')).toEqual({
 			projects: { "/repo": "merge-td" },
+		});
+	});
+
+	it("accepts per-project worktree trigger settings", () => {
+		expect(
+			parseConfig(
+				'{"projects":{"/repo":{"todoistProjectRef":"merge-td","triggersOnlyOnWorktree":false}}}',
+			),
+		).toEqual({
+			projects: {
+				"/repo": {
+					todoistProjectRef: "merge-td",
+					triggersOnlyOnWorktree: false,
+				},
+			},
 		});
 	});
 
@@ -35,7 +50,33 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve("/repo"),
 			todoistProjectRef: "merge-td",
+			triggersOnlyOnWorktree: true,
 		});
+	});
+
+	it("defaults worktree-only triggering on", () => {
+		expect(
+			resolveConfiguredProject("/repo", {
+				projects: {
+					"/repo": {
+						todoistProjectRef: "merge-td",
+					},
+				},
+			}),
+		).toMatchObject({ triggersOnlyOnWorktree: true });
+	});
+
+	it("allows task claiming outside worktrees when disabled", () => {
+		expect(
+			resolveConfiguredProject("/repo", {
+				projects: {
+					"/repo": {
+						todoistProjectRef: "merge-td",
+						triggersOnlyOnWorktree: false,
+					},
+				},
+			}),
+		).toMatchObject({ triggersOnlyOnWorktree: false });
 	});
 
 	it("resolves the nearest configured parent", () => {
@@ -49,6 +90,7 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve("/repo/packages"),
 			todoistProjectRef: "packages-project",
+			triggersOnlyOnWorktree: true,
 		});
 	});
 

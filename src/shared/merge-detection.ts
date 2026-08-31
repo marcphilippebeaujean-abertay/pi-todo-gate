@@ -1,198 +1,50 @@
-import { spawn } from "node:child_process";
-import { resolve } from "node:path";
-import { githubPrUrl } from "./pr-detection.ts";
+import type { CommandResult, Exec } from "./command.ts";
 
-export interface CommandResult {
-	stdout: string;
-	stderr: string;
-	code: number;
-	killed?: boolean;
+export interface MergeEvent {
+	prUrl: string;
 }
 
-export type Exec = (
-	command: string,
-	args: string[],
-	options?: { timeout?: number; signal?: AbortSignal; cwd?: string },
-) => Promise<CommandResult>;
-
-export interface WorktreeInfo {
-	isWorktree: boolean;
-	root: string | null;
-	branch: string | null;
-}
-
-export interface OpenPrInfo {
-	url: string | null;
-	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
-}
-
-export const spawnExec: Exec = (command, args, options = {}) =>
-	new Promise((resolveResult) => {
-		const child = spawn(command, args, { cwd: options.cwd, shell: false });
-		let stdout = "";
-		let stderr = "";
-		let killed = false;
-		let settled = false;
-		const finish = (result: CommandResult) => {
-			if (settled) return;
-			settled = true;
-			resolveResult(result);
-		};
-		const timer = options.timeout
-			? setTimeout(() => {
-					killed = true;
-					child.kill("SIGTERM");
-				}, options.timeout)
-			: undefined;
-		const onAbort = () => {
-			killed = true;
-			child.kill("SIGTERM");
-		};
-		options.signal?.addEventListener("abort", onAbort, { once: true });
-		child.stdout.on("data", (chunk: Buffer) => {
-			stdout += chunk.toString();
-		});
-		child.stderr.on("data", (chunk: Buffer) => {
-			stderr += chunk.toString();
-		});
-		child.on("error", (error) => {
-			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
-			finish({ stdout, stderr: `${stderr}${error.message}`, code: 1, killed });
-		});
-		child.on("close", (code) => {
-			if (timer) clearTimeout(timer);
-			options.signal?.removeEventListener("abort", onAbort);
-			finish({ stdout, stderr, code: code ?? 1, killed });
-		});
-	});
-
-export function resolveGitPath(cwd: string, output: string): string | null {
-	const value = output.trim();
-	return value ? resolve(cwd, value) : null;
-}
-
-export function parseBranchName(output: string): string | null {
-	const value = output.trim();
-	return value || null;
-}
-
-export function isLinkedWorktreePaths(
-	cwd: string,
-	gitDirOutput: string,
-	commonDirOutput: string,
-): boolean {
-	const gitDir = resolveGitPath(cwd, gitDirOutput);
-	const commonDir = resolveGitPath(cwd, commonDirOutput);
-	return gitDir !== null && commonDir !== null && gitDir !== commonDir;
-}
-
-function firstWorktreePath(output: string): string | null {
-	const line = output
-		.split(/\r?\n/)
-		.find((value) => value.startsWith("worktree "));
-	return line ? line.slice("worktree ".length).trim() : null;
-}
-
-export async function inspectWorktree(
-	exec: Exec,
-	cwd: string,
-): Promise<WorktreeInfo> {
-	const [rootResult, branchResult, listResult] = await Promise.all([
-		exec("git", ["rev-parse", "--show-toplevel"], { cwd }),
-		exec("git", ["branch", "--show-current"], { cwd }),
-		exec("git", ["worktree", "list", "--porcelain"], { cwd }),
-	]);
-	const root =
-		rootResult.code === 0 ? resolveGitPath(cwd, rootResult.stdout) : null;
-	const branch =
-		branchResult.code === 0 ? parseBranchName(branchResult.stdout) : null;
-	const mainRoot =
-		listResult.code === 0
-			? resolveGitPath(cwd, firstWorktreePath(listResult.stdout) ?? "")
-			: null;
-	return {
-		isWorktree:
-			root !== null && mainRoot !== null && root !== resolve(mainRoot),
-		root,
-		branch,
-	};
-}
-
-export async function findOpenPr(
-	exec: Exec,
-	cwd: string,
-	branch: string,
-): Promise<OpenPrInfo> {
-	const result = await exec(
-		"gh",
-		[
-			"pr",
-			"list",
-			"--head",
-			branch,
-			"--state",
-			"open",
-			"--json",
-			"url,state",
-			"--limit",
-			"1",
-		],
-		{ cwd },
-	);
-	if (result.code !== 0) return { url: null, state: "UNKNOWN" };
-	try {
-		const rows: unknown = JSON.parse(result.stdout);
-		if (!Array.isArray(rows)) return { url: null, state: "UNKNOWN" };
-		if (rows.length === 0) return { url: null, state: "OPEN" };
-		if (typeof rows[0] !== "object" || rows[0] === null) {
-			return { url: null, state: "UNKNOWN" };
-		}
-		const row = rows[0] as { url?: unknown; state?: unknown };
-		const url = typeof row.url === "string" ? githubPrUrl(row.url) : null;
-		const state =
-			row.state === "OPEN" || row.state === "CLOSED" || row.state === "MERGED"
-				? row.state
-				: "UNKNOWN";
-		return { url, state };
-	} catch {
-		return { url: null, state: "UNKNOWN" };
-	}
-}
-
-function shellSegments(command: string): string[] {
+function shellSegments(command: string): string[] | null {
 	const segments: string[] = [];
 	let current = "";
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
+	let terminatedWithOperator = false;
 	for (const character of command) {
 		if (escaped) {
 			current += character;
 			escaped = false;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (character === "\\" && quote !== "'") {
 			current += character;
 			escaped = true;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (quote) {
 			current += character;
 			if (character === quote) quote = null;
+			if (!/\s/.test(character)) terminatedWithOperator = false;
 			continue;
 		}
 		if (character === "'" || character === '"') {
 			quote = character;
 			current += character;
+			terminatedWithOperator = false;
 			continue;
 		}
 		if (character === ";" || character === "|" || character === "&") {
 			if (current.trim()) segments.push(current.trim());
 			current = "";
+			terminatedWithOperator = true;
 			continue;
 		}
 		current += character;
+		if (!/\s/.test(character)) terminatedWithOperator = false;
 	}
+	if (quote || escaped || terminatedWithOperator) return null;
 	if (current.trim()) segments.push(current.trim());
 	return segments;
 }
@@ -244,7 +96,7 @@ export function mergeCommand(
 	command: string,
 ): { kind: "git" | "gh"; args: string[] } | null {
 	const segments = shellSegments(command);
-	if (segments.length !== 1) return null;
+	if (segments?.length !== 1) return null;
 	let parsed: { kind: "git" | "gh"; args: string[] } | null = null;
 	for (const segment of segments) {
 		const words = shellWords(segment);
@@ -271,10 +123,69 @@ export function mergeCommand(
 	return parsed;
 }
 
-function positionalArgs(args: string[]): string[] {
-	return args.filter((arg) => arg !== "--" && !arg.startsWith("-"));
+const GIT_MERGE_VALUE_OPTIONS = new Set([
+	"-m",
+	"--message",
+	"-s",
+	"--strategy",
+	"-X",
+	"--strategy-option",
+	"--into-name",
+]);
+const NON_COMPLETING_GIT_MERGE_OPTIONS = new Set(["--no-commit", "--squash"]);
+const NON_COMPLETING_GH_MERGE_OPTIONS = new Set(["--auto", "--dry-run"]);
+
+function hasNonCompletingMergeOption(
+	kind: "git" | "gh",
+	args: readonly string[],
+): boolean {
+	const options =
+		kind === "git"
+			? NON_COMPLETING_GIT_MERGE_OPTIONS
+			: NON_COMPLETING_GH_MERGE_OPTIONS;
+	for (const arg of args) {
+		if (arg === "--") break;
+		if (options.has(arg) || (kind === "gh" && arg.startsWith("--auto=")))
+			return true;
+	}
+	return false;
 }
 
+function gitMergeTargets(args: string[]): string[] {
+	const targets: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === "--") {
+			targets.push(...args.slice(index + 1));
+			break;
+		}
+		if (GIT_MERGE_VALUE_OPTIONS.has(arg)) {
+			index += 1;
+			continue;
+		}
+		if (
+			arg.startsWith("--message=") ||
+			arg.startsWith("--strategy=") ||
+			arg.startsWith("--strategy-option=") ||
+			arg.startsWith("--into-name=") ||
+			arg.startsWith("-m")
+		)
+			continue;
+		if (!arg.startsWith("-")) targets.push(arg);
+	}
+	return targets;
+}
+
+const GH_MERGE_FLAG_OPTIONS = new Set([
+	"--admin",
+	"--auto",
+	"--delete-branch",
+	"--disable-auto",
+	"--dry-run",
+	"--merge",
+	"--rebase",
+	"--squash",
+]);
 const GH_MERGE_VALUE_OPTIONS = new Set([
 	"--author-email",
 	"--body",
@@ -300,6 +211,7 @@ function ghMergeTargets(args: string[]): string[] | null {
 			continue;
 		}
 		if (arg.startsWith("-")) {
+			if (GH_MERGE_FLAG_OPTIONS.has(arg)) continue;
 			if (index + 1 < args.length && !args[index + 1].startsWith("-"))
 				return null;
 			continue;
@@ -310,7 +222,20 @@ function ghMergeTargets(args: string[]): string[] | null {
 }
 
 function normalizedUrl(value: string): string | null {
-	return githubPrUrl(value);
+	const candidate = value.match(/https?:\/\/github\.com\/[^\s<>"']+/i)?.[0];
+	if (!candidate) return null;
+	try {
+		const url = new URL(candidate.replace(/[.,;:!?)}\]]+$/g, ""));
+		if (url.hostname.toLowerCase() !== "github.com") return null;
+		const match = url.pathname.match(
+			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
+		);
+		return match
+			? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`
+			: null;
+	} catch {
+		return null;
+	}
 }
 
 async function queryPinnedHead(
@@ -318,11 +243,14 @@ async function queryPinnedHead(
 	cwd: string,
 	prUrl: string,
 ): Promise<string | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", prUrl, "--json", "headRefName"],
-		{ cwd },
-	);
+	let result: CommandResult;
+	try {
+		result = await exec("gh", ["pr", "view", prUrl, "--json", "headRefName"], {
+			cwd,
+		});
+	} catch {
+		return null;
+	}
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -341,11 +269,16 @@ async function queryCurrentPr(
 	cwd: string,
 	target: string,
 ): Promise<{ url: string; headRefName: string } | null> {
-	const result = await exec(
-		"gh",
-		["pr", "view", target, "--json", "url,headRefName"],
-		{ cwd },
-	);
+	let result: CommandResult;
+	try {
+		result = await exec(
+			"gh",
+			["pr", "view", target, "--json", "url,headRefName"],
+			{ cwd },
+		);
+	} catch {
+		return null;
+	}
 	if (result.code !== 0) return null;
 	try {
 		const data: unknown = JSON.parse(result.stdout);
@@ -368,6 +301,7 @@ export async function matchesPinnedPr(
 	const parsed = mergeCommand(command);
 	const pinned = normalizedUrl(prUrl);
 	if (!parsed || !pinned) return false;
+	if (hasNonCompletingMergeOption(parsed.kind, parsed.args)) return false;
 
 	if (parsed.kind === "gh") {
 		const targets = ghMergeTargets(parsed.args);
@@ -380,11 +314,22 @@ export async function matchesPinnedPr(
 		return /^\d+$/.test(target) || currentPr.headRefName === target;
 	}
 
-	const targets = positionalArgs(parsed.args);
+	const targets = gitMergeTargets(parsed.args);
 	if (targets.length !== 1) return false;
 	const head = await queryPinnedHead(exec, cwd, pinned);
 	return (
 		head !== null &&
 		(targets[0] === head || targets[0] === `refs/heads/${head}`)
 	);
+}
+
+export async function detectMerge(
+	exec: Exec,
+	cwd: string,
+	command: string,
+	prUrl: string,
+): Promise<MergeEvent | null> {
+	return (await matchesPinnedPr(exec, cwd, command, prUrl))
+		? { prUrl: normalizedUrl(prUrl) ?? prUrl }
+		: null;
 }

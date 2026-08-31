@@ -3,13 +3,13 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { isLinkedWorktreePaths, parseBranchName } from "./git.ts";
 import {
 	type ClaimWorkerHandle,
 	type ClaimWorkerRequest,
 	startClaimWorker,
 	type WorkerSpawner,
 } from "./herdr-claim-worker.ts";
+import { isLinkedWorktreePaths, parseBranchName } from "./shared/project.ts";
 
 export type {
 	ClaimWorkerHandle,

@@ -30,7 +30,11 @@ if not isinstance(config, dict):
 projects = config.setdefault("projects", {})
 if not isinstance(projects, dict):
     raise SystemExit("cannot update malformed configuration: projects must be an object")
-projects[coding_root] = project_ref
+existing = projects.get(coding_root)
+if isinstance(existing, dict) and isinstance(existing.get("todoistProjectRef"), str):
+    existing["todoistProjectRef"] = project_ref
+else:
+    projects[coding_root] = project_ref
 fd, temporary = tempfile.mkstemp(prefix="pi-todo-gate-", dir=os.path.dirname(path), text=True)
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:

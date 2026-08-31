@@ -1,4 +1,4 @@
-import type { CommandResult } from "./git.ts";
+import type { CommandResult } from "../shared/command.ts";
 
 export interface TodoistTask {
 	id: string;
@@ -7,13 +7,8 @@ export interface TodoistTask {
 	projectId: string;
 	sectionId?: string | null;
 	sectionName?: string | null;
-	parentId?: string | null;
 	url?: string;
 	webUrl?: string;
-}
-
-export interface TodoistChild extends TodoistTask {
-	children?: TodoistChild[];
 }
 
 export interface TodoistExec {
@@ -72,6 +67,10 @@ function safeHttpUrl(value: unknown): string | undefined {
 	}
 }
 
+function canonicalTaskId(ref: string): string {
+	return ref.trim().replace(/^id:/, "");
+}
+
 function nullableString(value: unknown): string | null | undefined {
 	if (value === null) return null;
 	return typeof value === "string" ? value : undefined;
@@ -80,15 +79,17 @@ function nullableString(value: unknown): string | null | undefined {
 function taskFromPayload(value: unknown): TodoistTask {
 	const data = record(value);
 	const id = stringValue(data.id);
-	if (!id) throw new TodoistError("response", "task has no id");
+	const content = stringValue(data.content);
+	const projectId = stringValue(data.projectId ?? data.project_id);
+	if (!id || !content || !projectId)
+		throw new TodoistError("response", "task has missing required fields");
 	return {
 		id,
-		content: stringValue(data.content),
+		content,
 		description: stringValue(data.description),
-		projectId: stringValue(data.projectId ?? data.project_id),
+		projectId,
 		sectionId: nullableString(data.sectionId ?? data.section_id),
 		sectionName: nullableString(data.sectionName ?? data.section_name),
-		parentId: nullableString(data.parentId ?? data.parent_id),
 		url: safeHttpUrl(data.url),
 		webUrl: safeHttpUrl(data.webUrl ?? data.web_url),
 	};
@@ -98,7 +99,8 @@ function childList(value: unknown): unknown[] {
 	if (Array.isArray(value)) return value;
 	const data = record(value);
 	if (Array.isArray(data.tasks)) return data.tasks;
-	return Array.isArray(data.results) ? data.results : [];
+	if (Array.isArray(data.results)) return data.results;
+	throw new TodoistError("response", "expected a list payload");
 }
 
 export class TodoistClient {
@@ -143,9 +145,17 @@ export class TodoistClient {
 		return task;
 	}
 
+	async completeTask(ref: string): Promise<void> {
+		await this.run(["task", "complete", ref], false);
+	}
+
 	async claimTask(
 		ref: string,
-		project: { id: string; currentTaskId?: string },
+		project: {
+			id: string;
+			currentTaskId?: string;
+			allowInProgress?: boolean;
+		},
 	): Promise<TodoistTask> {
 		const task = await this.getTask(ref);
 		if (task.projectId !== project.id) {
@@ -169,10 +179,13 @@ export class TodoistClient {
 			sectionName = section ? stringValue(section.name) || null : null;
 		}
 		const isInProgress = sectionName?.trim().toLowerCase() === "in progress";
-		if (isInProgress && task.id !== project.currentTaskId) {
+		const currentTaskId = project.currentTaskId
+			? canonicalTaskId(project.currentTaskId)
+			: undefined;
+		if (isInProgress && task.id !== currentTaskId && !project.allowInProgress) {
 			throw new TodoistError("task claim", "task is already in progress");
 		}
-		if (sectionName !== "In Progress") {
+		if (!isInProgress) {
 			await this.run(
 				[
 					"task",
@@ -195,45 +208,5 @@ export class TodoistClient {
 				task.url ??
 				`https://app.todoist.com/app/task/${task.id}`,
 		};
-	}
-
-	async completeTask(ref: string): Promise<void> {
-		await this.run(["task", "complete", ref]);
-	}
-
-	async listDescendants(ref: string): Promise<TodoistChild[]> {
-		const payload = await this.run(["task", "list", "--parent", ref, "--json"]);
-		const children: TodoistChild[] = [];
-		for (const item of childList(payload)) {
-			const child = taskFromPayload(item) as TodoistChild;
-			child.children = await this.listDescendants(child.id);
-			children.push(child);
-		}
-		return children;
-	}
-
-	async deleteDescendants(children: readonly TodoistChild[]): Promise<void> {
-		for (const child of children) {
-			if (child.children?.length) await this.deleteDescendants(child.children);
-			await this.run(["task", "delete", `id:${child.id}`, "--yes"]);
-		}
-	}
-
-	async createSubtask(
-		parentRef: string,
-		input: { content: string; description: string },
-	): Promise<TodoistTask> {
-		return taskFromPayload(
-			await this.run([
-				"task",
-				"add",
-				input.content,
-				"--parent",
-				parentRef,
-				"--description",
-				input.description,
-				"--json",
-			]),
-		);
 	}
 }
