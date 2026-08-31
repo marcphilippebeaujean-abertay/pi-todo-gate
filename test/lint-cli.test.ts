@@ -36,6 +36,8 @@ describe("lint CLI", () => {
 			mkdir(join(root, SRC_DIRECTORY), { recursive: true }),
 			mkdir(join(root, EXTENSIONS_DIRECTORY), { recursive: true }),
 			mkdir(join(root, TEST_DIRECTORY), { recursive: true }),
+			mkdir(join(root, TEST_DIRECTORY, "nested"), { recursive: true }),
+			mkdir(join(root, SRC_DIRECTORY, "nested"), { recursive: true }),
 			mkdir(join(root, OTHER_DIRECTORY), { recursive: true }),
 		]);
 		await Promise.all([
@@ -46,11 +48,20 @@ describe("lint CLI", () => {
 			),
 			writeFile(join(root, EXTENSIONS_DIRECTORY, SOURCE_NAME), CLEAN_SOURCE),
 			writeFile(join(root, TEST_DIRECTORY, SOURCE_NAME), MAGIC_SOURCE),
+			writeFile(
+				join(root, TEST_DIRECTORY, "nested", SOURCE_NAME),
+				MAGIC_SOURCE,
+			),
+			writeFile(
+				join(root, SRC_DIRECTORY, "nested", LINT_INFRASTRUCTURE_NAME),
+				CLEAN_SOURCE,
+			),
 			writeFile(join(root, OTHER_DIRECTORY, SOURCE_NAME), MAGIC_SOURCE),
 		]);
 		expect(collectLintFiles(root)).toEqual([
 			join(root, EXTENSIONS_DIRECTORY, SOURCE_NAME),
 			join(root, SRC_DIRECTORY, SOURCE_NAME),
+			join(root, SRC_DIRECTORY, "nested", LINT_INFRASTRUCTURE_NAME),
 		]);
 	});
 

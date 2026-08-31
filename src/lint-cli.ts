@@ -5,11 +5,12 @@ import ts from "typescript";
 import { formatLintDiagnostic, lintProgram } from "./lint.ts";
 import { loadLintConfig } from "./lint-config.ts";
 
-const LINT_DIRECTORIES = ["extensions", "src"];
-const LINT_INFRASTRUCTURE_FILES = new Set([
-	"lint.ts",
-	"lint-config.ts",
-	"lint-cli.ts",
+const LINT_DIRECTORIES = ["extensions", "src", "test"];
+const TEST_DIRECTORY = "test";
+const LINT_INFRASTRUCTURE_PATHS = new Set([
+	"src/lint.ts",
+	"src/lint-config.ts",
+	"src/lint-cli.ts",
 ]);
 const TS_EXTENSION = ".ts";
 const TS_CONFIG_NAME = "tsconfig.json";
@@ -22,16 +23,30 @@ const FALLBACK_COMPILER_OPTIONS: ts.CompilerOptions = {
 	noEmit: true,
 };
 
-function collectDirectoryFiles(directory: string): string[] {
+function isExcludedPath(relativePath: string): boolean {
+	const normalizedPath = relativePath.replaceAll("\\", "/");
+	const isTestPath =
+		normalizedPath === TEST_DIRECTORY ||
+		normalizedPath.startsWith(`${TEST_DIRECTORY}/`);
+	return isTestPath || LINT_INFRASTRUCTURE_PATHS.has(normalizedPath);
+}
+
+function collectDirectoryFiles(
+	root: string,
+	directory: string,
+	relativeDirectory: string,
+): string[] {
 	if (!existsSync(directory)) return [];
 	const files: string[] = [];
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
 		const path = join(directory, entry.name);
-		if (entry.isDirectory()) files.push(...collectDirectoryFiles(path));
+		const relativePath = join(relativeDirectory, entry.name);
+		if (entry.isDirectory())
+			files.push(...collectDirectoryFiles(root, path, relativePath));
 		else if (
 			entry.isFile() &&
 			path.endsWith(TS_EXTENSION) &&
-			!LINT_INFRASTRUCTURE_FILES.has(entry.name)
+			!isExcludedPath(relative(root, path))
 		)
 			files.push(path);
 	}
@@ -40,7 +55,7 @@ function collectDirectoryFiles(directory: string): string[] {
 
 export function collectLintFiles(root: string): string[] {
 	return LINT_DIRECTORIES.flatMap((directory) =>
-		collectDirectoryFiles(join(root, directory)),
+		collectDirectoryFiles(root, join(root, directory), directory),
 	).sort((left, right) => left.localeCompare(right));
 }
 

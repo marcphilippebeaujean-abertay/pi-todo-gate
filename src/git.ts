@@ -61,6 +61,23 @@ export interface OpenPrInfo {
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
 
+export function parseBranchName(output: string): string | null {
+	const value = output.trim();
+	return value || null;
+}
+
+export function isLinkedWorktreePaths(
+	cwd: string,
+	gitDirOutput: string,
+	commonDirOutput: string,
+): boolean {
+	const gitDirValue = gitDirOutput.trim();
+	const commonDirValue = commonDirOutput.trim();
+	const hasPaths = gitDirValue !== "" && commonDirValue !== "";
+	if (!hasPaths) return false;
+	return resolve(cwd, gitDirValue) !== resolve(cwd, commonDirValue);
+}
+
 export const spawnExec: Exec = (command, args, options = {}) =>
 	new Promise((resolveResult) => {
 		const child = spawn(command, args, { cwd: options.cwd, shell: false });

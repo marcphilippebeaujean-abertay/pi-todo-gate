@@ -38,6 +38,9 @@ const CONSTANT_SOURCE = `function check(name: string) {
 const MODULE_PROPERTY_SOURCE = `import "side-effect";
 const record = { message: "ok" };
 export type Status = "ok";`;
+const DYNAMIC_IMPORT_SOURCE = `async function load() {
+	return import("./module");
+}`;
 const TYPE_SYNTAX_SOURCE = `function read(): "ok" {
 	return "ok";
 }`;
@@ -70,6 +73,12 @@ const IF_SOURCE = `function check(accountBalance: number, isClosed: boolean, cou
 	if (isClosed) return false;
 	if (!isClosed) return false;
 	if (count) return true;
+	return false;
+}`;
+const NON_BOOLEAN_IF_SOURCE = `function check(value: any, unknownValue: unknown, objectValue: { ready: boolean }) {
+	if (value) return true;
+	if (unknownValue) return true;
+	if (objectValue) return true;
 	return false;
 }`;
 const METRIC_TEST = "reports function metrics over configured limits";
@@ -154,6 +163,9 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
+		expect(ruleIds(await lintFixture(DYNAMIC_IMPORT_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
 		expect(
 			ruleIds(await lintFixture(TYPE_SYNTAX_SOURCE)).filter(
 				(id) => id === NO_MAGIC_RULE,
@@ -184,6 +196,11 @@ describe("lint diagnostics", () => {
 		expect(
 			ruleIds(diagnostics).filter((id) => id === NAMED_IF_RULE),
 		).toHaveLength(2);
+		expect(
+			ruleIds(await lintFixture(NON_BOOLEAN_IF_SOURCE)).filter(
+				(id) => id === NAMED_IF_RULE,
+			),
+		).toHaveLength(3);
 	});
 
 	it(METRIC_TEST, async () => {

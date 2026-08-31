@@ -123,10 +123,15 @@ function isModuleSpecifier(
 	const parent = ancestors.at(-1);
 	const grandparent = ancestors.at(-2);
 	if (!parent) return false;
+	const isDynamicImport =
+		ts.isCallExpression(parent) &&
+		parent.expression.kind === ts.SyntaxKind.ImportKeyword &&
+		parent.arguments[0] === node;
 	return (
 		(ts.isImportDeclaration(parent) && parent.moduleSpecifier === node) ||
 		(ts.isExportDeclaration(parent) && parent.moduleSpecifier === node) ||
 		(ts.isExternalModuleReference(parent) && parent.expression === node) ||
+		isDynamicImport ||
 		(ts.isLiteralTypeNode(parent) &&
 			grandparent !== undefined &&
 			ts.isImportTypeNode(grandparent) &&
@@ -262,11 +267,7 @@ function collectMagicStrings(
 
 function isNamedConditionType(type: ts.Type): boolean {
 	const isBooleanLike = (type.flags & ts.TypeFlags.BooleanLike) !== 0;
-	const isTruthyObject =
-		(type.flags &
-			(ts.TypeFlags.Object | ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !==
-		0;
-	if (isBooleanLike || isTruthyObject) return true;
+	if (isBooleanLike) return true;
 	if (!type.isUnion()) return false;
 	const nonNullishTypes = type.types.filter(
 		(member) =>

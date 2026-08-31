@@ -16,6 +16,12 @@ import {
 	spawnExec,
 } from "../src/git.ts";
 import {
+	type CommandRunner as HerdrCommandRunner,
+	installHerdrClaimGate,
+	type StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
+import { startClaimWorker } from "../src/herdr-claim-worker.ts";
+import {
 	readPiTaskStore,
 	sessionTaskPath,
 	syncPiTasksToTodoist,
@@ -48,6 +54,8 @@ export interface ExtensionDependencies {
 	openSession?: (path: string) => SessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	herdrCommandRunner?: HerdrCommandRunner;
+	herdrStartBackgroundWorker?: StartBackgroundWorker;
 }
 
 const STATE_TYPE = "pi-todo-gate-state";
@@ -245,6 +253,12 @@ export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
+	installHerdrClaimGate(pi, {
+		commandRunner: dependencies.herdrCommandRunner,
+		startBackgroundWorker:
+			dependencies.herdrStartBackgroundWorker ??
+			((request) => startClaimWorker(request, { cwd: process.cwd() })),
+	});
 	let active: ActiveSession | null = null;
 	let registered = false;
 
@@ -628,35 +642,34 @@ export default function extension(
 					command,
 				);
 			if (isGitMutation) session.workChanged = true;
-			if (
-				session.state.prUrl !== undefined &&
-				session.state.taskRef !== undefined
-			) {
-				const isPinnedPr = await matchesPinnedPr(
-					dependencies.exec ?? spawnExec,
-					ctx.cwd,
-					command,
-					session.state.prUrl,
-				);
-				if (!isPinnedPr) return;
-				if (session.state.todoistCompletionAttemptedAt !== undefined) return;
-				try {
-					await createClient(ctx, dependencies).completeTask(
-						session.state.taskRef,
-					);
-					session.state = applyStatePatch(session.state, {
-						mergeCompletedAt: new Date().toISOString(),
-						todoistCompletionAttemptedAt: new Date().toISOString(),
-					});
-					appendState(pi, session.state);
-					ctx.ui.notify(C.message.merged, C.value.info);
-				} catch {
-					session.state = applyStatePatch(session.state, {
-						todoistCompletionAttemptedAt: new Date().toISOString(),
-					});
-					appendState(pi, session.state);
-					ctx.ui.notify(C.message.mergedFailed, C.value.warning);
-				}
+			const prUrl = session.state.prUrl;
+			const taskRef = session.state.taskRef;
+			const hasPrUrl = prUrl !== undefined;
+			const hasTaskRef = taskRef !== undefined;
+			const hasClaimedTaskAndPr = hasPrUrl && hasTaskRef;
+			if (!hasClaimedTaskAndPr) return;
+			const isPinnedPr = await matchesPinnedPr(
+				dependencies.exec ?? spawnExec,
+				ctx.cwd,
+				command,
+				prUrl,
+			);
+			if (!isPinnedPr) return;
+			if (session.state.todoistCompletionAttemptedAt !== undefined) return;
+			try {
+				await createClient(ctx, dependencies).completeTask(taskRef);
+				session.state = applyStatePatch(session.state, {
+					mergeCompletedAt: new Date().toISOString(),
+					todoistCompletionAttemptedAt: new Date().toISOString(),
+				});
+				appendState(pi, session.state);
+				ctx.ui.notify(C.message.merged, C.value.info);
+			} catch {
+				session.state = applyStatePatch(session.state, {
+					todoistCompletionAttemptedAt: new Date().toISOString(),
+				});
+				appendState(pi, session.state);
+				ctx.ui.notify(C.message.mergedFailed, C.value.warning);
 			}
 		}
 		const usesTaskTool: boolean = !!taskToolNames.has(toolName);
