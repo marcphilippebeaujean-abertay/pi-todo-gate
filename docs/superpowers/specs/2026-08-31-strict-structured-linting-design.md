@@ -68,6 +68,10 @@ Count source lines from each function-like construct's opening start through its
 
 Count all function-like constructs in a file, including declarations, methods, accessors, function expressions, and arrow functions. Report files containing more than 10 functions.
 
+### `nested-function-depth`
+
+Count function nesting depth independently from cyclomatic complexity. A top-level function has depth 1; a function declared inside it has depth 2. Report functions deeper than 2. Function-like constructs include declarations, methods, accessors, function expressions, and arrow functions.
+
 ## Architecture
 
 `src/lint.ts` exposes the checker API and owns TypeScript AST traversal, rule evaluation, diagnostics, and sorting. It creates no files and performs no automatic fixes.
@@ -79,6 +83,7 @@ Count all function-like constructs in a file, including declarations, methods, a
   "maxCyclomaticComplexity": 10,
   "maxFunctionLines": 50,
   "maxFunctionsPerFile": 10,
+  "maxNestedFunctionDepth": 2,
   "maxBooleanChecks": 2
 }
 ```
@@ -110,6 +115,7 @@ Malformed or unreadable optional lint configuration falls back to defaults. Miss
 - complexity at 10 and 11;
 - function length at 50 and 51 lines;
 - file function count at 10 and 11;
+- nested-function depth at 2 and 3;
 - deterministic diagnostic ordering and formatting;
 - config overrides and malformed config fallback.
 
@@ -123,6 +129,7 @@ Implement and test the checker first. Wire it into the lint command, observe fai
 2. extract complex and non-boolean `if` conditions into descriptive booleans;
 3. split functions over 50 lines at cohesive boundaries;
 4. split files over 10 functions only where module boundaries remain clear;
-5. reduce complexity by extracting decision-heavy helpers.
+5. flatten functions deeper than two levels where module boundaries remain clear;
+6. reduce complexity by extracting decision-heavy helpers.
 
 Run the focused lint tests after each rule, then run the complete verification suite.
