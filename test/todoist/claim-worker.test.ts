@@ -9,7 +9,6 @@ import {
 
 const input: TaskClaimWorkerInput = {
 	prompt: "Implement feature",
-	history: ["initial user request", "assistant response"],
 	cwd: "/repo/.worktrees/feature",
 	projectRef: "Pi Extensions",
 	worktree: {
@@ -34,12 +33,11 @@ describe("Todoist task claim worker", () => {
 				options?: { timeout?: number },
 			) => {
 				expect(command).toBe("pi");
-				expect(options?.timeout).toBe(30_000);
+				expect(options?.timeout).toBe(120_000);
 				expect(args).toEqual(
 					expect.arrayContaining([
 						"--mode",
 						"json",
-						"--no-session",
 						"--no-extensions",
 						"--no-context-files",
 						"--tools",
@@ -52,6 +50,7 @@ describe("Todoist task claim worker", () => {
 				expect(prompt).toContain("Output JSON matching this schema:");
 				expect(prompt).toContain(JSON.stringify(TaskClaimWorkerResultSchema));
 				expect(prompt).toContain(input.prompt);
+				expect(prompt).not.toContain('"history"');
 				expect(prompt).toContain(input.projectRef);
 				expect(prompt).toContain(input.worktree.branch ?? "");
 				return result(

@@ -72,10 +72,8 @@ truth.
 The integrated extension starts this prompt in an ephemeral worker with Herdr extensions disabled.
 Worker output stays private. The main session remains unblocked while this procedure runs.
 
-The worker completes the claim when one of these happens:
-- it renames the current generic tab with \`herdr tab rename …\`,
-- it moves its pane to a new tab with \`herdr pane move … --new-tab …\`,
-- or it confirms the current tab already has a descriptive label.
+The worker completes the claim only after it renames or moves its pane. After success, output exactly one JSON object and nothing else:
+\`{"status":"claimed","tabId":"<current-tab-id>","label":"<new-tab-label>"}\`.
 `;
 
 export type CommandRunner = (command: string, args: string[]) => string;
@@ -114,8 +112,10 @@ function jsonResult<T>(output: string): T | undefined {
 	}
 }
 
-function tabLabel(commandRunner: CommandRunner): string | undefined {
-	const tabId = process.env.HERDR_TAB_ID;
+function tabLabel(
+	commandRunner: CommandRunner,
+	tabId = process.env.HERDR_TAB_ID,
+): string | undefined {
 	if (!tabId) return undefined;
 	const response = jsonResult<{ result?: { tab?: { label?: string } } }>(
 		commandRunner("herdr", ["tab", "get", tabId]),
@@ -149,46 +149,42 @@ function claimWorktreeTab(commandRunner: CommandRunner, cwd: string): boolean {
 	}
 }
 
-function normalize(command: string): string {
-	return command.trim().replace(/\s+/g, " ");
-}
-
-function completesClaim(command: string): boolean {
-	const normalized = normalize(command);
-	return (
-		/^herdr tab rename \S+ \S+/.test(normalized) ||
-		/^herdr pane move \S+ --new-tab\b/.test(normalized)
-	);
-}
-
-function isTabGet(command: string): boolean {
-	return /^herdr tab get \S+/.test(normalize(command));
-}
-
 function labelIsDescriptive(label: string | undefined | null): boolean {
 	if (!label) return false;
 	const value = label.trim();
 	return Boolean(value) && !/^\d+$/.test(value);
 }
 
-function extractLabel(text: string): string | undefined {
+function paneTabId(
+	commandRunner: CommandRunner,
+	paneId: string | undefined,
+): string | undefined {
+	if (!paneId) return undefined;
 	const response = jsonResult<{
-		result?: { tab?: { label?: unknown } };
-	}>(text);
-	const label = response?.result?.tab?.label;
-	return typeof label === "string" ? label : undefined;
+		result?: { pane?: { tab_id?: unknown } };
+	}>(commandRunner("herdr", ["pane", "get", paneId]));
+	const tabId = response?.result?.pane?.tab_id;
+	return typeof tabId === "string" && tabId ? tabId : undefined;
 }
 
-function textOf(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (!Array.isArray(value)) return "";
-	return value
-		.map((part) =>
-			typeof part === "object" && part !== null && "text" in part
-				? String(part.text)
-				: "",
-		)
-		.join("\n");
+function hasValidatedTabClaim(
+	commandRunner: CommandRunner,
+	initialLabel: string | undefined,
+	paneId: string | undefined,
+	claim: { tabId: string; label: string },
+): boolean {
+	if (initialLabel === undefined) return false;
+	try {
+		const currentLabel = tabLabel(commandRunner, claim.tabId);
+		return (
+			paneTabId(commandRunner, paneId) === claim.tabId &&
+			labelIsDescriptive(currentLabel) &&
+			currentLabel === claim.label &&
+			currentLabel !== initialLabel
+		);
+	} catch {
+		return false;
+	}
 }
 
 function notify(
@@ -236,6 +232,9 @@ export function installHerdrClaimGate(
 	options: ClaimGateOptions = {},
 ): void {
 	let sessionCwd = options.cwd ?? process.cwd();
+	let sessionTabId: string | undefined;
+	let sessionPaneId: string | undefined;
+	let sessionTabLabel: string | undefined;
 	const commandRunner =
 		options.commandRunner ??
 		((command, args) => runCommand(command, args, sessionCwd));
@@ -270,6 +269,13 @@ export function installHerdrClaimGate(
 		herdrAvailable = isInsideHerdr() && !isSubagent();
 		worker = undefined;
 		if (!herdrAvailable || alreadyClaimed(ctx)) return;
+		sessionTabId = process.env.HERDR_TAB_ID;
+		sessionPaneId = process.env.HERDR_PANE_ID;
+		try {
+			sessionTabLabel = tabLabel(commandRunner, sessionTabId);
+		} catch {
+			sessionTabLabel = undefined;
+		}
 
 		gateActive = true;
 		if (claimWorktreeTab(commandRunner, sessionCwd)) {
@@ -289,9 +295,24 @@ export function installHerdrClaimGate(
 			worker = startWorker({
 				prompt: event.prompt ?? "",
 				instructions: HERDR_INSTRUCTIONS,
-				onClaimComplete: () => {
+				onClaimComplete: (claim) => {
 					worker = undefined;
 					setHerdrStatus(ctx, undefined);
+					if (
+						!hasValidatedTabClaim(
+							commandRunner,
+							sessionTabLabel,
+							sessionPaneId,
+							claim,
+						)
+					) {
+						notify(
+							ctx,
+							"Herdr claim worker completed but could not validate tab claim.",
+							"warning",
+						);
+						return;
+					}
 					persistClaimed(ctx);
 				},
 				onFailure: (message) => {
@@ -314,23 +335,13 @@ export function installHerdrClaimGate(
 		return undefined;
 	});
 
-	pi.on("tool_result", async (event) => {
-		if (!gateActive || event.toolName !== "bash" || event.isError) return;
-		const command =
-			(event.input as { command?: string } | undefined)?.command ?? "";
-		if (completesClaim(command)) {
-			persistClaimed();
-			return;
-		}
-		if (!isTabGet(command)) return;
-		const content = textOf(event.content);
-		if (labelIsDescriptive(extractLabel(content))) persistClaimed();
-	});
-
 	pi.on("session_shutdown", async (_event, ctx) => {
 		worker?.cancel();
 		worker = undefined;
 		setHerdrStatus(ctx, undefined);
+		sessionTabId = undefined;
+		sessionPaneId = undefined;
+		sessionTabLabel = undefined;
 		gateActive = false;
 		herdrAvailable = false;
 	});

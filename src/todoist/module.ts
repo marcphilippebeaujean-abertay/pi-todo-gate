@@ -76,17 +76,6 @@ function isWorktreePath(cwd: string): boolean {
 	return cwd.split(/[\\/]/).includes(".worktrees");
 }
 
-function branchTexts(entries: readonly unknown[]): string[] {
-	return entries
-		.filter(
-			(entry) =>
-				typeof entry === "object" &&
-				entry !== null &&
-				(entry as { type?: unknown }).type !== "custom",
-		)
-		.map((entry) => JSON.stringify(entry));
-}
-
 function isTaskAlreadyInProgress(error: unknown): boolean {
 	return (
 		error instanceof TodoistError &&
@@ -227,7 +216,6 @@ export function createTodoistModule(
 				createTaskClaimWorker(dependencies.exec ?? spawnExec);
 			const result = await worker({
 				prompt,
-				history: branchTexts(runContext.sessionManager.getBranch()),
 				cwd: runContext.cwd,
 				projectRef: activeProject.todoistProjectRef,
 				worktree,

@@ -60,7 +60,6 @@ describe("startClaimWorker", () => {
 			"--mode",
 			"json",
 			"-p",
-			"--no-session",
 			"--no-extensions",
 			expect.stringContaining("Fix dialog"),
 		]);
@@ -83,11 +82,27 @@ describe("startClaimWorker", () => {
 			spawnWorker: setupState.spawnWorker,
 		});
 
-		setupState.process.stdout.write("worker private result\n");
+		setupState.process.stdout.write(
+			`${JSON.stringify({
+				type: "message_end",
+				message: {
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: '{"status":"claimed","tabId":"w1:t1","label":"dialog-editor"}',
+						},
+					],
+				},
+			})}\n`,
+		);
 		setupState.process.stderr.write("private warning\n");
 		setupState.process.emit("close", 0);
 
-		expect(setupState.onClaimComplete).toHaveBeenCalledOnce();
+		expect(setupState.onClaimComplete).toHaveBeenCalledWith({
+			tabId: "w1:t1",
+			label: "dialog-editor",
+		});
 		expect(setupState.onFailure).not.toHaveBeenCalled();
 	});
 

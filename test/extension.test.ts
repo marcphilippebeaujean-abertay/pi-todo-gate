@@ -367,11 +367,11 @@ describe("deferred Todoist task claiming", () => {
 		expect(inputs).toHaveLength(1);
 		expect(inputs[0]).toMatchObject({
 			prompt: "Implement feature",
-			history: [expect.stringContaining("initial request")],
 			cwd: "/configured/.worktrees/project",
 			projectRef: "Pi Extensions",
 			worktree: { isWorktree: true, branch: "feature" },
 		});
+		expect(inputs[0]).not.toHaveProperty("history");
 	});
 
 	it("shows pinned spinner and final no-update feedback", async () => {
