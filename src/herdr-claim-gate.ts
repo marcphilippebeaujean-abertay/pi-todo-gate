@@ -3,14 +3,11 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { isLinkedWorktreePaths, parseBranchName } from "./git.ts";
 import {
-	isLinkedWorktreePaths,
-	parseBranchName,
-} from "./git.ts";
-import {
-	startClaimWorker,
 	type ClaimWorkerHandle,
 	type ClaimWorkerRequest,
+	startClaimWorker,
 	type WorkerSpawner,
 } from "./herdr-claim-worker.ts";
 
@@ -146,16 +143,10 @@ function isDefaultTabLabel(label: string | undefined): boolean {
 	return label !== undefined && /^\d+$/.test(label);
 }
 
-function claimWorktreeTab(
-	commandRunner: CommandRunner,
-	cwd: string,
-): boolean {
+function claimWorktreeTab(commandRunner: CommandRunner, cwd: string): boolean {
 	try {
 		const gitDir = commandRunner("git", ["rev-parse", "--git-dir"]);
-		const commonDir = commandRunner("git", [
-			"rev-parse",
-			"--git-common-dir",
-		]);
+		const commonDir = commandRunner("git", ["rev-parse", "--git-common-dir"]);
 		if (!isLinkedWorktreePaths(cwd, gitDir, commonDir)) return false;
 
 		const tabId = process.env.HERDR_TAB_ID;
@@ -163,7 +154,8 @@ function claimWorktreeTab(
 			commandRunner("git", ["branch", "--show-current"]),
 		);
 		const defaultTabLabel = tabLabel(commandRunner);
-		if (!tabId || !branchName || !isDefaultTabLabel(defaultTabLabel)) return false;
+		if (!tabId || !branchName || !isDefaultTabLabel(defaultTabLabel))
+			return false;
 
 		commandRunner("herdr", ["tab", "rename", tabId, branchName]);
 		return true;
@@ -195,8 +187,8 @@ function allowedCommand(command: string): boolean {
 	const normalized = normalize(command);
 	return Boolean(
 		normalized &&
-		!CHAINING_RE.test(normalized) &&
-		ALLOWED.some((pattern) => pattern.test(normalized)),
+			!CHAINING_RE.test(normalized) &&
+			ALLOWED.some((pattern) => pattern.test(normalized)),
 	);
 }
 
@@ -247,15 +239,16 @@ function notify(
 }
 
 function alreadyClaimed(ctx: {
-	sessionManager: { getEntries: () => Array<{ type?: string; customType?: string }> };
+	sessionManager: {
+		getEntries: () => Array<{ type?: string; customType?: string }>;
+	};
 }): boolean {
 	try {
 		return ctx.sessionManager
 			.getEntries()
 			.some(
 				(entry) =>
-					entry?.type === "custom" &&
-					entry?.customType === CLAIM_CUSTOM_TYPE,
+					entry?.type === "custom" && entry?.customType === CLAIM_CUSTOM_TYPE,
 			);
 	} catch {
 		return false;
@@ -268,7 +261,8 @@ export function installHerdrClaimGate(
 ): void {
 	const cwd = options.cwd ?? process.cwd();
 	const commandRunner =
-		options.commandRunner ?? ((command, args) => runCommand(command, args, cwd));
+		options.commandRunner ??
+		((command, args) => runCommand(command, args, cwd));
 	const startWorker =
 		options.startBackgroundWorker ??
 		((request: ClaimWorkerRequest) =>

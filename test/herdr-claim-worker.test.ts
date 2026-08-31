@@ -18,10 +18,10 @@ function setup() {
 	const process = new FakeProcess();
 	let spawned:
 		| {
-			command: string;
-			args: readonly string[];
-			options: { cwd: string; env: NodeJS.ProcessEnv; shell: false };
-		}
+				command: string;
+				args: readonly string[];
+				options: { cwd: string; env: NodeJS.ProcessEnv; shell: false };
+		  }
 		| undefined;
 	const spawnWorker: WorkerSpawner = (command, args, options) => {
 		spawned = { command, args, options };

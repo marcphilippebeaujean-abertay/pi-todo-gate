@@ -5,12 +5,6 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import {
-	installHerdrClaimGate,
-	type CommandRunner as HerdrCommandRunner,
-	type StartBackgroundWorker,
-} from "../src/herdr-claim-gate.ts";
-import { startClaimWorker } from "../src/herdr-claim-worker.ts";
 import { loadConfig, resolveConfiguredProject } from "../src/config.ts";
 import { renderPrStatus, renderTaskStatus } from "../src/footer.ts";
 import {
@@ -20,6 +14,12 @@ import {
 	matchesPinnedPr,
 	spawnExec,
 } from "../src/git.ts";
+import {
+	type CommandRunner as HerdrCommandRunner,
+	installHerdrClaimGate,
+	type StartBackgroundWorker,
+} from "../src/herdr-claim-gate.ts";
+import { startClaimWorker } from "../src/herdr-claim-worker.ts";
 import {
 	readPiTaskStore,
 	sessionTaskPath,

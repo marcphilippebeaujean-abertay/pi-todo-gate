@@ -61,7 +61,14 @@ export function startClaimWorker(
 ): ClaimWorkerHandle {
 	const child = (options.spawnWorker ?? defaultSpawnWorker)(
 		options.command ?? DEFAULT_COMMAND,
-		["--mode", "json", "-p", "--no-session", workerPrompt(request)],
+		[
+			"--mode",
+			"json",
+			"-p",
+			"--no-session",
+			"--no-extensions",
+			workerPrompt(request),
+		],
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
@@ -87,7 +94,8 @@ export function startClaimWorker(
 
 	child.on("error", (...args) => {
 		const error = args[0];
-		const detail = error instanceof Error ? error.message : String(error ?? "unknown error");
+		const detail =
+			error instanceof Error ? error.message : String(error ?? "unknown error");
 		fail(`Herdr claim worker failed: ${detail}`);
 	});
 	child.on("close", (...args) => {

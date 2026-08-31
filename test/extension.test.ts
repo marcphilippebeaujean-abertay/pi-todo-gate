@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
-import {
-	type CommandRunner as HerdrCommandRunner,
-	type StartBackgroundWorker,
+import type {
+	CommandRunner as HerdrCommandRunner,
+	StartBackgroundWorker,
 } from "../src/herdr-claim-gate.ts";
 import {
 	readPiTaskStore,

@@ -104,13 +104,9 @@ export async function inspectWorktree(
 		exec("git", ["worktree", "list", "--porcelain"], { cwd }),
 	]);
 	const root =
-		rootResult.code === 0
-			? resolveGitPath(cwd, rootResult.stdout)
-			: null;
+		rootResult.code === 0 ? resolveGitPath(cwd, rootResult.stdout) : null;
 	const branch =
-		branchResult.code === 0
-			? parseBranchName(branchResult.stdout)
-			: null;
+		branchResult.code === 0 ? parseBranchName(branchResult.stdout) : null;
 	const mainRoot =
 		listResult.code === 0
 			? resolveGitPath(cwd, firstWorktreePath(listResult.stdout) ?? "")

@@ -1,11 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { CommandRunner } from "../src/herdr-claim-gate.ts";
 import {
 	type ClaimWorkerRequest,
 	installHerdrClaimGate,
 	type StartBackgroundWorker,
 } from "../src/herdr-claim-gate.ts";
-import type { CommandRunner } from "../src/herdr-claim-gate.ts";
 
 interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
@@ -18,7 +18,8 @@ interface FakePi {
 }
 
 function createFakePi(): FakePi {
-	const entries: Array<{ type: string; data?: unknown; customType?: string }> = [];
+	const entries: Array<{ type: string; data?: unknown; customType?: string }> =
+		[];
 	const pi: FakePi = {
 		handlers: new Map(),
 		entries,
@@ -39,7 +40,11 @@ function createFakePi(): FakePi {
 
 function contextFor(
 	pi: FakePi,
-	entries: Array<{ type: string; data?: unknown; customType?: string }> = pi.entries,
+	entries: Array<{
+		type: string;
+		data?: unknown;
+		customType?: string;
+	}> = pi.entries,
 ) {
 	return {
 		cwd: "/repo",
@@ -122,12 +127,7 @@ async function startGate(
 	else process.env.PI_SUBAGENT_CHILD = previousSubagent;
 }
 
-async function emit(
-	pi: FakePi,
-	event: string,
-	value: unknown,
-	ctx: unknown,
-) {
+async function emit(pi: FakePi, event: string, value: unknown, ctx: unknown) {
 	const handlers = pi.handlers.get(event) ?? [];
 	return Promise.all(handlers.map((handler) => handler(value, ctx)));
 }
@@ -147,9 +147,7 @@ describe("Herdr claim gate activation", () => {
 
 		expect(result).toEqual([undefined]);
 		expect(worker.request?.prompt).toBe("Fix dialog editor");
-		expect(worker.request?.instructions).toContain(
-			"# STEP 0 — Setup Herdr",
-		);
+		expect(worker.request?.instructions).toContain("# STEP 0 — Setup Herdr");
 		expect(pi.contextMessages).toHaveLength(0);
 	});
 
@@ -314,10 +312,7 @@ describe("Herdr automatic linked-worktree claim", () => {
 		const runner: CommandRunner = (command, args) => {
 			if (command === "git" && args.join(" ") === "rev-parse --git-dir")
 				return "/repo/.git/worktrees/feature\n";
-			if (
-				command === "git" &&
-				args.join(" ") === "rev-parse --git-common-dir"
-			)
+			if (command === "git" && args.join(" ") === "rev-parse --git-common-dir")
 				return "/repo/.git\n";
 			if (command === "git" && args.join(" ") === "branch --show-current")
 				return "feature/dialog-editor\n";
