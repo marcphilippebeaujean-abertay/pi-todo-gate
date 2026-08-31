@@ -24,9 +24,8 @@ const UNKNOWN_VALUE = "UNKNOWN";
 const OPEN_2 = "OPEN";
 const CLOSED = "CLOSED";
 const MERGED = "MERGED";
-const TEXT_3 = '"';
 const MERGE = "merge";
-const TEXT_8 = "--";
+const DOUBLE_DASH = "--";
 const REPO = "--repo";
 const R = "-R";
 const REPO_2 = "--repo=";
@@ -173,6 +172,34 @@ export async function findOpenPr(
 	}
 }
 
+type Char = "'" | '"' | "\\" | ";" | "|" | "&";
+type QuoteCharacter = "'" | '"';
+
+function isCharacter(character: string, expected: Char): boolean {
+	return character === expected;
+}
+
+function isQuoteCharacter(character: string): character is QuoteCharacter {
+	return isCharacter(character, "'") || isCharacter(character, '"');
+}
+
+function isEscapeCharacter(
+	character: string,
+	quote: QuoteCharacter | null,
+): boolean {
+	return isCharacter(character, "\\") && quote !== "'";
+}
+
+function isCommandSeparator(character: string): boolean {
+	if (isCharacter(character, ";")) return true;
+	if (isCharacter(character, "|")) return true;
+	return isCharacter(character, "&");
+}
+
+function isShellWhitespace(character: string): boolean {
+	return /\s/.test(character);
+}
+
 function shellSegments(command: string): string[] {
 	const segments: string[] = [];
 	let current = "";
@@ -184,7 +211,8 @@ function shellSegments(command: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === "\\" && quote !== "'") {
+		const startsEscape = isEscapeCharacter(character, quote);
+		if (startsEscape) {
 			current += character;
 			escaped = true;
 			continue;
@@ -192,16 +220,17 @@ function shellSegments(command: string): string[] {
 		const isInsideQuote: boolean = !!quote;
 		if (isInsideQuote) {
 			current += character;
-			if (character === quote) quote = null;
+			const closesQuote = quote !== null && character === quote;
+			if (closesQuote) quote = null;
 			continue;
 		}
-		if (character === "'" || character === TEXT_3) {
+		const startsQuote = isQuoteCharacter(character);
+		if (startsQuote) {
 			quote = character;
 			current += character;
 			continue;
 		}
-		const isBasicWhitespace = character === ";" || character === "|";
-		const isWhitespace: boolean = isBasicWhitespace || character === "&";
+		const isWhitespace = isCommandSeparator(character);
 		if (isWhitespace) {
 			const hasCurrentToken: boolean = !!current.trim();
 			if (hasCurrentToken) segments.push(current.trim());
@@ -231,21 +260,24 @@ function shellWords(segment: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === "\\" && quote !== "'") {
+		const startsEscape = isEscapeCharacter(character, quote);
+		if (startsEscape) {
 			escaped = true;
 			continue;
 		}
 		const isInsideQuote: boolean = !!quote;
 		if (isInsideQuote) {
-			if (character === quote) quote = null;
+			const closesQuote = quote !== null && character === quote;
+			if (closesQuote) quote = null;
 			else current += character;
 			continue;
 		}
-		if (character === "'" || character === TEXT_3) {
+		const startsQuote = isQuoteCharacter(character);
+		if (startsQuote) {
 			quote = character;
 			continue;
 		}
-		const isWhitespace: boolean = !!/\s/.test(character);
+		const isWhitespace = isShellWhitespace(character);
 		if (isWhitespace) {
 			const hasCurrentWord: boolean = !!current;
 			if (hasCurrentWord) push();
@@ -295,7 +327,7 @@ export function mergeCommand(
 
 function positionalArgs(args: string[]): string[] {
 	return args.filter((arg) => {
-		if (arg === TEXT_8) return false;
+		if (arg === DOUBLE_DASH) return false;
 		return !arg.startsWith("-");
 	});
 }
@@ -314,7 +346,7 @@ function ghMergeTargets(args: string[]): string[] | null {
 	const targets: string[] = [];
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
-		if (arg === TEXT_8) {
+		if (arg === DOUBLE_DASH) {
 			targets.push(...args.slice(index + 1));
 			break;
 		}

@@ -5,13 +5,13 @@ const TODOIST_TASK_NONE = "Todoist Task: none";
 const HTTP = "http:";
 const HTTPS = "https:";
 const MUTED = "muted";
-const TEXT = "text";
+const TEXT_COLOR = "text";
 const PR_LINK = "| PR Link: ";
 const NONE = "none";
-const TEXT_2 = " |";
+const LINK_SEPARATOR_SUFFIX = " |";
 const TODOIST_TASK = "Todoist Task: ";
 const DIM = "dim";
-const TEXT_3 = " | ";
+const STATUS_SEPARATOR = " | ";
 
 import {
 	hyperlink,
@@ -98,13 +98,13 @@ export function renderPrStatus(
 	theme?: FooterTheme,
 ): string {
 	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT, text) ?? text;
+	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (number === undefined || normalized === null)
-		return `${muted(PR_LINK)}${value(NONE)}${muted(TEXT_2)}`;
+		return `${muted(PR_LINK)}${value(NONE)}${muted(LINK_SEPARATOR_SUFFIX)}`;
 	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
-	return `${muted(PR_LINK)}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(TEXT_2)}`;
+	return `${muted(PR_LINK)}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(LINK_SEPARATOR_SUFFIX)}`;
 }
 
 export function renderTaskStatus(
@@ -113,7 +113,7 @@ export function renderTaskStatus(
 	taskName?: string,
 ): string {
 	const muted = (text: string) => theme?.fg(MUTED, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT, text) ?? text;
+	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
 	if (url === undefined) return `${muted(TODOIST_TASK)}${value(NONE)}`;
 	try {
 		const parsed = new URL(url);
@@ -144,7 +144,7 @@ export function renderFooterLine(
 		const hasStatus: boolean = !!status;
 		if (hasStatus) parts.push(status);
 	}
-	const line = theme.fg(DIM, parts.join(TEXT_3));
+	const line = theme.fg(DIM, parts.join(STATUS_SEPARATOR));
 	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
 	if (fitsWidth) return line;
 	return truncateToWidth(line, width, "", false);
