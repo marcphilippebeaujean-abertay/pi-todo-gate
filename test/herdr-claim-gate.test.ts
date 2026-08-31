@@ -256,6 +256,26 @@ describe("Herdr claim gate enforcement", () => {
 				contextFor(pi),
 			),
 		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+		expect(
+			await toolCall?.(
+				{
+					toolName: "bash",
+					input: { command: "herdr pane current $HOME" },
+				},
+				contextFor(pi),
+			),
+		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
+		expect(
+			await toolCall?.(
+				{
+					toolName: "bash",
+					input: {
+						command: 'herdr pane list --workspace "$HERDR_WORKSPACE_ID" extra',
+					},
+				},
+				contextFor(pi),
+			),
+		).toEqual({ block: true, reason: expect.stringContaining("Herdr") });
 	});
 
 	it("lifts gate when worker completes and cancels worker on shutdown", async () => {

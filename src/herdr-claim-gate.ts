@@ -165,18 +165,22 @@ function claimWorktreeTab(commandRunner: CommandRunner, cwd: string): boolean {
 }
 
 const CHAINING_RE = /[;&|<>`\r\n]|\$\(/;
+const HERDR_ID = "[A-Za-z0-9_.:-]+";
+const SHORT_LABEL = "[A-Za-z0-9_.\\/-]+";
 const ALLOWED: RegExp[] = [
 	/^echo HERDR_ENV=\$\{?HERDR_ENV\}?$/,
 	/^echo HERDR_ENV=['"]?\$\{?HERDR_ENV\}?['"]?$/,
 	/^echo ['"]?\$\{?HERDR_ENV\}?['"]?$/,
 	/^test "\$\{HERDR_ENV:-\}" = 1$/,
 	/^printf '%s\\n' "\$HERDR_WORKSPACE_ID" "\$HERDR_TAB_ID" "\$HERDR_PANE_ID"$/,
-	/^herdr pane current(\s.*)?$/,
-	/^herdr pane list(\s.*)?$/,
-	/^herdr tab get \S+(\s.*)?$/,
-	/^herdr agent list(\s.*)?$/,
-	/^herdr tab rename \S+ \S+(\s.*)?$/,
-	/^herdr pane move \S+ --new-tab\b.*$/,
+	/^herdr pane current$/,
+	/^herdr pane list(?: --workspace (?:\$HERDR_WORKSPACE_ID|"\$HERDR_WORKSPACE_ID"|'\$HERDR_WORKSPACE_ID'))?$/,
+	new RegExp(`^herdr tab get ${HERDR_ID}$`),
+	/^herdr agent list$/,
+	new RegExp(`^herdr tab rename ${HERDR_ID} ${SHORT_LABEL}$`),
+	new RegExp(
+		`^herdr pane move ${HERDR_ID} --new-tab --label ${SHORT_LABEL} --focus$`,
+	),
 ];
 
 function normalize(command: string): string {
