@@ -21,17 +21,15 @@ pi --mode json -p --no-session --no-extensions <worker-prompt>
 
 Worker instructions and output stay inside worker process. User sees completion or failure through notification only. Main agent receives no Herdr context, message, status, or result, and its tool calls are never blocked while worker runs.
 
-## Remove legacy gate
+## Legacy gate cleanup
 
-After installing and verifying package, manually remove old unversioned files:
+`npm run install-local` removes only these obsolete files when present:
 
 ```text
 ~/.pi/agent/extensions/herdr-claim-gate.ts
 ~/.pi/agent/extensions/tests/herdr-claim-gate.test.ts
 ```
 
-Leaving old `herdr-claim-gate.ts` active causes duplicate gate handlers. Installer does not remove global files automatically.
+This prevents duplicate Herdr gate handlers. Keep `~/.pi/agent/extensions/herdr-agent-state.ts`; Herdr manages that file and may overwrite local changes.
 
-Keep `~/.pi/agent/extensions/herdr-agent-state.ts`. Herdr manages that file and may overwrite local changes.
-
-Restart Pi after cleanup. Confirm Herdr claim completion produces user notification and no Herdr instructions or worker output appear in main agent context.
+Restart Pi after installation. Confirm Herdr claim completion produces user notification and no Herdr instructions or worker output appear in main agent context.

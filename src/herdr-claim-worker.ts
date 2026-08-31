@@ -20,7 +20,12 @@ export interface ClaimWorkerOptions {
 export type WorkerSpawner = (
 	command: string,
 	args: readonly string[],
-	options: { cwd: string; env: NodeJS.ProcessEnv; shell: false },
+	options: {
+		cwd: string;
+		env: NodeJS.ProcessEnv;
+		shell: false;
+		stdio: ["ignore", "pipe", "pipe"];
+	},
 ) => WorkerProcess;
 
 export interface WorkerOutputStream {
@@ -42,6 +47,7 @@ const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 		cwd: options.cwd,
 		env: options.env,
 		shell: options.shell,
+		stdio: options.stdio,
 	}) as unknown as WorkerProcess;
 
 function appendBounded(current: string, chunk: Buffer | string): string {
@@ -73,6 +79,7 @@ export function startClaimWorker(
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
 			shell: false,
+			stdio: ["ignore", "pipe", "pipe"],
 		},
 	);
 	let settled = false;
