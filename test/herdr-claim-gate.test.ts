@@ -321,8 +321,10 @@ describe("Herdr automatic linked-worktree claim", () => {
 			return "{}";
 		};
 		const previousHerdr = process.env.HERDR_ENV;
+		const previousSubagent = process.env.PI_SUBAGENT_CHILD;
 		const previousTab = process.env.HERDR_TAB_ID;
 		process.env.HERDR_ENV = "1";
+		delete process.env.PI_SUBAGENT_CHILD;
 		process.env.HERDR_TAB_ID = "w1:t1";
 		try {
 			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
@@ -336,6 +338,8 @@ describe("Herdr automatic linked-worktree claim", () => {
 		} finally {
 			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
 			else process.env.HERDR_ENV = previousHerdr;
+			if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previousSubagent;
 			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
 			else process.env.HERDR_TAB_ID = previousTab;
 		}
