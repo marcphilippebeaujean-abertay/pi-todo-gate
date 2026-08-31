@@ -14,7 +14,7 @@ export function githubPrUrl(text: string): string | null {
 			const match = url.pathname.match(
 				/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 			);
-			if (!match) continue;
+			if (match === null) continue;
 			return `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`;
 		} catch {
 			// Ignore malformed URL candidates and continue scanning the text.

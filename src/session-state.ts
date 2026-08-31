@@ -1,5 +1,7 @@
 const CUSTOM = "custom";
 const PI_TODO_GATE_STATE = "pi-todo-gate-state";
+const OBJECT_TYPE = "object";
+const STRING_TYPE = "string";
 
 import type { WorkState } from "./types.ts";
 
@@ -14,22 +16,29 @@ const STATE_KEYS: readonly (keyof WorkState)[] = [
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null) return false;
+	const isObjectValue = typeof value === OBJECT_TYPE;
+	const isNullValue = value === null;
+	const isNotObject = !isObjectValue || isNullValue;
+	if (isNotObject) return false;
 	return !Array.isArray(value);
 }
 
 function isWorkState(value: unknown): value is WorkState {
-	if (!isRecord(value)) return false;
+	const record = isRecord(value) ? value : null;
+	if (record === null) return false;
 	return STATE_KEYS.every(
-		(key) => value[key] === undefined || typeof value[key] === "string",
+		(key) => record[key] === undefined || typeof record[key] === STRING_TYPE,
 	);
 }
 
 function stateFromEntry(entry: unknown): WorkState | null {
-	if (!isRecord(entry)) return null;
-	if (entry.type !== CUSTOM) return null;
-	if (entry.customType !== PI_TODO_GATE_STATE) return null;
-	return isWorkState(entry.data) ? { ...entry.data } : null;
+	const record = isRecord(entry) ? entry : null;
+	if (record === null) return null;
+	const isCustomEntry = record.type === CUSTOM;
+	if (!isCustomEntry) return null;
+	const isStateEntry = record.customType === PI_TODO_GATE_STATE;
+	if (!isStateEntry) return null;
+	return isWorkState(record.data) ? { ...record.data } : null;
 }
 
 export function emptyWorkState(): WorkState {
@@ -54,7 +63,8 @@ export function applyStatePatch(
 export function latestState(entries: readonly unknown[]): WorkState {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const state = stateFromEntry(entries[index]);
-		if (state) return state;
+		if (state === null) continue;
+		return state;
 	}
 	return emptyWorkState();
 }
@@ -64,7 +74,8 @@ export function extractInheritedState(
 ): WorkState | null {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const state = stateFromEntry(entries[index]);
-		if (state) return state;
+		if (state === null) continue;
+		return state;
 	}
 	return null;
 }
