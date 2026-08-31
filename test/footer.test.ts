@@ -40,7 +40,7 @@ describe("Todoist footer rendering", () => {
 
 	it("renders missing task and invalid PR values safely", () => {
 		expect(renderTaskStatus(undefined, styledTheme)).toContain(
-			"<muted>Todoist Task: </muted><text>none</text>",
+			"<muted>Todoist Task | </muted><text>none</text>",
 		);
 		expect(renderPrStatus("https://example.com/pr/42", styledTheme)).toContain(
 			"PR Link: ",

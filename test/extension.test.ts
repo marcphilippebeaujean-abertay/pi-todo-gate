@@ -392,6 +392,9 @@ describe("deferred Todoist task claiming", () => {
 		await h.commands.get("todoist-reevaluate")?.("", h.ctx);
 
 		expect(h.statusCalls.some(({ text }) => text?.includes("⠋"))).toBe(true);
+		expect(
+			h.statusCalls.some(({ text }) => text?.includes("Todoist Task | ⠋")),
+		).toBe(true);
 		expect(h.notifications).toContain("No task update");
 	});
 
@@ -541,6 +544,9 @@ describe("deferred Todoist task claiming", () => {
 			allowInProgress: true,
 		});
 		expect(h.statusCalls.some(({ text }) => text?.includes("⠋"))).toBe(true);
+		expect(
+			h.statusCalls.some(({ text }) => text?.includes("Todoist Task | ⠋")),
+		).toBe(true);
 		expect(h.statusCalls.at(-1)?.text).toContain("Implement featu");
 		expect(
 			(h.appended.at(-1) as { data: Record<string, unknown> }).data,
