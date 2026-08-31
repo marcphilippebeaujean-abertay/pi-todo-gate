@@ -38,6 +38,9 @@ const CONSTANT_SOURCE = `function check(name: string) {
 const MODULE_PROPERTY_SOURCE = `import "side-effect";
 const record = { message: "ok" };
 export type Status = "ok";`;
+const TYPE_SYNTAX_SOURCE = `function read(): "ok" {
+	return "ok";
+}`;
 const TWO_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean) { return a && b; }";
 const THREE_CHECKS_SOURCE =
@@ -138,6 +141,11 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
+		expect(
+			ruleIds(await lintFixture(TYPE_SYNTAX_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(1);
 	});
 
 	it(EXPRESSION_TEST, async () => {
