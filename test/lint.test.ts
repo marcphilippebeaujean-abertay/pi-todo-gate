@@ -41,6 +41,16 @@ export type Status = "ok";`;
 const TYPE_SYNTAX_SOURCE = `function read(): "ok" {
 	return "ok";
 }`;
+const DIRECTIVE_SOURCE = `function read() {
+	"use strict";
+	return true;
+}`;
+const STANDALONE_STRING_SOURCE = `function read() {
+	"use strict";
+	void 0;
+	"not a directive";
+	return true;
+}`;
 const TWO_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean) { return a && b; }";
 const THREE_CHECKS_SOURCE =
@@ -146,6 +156,12 @@ describe("lint diagnostics", () => {
 				(id) => id === NO_MAGIC_RULE,
 			),
 		).toHaveLength(1);
+		expect(ruleIds(await lintFixture(DIRECTIVE_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
+		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
+			NO_MAGIC_RULE,
+		);
 	});
 
 	it(EXPRESSION_TEST, async () => {

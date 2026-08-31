@@ -117,11 +117,16 @@ function isModuleSpecifier(
 	ancestors: readonly ts.Node[],
 ): boolean {
 	const parent = ancestors.at(-1);
+	const grandparent = ancestors.at(-2);
 	if (!parent) return false;
 	return (
 		(ts.isImportDeclaration(parent) && parent.moduleSpecifier === node) ||
 		(ts.isExportDeclaration(parent) && parent.moduleSpecifier === node) ||
-		(ts.isExternalModuleReference(parent) && parent.expression === node)
+		(ts.isExternalModuleReference(parent) && parent.expression === node) ||
+		(ts.isLiteralTypeNode(parent) &&
+			grandparent !== undefined &&
+			ts.isImportTypeNode(grandparent) &&
+			parent.literal === node)
 	);
 }
 
@@ -160,9 +165,27 @@ function isStandaloneStringStatement(
 	node: ts.Node,
 	ancestors: readonly ts.Node[],
 ): boolean {
-	const parent = ancestors.at(-1);
-	return Boolean(
-		parent && ts.isExpressionStatement(parent) && parent.expression === node,
+	const statement = ancestors.at(-1);
+	const container = ancestors.at(-2);
+	if (
+		!statement ||
+		!container ||
+		!ts.isExpressionStatement(statement) ||
+		statement.expression !== node ||
+		(!ts.isBlock(container) && !ts.isSourceFile(container))
+	)
+		return false;
+	const statements = container.statements;
+	const index = statements.indexOf(statement);
+	return (
+		index >= 0 &&
+		statements
+			.slice(0, index)
+			.every(
+				(candidate) =>
+					ts.isExpressionStatement(candidate) &&
+					isStringLiteralLike(candidate.expression),
+			)
 	);
 }
 
