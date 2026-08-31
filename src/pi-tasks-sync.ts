@@ -1,6 +1,5 @@
 const PI = ".pi";
 const TASKS = "tasks";
-const EMPTY_STRING = "";
 const OFF_VALUE = "off";
 const MEMORY = "memory";
 const PI_TASK_STORE_IS_UNAVAILABLE_IN_THE =
@@ -15,10 +14,6 @@ const COMPLETED_VALUE = "completed";
 const UTF8_ENCODING = "utf8";
 const INVALID_PI_TASK_STORE_JSON = "invalid Pi task store JSON";
 const INVALID_PI_TASK_STORE = "invalid Pi task store";
-const TEXT = ",";
-const TEXT_2 = "\n";
-const X = "x";
-const TEXT_3 = "~";
 const X_2 = "[x]";
 const TEXT_4 = "[~]";
 const TEXT_5 = "[ ]";
@@ -62,7 +57,7 @@ export function sessionTaskPath(cwd: string, sessionId: string): string {
 }
 
 function ensureFileBacked(path: string): void {
-	const scope = (process.env.PI_TASKS ?? EMPTY_STRING).toLowerCase();
+	const scope = (process.env.PI_TASKS ?? "").toLowerCase();
 	if (scope === OFF_VALUE || scope === MEMORY) {
 		throw new Error(PI_TASK_STORE_IS_UNAVAILABLE_IN_THE);
 	}
@@ -173,10 +168,10 @@ function metadataLines(task: PiTask): string[] {
 	if (hasOwner) lines.push(`${PRIVATE_PREFIX}owner=${task.owner} -->`);
 	const hasBlockedTasks: boolean = !!task.blocks.length;
 	if (hasBlockedTasks)
-		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(TEXT)} -->`);
+		lines.push(`${PRIVATE_PREFIX}blocks=${task.blocks.join(",")} -->`);
 	const hasBlockingTasks: boolean = !!task.blockedBy.length;
 	if (hasBlockingTasks)
-		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(TEXT)} -->`);
+		lines.push(`${PRIVATE_PREFIX}blockedBy=${task.blockedBy.join(",")} -->`);
 	return lines;
 }
 
@@ -184,16 +179,14 @@ function withoutPrivateLines(description: string): string {
 	return description
 		.split(/\r?\n/)
 		.filter((line) => !line.trim().startsWith(PRIVATE_PREFIX))
-		.join(TEXT_2)
+		.join("\n")
 		.trim();
 }
 
 function descriptionWithMetadata(task: PiTask): string {
 	const original = withoutPrivateLines(task.description);
 	const metadata = metadataLines(task);
-	return original
-		? `${original}\n${metadata.join(TEXT_2)}`
-		: metadata.join(TEXT_2);
+	return original ? `${original}\n${metadata.join("\n")}` : metadata.join("\n");
 }
 
 function parseStatus(content: string): {
@@ -203,9 +196,9 @@ function parseStatus(content: string): {
 	const marker = content.match(/^\[([ x~])\]\s*(.*)$/i);
 	if (!marker) return { status: PENDING_VALUE, subject: content };
 	const status =
-		marker[1].toLowerCase() === X
+		marker[1].toLowerCase() === "x"
 			? COMPLETED_VALUE
-			: marker[1] === TEXT_3
+			: marker[1] === "~"
 				? IN_PROGRESS_VALUE
 				: PENDING_VALUE;
 	return { status, subject: marker[2] };
@@ -222,7 +215,7 @@ function markerData(description: string): {
 		if (match) values[match[1]] = match[2];
 		else cleanLines.push(line);
 	}
-	return { clean: cleanLines.join(TEXT_2).trim(), values };
+	return { clean: cleanLines.join("\n").trim(), values };
 }
 
 function flattened(children: readonly TodoistChild[]): TodoistChild[] {
@@ -258,10 +251,10 @@ export function todoistSubtasksToPiTasks(
 		);
 		if (hasNumericTaskId) nextId = numericId + 1;
 		const blocks = metadata.values.blocks
-			? metadata.values.blocks.split(TEXT).filter(Boolean)
+			? metadata.values.blocks.split(",").filter(Boolean)
 			: [];
 		const blockedBy = metadata.values.blockedBy
-			? metadata.values.blockedBy.split(TEXT).filter(Boolean)
+			? metadata.values.blockedBy.split(",").filter(Boolean)
 			: [];
 		tasks.push({
 			id,

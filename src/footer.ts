@@ -1,6 +1,5 @@
 const ACCENT = "accent";
 const PR_NONE = "PR: none";
-const SPACE = " ";
 const OPEN = "open";
 const TODOIST_TASK_NONE = "Todoist Task: none";
 const HTTP = "http:";
@@ -11,7 +10,6 @@ const PR_LINK = "| PR Link: ";
 const NONE = "none";
 const TEXT_2 = " |";
 const TODOIST_TASK = "Todoist Task: ";
-const EMPTY_STRING = "";
 const DIM = "dim";
 const TEXT_3 = " | ";
 
@@ -72,9 +70,9 @@ function displayTaskName(
 	taskName: string | undefined,
 	id: string | undefined,
 ): string {
-	const name = taskName?.replace(/\s+/g, SPACE).trim();
+	const name = taskName?.replace(/\s+/g, " ").trim();
 	if (name === undefined) return id ? `#${id}` : OPEN;
-	if (name === EMPTY_STRING) return id ? `#${id}` : OPEN;
+	if (name === "") return id ? `#${id}` : OPEN;
 	return name.length > 15 ? `${name.slice(0, 15)}...` : name;
 }
 
@@ -135,7 +133,7 @@ export function renderFooterLine(
 	statuses: ReadonlyMap<string, string>,
 ): string {
 	const hasNoWidth: boolean = !!(width <= 0);
-	if (hasNoWidth) return EMPTY_STRING;
+	if (hasNoWidth) return "";
 	const parts = [
 		prLabel(state.prUrl, theme),
 		taskLabel(state.taskUrl, state.taskName, theme),
@@ -149,7 +147,7 @@ export function renderFooterLine(
 	const line = theme.fg(DIM, parts.join(TEXT_3));
 	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
 	if (fitsWidth) return line;
-	return truncateToWidth(line, width, EMPTY_STRING, false);
+	return truncateToWidth(line, width, "", false);
 }
 
 function noop(): void {}

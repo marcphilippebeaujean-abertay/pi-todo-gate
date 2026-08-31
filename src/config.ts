@@ -2,8 +2,6 @@ const PI = ".pi";
 const AGENT = "agent";
 const PI_TODO_GATE_JSON = "pi-todo-gate.json";
 const UTF8_ENCODING = "utf8";
-const TEXT = "/";
-const TEXT_2 = "\\";
 
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -62,7 +60,7 @@ function isPathAtOrBelow(path: string, ancestor: string): boolean {
 	const target = normalizedPath(path);
 	const parent = normalizedPath(ancestor);
 	const prefix =
-		parent.endsWith(TEXT) || parent.endsWith(TEXT_2) ? parent : `${parent}/`;
+		parent.endsWith("/") || parent.endsWith("\\") ? parent : `${parent}/`;
 	return target === parent || target.startsWith(prefix);
 }
 

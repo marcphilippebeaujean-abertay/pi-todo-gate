@@ -1,4 +1,3 @@
-const EMPTY_STRING = "";
 const SIGTERM = "SIGTERM";
 const ABORT = "abort";
 const DATA = "data";
@@ -21,21 +20,13 @@ const OPEN = "open";
 const JSON_2 = "--json";
 const URL_STATE = "url,state";
 const LIMIT = "--limit";
-const VALUE_1 = "1";
 const UNKNOWN_VALUE = "UNKNOWN";
 const OPEN_2 = "OPEN";
 const CLOSED = "CLOSED";
 const MERGED = "MERGED";
-const TEXT = "\\";
-const TEXT_2 = "'";
 const TEXT_3 = '"';
-const TEXT_4 = ";";
-const TEXT_5 = "|";
-const TEXT_6 = "&";
-const TEXT_7 = "/";
 const MERGE = "merge";
 const TEXT_8 = "--";
-const TEXT_9 = "-";
 const REPO = "--repo";
 const R = "-R";
 const REPO_2 = "--repo=";
@@ -74,8 +65,8 @@ export interface OpenPrInfo {
 export const spawnExec: Exec = (command, args, options = {}) =>
 	new Promise((resolveResult) => {
 		const child = spawn(command, args, { cwd: options.cwd, shell: false });
-		let stdout = EMPTY_STRING;
-		let stderr = EMPTY_STRING;
+		let stdout = "";
+		let stderr = "";
 		let killed = false;
 		let settled = false;
 		const finish = (result: CommandResult) => {
@@ -157,7 +148,7 @@ export async function findOpenPr(
 ): Promise<OpenPrInfo> {
 	const result = await exec(
 		GH,
-		[PR, LIST, HEAD, branch, STATE, OPEN, JSON_2, URL_STATE, LIMIT, VALUE_1],
+		[PR, LIST, HEAD, branch, STATE, OPEN, JSON_2, URL_STATE, LIMIT, "1"],
 		{ cwd },
 	);
 	const commandFailed: boolean = !!(result.code !== 0);
@@ -184,7 +175,7 @@ export async function findOpenPr(
 
 function shellSegments(command: string): string[] {
 	const segments: string[] = [];
-	let current = EMPTY_STRING;
+	let current = "";
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 	for (const character of command) {
@@ -193,7 +184,7 @@ function shellSegments(command: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === TEXT && quote !== TEXT_2) {
+		if (character === "\\" && quote !== "'") {
 			current += character;
 			escaped = true;
 			continue;
@@ -204,17 +195,17 @@ function shellSegments(command: string): string[] {
 			if (character === quote) quote = null;
 			continue;
 		}
-		if (character === TEXT_2 || character === TEXT_3) {
+		if (character === "'" || character === TEXT_3) {
 			quote = character;
 			current += character;
 			continue;
 		}
-		const isBasicWhitespace = character === TEXT_4 || character === TEXT_5;
-		const isWhitespace: boolean = isBasicWhitespace || character === TEXT_6;
+		const isBasicWhitespace = character === ";" || character === "|";
+		const isWhitespace: boolean = isBasicWhitespace || character === "&";
 		if (isWhitespace) {
 			const hasCurrentToken: boolean = !!current.trim();
 			if (hasCurrentToken) segments.push(current.trim());
-			current = EMPTY_STRING;
+			current = "";
 			continue;
 		}
 		current += character;
@@ -226,13 +217,13 @@ function shellSegments(command: string): string[] {
 
 function shellWords(segment: string): string[] {
 	const words: string[] = [];
-	let current = EMPTY_STRING;
+	let current = "";
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 	const push = () => {
 		const shouldPushWord: boolean = !!(current || words.length === 0);
 		if (shouldPushWord) words.push(current);
-		current = EMPTY_STRING;
+		current = "";
 	};
 	for (const character of segment) {
 		if (escaped) {
@@ -240,7 +231,7 @@ function shellWords(segment: string): string[] {
 			escaped = false;
 			continue;
 		}
-		if (character === TEXT && quote !== TEXT_2) {
+		if (character === "\\" && quote !== "'") {
 			escaped = true;
 			continue;
 		}
@@ -250,7 +241,7 @@ function shellWords(segment: string): string[] {
 			else current += character;
 			continue;
 		}
-		if (character === TEXT_2 || character === TEXT_3) {
+		if (character === "'" || character === TEXT_3) {
 			quote = character;
 			continue;
 		}
@@ -262,14 +253,14 @@ function shellWords(segment: string): string[] {
 		}
 		current += character;
 	}
-	if (escaped) current += TEXT;
+	if (escaped) current += "\\";
 	const hasCurrentWord: boolean = !!current;
 	if (hasCurrentWord) push();
 	return words;
 }
 
 function executableName(value: string): string {
-	return value.split(TEXT_7).at(-1) ?? value;
+	return value.split("/").at(-1) ?? value;
 }
 
 export function mergeCommand(
@@ -305,7 +296,7 @@ export function mergeCommand(
 function positionalArgs(args: string[]): string[] {
 	return args.filter((arg) => {
 		if (arg === TEXT_8) return false;
-		return !arg.startsWith(TEXT_9);
+		return !arg.startsWith("-");
 	});
 }
 
@@ -335,10 +326,10 @@ function ghMergeTargets(args: string[]): string[] | null {
 			index += 1;
 			continue;
 		}
-		const isLongOption: boolean = !!arg.startsWith(TEXT_9);
+		const isLongOption: boolean = !!arg.startsWith("-");
 		if (isLongOption) {
 			const hasInvalidOptionValue: boolean = !!(
-				index + 1 < args.length && !args[index + 1].startsWith(TEXT_9)
+				index + 1 < args.length && !args[index + 1].startsWith("-")
 			);
 			if (hasInvalidOptionValue) return null;
 			continue;

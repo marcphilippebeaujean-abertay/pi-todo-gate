@@ -77,6 +77,10 @@ function isStringLiteralLike(
 	return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
 }
 
+function isSingleCharacterLiteral(node: ts.Node): boolean {
+	return isStringLiteralLike(node) && node.text.length <= 1;
+}
+
 function isConstInitializer(
 	node: ts.Node,
 	ancestors: readonly ts.Node[],
@@ -163,6 +167,7 @@ function isIgnoredString(
 	ancestors: readonly ts.Node[],
 ): boolean {
 	return (
+		isSingleCharacterLiteral(node) ||
 		isConstInitializer(node, ancestors) ||
 		isPropertyName(node, ancestors) ||
 		isModuleSpecifier(node, ancestors) ||

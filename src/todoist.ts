@@ -1,7 +1,5 @@
-const EMPTY_STRING = "";
 const TODOISTERROR = "TodoistError";
 const VALUE_1_REDACTED = "$1=[redacted]";
-const SPACE = " ";
 const INVALID_JSON_RESPONSE = "invalid JSON response";
 const RESPONSE = "response";
 const UNEXPECTED_JSON_SHAPE = "unexpected JSON shape";
@@ -58,9 +56,7 @@ export class TodoistError extends Error {
 	readonly commandFamily: string;
 
 	constructor(commandFamily: string, detail: string) {
-		super(
-			`Todoist ${commandFamily} failed${detail ? `: ${detail}` : EMPTY_STRING}`,
-		);
+		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
 		this.name = TODOISTERROR;
 		this.commandFamily = commandFamily;
 	}
@@ -72,7 +68,7 @@ function sanitizeError(stderr: string): string {
 			/(?:token|password|secret|authorization|bearer)\s*[:=]?\s*[^\s,;]+/gi,
 			VALUE_1_REDACTED,
 		)
-		.replace(/\s+/g, SPACE)
+		.replace(/\s+/g, " ")
 		.trim()
 		.slice(0, 300);
 }
@@ -93,7 +89,7 @@ function record(value: unknown): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-function stringValue(value: unknown, fallback = EMPTY_STRING): string {
+function stringValue(value: unknown, fallback = ""): string {
 	return typeof value === "string" ? value : fallback;
 }
 
@@ -147,11 +143,11 @@ export class TodoistClient {
 		const result = await this.exec.run(args);
 		const commandFailed: boolean = !!(result.code !== 0);
 		if (commandFailed) {
-			const family = args.slice(0, 2).join(SPACE);
+			const family = args.slice(0, 2).join(" ");
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
 		return parseJson
-			? parsePayload(result.stdout, args.slice(0, 2).join(SPACE))
+			? parsePayload(result.stdout, args.slice(0, 2).join(" "))
 			: result.stdout;
 	}
 

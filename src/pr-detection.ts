@@ -1,11 +1,10 @@
-const EMPTY_STRING = "";
 const GITHUB_COM = "github.com";
 const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 
 export function githubPrUrl(text: string): string | null {
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
-		const trimmed = candidate.replace(TRAILING_PUNCTUATION, EMPTY_STRING);
+		const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
 		try {
 			const url = new URL(trimmed);
 			const isWrongHost: boolean = !!(

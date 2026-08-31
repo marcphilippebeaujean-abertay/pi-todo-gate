@@ -1,5 +1,3 @@
-const TEXT = "\n";
-
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,7 +56,7 @@ function formatTypeScriptDiagnostic(
 	diagnostic: ts.Diagnostic,
 	root: string,
 ): string {
-	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, TEXT);
+	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 	if (!diagnostic.file || diagnostic.start === undefined)
 		return `TypeScript ${message}`;
 	const location = diagnostic.file.getLineAndCharacterOfPosition(
