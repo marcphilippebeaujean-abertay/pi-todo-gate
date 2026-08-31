@@ -4,8 +4,11 @@ import {
 	type Exec,
 	findOpenPr,
 	inspectWorktree,
+	isLinkedWorktreePaths,
 	matchesPinnedPr,
 	mergeCommand,
+	parseBranchName,
+	resolveGitPath,
 } from "../src/git.ts";
 
 const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", code: 0 });
@@ -20,6 +23,35 @@ function fakeExec(results: Record<string, CommandResult>): Exec {
 		results[[command, ...args].join(" ")] ??
 		fail(`unexpected ${command} ${args.join(" ")}`);
 }
+
+describe("shared Git helpers", () => {
+	it("normalizes git path output relative to cwd", () => {
+		expect(resolveGitPath("/repo/worktree", ".git/worktrees/feature\n")).toBe(
+			"/repo/worktree/.git/worktrees/feature",
+		);
+		expect(resolveGitPath("/repo", "\n")).toBeNull();
+	});
+
+	it("parses a non-empty branch name", () => {
+		expect(parseBranchName("feature/dialog-editor\n")).toBe(
+			"feature/dialog-editor",
+		);
+		expect(parseBranchName("\n")).toBeNull();
+	});
+
+	it("detects linked worktree from git and common directory paths", () => {
+		expect(
+			isLinkedWorktreePaths(
+				"/repo/worktree",
+				".git/worktrees/feature",
+				"/repo/.git",
+			),
+		).toBe(true);
+		expect(isLinkedWorktreePaths("/repo", "/repo/.git", "/repo/.git")).toBe(
+			false,
+		);
+	});
+});
 
 describe("inspectWorktree", () => {
 	it("identifies a linked worktree and branch", async () => {
