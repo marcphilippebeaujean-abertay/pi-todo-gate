@@ -41,6 +41,19 @@ export interface WorkerProcess {
 
 const DEFAULT_COMMAND = "pi";
 const MAX_DIAGNOSTIC_BYTES = 500;
+const MODE_FLAG = "--mode";
+const JSON_MODE = "json";
+const PROMPT_FLAG = "-p";
+const NO_SESSION_FLAG = "--no-session";
+const NO_EXTENSIONS_FLAG = "--no-extensions";
+const STDIO_IGNORE = "ignore";
+const STDIO_PIPE = "pipe";
+const DATA_EVENT = "data";
+const ERROR_EVENT = "error";
+const CLOSE_EVENT = "close";
+const CHILD_PROCESS_VALUE = "1";
+const UNKNOWN_ERROR = "unknown error";
+const SIGTERM = "SIGTERM";
 
 const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 	spawn(command, [...args], {
@@ -50,80 +63,96 @@ const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 		stdio: options.stdio,
 	}) as unknown as WorkerProcess;
 
-function appendBounded(current: string, chunk: Buffer | string): string {
-	const next = `${current}${chunk.toString()}`;
-	return next.length > MAX_DIAGNOSTIC_BYTES
-		? next.slice(-MAX_DIAGNOSTIC_BYTES)
-		: next;
+function spawnWorkerProcess(
+	request: ClaimWorkerRequest,
+	options: ClaimWorkerOptions,
+): WorkerProcess {
+	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
+	return spawnWorker(
+		options.command ?? DEFAULT_COMMAND,
+		[
+			MODE_FLAG,
+			JSON_MODE,
+			PROMPT_FLAG,
+			NO_SESSION_FLAG,
+			NO_EXTENSIONS_FLAG,
+			`${request.instructions}\n\nParent user prompt:\n${request.prompt}`,
+		],
+		{
+			cwd: options.cwd ?? process.cwd(),
+			env: { ...process.env, PI_SUBAGENT_CHILD: CHILD_PROCESS_VALUE },
+			shell: false,
+			stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_PIPE],
+		},
+	);
 }
 
-function workerPrompt(request: ClaimWorkerRequest): string {
-	return `${request.instructions}\n\nParent user prompt:\n${request.prompt}`;
+interface WorkerState {
+	settled: boolean;
+	cancelled: boolean;
+	stderr: string;
+}
+
+function registerWorkerLifecycle(
+	child: WorkerProcess,
+	request: ClaimWorkerRequest,
+	state: WorkerState,
+): void {
+	child.stdout.on(DATA_EVENT, () => {
+		// Worker output is intentionally private and never forwarded to the parent session.
+	});
+	child.stderr.on(DATA_EVENT, (chunk) => {
+		const next = `${state.stderr}${chunk.toString()}`;
+		state.stderr =
+			next.length > MAX_DIAGNOSTIC_BYTES
+				? next.slice(-MAX_DIAGNOSTIC_BYTES)
+				: next;
+	});
+
+	const fail = (message: string): void => {
+		const isFinished = state.settled || state.cancelled;
+		if (isFinished) return;
+		state.settled = true;
+		request.onFailure(message);
+	};
+
+	child.on(ERROR_EVENT, (...args) => {
+		const error = args[0];
+		const detail =
+			error instanceof Error ? error.message : String(error ?? UNKNOWN_ERROR);
+		fail(`Herdr claim worker failed: ${detail}`);
+	});
+	child.on(CLOSE_EVENT, (...args) => {
+		const isFinished = state.settled || state.cancelled;
+		if (isFinished) return;
+		const code = args[0];
+		state.settled = true;
+		const didSucceed = code === 0;
+		if (didSucceed) {
+			request.onClaimComplete();
+			return;
+		}
+		const detail = state.stderr.trim();
+		request.onFailure(
+			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detail ? `: ${detail}` : ""}`,
+		);
+	});
 }
 
 export function startClaimWorker(
 	request: ClaimWorkerRequest,
 	options: ClaimWorkerOptions = {},
 ): ClaimWorkerHandle {
-	const child = (options.spawnWorker ?? defaultSpawnWorker)(
-		options.command ?? DEFAULT_COMMAND,
-		[
-			"--mode",
-			"json",
-			"-p",
-			"--no-session",
-			"--no-extensions",
-			workerPrompt(request),
-		],
-		{
-			cwd: options.cwd ?? process.cwd(),
-			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
-			shell: false,
-			stdio: ["ignore", "pipe", "pipe"],
-		},
-	);
-	let settled = false;
-	let cancelled = false;
-	let stderr = "";
-
-	child.stdout.on("data", () => {
-		// Worker output is intentionally private and never forwarded to the parent session.
-	});
-	child.stderr.on("data", (chunk) => {
-		stderr = appendBounded(stderr, chunk);
-	});
-
-	const fail = (message: string): void => {
-		if (settled || cancelled) return;
-		settled = true;
-		request.onFailure(message);
-	};
-
-	child.on("error", (...args) => {
-		const error = args[0];
-		const detail =
-			error instanceof Error ? error.message : String(error ?? "unknown error");
-		fail(`Herdr claim worker failed: ${detail}`);
-	});
-	child.on("close", (...args) => {
-		if (settled || cancelled) return;
-		const code = args[0];
-		settled = true;
-		if (code === 0) {
-			request.onClaimComplete();
-			return;
-		}
-		const detail = stderr.trim();
-		request.onFailure(
-			`Herdr claim worker exited with code ${String(code ?? "unknown")}${detail ? `: ${detail}` : ""}`,
-		);
-	});
+	const child = spawnWorkerProcess(request, options);
+	const state: WorkerState = { settled: false, cancelled: false, stderr: "" };
+	registerWorkerLifecycle(child, request, state);
 
 	return {
 		cancel(): void {
-			if (settled || cancelled) return;
-			cancelled = true;
-			child.kill("SIGTERM");
+			const isFinished = state.settled || state.cancelled;
+			if (isFinished) return;
+			state.cancelled = true;
+			child.kill(SIGTERM);
 		},
 	};
 }
