@@ -285,7 +285,7 @@ describe("Todoist prompt isolation", () => {
 
 describe("deferred Todoist task claiming", () => {
 	it("runs claim worker once with first prompt, history, and project details", async () => {
-		const h = harness("/configured/project", [
+		const h = harness("/configured/.worktrees/project", [
 			{
 				type: "message",
 				message: { role: "user", content: "initial request" },
@@ -294,7 +294,10 @@ describe("deferred Todoist task claiming", () => {
 		const inputs: unknown[] = [];
 		const todoist = createTodoistModule(
 			h.pi,
-			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{
 				exec: projectExec,
@@ -313,7 +316,7 @@ describe("deferred Todoist task claiming", () => {
 		expect(inputs[0]).toMatchObject({
 			prompt: "Implement feature",
 			history: [expect.stringContaining("initial request")],
-			cwd: "/configured/project",
+			cwd: "/configured/.worktrees/project",
 			projectRef: "Pi Extensions",
 			worktree: { isWorktree: true, branch: "feature" },
 		});
@@ -330,7 +333,11 @@ describe("deferred Todoist task claiming", () => {
 		);
 		const todoist = createTodoistModule(
 			h.pi,
-			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{ exec: projectExec, claimTaskWorker: worker },
 		);
@@ -368,7 +375,7 @@ describe("deferred Todoist task claiming", () => {
 			{
 				codingRoot: "/configured",
 				todoistProjectRef: "Pi Extensions",
-				triggerOnlyOnBranches: true,
+				triggersOnlyOnWorktree: true,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{ exec: rootExec, claimTaskWorker: worker },
@@ -397,7 +404,11 @@ describe("deferred Todoist task claiming", () => {
 			.mockResolvedValueOnce({ status: "claimed" as const, taskRef: "42" });
 		const todoist = createTodoistModule(
 			h.pi,
-			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{
 				exec: projectExec,
@@ -431,7 +442,11 @@ describe("deferred Todoist task claiming", () => {
 		} as unknown as TodoistClient;
 		const todoist = createTodoistModule(
 			h.pi,
-			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{
 				exec: projectExec,
@@ -472,7 +487,11 @@ describe("deferred Todoist task claiming", () => {
 		} as unknown as TodoistClient;
 		const todoist = createTodoistModule(
 			h.pi,
-			{ codingRoot: "/configured", todoistProjectRef: "Pi Extensions" },
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
 			{ projects: { "/configured": "Pi Extensions" } },
 			{
 				exec: projectExec,

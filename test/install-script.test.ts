@@ -77,7 +77,7 @@ describe("install.sh", () => {
 				projects: {
 					"/repo": {
 						todoistProjectRef: "old-project",
-						triggerOnlyOnBranches: false,
+						triggersOnlyOnWorktree: false,
 					},
 				},
 			}),
@@ -94,7 +94,7 @@ describe("install.sh", () => {
 					projects: {
 						"/repo": {
 							todoistProjectRef: "new-project",
-							triggerOnlyOnBranches: false,
+							triggersOnlyOnWorktree: false,
 						},
 					},
 				},

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 export interface TodoistProjectSettings {
 	todoistProjectRef: string;
-	triggerOnlyOnBranches?: boolean;
+	triggersOnlyOnWorktree?: boolean;
 }
 
 export interface TodoistProjectMapping {
@@ -13,7 +13,7 @@ export interface TodoistProjectMapping {
 export interface ResolvedProject {
 	codingRoot: string;
 	todoistProjectRef: string;
-	triggerOnlyOnBranches?: boolean;
+	triggersOnlyOnWorktree?: boolean;
 }
 
 export function defaultConfigPath(): string {
@@ -49,8 +49,8 @@ export function parseConfig(raw: string): TodoistProjectMapping {
 			if (typeof projectRef !== "string" || !projectRef.trim()) continue;
 			projects[normalizedPath] = {
 				todoistProjectRef: projectRef.trim(),
-				...(typeof project.triggerOnlyOnBranches === "boolean"
-					? { triggerOnlyOnBranches: project.triggerOnlyOnBranches }
+				...(typeof project.triggersOnlyOnWorktree === "boolean"
+					? { triggersOnlyOnWorktree: project.triggersOnlyOnWorktree }
 					: {}),
 			};
 		}
@@ -92,10 +92,10 @@ export function resolveConfiguredProject(
 			codingRoot: normalizedPath(codingRoot),
 			todoistProjectRef:
 				typeof project === "string" ? project : project.todoistProjectRef,
-			triggerOnlyOnBranches:
+			triggersOnlyOnWorktree:
 				typeof project === "string"
 					? true
-					: project.triggerOnlyOnBranches !== false,
+					: project.triggersOnlyOnWorktree !== false,
 		}))
 		.filter(({ codingRoot }) => isPathAtOrBelow(current, codingRoot))
 		.sort((a, b) => b.codingRoot.length - a.codingRoot.length);

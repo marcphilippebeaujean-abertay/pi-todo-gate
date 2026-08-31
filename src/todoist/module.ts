@@ -70,6 +70,10 @@ type SessionContext = Pick<
 	"cwd" | "ui" | "sessionManager" | "hasUI"
 >;
 
+function isWorktreePath(cwd: string): boolean {
+	return cwd.split(/[\\/]/).includes(".worktrees");
+}
+
 function branchTexts(entries: readonly unknown[]): string[] {
 	return entries
 		.filter(
@@ -169,13 +173,16 @@ export function createTodoistModule(
 		claimAnalysisComplete = true;
 		const generation = ++operationGeneration;
 		try {
+			if (
+				activeProject.triggersOnlyOnWorktree !== false &&
+				!isWorktreePath(runContext.cwd)
+			)
+				return;
 			const worktree = await inspectProject(
 				dependencies.exec ?? spawnExec,
 				runContext.cwd,
 			);
 			if (generation !== operationGeneration || context !== runContext) return;
-			if (activeProject.triggerOnlyOnBranches !== false && !worktree.isWorktree)
-				return;
 			const worker =
 				dependencies.claimTaskWorker ??
 				createTaskClaimWorker(dependencies.exec ?? spawnExec);
