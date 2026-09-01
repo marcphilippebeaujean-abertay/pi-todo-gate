@@ -47,7 +47,7 @@ The extension emits `sessionWillClose` before deactivating session modules. The 
 
 The close event collects remaining Todoist and worktree actions, including previously approved deferred cleanup. The combined picker again starts with all applicable actions selected and focus on `Submit`.
 
-If no actions exist, no picker is shown.
+If no actions exist, no picker is shown. Therefore, when no Todoist task is active and a linked worktree has no session changes, the worktree is auto-deleted, the user is notified, and no prompt is shown.
 
 ## Prompt UI
 
