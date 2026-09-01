@@ -12,7 +12,7 @@ import {
 	replaceSessionState,
 } from "./extension-lifecycle.ts";
 import { textOf } from "./extension-message.ts";
-import { linkInferredTask, scheduleSync } from "./extension-tasks.ts";
+import { linkInferredTask } from "./extension-tasks.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
 import {
 	type Exec,
@@ -31,13 +31,6 @@ const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 const BASH_COMMAND = "command";
 const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
-const TASK_TOOL_NAMES = new Set([
-	"TaskCreate",
-	"TaskUpdate",
-	"TaskStop",
-	"TaskExecute",
-]);
-
 export function persistPrIfAvailable(
 	runtime: ExtensionRuntime,
 	text: string,
@@ -197,14 +190,6 @@ export async function handleToolResult(
 	if (isFileMutation) session.workChanged = true;
 	const isBashTool = event.toolName === C.tool.bash;
 	if (isBashTool) await handleBashResult(runtime, session, event, ctx);
-	const usesTaskTool = TASK_TOOL_NAMES.has(event.toolName);
-	if (usesTaskTool) scheduleSync(runtime, session);
-}
-
-export function handleAgentSettled(runtime: ExtensionRuntime): void {
-	const session = runtime.active;
-	const hasSession = session !== null;
-	if (hasSession) scheduleSync(runtime, session);
 }
 
 export async function findOpenPrSafe(

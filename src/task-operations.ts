@@ -5,20 +5,16 @@ import type {
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import {
 	appendState,
-	cancelScheduledSync,
 	createClient,
 	refreshFooterStatuses,
 	replaceSessionState,
-	taskPath,
 } from "./extension-lifecycle.ts";
 import { extensionResult } from "./extension-message.ts";
-import { clearLocalTasks } from "./extension-tasks.ts";
 import type {
 	ActiveSession,
 	ExtensionRuntime,
 	StateToolParams,
 } from "./extension-types.ts";
-import { syncTodoistToPiTasks } from "./pi-tasks-sync.ts";
 import { enqueueSessionOperation } from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
 
@@ -31,7 +27,6 @@ async function setTaskActionNow(
 	const hasTask = params.task !== undefined;
 	if (!hasTask) throw new Error(C.message.invalidTask);
 	const task = params.task as string;
-	cancelScheduledSync(session);
 	const client = createClient(ctx, runtime.dependencies);
 	const project = await client.resolveProject(
 		session.project.todoistProjectRef,
@@ -40,10 +35,8 @@ async function setTaskActionNow(
 		id: project.id,
 		currentTaskId: session.state.taskRef,
 	});
-	await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
 	const isCurrentSession = runtime.active === session;
 	if (!isCurrentSession) return extensionResult(C.message.taskCleared);
-	session.syncAvailable = true;
 	const taskChanged = session.state.taskRef !== claimed.id;
 	replaceSessionState(
 		session,
@@ -70,8 +63,6 @@ async function clearTaskActionNow(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 ): Promise<AgentToolResult<undefined>> {
-	cancelScheduledSync(session);
-	await clearLocalTasks(session);
 	const isCurrentSession = runtime.active === session;
 	if (!isCurrentSession) return extensionResult(C.message.taskCleared);
 	replaceSessionState(
@@ -93,8 +84,6 @@ async function clearAllActionNow(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 ): Promise<AgentToolResult<undefined>> {
-	cancelScheduledSync(session);
-	await clearLocalTasks(session);
 	const isCurrentSession = runtime.active === session;
 	if (!isCurrentSession) return extensionResult(C.message.stateCleared);
 	replaceSessionState(session, {});

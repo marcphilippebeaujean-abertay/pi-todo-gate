@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../src/constants.ts";
 import {
-	handleAgentSettled,
 	handleBeforeAgentStart,
 	handleMessageEnd,
 	handleToolResult,
@@ -29,7 +28,6 @@ function startExtensions(
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));
 	pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, runtime));
 	pi.on(C.event.toolResult, handleToolResult.bind(null, runtime));
-	pi.on(C.event.agentSettled, handleAgentSettled.bind(null, runtime));
 	pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, runtime));
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,

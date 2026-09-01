@@ -8,10 +8,8 @@ import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import { persistPrIfAvailable } from "./extension-events.ts";
 import {
 	appendState,
-	createClient,
 	deactivateSession,
 	refreshFooterStatuses,
-	taskPath,
 } from "./extension-lifecycle.ts";
 import { branchTexts, latestStateData } from "./extension-message.ts";
 import { linkInferredTask } from "./extension-tasks.ts";
@@ -21,7 +19,6 @@ import type {
 	ExtensionRuntime,
 	SessionReader,
 } from "./extension-types.ts";
-import { syncTodoistToPiTasks } from "./pi-tasks-sync.ts";
 import { firstGithubPrUrl } from "./pr-detection.ts";
 import { extractInheritedState, latestState } from "./session-state.ts";
 import type { TodoistProjectMapping } from "./types.ts";
@@ -92,10 +89,8 @@ function activateSession(
 		allowPrDiscovery,
 		handoffContext,
 		workChanged: false,
-		syncAvailable: true,
 		workRevision: 0,
 		operationQueue: Promise.resolve(),
-		syncGeneration: 0,
 	};
 	runtime.active = session;
 	return session;
@@ -116,25 +111,6 @@ function manageActiveTools(runtime: ExtensionRuntime): void {
 	const shouldAddStateTool = !activeTools.includes(C.tool.state);
 	if (!shouldAddStateTool) return;
 	runtime.pi.setActiveTools([...activeTools, C.tool.state]);
-}
-
-async function syncInitialTask(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-): Promise<void> {
-	const taskRef = session.state.taskRef;
-	const hasTaskRef = taskRef !== undefined;
-	if (!hasTaskRef) return;
-	try {
-		await syncTodoistToPiTasks(
-			createClient(session.context, runtime.dependencies),
-			taskRef,
-			taskPath(session),
-		);
-	} catch {
-		session.syncAvailable = false;
-		session.context.ui.notify(C.message.taskUpdateFailed, C.value.warning);
-	}
 }
 
 export async function handleSessionStart(
@@ -174,18 +150,14 @@ export async function handleSessionStart(
 		inherited.handoffContext,
 		allowPrDiscovery,
 	);
-	const taskWasSynced = session.state.taskRef
-		? false
-		: await linkInferredTask(runtime, session);
+	if (session.state.taskRef === undefined)
+		await linkInferredTask(runtime, session);
 	installStateTool(runtime);
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
 	refreshFooterStatuses(session);
 	persistInitialPr(runtime, branch);
-	const shouldSyncTask = session.state.taskRef !== undefined && !taskWasSynced;
-	if (!shouldSyncTask) return;
-	await syncInitialTask(runtime, session);
 }
 
 export function persistInitialPr(

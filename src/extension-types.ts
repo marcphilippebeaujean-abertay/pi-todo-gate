@@ -52,11 +52,8 @@ export interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
-	syncAvailable: boolean;
 	workRevision: number;
 	operationQueue: Promise<void>;
-	syncGeneration: number;
-	syncTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface ExtensionRuntime {

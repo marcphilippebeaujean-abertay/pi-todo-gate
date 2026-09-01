@@ -1,21 +1,12 @@
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import {
 	appendState,
-	cancelScheduledSync,
 	createClient,
-	isCurrentSync,
 	refreshFooterStatuses,
 	replaceSessionState,
-	taskPath,
 } from "./extension-lifecycle.ts";
 import { branchTexts } from "./extension-message.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
-import {
-	readPiTaskStore,
-	syncPiTasksToTodoist,
-	syncTodoistToPiTasks,
-	writePiTaskStore,
-} from "./pi-tasks-sync.ts";
 import { enqueueSessionOperation } from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
 
@@ -100,10 +91,8 @@ async function linkInferredTaskNow(
 			id: project.id,
 			currentTaskId: taskRef,
 		});
-		await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
 		const isCurrentSession = runtime.active === session;
 		if (!isCurrentSession) return false;
-		session.syncAvailable = true;
 		replaceSessionState(
 			session,
 			applyStatePatch(session.state, {
@@ -133,64 +122,4 @@ export function linkInferredTask(
 		session,
 		linkInferredTaskNow.bind(null, runtime, session, prompt),
 	);
-}
-
-async function runScheduledSyncNow(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	parentRef: string,
-	generation: number,
-	isQueued = false,
-): Promise<void> {
-	if (!isQueued) {
-		session.syncTimer = undefined;
-		void enqueueSessionOperation(
-			session,
-			runScheduledSyncNow.bind(
-				null,
-				runtime,
-				session,
-				parentRef,
-				generation,
-				true,
-			),
-		);
-		return;
-	}
-	const isSyncStale = !isCurrentSync(runtime.active, session, generation);
-	if (isSyncStale) return;
-	try {
-		const store = await readPiTaskStore(taskPath(session));
-		await syncPiTasksToTodoist(
-			createClient(session.context, runtime.dependencies),
-			parentRef,
-			store ?? { nextId: 1, tasks: [] },
-			() => isCurrentSync(runtime.active, session, generation),
-		);
-	} catch {
-		const isSyncCurrent = isCurrentSync(runtime.active, session, generation);
-		if (isSyncCurrent)
-			session.context.ui.notify(C.message.taskUpdateFailed, C.value.warning);
-	}
-}
-
-export function scheduleSync(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-): void {
-	const parentRef = session.state.taskRef;
-	const hasParentRef = parentRef !== undefined;
-	if (!hasParentRef) return;
-	const syncIsAvailable = session.syncAvailable;
-	if (!syncIsAvailable) return;
-	cancelScheduledSync(session);
-	const generation = session.syncGeneration;
-	session.syncTimer = setTimeout(
-		runScheduledSyncNow.bind(null, runtime, session, parentRef, generation),
-		25,
-	);
-}
-
-export async function clearLocalTasks(session: ActiveSession): Promise<void> {
-	await writePiTaskStore(taskPath(session), { nextId: 1, tasks: [] });
 }

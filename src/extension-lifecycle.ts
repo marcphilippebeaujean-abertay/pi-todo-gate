@@ -7,7 +7,6 @@ import type {
 } from "./extension-types.ts";
 import { renderPrStatus, renderTaskStatus } from "./footer.ts";
 import { spawnExec } from "./git.ts";
-import { sessionTaskPath } from "./pi-tasks-sync.ts";
 import { TodoistClient } from "./todoist.ts";
 
 export function createClient(
@@ -45,13 +44,6 @@ export function appendState(
 	runtime.pi.appendEntry(C.entry.state, data);
 }
 
-export function taskPath(session: ActiveSession): string {
-	return sessionTaskPath(
-		session.context.cwd,
-		session.context.sessionManager.getSessionId(),
-	);
-}
-
 export function refreshFooterStatuses(session: ActiveSession): void {
 	session.context.ui.setStatus(
 		C.status.pr,
@@ -72,28 +64,7 @@ export function clearFooterStatuses(session: ActiveSession): void {
 	session.context.ui.setStatus(C.status.task, undefined);
 }
 
-export function cancelScheduledSync(session: ActiveSession): void {
-	session.syncGeneration += 1;
-	const hasScheduledSync = session.syncTimer !== undefined;
-	if (!hasScheduledSync) return;
-	clearTimeout(session.syncTimer);
-	session.syncTimer = undefined;
-}
-
 export function deactivateSession(session: ActiveSession): void {
-	cancelScheduledSync(session);
 	clearFooterStatuses(session);
 	session.context.ui.setFooter(undefined);
-}
-
-export function isCurrentSync(
-	active: ActiveSession | null,
-	session: ActiveSession,
-	generation: number,
-): boolean {
-	const isDifferentSession = active !== session;
-	if (isDifferentSession) return false;
-	const isCurrentGeneration = generation === session.syncGeneration;
-	if (!isCurrentGeneration) return false;
-	return session.syncAvailable;
 }

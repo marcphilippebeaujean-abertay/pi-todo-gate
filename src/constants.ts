@@ -27,7 +27,6 @@ export const EXTENSION_CONSTANTS = {
 		messageEnd: "message_end",
 		beforeAgentStart: "before_agent_start",
 		toolResult: "tool_result",
-		agentSettled: "agent_settled",
 		sessionShutdown: "session_shutdown",
 	},
 	tool: {
@@ -46,7 +45,6 @@ export const EXTENSION_CONSTANTS = {
 	},
 	message: {
 		taskNotLinked: "Todoist task was not linked from session history",
-		taskUpdateFailed: "Todoist task update failed",
 		inactive: "pi-todo-gate is inactive for this project",
 		invalidPr: "set_pr requires a valid GitHub pull request URL",
 		prCleared: "Cleared the pinned PR",

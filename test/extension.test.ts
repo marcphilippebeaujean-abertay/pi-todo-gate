@@ -16,7 +16,7 @@ const MERGE_TD = "merge-td";
 const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
 	"registers the state tool only for a matched project";
 const CONFIGURED_PROJECT = "/configured/project";
-const PI_TODO_GATE_STATE = "pi_todo_gate_state";
+const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
 	"keeps native footer and publishes PR/task statuses";
 const TUI = "tui";
@@ -24,21 +24,9 @@ const PI_TODO_GATE_PR = "pi-todo-gate-pr";
 const PR_LINK_NONE = "| PR Link: none |";
 const PI_TODO_GATE_TASK = "pi-todo-gate-task";
 const TODOIST_TASK_NONE = "Todoist Task: none";
-const READS_THE_TASK_STORE_FROM_THE_ACTIVE =
-	"reads the task store from the active worktree";
-const PI_TODO_GATE_PROJECT = "pi-todo-gate-project-";
-const WORKTREES = ".worktrees";
-const DIALOG_EDIT = "dialog-edit";
 const CUSTOM = "custom";
-const PI_TODO_GATE_STATE_2 = "pi-todo-gate-state";
+const PI_TODO_GATE_STATE_ENTRY = "pi-todo-gate-state";
 const PARENT = "parent";
-const HTTPS_APP_TODOIST_COM_APP_TASK_PARENT =
-	"https://app.todoist.com/app/task/parent";
-const VALUE_1 = "1";
-const WORKTREE_TASK = "Worktree task";
-const PENDING_VALUE = "pending";
-const AGENT_SETTLED = "agent_settled";
-const PARENT_WORKTREE_TASK = "parent:[ ] Worktree task";
 const LINKS_A_CLAIMED_TASK_FROM_SESSION_HISTORY =
 	"links a claimed task from session history and refreshes the footer";
 const PI_TODO_GATE_AUTO_LINK = "pi-todo-gate-auto-link-";
@@ -114,14 +102,7 @@ const TASK_A = "task-a";
 const TASK_B = "task-b";
 const INFERRED_TASK = "inferred-task";
 const CLEAR_TASK = "clear_task";
-const PI_TASKS_OFF = "off";
-const KEEPS_STATE_WHEN_LOCAL_TASK_CLEARING_FAILS =
-	"keeps state when local task clearing fails";
-const DOES_NOT_RUN_A_PENDING_OLD_PARENT =
-	"does not run a pending old-parent sync after switching tasks";
 const SET_TASK = "set_task";
-const VALUE_NEW = "new";
-const LIST_NEW = "list:new";
 const RECORDS_FAILED_TODOIST_COMPLETION_ATTEMPTS =
 	"records failed Todoist completion attempts";
 const DOES_NOT_COMPLETE_STALE_MERGE_TASK =
@@ -137,21 +118,6 @@ const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
 const FEATURE_AUTH = "feature/auth";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
-const DOES_NOT_OUTBOUND_SYNC_AFTER_AN_INBOUND =
-	"does not outbound-sync after an inbound restore failure";
-const RESTORE_FAILED = "restore failed";
-const SWITCHES_TASKS_ONLY_AFTER_LOADING_THE_NEW =
-	"switches tasks only after loading the new parent's subtasks";
-const HTTPS_APP_TODOIST_COM_APP_TASK_OLD =
-	"https://app.todoist.com/app/task/old";
-const ADD_DIALOG_CONTROLS = "Add dialog controls";
-const NEW_CHILD = "new-child";
-const NEW_CHILD_2 = "[ ] New child";
-const NEW_PARENT = "new-parent";
-const LIST_NEW_PARENT = "list:new-parent";
-const HTTPS_APP_TODOIST_COM_APP_TASK_NEW =
-	"https://app.todoist.com/app/task/new-parent";
-const NEW_CHILD_3 = "New child";
 const REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM =
 	"rejects invalid PR URLs without persisting them";
 const HTTPS_EXAMPLE_COM_PR_42 = "https://example.com/pr/42";
@@ -165,11 +131,6 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
-import {
-	readPiTaskStore,
-	sessionTaskPath,
-	writePiTaskStore,
-} from "../src/pi-tasks-sync.ts";
 import type { TodoistClient } from "../src/todoist.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
@@ -288,7 +249,7 @@ describe("lazy activation", () => {
 	it(REGISTERS_THE_STATE_TOOL_ONLY_FOR_A, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
-		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE]);
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
 	});
 
 	it(KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK, async () => {
@@ -300,59 +261,6 @@ describe("lazy activation", () => {
 			{ key: PI_TODO_GATE_PR, text: PR_LINK_NONE },
 			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
 		]);
-	});
-});
-
-describe("task synchronization", () => {
-	it(READS_THE_TASK_STORE_FROM_THE_ACTIVE, async () => {
-		const configuredRoot = await mkdtemp(join(tmpdir(), PI_TODO_GATE_PROJECT));
-		const worktree = join(configuredRoot, WORKTREES, DIALOG_EDIT);
-		const h = harness(worktree, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
-				data: {
-					taskRef: PARENT,
-					taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_PARENT,
-				},
-			},
-		]);
-		const created: string[] = [];
-		const client = {
-			listDescendants: async () => [],
-			deleteDescendants: async () => {},
-			createSubtask: async (parent: string, task: { content: string }) => {
-				created.push(`${parent}:${task.content}`);
-			},
-		};
-		extension(h.pi, {
-			loadConfig: async () => config({ [configuredRoot]: MERGE_TD }),
-			createTodoistClient: () => client as unknown as TodoistClient,
-		});
-		await h.handlers.get(SESSION_START)?.(
-			{ type: SESSION_START, reason: STARTUP },
-			h.ctx,
-		);
-		await writePiTaskStore(sessionTaskPath(worktree, SESSION_CURRENT), {
-			nextId: 2,
-			tasks: [
-				{
-					id: VALUE_1,
-					subject: WORKTREE_TASK,
-					description: EMPTY_STRING,
-					status: PENDING_VALUE,
-					metadata: {},
-					blocks: [],
-					blockedBy: [],
-					createdAt: 1,
-					updatedAt: 1,
-				},
-			],
-		});
-		await h.handlers.get(AGENT_SETTLED)?.({ type: AGENT_SETTLED }, h.ctx);
-		await vi.waitFor(() => {
-			expect(created).toEqual([PARENT_WORKTREE_TASK]);
-		});
 	});
 });
 
@@ -396,7 +304,7 @@ describe("automatic Todoist task linking", () => {
 		);
 
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: {
 				taskRef: VALUE_42,
 				taskName: IMPLEMENT_FEATURE,
@@ -452,7 +360,7 @@ describe("automatic Todoist task linking", () => {
 		);
 
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: {
 				taskRef: VALUE_42,
 				taskName: IMPLEMENT_FEATURE,
@@ -500,7 +408,7 @@ describe("automatic Todoist task linking", () => {
 		);
 
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: {
 				taskRef: VALUE_42,
 				taskName: IMPLEMENT_FEATURE,
@@ -548,7 +456,7 @@ describe("hidden lifecycle context", () => {
 		const withTask = harness(CONFIGURED_PROJECT, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: { taskRef: VALUE_42, taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42 },
 			},
 		]);
@@ -587,7 +495,7 @@ describe("hidden lifecycle context", () => {
 		);
 		expect(h.appended).toEqual([
 			{
-				type: PI_TODO_GATE_STATE_2,
+				type: PI_TODO_GATE_STATE_ENTRY,
 				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
 			},
 		]);
@@ -623,7 +531,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(CONFIGURED_PROJECT, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					prUrl: HTTPS_GITHUB_COM_O_R_PULL_1,
 					mergeCompletedAt: OLD,
@@ -640,7 +548,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		)) as StateToolResult;
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
@@ -675,7 +583,7 @@ describe("pi_todo_gate_state", () => {
 				getBranch: () => [
 					{
 						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_2,
+						customType: PI_TODO_GATE_STATE_ENTRY,
 						data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
 					},
 				],
@@ -694,60 +602,12 @@ describe("pi_todo_gate_state", () => {
 		expect(h.appended).toHaveLength(0);
 	});
 
-	it(KEEPS_STATE_WHEN_LOCAL_TASK_CLEARING_FAILS, async () => {
-		const previousScope = process.env.PI_TASKS;
-		process.env.PI_TASKS = PI_TASKS_OFF;
-		try {
-			const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
-			const h = harness(root, [
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE_2,
-					data: { taskRef: TASK_1 },
-				},
-			]);
-			const client = { listDescendants: async () => [] };
-			extension(h.pi, {
-				loadConfig: async () => config({ [root]: MERGE_TD }),
-				createTodoistClient: () => client as unknown as TodoistClient,
-			});
-			await h.handlers.get(SESSION_START)?.(
-				{ type: SESSION_START, reason: STARTUP },
-				h.ctx,
-			);
-			const appendedBefore = h.appended.length;
-			await expect(
-				h.tools[0].execute(
-					CALL,
-					{ action: CLEAR_TASK },
-					undefined,
-					undefined,
-					h.ctx,
-				),
-			).rejects.toThrow();
-			expect(h.appended).toHaveLength(appendedBefore);
-			const result = (await h.tools[0].execute(
-				CALL,
-				{ action: "status" },
-				undefined,
-				undefined,
-				h.ctx,
-			)) as StateToolResult;
-			expect(JSON.parse(result.content[0].text)).toMatchObject({
-				taskRef: TASK_1,
-			});
-		} finally {
-			if (previousScope === undefined) delete process.env.PI_TASKS;
-			else process.env.PI_TASKS = previousScope;
-		}
-	});
-
 	it(INHERITS_STATE_WHEN_LATEST_STATE_ENTRY_IS_MALFORMED, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: { taskRef: 42 },
 			},
 		]);
@@ -757,7 +617,7 @@ describe("pi_todo_gate_state", () => {
 				getBranch: () => [
 					{
 						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_2,
+						customType: PI_TODO_GATE_STATE_ENTRY,
 						data: { taskRef: TASK_1 },
 					},
 				],
@@ -774,7 +634,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		expect(h.appended.at(-1)).toMatchObject({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: { taskRef: TASK_1, inheritedFrom: PREVIOUS },
 		});
 	});
@@ -784,7 +644,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					taskRef: TASK_1,
 					mergeCompletedAt: OLD,
@@ -809,60 +669,9 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: {},
 		});
-	});
-
-	it(DOES_NOT_RUN_A_PENDING_OLD_PARENT, async () => {
-		vi.useFakeTimers();
-		try {
-			const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
-			const h = harness(root, [
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE_2,
-					data: { taskRef: OLD },
-				},
-			]);
-			const calls: string[] = [];
-			const client = {
-				resolveProject: async () => ({
-					id: PROJECT_1,
-					name: MERGE_TD,
-				}),
-				claimTask: async (ref: string) => ({
-					id: ref,
-					webUrl: `https://app.todoist.com/app/task/${ref}`,
-					projectId: PROJECT_1,
-				}),
-				listDescendants: async (ref: string) => {
-					calls.push(`list:${ref}`);
-					return [];
-				},
-			};
-			extension(h.pi, {
-				loadConfig: async () => config({ [root]: MERGE_TD }),
-				createTodoistClient: () => client as unknown as TodoistClient,
-			});
-			await h.handlers.get(SESSION_START)?.(
-				{ type: SESSION_START, reason: STARTUP },
-				h.ctx,
-			);
-			calls.length = 0;
-			await h.handlers.get(AGENT_SETTLED)?.({ type: AGENT_SETTLED }, h.ctx);
-			await h.tools[0].execute(
-				CALL,
-				{ action: SET_TASK, task: VALUE_NEW },
-				undefined,
-				undefined,
-				h.ctx,
-			);
-			await vi.advanceTimersByTimeAsync(30);
-			expect(calls).toEqual([LIST_NEW]);
-		} finally {
-			vi.useRealTimers();
-		}
 	});
 
 	it(DOES_NOT_COMPLETE_STALE_MERGE_TASK, async () => {
@@ -870,7 +679,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 					taskRef: TASK_1,
@@ -1043,7 +852,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 					taskRef: TASK_1,
@@ -1123,7 +932,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 					taskRef: TASK_1,
@@ -1177,7 +986,7 @@ describe("pi_todo_gate_state", () => {
 		await clearing;
 
 		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
+			type: PI_TODO_GATE_STATE_ENTRY,
 			data: {
 				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 				prDiscoveryDisabled: true,
@@ -1190,7 +999,7 @@ describe("pi_todo_gate_state", () => {
 		const h = harness(root, [
 			{
 				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
+				customType: PI_TODO_GATE_STATE_ENTRY,
 				data: {
 					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 					taskRef: TASK_1,
@@ -1230,108 +1039,6 @@ describe("pi_todo_gate_state", () => {
 			(h.appended.at(-1) as { data: { todoistCompletionAttemptedAt?: string } })
 				.data.todoistCompletionAttemptedAt,
 		).toEqual(expect.any(String));
-	});
-
-	it(DOES_NOT_OUTBOUND_SYNC_AFTER_AN_INBOUND, async () => {
-		vi.useFakeTimers();
-		try {
-			const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
-			const h = harness(root, [
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE_2,
-					data: { taskRef: OLD },
-				},
-			]);
-			let lists = 0;
-			const client = {
-				listDescendants: async () => {
-					lists += 1;
-					throw new Error(RESTORE_FAILED);
-				},
-			};
-			extension(h.pi, {
-				loadConfig: async () => config({ [root]: MERGE_TD }),
-				createTodoistClient: () => client as unknown as TodoistClient,
-			});
-			await h.handlers.get(SESSION_START)?.(
-				{ type: SESSION_START, reason: STARTUP },
-				h.ctx,
-			);
-			await h.handlers.get(AGENT_SETTLED)?.({ type: AGENT_SETTLED }, h.ctx);
-			await vi.advanceTimersByTimeAsync(30);
-			expect(lists).toBe(1);
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it(SWITCHES_TASKS_ONLY_AFTER_LOADING_THE_NEW, async () => {
-		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
-		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_2,
-				data: {
-					taskRef: OLD,
-					taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_OLD,
-				},
-			},
-		]);
-		const calls: string[] = [];
-		const client = {
-			resolveProject: async () => ({
-				id: PROJECT_1,
-				name: MERGE_TD,
-			}),
-			claimTask: async (ref: string) => ({
-				id: ref,
-				content: ADD_DIALOG_CONTROLS,
-				webUrl: `https://app.todoist.com/app/task/${ref}`,
-				projectId: PROJECT_1,
-			}),
-			listDescendants: async (ref: string) => {
-				calls.push(`list:${ref}`);
-				return [
-					{
-						id: NEW_CHILD,
-						content: NEW_CHILD_2,
-						description: EMPTY_STRING,
-						projectId: PROJECT_1,
-					},
-				];
-			},
-		};
-		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
-			createTodoistClient: () => client as unknown as TodoistClient,
-		});
-		await h.handlers.get(SESSION_START)?.(
-			{ type: SESSION_START, reason: STARTUP },
-			h.ctx,
-		);
-		calls.length = 0;
-		await h.tools[0].execute(
-			CALL,
-			{ action: SET_TASK, task: NEW_PARENT },
-			undefined,
-			undefined,
-			h.ctx,
-		);
-		expect(calls).toEqual([LIST_NEW_PARENT]);
-		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_2,
-			data: {
-				taskRef: NEW_PARENT,
-				taskName: ADD_DIALOG_CONTROLS,
-				taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_NEW,
-			},
-		});
-		await expect(
-			readPiTaskStore(sessionTaskPath(root, SESSION_CURRENT)),
-		).resolves.toMatchObject({
-			tasks: [{ subject: NEW_CHILD_3 }],
-		});
 	});
 
 	it(REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM, async () => {
