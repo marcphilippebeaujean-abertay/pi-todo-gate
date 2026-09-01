@@ -1,3 +1,6 @@
+const STRING_LITERAL_OBJECT = "object";
+const STRING_LITERAL_CUSTOM = "custom";
+
 export function latestCustomState<T>(
 	entries: readonly unknown[],
 	customType: string,
@@ -5,16 +8,18 @@ export function latestCustomState<T>(
 ): T | null {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const entry = entries[index];
-		if (
-			typeof entry !== "object" ||
-			entry === null ||
-			Array.isArray(entry) ||
-			(entry as { type?: unknown }).type !== "custom" ||
-			(entry as { customType?: unknown }).customType !== customType
-		)
-			continue;
+		const isObject = typeof entry === STRING_LITERAL_OBJECT;
+		if (!isObject) continue;
+		if (entry === null) continue;
+		if (Array.isArray(entry)) continue;
+		const record = entry as { type?: unknown; customType?: unknown };
+		const isCustomStateEntry = record.type === STRING_LITERAL_CUSTOM;
+		if (!isCustomStateEntry) continue;
+		const hasMatchingType = record.customType === customType;
+		if (!hasMatchingType) continue;
 		const data = (entry as { data?: unknown }).data;
-		if (isState(data)) return data;
+		const isValidState = isState(data);
+		if (isValidState) return data;
 	}
 	return null;
 }

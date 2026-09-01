@@ -1,7 +1,9 @@
-import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
-import type { ExitAction } from "./types.ts";
+import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 
-export type PickerFocus = "submit" | "cancel" | { type: "action"; id: string };
+export type PickerFocus =
+	| typeof C.exit.submitKey
+	| typeof C.exit.cancelKey
+	| { type: typeof C.exit.actionKey; id: string };
 
 export interface PickerState {
 	readonly actionIds: readonly string[];
@@ -9,115 +11,32 @@ export interface PickerState {
 	readonly focused: PickerFocus;
 }
 
+export type ExitPickerResult = readonly string[] | null;
+
 export function initialPickerState(actionIds: readonly string[]): PickerState {
 	return {
 		actionIds: [...actionIds],
 		selectedIds: new Set(actionIds),
-		focused: "submit",
+		focused: C.exit.submitKey,
 	};
 }
 
 export function toggleAction(state: PickerState, id: string): PickerState {
-	if (!state.actionIds.includes(id)) return state;
+	const isAction = state.actionIds.includes(id);
+	if (!isAction) return state;
 	const selectedIds = new Set(state.selectedIds);
-	if (selectedIds.has(id)) selectedIds.delete(id);
+	const isSelected = selectedIds.has(id);
+	if (isSelected) selectedIds.delete(id);
 	else selectedIds.add(id);
 	return { ...state, selectedIds };
 }
 
 export function focusAction(state: PickerState, id: string): PickerState {
-	return state.actionIds.includes(id)
-		? { ...state, focused: { type: "action", id } }
-		: state;
+	const isAction = state.actionIds.includes(id);
+	if (!isAction) return state;
+	return { ...state, focused: { type: C.exit.actionKey, id } };
 }
 
 export function focusSubmit(state: PickerState): PickerState {
-	return { ...state, focused: "submit" };
-}
-
-export type ExitPickerResult = readonly string[] | null;
-
-export class ExitActionPicker {
-	private state: PickerState;
-	private readonly actions: readonly ExitAction[];
-	private readonly done: (result: ExitPickerResult) => void;
-
-	constructor(
-		actions: readonly ExitAction[],
-		done: (result: ExitPickerResult) => void,
-	) {
-		this.actions = actions;
-		this.state = initialPickerState(actions.map((action) => action.id));
-		this.done = done;
-	}
-
-	render(width: number): string[] {
-		const rows = ["Exit protocol", ""];
-		for (const action of this.actions) {
-			const focused =
-				typeof this.state.focused === "object" &&
-				this.state.focused.id === action.id;
-			const marker = focused ? ">" : " ";
-			const checked = this.state.selectedIds.has(action.id) ? "x" : " ";
-			rows.push(`${marker} [${checked}] ${action.label}`);
-		}
-		rows.push("");
-		rows.push(
-			`${this.state.focused === "submit" ? ">" : " "} Submit    ${this.state.focused === "cancel" ? ">" : " "} Cancel`,
-		);
-		return rows.map((row) => truncateToWidth(row, width, ""));
-	}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, Key.tab)) {
-			this.moveFocus(1);
-			return;
-		}
-		if (matchesKey(data, Key.shift("tab"))) {
-			this.moveFocus(-1);
-			return;
-		}
-		if (matchesKey(data, Key.up)) {
-			this.moveFocus(-1);
-			return;
-		}
-		if (matchesKey(data, Key.down)) {
-			this.moveFocus(1);
-			return;
-		}
-		if (matchesKey(data, Key.space)) {
-			if (typeof this.state.focused === "object")
-				this.state = toggleAction(this.state, this.state.focused.id);
-			return;
-		}
-		if (matchesKey(data, Key.enter)) {
-			if (this.state.focused === "submit") {
-				this.done([...this.state.selectedIds]);
-			} else if (this.state.focused === "cancel") {
-				this.done(null);
-			} else {
-				this.state = toggleAction(this.state, this.state.focused.id);
-			}
-			return;
-		}
-		if (matchesKey(data, Key.escape)) this.done(null);
-	}
-
-	private moveFocus(direction: 1 | -1): void {
-		const targets: PickerFocus[] = [
-			...this.actions.map((action) => ({
-				type: "action" as const,
-				id: action.id,
-			})),
-			"submit",
-			"cancel",
-		];
-		const index = targets.findIndex((target) =>
-			typeof target === "object" && typeof this.state.focused === "object"
-				? target.id === this.state.focused.id
-				: target === this.state.focused,
-		);
-		const next = targets[(index + direction + targets.length) % targets.length];
-		if (next) this.state = { ...this.state, focused: next };
-	}
+	return { ...state, focused: C.exit.submitKey };
 }

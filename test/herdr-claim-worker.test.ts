@@ -98,7 +98,7 @@ describe("startClaimWorker", () => {
 						},
 					],
 				},
-			})}\n`,
+			})}\n${JSON.stringify({ type: "turn_end" })}\n`,
 		);
 		setupState.process.stderr.write("private warning\n");
 		setupState.process.emit("close", 0);
@@ -110,7 +110,7 @@ describe("startClaimWorker", () => {
 		expect(setupState.onFailure).not.toHaveBeenCalled();
 	});
 
-	it("completes without worker JSON when observed state can validate claim", () => {
+	it("reports missing claim evidence on clean worker exit", () => {
 		const setupState = setup();
 		startClaimWorker(setupState.request, {
 			spawnWorker: setupState.spawnWorker,
@@ -118,8 +118,10 @@ describe("startClaimWorker", () => {
 
 		setupState.process.emit("close", 0);
 
-		expect(setupState.onClaimComplete).toHaveBeenCalledWith(undefined);
-		expect(setupState.onFailure).not.toHaveBeenCalled();
+		expect(setupState.onClaimComplete).not.toHaveBeenCalled();
+		expect(setupState.onFailure).toHaveBeenCalledWith(
+			"Herdr claim worker completed without claim evidence.",
+		);
 	});
 
 	it("reports process failure once and cancels child with SIGTERM", () => {

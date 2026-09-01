@@ -73,7 +73,7 @@ describe("module architecture", () => {
 		).toBe(true);
 	});
 
-	it("allows only the composition root to import both domains", () => {
+	it("keeps extension composition in dedicated lifecycle modules", () => {
 		const sourceFiles = filesUnder(resolve(projectRoot, "src")).map(
 			relativeSourcePath,
 		);
@@ -82,7 +82,11 @@ describe("module architecture", () => {
 		);
 		expect(importers).toEqual([]);
 		expect(importsOf("extensions/pi-todo-gate.ts")).toEqual(
-			expect.arrayContaining(["src/pr/module.ts", "src/todoist/module.ts"]),
+			expect.arrayContaining([
+				"src/extension-events.ts",
+				"src/extension-session.ts",
+				"src/extension-runtime.ts",
+			]),
 		);
 	});
 
