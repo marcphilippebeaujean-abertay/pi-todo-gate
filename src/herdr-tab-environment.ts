@@ -1,14 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { isLinkedWorktreePaths, parseBranchName } from "./git.ts";
-import type {
-	CommandRunner,
-	StartBackgroundWorker,
-} from "./herdr-claim-gate.ts";
 import {
 	type ClaimWorkerRequest,
 	startClaimWorker,
 	type WorkerSpawner,
 } from "./herdr-claim-worker.ts";
+import type {
+	CommandRunner,
+	StartBackgroundWorker,
+} from "./herdr-tab-claim.ts";
 
 const GIT_COMMAND = "git";
 const HERDR_COMMAND = "herdr";

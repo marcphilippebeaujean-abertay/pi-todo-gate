@@ -10,6 +10,7 @@ import {
 	appendState,
 	createClient,
 	refreshFooterStatuses,
+	replaceSessionState,
 } from "./extension-lifecycle.ts";
 import { textOf } from "./extension-message.ts";
 import { linkInferredTask, scheduleSync } from "./extension-tasks.ts";
@@ -22,7 +23,7 @@ import {
 	spawnExec,
 } from "./git.ts";
 import { githubPrUrl } from "./pr-detection.ts";
-import { applyStatePatch, sameWorkState } from "./session-state.ts";
+import { applyStatePatch } from "./session-state.ts";
 import { matchesWorkState } from "./shared/work-state.ts";
 
 const STRING_TYPE = "string";
@@ -50,7 +51,7 @@ export function persistPrIfAvailable(
 	const url = githubPrUrl(text);
 	const hasUrl = url !== null;
 	if (!hasUrl) return;
-	session.state = applyStatePatch(session.state, { prUrl: url });
+	replaceSessionState(session, applyStatePatch(session.state, { prUrl: url }));
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
 	refreshFooterStatuses(session);
@@ -138,27 +139,44 @@ async function completeMergedTask(
 	ctx: ExtensionContext,
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
+	workRevision: number,
 ): Promise<void> {
 	try {
 		await createClient(ctx, runtime.dependencies).completeTask(taskRef);
 		const isCurrentSession = runtime.active === session;
-		const isCurrentState = sameWorkState(session.state, stateSnapshot);
-		const isCurrentCompletion = isCurrentSession && isCurrentState;
+		const isCurrentRevision = session.workRevision === workRevision;
+		const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
+		const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
+		const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
+		const isCurrentIdentity = isCurrentTask && isCurrentPr;
+		const isCurrentCompletion =
+			isCurrentSessionAndRevision && isCurrentIdentity;
 		if (!isCurrentCompletion) return;
-		session.state = applyStatePatch(structuredClone(stateSnapshot), {
-			mergeCompletedAt: new Date().toISOString(),
-			todoistCompletionAttemptedAt: new Date().toISOString(),
-		});
+		replaceSessionState(
+			session,
+			applyStatePatch(session.state, {
+				mergeCompletedAt: new Date().toISOString(),
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			}),
+		);
 		appendState(runtime, session.state);
 		ctx.ui.notify(C.message.merged, C.value.info);
 	} catch {
 		const isCurrentSession = runtime.active === session;
-		const isCurrentState = sameWorkState(session.state, stateSnapshot);
-		const isCurrentCompletion = isCurrentSession && isCurrentState;
+		const isCurrentRevision = session.workRevision === workRevision;
+		const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
+		const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
+		const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
+		const isCurrentIdentity = isCurrentTask && isCurrentPr;
+		const isCurrentCompletion =
+			isCurrentSessionAndRevision && isCurrentIdentity;
 		if (!isCurrentCompletion) return;
-		session.state = applyStatePatch(structuredClone(stateSnapshot), {
-			todoistCompletionAttemptedAt: new Date().toISOString(),
-		});
+		replaceSessionState(
+			session,
+			applyStatePatch(session.state, {
+				todoistCompletionAttemptedAt: new Date().toISOString(),
+			}),
+		);
 		appendState(runtime, session.state);
 		ctx.ui.notify(C.message.mergedFailed, C.value.warning);
 	}
@@ -188,6 +206,7 @@ async function handleBashResult(
 	const claimedPrUrl = prUrl ?? "";
 	const claimedTaskRef = taskRef ?? "";
 	const stateSnapshot = structuredClone(session.state);
+	const workRevision = session.workRevision;
 	const isPinnedPr = await matchesPinnedPr(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
@@ -208,6 +227,7 @@ async function handleBashResult(
 		ctx,
 		claimedTaskRef,
 		stateSnapshot,
+		workRevision,
 	);
 }
 

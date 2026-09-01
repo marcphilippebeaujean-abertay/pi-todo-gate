@@ -41,10 +41,6 @@ function stateFromEntry(entry: unknown): WorkState | null {
 	return isWorkState(record.data) ? { ...record.data } : null;
 }
 
-export function sameWorkState(left: WorkState, right: WorkState): boolean {
-	return STATE_KEYS.every((key) => left[key] === right[key]);
-}
-
 export function emptyWorkState(): WorkState {
 	return {};
 }

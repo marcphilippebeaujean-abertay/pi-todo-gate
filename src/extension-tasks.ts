@@ -5,6 +5,7 @@ import {
 	createClient,
 	isCurrentSync,
 	refreshFooterStatuses,
+	replaceSessionState,
 	taskPath,
 } from "./extension-lifecycle.ts";
 import { branchTexts } from "./extension-message.ts";
@@ -100,14 +101,17 @@ export async function linkInferredTask(
 		});
 		await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
 		session.syncAvailable = true;
-		session.state = applyStatePatch(session.state, {
-			taskRef: claimed.id,
-			taskName: claimed.content,
-			taskUrl:
-				claimed.webUrl ??
-				claimed.url ??
-				`https://app.todoist.com/app/task/${claimed.id}`,
-		});
+		replaceSessionState(
+			session,
+			applyStatePatch(session.state, {
+				taskRef: claimed.id,
+				taskName: claimed.content,
+				taskUrl:
+					claimed.webUrl ??
+					claimed.url ??
+					`https://app.todoist.com/app/task/${claimed.id}`,
+			}),
+		);
 		appendState(runtime, session.state, !session.allowPrDiscovery);
 		refreshFooterStatuses(session);
 		return true;

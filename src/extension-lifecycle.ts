@@ -23,6 +23,17 @@ export function createClient(
 	);
 }
 
+export function replaceSessionState(
+	session: ActiveSession,
+	nextState: ActiveSession["state"],
+): void {
+	const hasTaskChanged = session.state.taskRef !== nextState.taskRef;
+	const hasPrChanged = session.state.prUrl !== nextState.prUrl;
+	const hasWorkIdentityChanged = hasTaskChanged || hasPrChanged;
+	if (hasWorkIdentityChanged) session.workRevision += 1;
+	session.state = nextState;
+}
+
 export function appendState(
 	runtime: ExtensionRuntime,
 	state: ActiveSession["state"],

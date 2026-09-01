@@ -6,7 +6,7 @@ import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "./herdr-claim-gate.ts";
+} from "./herdr-tab-claim.ts";
 import type { TodoistClient } from "./todoist.ts";
 import type {
 	ResolvedProject,
@@ -53,6 +53,7 @@ export interface ActiveSession {
 	handoffContext: boolean;
 	workChanged: boolean;
 	syncAvailable: boolean;
+	workRevision: number;
 	syncGeneration: number;
 	syncTimer?: ReturnType<typeof setTimeout>;
 }

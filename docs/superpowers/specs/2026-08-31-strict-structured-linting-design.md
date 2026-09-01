@@ -36,7 +36,7 @@ if (name === USER_NAME) return true;
 
 ### `no-short-string-constants`
 
-Named string constants must contain at least two characters. This rule is separate from `no-magic-strings`: direct `const` initializers are valid magic-string definitions, but one-character and empty definitions are rejected as non-descriptive constants.
+Named string constants must contain at least two characters. This rule is separate from `no-magic-strings`: direct `const` initializers are valid magic-string definitions, but one-character and empty definitions are rejected as non-descriptive constants. Inline one-character literals remain exempt because they commonly represent deliberate character tokens.
 
 ### `no-complicated-expressions`
 

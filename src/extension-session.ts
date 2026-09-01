@@ -93,6 +93,7 @@ function activateSession(
 		handoffContext,
 		workChanged: false,
 		syncAvailable: true,
+		workRevision: 0,
 		syncGeneration: 0,
 	};
 	runtime.active = session;

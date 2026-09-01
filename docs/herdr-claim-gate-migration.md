@@ -1,6 +1,6 @@
-# Herdr Claim Gate Migration
+# Herdr Tab Naming Migration
 
-`pi-todo-gate` now versions custom Herdr claim enforcement.
+`pi-todo-gate` now versions background Herdr tab naming.
 
 ## Install
 
@@ -13,13 +13,14 @@ npm run lint
 npm run install-local
 ```
 
-Integrated Herdr setup starts an ephemeral background worker:
+Integrated Herdr setup starts an ephemeral background naming worker:
 
 ```text
-pi --mode json -p --no-extensions <worker-prompt>
+pi --mode json -p --no-extensions --no-context-files --tools bash \
+  --append-system-prompt <tab-naming-instructions> <worker-prompt>
 ```
 
-Worker instructions and output stay inside worker process. User sees completion or failure through notification only. Main agent receives no Herdr context, message, status, or result, and its tool calls are never blocked while worker runs.
+Worker instructions and output stay inside worker process. User sees tab naming failures through notification only. Main agent continues normally; no tools are blocked.
 
 ## Legacy gate cleanup
 
@@ -30,6 +31,6 @@ Worker instructions and output stay inside worker process. User sees completion 
 ~/.pi/agent/extensions/tests/herdr-claim-gate.test.ts
 ```
 
-This prevents duplicate Herdr gate handlers. Keep `~/.pi/agent/extensions/herdr-agent-state.ts`; Herdr manages that file and may overwrite local changes.
+Remove legacy gate before restarting Pi; otherwise its global blocking hooks remain active. Keep `~/.pi/agent/extensions/herdr-agent-state.ts`; Herdr manages that file and may overwrite local changes.
 
-Restart Pi after installation. Confirm Herdr claim completion produces user notification and no Herdr instructions or worker output appear in main agent context.
+Restart Pi after installation. Confirm tab naming runs in background and main agent tools remain available.

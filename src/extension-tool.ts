@@ -11,6 +11,7 @@ import {
 	cancelScheduledSync,
 	createClient,
 	refreshFooterStatuses,
+	replaceSessionState,
 	taskPath,
 } from "./extension-lifecycle.ts";
 import { extensionResult } from "./extension-message.ts";
@@ -55,15 +56,18 @@ function setPrAction(
 	const hasInvalidUrl = url === null;
 	if (hasInvalidUrl) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
-	session.state = applyStatePatch(session.state, {
-		prUrl: url,
-		...(prChanged
-			? {
-					mergeCompletedAt: undefined,
-					todoistCompletionAttemptedAt: undefined,
-				}
-			: {}),
-	});
+	replaceSessionState(
+		session,
+		applyStatePatch(session.state, {
+			prUrl: url,
+			...(prChanged
+				? {
+						mergeCompletedAt: undefined,
+						todoistCompletionAttemptedAt: undefined,
+					}
+				: {}),
+		}),
+	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
 	refreshFooterStatuses(session);
@@ -74,11 +78,14 @@ function clearPrAction(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 ): AgentToolResult<undefined> {
-	session.state = applyStatePatch(session.state, {
-		prUrl: undefined,
-		mergeCompletedAt: undefined,
-		todoistCompletionAttemptedAt: undefined,
-	});
+	replaceSessionState(
+		session,
+		applyStatePatch(session.state, {
+			prUrl: undefined,
+			mergeCompletedAt: undefined,
+			todoistCompletionAttemptedAt: undefined,
+		}),
+	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
 	refreshFooterStatuses(session);
@@ -106,17 +113,20 @@ async function setTaskAction(
 	await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
 	session.syncAvailable = true;
 	const taskChanged = session.state.taskRef !== claimed.id;
-	session.state = applyStatePatch(session.state, {
-		taskRef: claimed.id,
-		taskName: claimed.content,
-		taskUrl: claimed.webUrl ?? claimed.url,
-		...(taskChanged
-			? {
-					mergeCompletedAt: undefined,
-					todoistCompletionAttemptedAt: undefined,
-				}
-			: {}),
-	});
+	replaceSessionState(
+		session,
+		applyStatePatch(session.state, {
+			taskRef: claimed.id,
+			taskName: claimed.content,
+			taskUrl: claimed.webUrl ?? claimed.url,
+			...(taskChanged
+				? {
+						mergeCompletedAt: undefined,
+						todoistCompletionAttemptedAt: undefined,
+					}
+				: {}),
+		}),
+	);
 	appendState(runtime, session.state, !session.allowPrDiscovery);
 	refreshFooterStatuses(session);
 	return extensionResult(
@@ -130,13 +140,16 @@ async function clearTaskAction(
 ): Promise<AgentToolResult<undefined>> {
 	cancelScheduledSync(session);
 	await clearLocalTasks(session);
-	session.state = applyStatePatch(session.state, {
-		taskRef: undefined,
-		taskName: undefined,
-		taskUrl: undefined,
-		mergeCompletedAt: undefined,
-		todoistCompletionAttemptedAt: undefined,
-	});
+	replaceSessionState(
+		session,
+		applyStatePatch(session.state, {
+			taskRef: undefined,
+			taskName: undefined,
+			taskUrl: undefined,
+			mergeCompletedAt: undefined,
+			todoistCompletionAttemptedAt: undefined,
+		}),
+	);
 	appendState(runtime, session.state, !session.allowPrDiscovery);
 	refreshFooterStatuses(session);
 	return extensionResult(C.message.taskCleared);
@@ -148,7 +161,7 @@ async function clearAllAction(
 ): Promise<AgentToolResult<undefined>> {
 	cancelScheduledSync(session);
 	await clearLocalTasks(session);
-	session.state = {};
+	replaceSessionState(session, {});
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
 	refreshFooterStatuses(session);

@@ -14,7 +14,7 @@
 
 - Lint only production files in `extensions/**/*.ts` and `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`; tests remain Biome/Vitest-only.
 - String literals inside function bodies require named `const` extraction; direct `const` initializers are allowed.
-- Named string constants must contain at least two characters; empty and one-character definitions violate `no-short-string-constants`.
+- Named string constants must contain at least two characters; empty and one-character definitions violate `no-short-string-constants`. Inline one-character literals remain exempt because they commonly represent deliberate character tokens.
 - Boolean expressions with three or more logical leaf checks violate `no-complicated-expressions`.
 - `if` conditions must be boolean identifiers, optionally negated; numeric comparisons, arithmetic, calls, and other computed conditions require extraction into descriptive booleans; compiler type guards remain inline.
 - Cyclomatic complexity limit is 10.

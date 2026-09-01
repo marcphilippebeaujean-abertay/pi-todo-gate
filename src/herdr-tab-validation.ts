@@ -1,11 +1,20 @@
-import { labelIsDescriptive } from "./herdr-claim-gate-context.ts";
-import type { CommandRunner } from "./herdr-claim-gate-types.ts";
 import type { ClaimWorkerResult } from "./herdr-claim-worker-result.ts";
+import type { CommandRunner } from "./herdr-tab-claim.ts";
 
 const HERDR_COMMAND = "herdr";
 const TAB_GET_ARGS = ["tab", "get"];
 const PANE_GET_ARGS = ["pane", "get"];
 const STRING_TYPE = "string";
+const NUMERIC_LABEL = /^\d+$/;
+
+function labelIsDescriptive(label: string | undefined | null): boolean {
+	const hasNoLabel = !label;
+	if (hasNoLabel) return false;
+	const value = label.trim();
+	const hasValue = Boolean(value);
+	const isNotNumeric = !NUMERIC_LABEL.test(value);
+	return hasValue && isNotNumeric;
+}
 
 function matchesWorkerClaim(
 	claim: ClaimWorkerResult | undefined,
@@ -74,9 +83,9 @@ export function hasValidatedTabClaim(
 			observedTabId,
 			currentLabel ?? "",
 		);
-		const hasDescriptiveChangedLabel = hasDescriptiveLabel && hasChangedLabel;
+		const hasClaimedOrChangedLabel = hasChangedLabel || hasMatchingWorkerClaim;
 		const hasValidObservedClaim =
-			hasDescriptiveChangedLabel || hasMatchingWorkerClaim;
+			hasDescriptiveLabel && hasClaimedOrChangedLabel;
 		if (!hasValidObservedClaim) return false;
 		const hasWorkerClaim = claim !== undefined;
 		return !hasWorkerClaim || hasMatchingWorkerClaim;

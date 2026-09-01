@@ -125,6 +125,9 @@ const DOES_NOT_COMPLETE_STALE_MERGE_TASK =
 	"does not complete task after stale merge result";
 const DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION =
 	"does not overwrite newer state after completion";
+const DOES_NOT_COMPLETE_ABA_RECLAIM = "does not complete ABA-reclaimed task";
+const TASK_NAME = "task name";
+const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
 const FEATURE_AUTH = "feature/auth";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
@@ -918,6 +921,83 @@ describe("pi_todo_gate_state", () => {
 		await mergePromise;
 
 		expect(completeTask).not.toHaveBeenCalled();
+	});
+
+	it(DOES_NOT_COMPLETE_ABA_RECLAIM, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root, [
+			{
+				type: CUSTOM,
+				customType: PI_TODO_GATE_STATE_2,
+				data: {
+					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+					taskRef: TASK_1,
+					taskName: TASK_NAME,
+					taskUrl: TASK_URL,
+				},
+			},
+		]);
+		let resolveCompletion: (() => void) | undefined;
+		const completion = new Promise<void>((resolve) => {
+			resolveCompletion = resolve;
+		});
+		const completeTask = vi.fn(() => completion);
+		const client = {
+			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
+			claimTask: async () => ({
+				id: TASK_1,
+				content: TASK_NAME,
+				webUrl: TASK_URL,
+				projectId: PROJECT_1,
+			}),
+			listDescendants: async () => [],
+			completeTask,
+		};
+		const exec = async () => ({
+			stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
+			stderr: EMPTY_STRING,
+			code: 0,
+		});
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+			exec,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const mergePromise = h.handlers.get(TOOL_RESULT)?.(
+			{
+				type: TOOL_RESULT,
+				toolName: BASH,
+				input: { command: GIT_MERGE_FEATURE_AUTH },
+				isError: false,
+			},
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await h.tools[0].execute(
+			CALL,
+			{ action: CLEAR_TASK },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await h.tools[0].execute(
+			CALL,
+			{ action: SET_TASK, task: TASK_1 },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		resolveCompletion?.();
+		await mergePromise;
+
+		const latest = (h.appended.at(-1) as { data: Record<string, unknown> })
+			.data;
+		expect(latest).toMatchObject({ taskRef: TASK_1 });
+		expect(latest).not.toHaveProperty("mergeCompletedAt");
 	});
 
 	it(DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION, async () => {

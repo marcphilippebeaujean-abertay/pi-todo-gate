@@ -12,7 +12,7 @@ import {
 	handleSessionStart,
 } from "../src/extension-session.ts";
 import type { ExtensionDependencies } from "../src/extension-types.ts";
-import { installHerdrClaimGate } from "../src/herdr-claim-gate.ts";
+import { installHerdrTabClaim } from "../src/herdr-tab-claim.ts";
 import { isSubagent } from "../src/session.ts";
 
 export type {
@@ -20,12 +20,10 @@ export type {
 	WorkStateAction,
 } from "../src/extension-types.ts";
 
-export default function extension(
+function startExtensions(
 	pi: ExtensionAPI,
-	dependencies: ExtensionDependencies = {},
+	dependencies: ExtensionDependencies,
 ): void {
-	const shouldSkipSubagent = isSubagent();
-	if (shouldSkipSubagent) return;
 	const runtime = createExtensionRuntime(pi, dependencies);
 	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));
@@ -33,8 +31,17 @@ export default function extension(
 	pi.on(C.event.toolResult, handleToolResult.bind(null, runtime));
 	pi.on(C.event.agentSettled, handleAgentSettled.bind(null, runtime));
 	pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, runtime));
-	installHerdrClaimGate(pi, {
+	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 	});
+}
+
+export default function extension(
+	pi: ExtensionAPI,
+	dependencies: ExtensionDependencies = {},
+): void {
+	const shouldSkipSubagent = isSubagent();
+	if (shouldSkipSubagent) return;
+	startExtensions(pi, dependencies);
 }
