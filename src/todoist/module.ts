@@ -14,7 +14,7 @@ import {
 	latestCustomState,
 } from "../shared/session-state.ts";
 import { createTaskClaimWorker, type TaskClaimWorker } from "./claim-worker.ts";
-import { TodoistClient, TodoistError, type TodoistTask } from "./client.ts";
+import { TodoistClient } from "./client.ts";
 import {
 	type ResolvedProject,
 	resolveConfiguredProject,
@@ -59,14 +59,10 @@ export interface TodoistModule {
 }
 
 const stateParameters = Type.Object({
-	action: StringEnum(["status", "set_task", "clear_task"] as const),
-	task: Type.Optional(Type.String()),
+	action: StringEnum(["status"] as const),
 });
 
-type StateAction =
-	| { action: "status" }
-	| { action: "set_task"; task?: string }
-	| { action: "clear_task" };
+type StateAction = { action: "status" };
 
 type SessionContext = Pick<
 	ExtensionContext,
@@ -75,13 +71,6 @@ type SessionContext = Pick<
 
 function isWorktreePath(cwd: string): boolean {
 	return cwd.split(/[\\/]/).includes(".worktrees");
-}
-
-function isTaskAlreadyInProgress(error: unknown): boolean {
-	return (
-		error instanceof TodoistError &&
-		error.message.toLowerCase().includes("already in progress")
-	);
 }
 
 function displayError(error: unknown): string {
@@ -268,88 +257,21 @@ export function createTodoistModule(
 		pi.registerTool<typeof stateParameters>({
 			name: "pi_todoist_gate_state",
 			label: "Todoist Gate State",
-			description: "Inspect or change this session's claimed Todoist task.",
-			promptSnippet: "inspect or update the session Todoist task",
+			description: "Inspect this session's claimed Todoist task.",
+			promptSnippet: "inspect the session Todoist task",
 			parameters: stateParameters,
-			async execute(_toolCallId, params: StateAction, _signal, _onUpdate, ctx) {
+			async execute(
+				_toolCallId,
+				_params: StateAction,
+				_signal,
+				_onUpdate,
+				_ctx,
+			) {
 				if (!context) throw new Error("Todoist tracking is inactive");
 				if (!ready) throw new Error("Todoist tracking is initializing");
-				if (params.action === "status")
-					return extensionResult(
-						JSON.stringify({ ...state, codingRoot: activeProject.codingRoot }),
-					);
-				if (params.action === "set_task") {
-					if (!params.task)
-						throw new Error("set_task requires a Todoist task reference");
-					const generation = ++operationGeneration;
-					const runContext = context;
-					if (runContext)
-						runContext.ui.setStatus(
-							"pi-todo-gate-task",
-							"Todoist Task: ⠋ claiming |",
-						);
-					try {
-						const client = createClient(ctx, dependencies);
-						const resolved = await client.resolveProject(
-							activeProject.todoistProjectRef,
-						);
-						if (generation !== operationGeneration)
-							return extensionResult("Todoist task change superseded");
-						let claimed: TodoistTask;
-						try {
-							claimed = await client.claimTask(params.task, {
-								id: resolved.id,
-								currentTaskId: state.taskRef,
-							});
-						} catch (error) {
-							if (!isTaskAlreadyInProgress(error) || !runContext) throw error;
-							const shouldClaim = await promptToClaimInProgressTask(runContext);
-							if (!shouldClaim) {
-								runContext.ui.notify("No task update", "info");
-								return extensionResult("No task update");
-							}
-							if (generation !== operationGeneration || context !== runContext)
-								return extensionResult("Todoist task change superseded");
-							claimed = await client.claimTask(params.task, {
-								id: resolved.id,
-								allowInProgress: true,
-							});
-						}
-						if (generation !== operationGeneration)
-							return extensionResult("Todoist task change superseded");
-						state = applyTodoistStatePatch(state, {
-							taskRef: claimed.id,
-							taskName: claimed.content,
-							taskUrl: claimed.webUrl ?? claimed.url,
-							mergePromptedPrUrl: undefined,
-						});
-						claimAnalysisComplete = true;
-						appendState();
-						if (runContext?.hasUI)
-							runContext.ui.notify("New task claimed", "info");
-						return extensionResult(
-							`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
-						);
-					} catch (error) {
-						if (generation !== operationGeneration)
-							return extensionResult("Todoist task change superseded");
-						if (runContext?.hasUI)
-							runContext.ui.notify(
-								`Todoist task claim failed: ${displayError(error)}`,
-								"warning",
-							);
-						throw error;
-					} finally {
-						if (generation === operationGeneration && context === runContext)
-							refreshStatus();
-					}
-				}
-				++operationGeneration;
-				claimAnalysisComplete = true;
-				state = {};
-				appendState();
-				refreshStatus();
-				return extensionResult("Cleared the claimed Todoist task");
+				return extensionResult(
+					JSON.stringify({ ...state, codingRoot: activeProject.codingRoot }),
+				);
 			},
 		});
 	};
