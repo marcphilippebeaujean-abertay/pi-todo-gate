@@ -42,8 +42,20 @@ export function runCommand(
 	});
 }
 
-export function boundCommandRunner(cwd: string): CommandRunner {
-	return runCommand.bind(null, cwd);
+interface CwdReference {
+	current: string;
+}
+
+export function boundCommandRunner(
+	cwd: string | (() => string) | CwdReference,
+	execute: typeof runCommand = runCommand,
+): CommandRunner {
+	return (command, args) => {
+		const isFunctionReference = typeof cwd === "function";
+		if (isFunctionReference) return execute(cwd(), command, args);
+		const currentCwd = typeof cwd === "string" ? cwd : cwd.current;
+		return execute(currentCwd, command, args);
+	};
 }
 
 function jsonResult<T>(output: string): T | undefined {

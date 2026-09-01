@@ -22,7 +22,7 @@ import {
 	spawnExec,
 } from "./git.ts";
 import { githubPrUrl } from "./pr-detection.ts";
-import { applyStatePatch } from "./session-state.ts";
+import { applyStatePatch, matchesWorkState } from "./session-state.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
@@ -184,6 +184,10 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!isPinnedPr) return;
+	const isCurrentMerge =
+		runtime.active === session &&
+		matchesWorkState(session.state, claimedTaskRef, claimedPrUrl);
+	if (!isCurrentMerge) return;
 	const hasCompletionAttempt =
 		session.state.todoistCompletionAttemptedAt !== undefined;
 	if (hasCompletionAttempt) return;

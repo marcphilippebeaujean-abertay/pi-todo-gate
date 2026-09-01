@@ -29,6 +29,7 @@ const RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE =
 const UNKNOWN_VALUE = "UNKNOWN";
 const PARSES_GIT_AND_GH_MERGE_COMMANDS = "parses git and gh merge commands";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
+const GIT_MERGE_NO_COMMIT_FEATURE_AUTH = "git merge --no-commit feature/auth";
 const GIT = "git";
 const FEATURE_AUTH = "feature/auth";
 const GH_PR_MERGE_42_SQUASH = "gh pr merge 42 --squash";
@@ -215,6 +216,22 @@ describe("matchesPinnedPr", () => {
 				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
+	});
+
+	it("rejects a non-completing git merge", async () => {
+		const exec = fakeExec({
+			"gh pr view https://github.com/o/r/pull/42 --json headRefName": ok(
+				HEADREFNAME_FEATURE_AUTH,
+			),
+		});
+		await expect(
+			matchesPinnedPr(
+				exec,
+				REPO_2,
+				GIT_MERGE_NO_COMMIT_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
+			),
+		).resolves.toBe(false);
 	});
 
 	it(REJECTS_AMBIGUOUS_OR_REPOSITORY_SELECTED_GH_MERGE, async () => {

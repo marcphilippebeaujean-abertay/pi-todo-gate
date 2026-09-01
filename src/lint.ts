@@ -9,6 +9,7 @@ const NO_COMPLICATED_EXPRESSIONS = "no-complicated-expressions";
 
 import ts from "typescript";
 import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
+import { normalizedPath } from "./shared/path.ts";
 
 export type LintRuleId =
 	| "no-magic-strings"
@@ -57,7 +58,9 @@ function compareDiagnostics(
 	right: LintDiagnostic,
 ): number {
 	return (
-		left.filePath.localeCompare(right.filePath) ||
+		normalizedPath(left.filePath).localeCompare(
+			normalizedPath(right.filePath),
+		) ||
 		left.line - right.line ||
 		left.column - right.column ||
 		left.ruleId.localeCompare(right.ruleId)
@@ -535,26 +538,15 @@ function collectFunctionDiagnostics(
 	}
 }
 
-function isIfCondition(node: ts.Node, ancestors: readonly ts.Node[]): boolean {
-	const parent = ancestors.at(-1);
-	return (
-		parent !== undefined &&
-		ts.isIfStatement(parent) &&
-		parent.expression === node
-	);
-}
-
 function collectComplicatedExpressions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
 	limit: number,
 ): void {
 	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
-		if (
-			isLogicalExpression(node) &&
-			!hasLogicalParent(ancestors) &&
-			!isIfCondition(node, ancestors)
-		) {
+		const isOutermostLogicalExpression =
+			isLogicalExpression(node) && !hasLogicalParent(ancestors);
+		if (isOutermostLogicalExpression) {
 			const checks = logicalCheckCount(node);
 			if (checks > limit) {
 				diagnostics.push(

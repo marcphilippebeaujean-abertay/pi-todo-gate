@@ -41,6 +41,16 @@ function stateFromEntry(entry: unknown): WorkState | null {
 	return isWorkState(record.data) ? { ...record.data } : null;
 }
 
+export function matchesWorkState(
+	state: WorkState,
+	taskRef: string,
+	prUrl: string,
+): boolean {
+	const hasSameTask = state.taskRef === taskRef;
+	const hasSamePr = state.prUrl === prUrl;
+	return hasSameTask && hasSamePr;
+}
+
 export function emptyWorkState(): WorkState {
 	return {};
 }

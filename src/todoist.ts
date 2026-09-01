@@ -181,7 +181,7 @@ export class TodoistClient {
 	}
 
 	async completeTask(ref: string): Promise<void> {
-		await this.run([TASK, COMPLETE, ref]);
+		await this.run([TASK, COMPLETE, ref], false);
 	}
 
 	async listDescendants(ref: string): Promise<TodoistChild[]> {
@@ -207,7 +207,7 @@ export class TodoistClient {
 			if (hasChildTasks) await this.deleteDescendants(childTasks, isCurrent);
 			const isCancelledAfterChildren = isCurrent !== undefined && !isCurrent();
 			if (isCancelledAfterChildren) return;
-			await this.run([TASK, VALUE_DELETE, `id:${child.id}`, YES]);
+			await this.run([TASK, VALUE_DELETE, `id:${child.id}`, YES], false);
 		}
 	}
 

@@ -73,7 +73,7 @@ const STANDALONE_STRING_SOURCE = `function read() {
 const TWO_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean) { return a && b; }";
 const THREE_CHECKS_SOURCE =
-	"function check(a: boolean, b: boolean, c: boolean) { return a && (b || c); }";
+	"function check(a: boolean, b: boolean, c: boolean) { if (a && b && c) return true; return false; }";
 const MAGIC_TEST =
 	"flags executable string literals but permits const definitions";
 const EXPRESSION_TEST = "flags three logical checks but permits two";
@@ -108,6 +108,7 @@ const NEGATED_TYPE_GUARD_SOURCE = `function check(value: unknown, objectValue: o
 	return true;
 }`;
 const METRIC_TEST = "reports function metrics over configured limits";
+const NORMALIZED_PATH_TEST = "sorts diagnostics by normalized path";
 const COMPLEX_SOURCE = `function complex(value: number) {
 	if (value > 0 && value < 10) {
 		for (const item of [value]) {
@@ -250,6 +251,33 @@ describe("lint diagnostics", () => {
 				(id) => id === NAMED_IF_RULE,
 			),
 		).toHaveLength(0);
+	});
+
+	it(NORMALIZED_PATH_TEST, () => {
+		const laterPath = ts.createSourceFile(
+			"a/../b.ts",
+			"function later() {}",
+			ts.ScriptTarget.ES2022,
+			true,
+		);
+		const earlierPath = ts.createSourceFile(
+			"z/../a.ts",
+			"function earlier() {}",
+			ts.ScriptTarget.ES2022,
+			true,
+		);
+		laterPath.fileName = "a/../b.ts";
+		earlierPath.fileName = "z/../a.ts";
+		const program = {
+			getSourceFiles: () => [laterPath, earlierPath],
+			getTypeChecker: () => ({}) as ts.TypeChecker,
+		} as unknown as ts.Program;
+
+		expect(
+			lintProgram(program, { maxFunctionLines: 0 }).map(
+				(diagnostic) => diagnostic.filePath,
+			),
+		).toEqual(["z/../a.ts", "a/../b.ts"]);
 	});
 
 	it(METRIC_TEST, async () => {

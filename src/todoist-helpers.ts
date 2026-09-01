@@ -97,5 +97,7 @@ export function childList(value: unknown): unknown[] {
 	const data = record(value);
 	const hasTasks = Array.isArray(data.tasks);
 	if (hasTasks) return data.tasks as unknown[];
-	return Array.isArray(data.results) ? data.results : [];
+	const hasResults = Array.isArray(data.results);
+	if (hasResults) return data.results as unknown[];
+	throw new TodoistError(RESPONSE, UNEXPECTED_JSON_SHAPE);
 }

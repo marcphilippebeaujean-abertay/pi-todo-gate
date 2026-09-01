@@ -7,6 +7,7 @@ import {
 	type StartBackgroundWorker,
 } from "../src/herdr-claim-gate.ts";
 import { allowedCommand } from "../src/herdr-claim-gate-commands.ts";
+import { boundCommandRunner } from "../src/herdr-claim-gate-environment.ts";
 import type { WorkerSpawner } from "../src/herdr-claim-worker.ts";
 
 interface FakePi {
@@ -71,6 +72,16 @@ const commandRunner: CommandRunner = (command, args) => {
 	return "{}";
 };
 
+function validatedRunner(label: () => string): CommandRunner {
+	return (command, args) => {
+		if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+			return JSON.stringify({ result: { tab: { label: label() } } });
+		if (command === "herdr" && args.join(" ") === "pane get w1:p1")
+			return JSON.stringify({ result: { pane: { tab_id: "w1:t1" } } });
+		return commandRunner(command, args);
+	};
+}
+
 function fakeWorker() {
 	const requests: ClaimWorkerRequest[] = [];
 	const cancelled: boolean[] = [];
@@ -107,6 +118,7 @@ async function startGate(
 		subagent?: boolean;
 		entries?: Array<{ type: string; data: unknown }>;
 		worker?: ReturnType<typeof fakeWorker>;
+		commandRunner?: CommandRunner;
 		startBackgroundWorker?: StartBackgroundWorker;
 		shouldActivate?: () => boolean;
 		cwd?: string;
@@ -115,12 +127,16 @@ async function startGate(
 ) {
 	const previousHerdr = process.env.HERDR_ENV;
 	const previousSubagent = process.env.PI_SUBAGENT_CHILD;
+	const previousTab = process.env.HERDR_TAB_ID;
+	const previousPane = process.env.HERDR_PANE_ID;
 	process.env.HERDR_ENV = "1";
+	process.env.HERDR_TAB_ID = "w1:t1";
+	process.env.HERDR_PANE_ID = "w1:p1";
 	if (options.subagent) process.env.PI_SUBAGENT_CHILD = "1";
 	else delete process.env.PI_SUBAGENT_CHILD;
 
 	installHerdrClaimGate(pi as unknown as ExtensionAPI, {
-		commandRunner,
+		commandRunner: options.commandRunner ?? commandRunner,
 		startBackgroundWorker:
 			options.startBackgroundWorker ?? options.worker?.start,
 		shouldActivate: options.shouldActivate,
@@ -137,12 +153,36 @@ async function startGate(
 	else process.env.HERDR_ENV = previousHerdr;
 	if (previousSubagent === undefined) delete process.env.PI_SUBAGENT_CHILD;
 	else process.env.PI_SUBAGENT_CHILD = previousSubagent;
+	if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+	else process.env.HERDR_TAB_ID = previousTab;
+	if (previousPane === undefined) delete process.env.HERDR_PANE_ID;
+	else process.env.HERDR_PANE_ID = previousPane;
 }
 
 async function emit(pi: FakePi, event: string, value: unknown, ctx: unknown) {
 	const handlers = pi.handlers.get(event) ?? [];
 	return Promise.all(handlers.map((handler) => handler(value, ctx)));
 }
+
+describe("Herdr command runner", () => {
+	it("uses current cwd when session cwd changes", () => {
+		let cwd = "/initial";
+		const observed: string[] = [];
+		const runner = boundCommandRunner(
+			() => cwd,
+			(currentCwd, command) => {
+				observed.push(`${currentCwd}:${command}`);
+				return "";
+			},
+		);
+
+		runner("git", []);
+		cwd = "/switched";
+		runner("git", []);
+
+		expect(observed).toEqual(["/initial:git", "/switched:git"]);
+	});
+});
 
 describe("Herdr claim gate activation", () => {
 	it("stays inactive when extension activation is disabled", async () => {
@@ -182,7 +222,11 @@ describe("Herdr claim gate activation", () => {
 	it("notifies user on worker completion without informing main agent", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
-		await startGate(pi, { worker });
+		let label = "probe";
+		await startGate(pi, {
+			worker,
+			commandRunner: validatedRunner(() => label),
+		});
 		await emit(
 			pi,
 			"before_agent_start",
@@ -190,6 +234,7 @@ describe("Herdr claim gate activation", () => {
 			contextFor(pi),
 		);
 
+		label = "dialog-editor";
 		worker.complete();
 
 		expect(pi.notifications.at(-1)).toEqual(
@@ -291,13 +336,18 @@ describe("Herdr claim gate enforcement", () => {
 	it("lifts gate when worker completes and cancels worker on shutdown", async () => {
 		const pi = createFakePi();
 		const worker = fakeWorker();
-		await startGate(pi, { worker });
+		let label = "probe";
+		await startGate(pi, {
+			worker,
+			commandRunner: validatedRunner(() => label),
+		});
 		await emit(
 			pi,
 			"before_agent_start",
 			{ prompt: "claim tab" },
 			contextFor(pi),
 		);
+		label = "dialog-editor";
 		worker.complete();
 
 		const toolCall = pi.handlers.get("tool_call")?.[0];
@@ -306,6 +356,37 @@ describe("Herdr claim gate enforcement", () => {
 		).toBeUndefined();
 		await emit(pi, "session_shutdown", {}, contextFor(pi));
 		expect(worker.wasCancelled()).toBe(false);
+	});
+
+	it("keeps gate active when worker exits cleanly without tab mutation", async () => {
+		const pi = createFakePi();
+		const worker = fakeWorker();
+		await startGate(pi, {
+			worker,
+			commandRunner: validatedRunner(() => "probe"),
+		});
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "claim tab" },
+			contextFor(pi),
+		);
+		worker.complete();
+
+		expect(pi.entries).toHaveLength(0);
+		expect(pi.notifications.at(-1)).toEqual(
+			expect.objectContaining({
+				message: expect.stringContaining("could not validate"),
+				level: "warning",
+			}),
+		);
+		await emit(
+			pi,
+			"before_agent_start",
+			{ prompt: "retry claim" },
+			contextFor(pi),
+		);
+		expect(worker.start).toHaveBeenCalledTimes(2);
 	});
 
 	it("keeps gate active after worker failure and notifies user", async () => {

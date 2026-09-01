@@ -21,13 +21,18 @@ import {
 	defaultStartWorker,
 	isInsideHerdr,
 	isSubagent,
+	tabLabel,
 } from "./herdr-claim-gate-environment.ts";
 import type {
 	ClaimGateOptions,
 	CommandRunner,
 	StartBackgroundWorker,
 } from "./herdr-claim-gate-types.ts";
-import type { ClaimWorkerHandle } from "./herdr-claim-worker.ts";
+import { hasValidatedTabClaim } from "./herdr-claim-gate-validation.ts";
+import type {
+	ClaimWorkerHandle,
+	ClaimWorkerRequest,
+} from "./herdr-claim-worker.ts";
 
 const HERDR_INSTRUCTIONS = `# STEP 0 — Setup Herdr (FIRST, NOT SKIPPABLE)
 
@@ -99,6 +104,12 @@ not distinguish subagents, so the subagent exemption is keyed on this same \`PI_
 _dispatched by another agent_, run no Herdr command at all: no tab claim, rename, or pane move. The
 agent that spawned you owns the tab and pane you are in; moving or renaming either destroys its
 claim.
+
+### Worker completion
+
+After successful rename or move, output exactly one JSON object and no explanation:
+\`{"status":"claimed","tabId":"<current-tab-id>","label":"<new-tab-label>"}\`.
+If claim cannot complete, exit nonzero.
 `;
 
 const BLOCK_MESSAGE =
@@ -112,11 +123,14 @@ const BASH_TOOL = "bash";
 const WARNING_LEVEL = "warning";
 const CLAIM_GATE_MESSAGE =
 	"Herdr claim gate active; background worker will claim this tab before work continues.";
+const CLAIM_VALIDATION_FAILED_MESSAGE =
+	"Herdr claim worker completed but could not validate tab claim.";
 const WORKER_START_FAILURE = "Herdr claim worker failed to start: ";
 
 class HerdrClaimGate {
 	private readonly pi: ExtensionAPI;
 	private sessionCwd: string;
+	private readonly sessionCwdReference = { current: process.cwd() };
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: ClaimGateOptions["shouldActivate"];
@@ -124,13 +138,16 @@ class HerdrClaimGate {
 	private herdrAvailable = false;
 	private worker: ClaimWorkerHandle | undefined;
 	private pendingClaimCommand: string | undefined;
+	private initialTabLabel: string | undefined;
+	private sessionPaneId: string | undefined;
 	private sessionGeneration = 0;
 
 	constructor(pi: ExtensionAPI, options: ClaimGateOptions) {
 		this.pi = pi;
 		this.sessionCwd = options.cwd ?? process.cwd();
+		this.sessionCwdReference.current = this.sessionCwd;
 		this.commandRunner =
-			options.commandRunner ?? boundCommandRunner(this.sessionCwd);
+			options.commandRunner ?? boundCommandRunner(this.sessionCwdReference);
 		this.startWorker =
 			options.startBackgroundWorker ??
 			((request) =>
@@ -149,7 +166,10 @@ class HerdrClaimGate {
 		this.pendingClaimCommand = undefined;
 		this.sessionGeneration += 1;
 		this.sessionCwd = ctx.cwd;
+		this.sessionCwdReference.current = this.sessionCwd;
 		this.gateActive = false;
+		this.initialTabLabel = undefined;
+		this.sessionPaneId = undefined;
 		this.herdrAvailable = isInsideHerdr() && !isSubagent();
 		const isNotHerdrSession = !this.herdrAvailable;
 		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
@@ -157,6 +177,12 @@ class HerdrClaimGate {
 		const isUnavailableOrDisabled = isNotHerdrSession || isDisabled;
 		const shouldSkip = isUnavailableOrDisabled || hasClaim;
 		if (shouldSkip) return;
+		this.sessionPaneId = process.env.HERDR_PANE_ID;
+		try {
+			this.initialTabLabel = tabLabel(this.commandRunner);
+		} catch {
+			this.initialTabLabel = undefined;
+		}
 		this.gateActive = true;
 		const claimedByWorktree = claimWorktreeTab(
 			this.commandRunner,
@@ -193,10 +219,24 @@ class HerdrClaimGate {
 		}
 	}
 
-	private completeClaim(ctx: ExtensionContext, generation: number): void {
+	private completeClaim(
+		ctx: ExtensionContext,
+		generation: number,
+		claim?: Parameters<ClaimWorkerRequest["onClaimComplete"]>[0],
+	): void {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
+		const isValidated = hasValidatedTabClaim(
+			this.commandRunner,
+			this.initialTabLabel,
+			this.sessionPaneId,
+			claim,
+		);
+		if (!isValidated) {
+			notify(ctx, CLAIM_VALIDATION_FAILED_MESSAGE, WARNING_LEVEL);
+			return;
+		}
 		persistClaimed(this.pi, this, ctx);
 	}
 
@@ -260,6 +300,8 @@ class HerdrClaimGate {
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.pendingClaimCommand = undefined;
+		this.initialTabLabel = undefined;
+		this.sessionPaneId = undefined;
 		this.gateActive = false;
 		this.herdrAvailable = false;
 	}

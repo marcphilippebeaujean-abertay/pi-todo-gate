@@ -60,11 +60,14 @@ describe("startClaimWorker", () => {
 			"--mode",
 			"json",
 			"-p",
-			"--no-session",
 			"--no-extensions",
-			expect.stringContaining("Fix dialog"),
+			"--no-context-files",
+			"--tools",
+			"bash",
+			"--append-system-prompt",
+			"Claim tab",
+			"Fix dialog",
 		]);
-		expect(setupState.spawned?.args.at(-1)).toContain("Claim tab");
 		expect(setupState.spawned?.options.shell).toBe(false);
 		expect(setupState.spawned?.options.cwd).toBe("/repo/worktree");
 		expect(setupState.spawned?.options).toMatchObject({
@@ -83,12 +86,42 @@ describe("startClaimWorker", () => {
 			spawnWorker: setupState.spawnWorker,
 		});
 
-		setupState.process.stdout.write("worker private result\n");
+		setupState.process.stdout.write(
+			`${JSON.stringify({
+				type: "message_end",
+				message: {
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: '{"status":"claimed","tabId":"w1:t1","label":"dialog-editor"}',
+						},
+					],
+				},
+			})}\n${JSON.stringify({ type: "turn_end" })}\n`,
+		);
 		setupState.process.stderr.write("private warning\n");
 		setupState.process.emit("close", 0);
 
-		expect(setupState.onClaimComplete).toHaveBeenCalledOnce();
+		expect(setupState.onClaimComplete).toHaveBeenCalledWith({
+			tabId: "w1:t1",
+			label: "dialog-editor",
+		});
 		expect(setupState.onFailure).not.toHaveBeenCalled();
+	});
+
+	it("reports missing claim evidence on clean worker exit", () => {
+		const setupState = setup();
+		startClaimWorker(setupState.request, {
+			spawnWorker: setupState.spawnWorker,
+		});
+
+		setupState.process.emit("close", 0);
+
+		expect(setupState.onClaimComplete).not.toHaveBeenCalled();
+		expect(setupState.onFailure).toHaveBeenCalledWith(
+			"Herdr claim worker completed without claim evidence.",
+		);
 	});
 
 	it("reports process failure once and cancels child with SIGTERM", () => {

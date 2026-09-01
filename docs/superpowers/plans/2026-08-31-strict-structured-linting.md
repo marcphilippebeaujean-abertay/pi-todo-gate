@@ -14,6 +14,7 @@
 
 - Lint only production files in `extensions/**/*.ts` and `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`; tests remain Biome/Vitest-only.
 - String literals inside function bodies require named `const` extraction; direct `const` initializers are allowed.
+- Named string constants must contain at least two characters; empty and one-character definitions violate `no-short-string-constants`.
 - Boolean expressions with three or more logical leaf checks violate `no-complicated-expressions`.
 - `if` conditions must be boolean identifiers, optionally negated; numeric comparisons, arithmetic, calls, and other computed conditions require extraction into descriptive booleans; compiler type guards remain inline.
 - Cyclomatic complexity limit is 10.
@@ -116,8 +117,9 @@ git commit -m "feat: add lint checker contracts"
 - Modify: `test/lint.test.ts`
 
 **Interfaces:**
-- Add rule IDs `no-magic-strings` and `no-complicated-expressions` to `LintRuleId`.
+- Add rule IDs `no-magic-strings`, `no-short-string-constants`, and `no-complicated-expressions` to `LintRuleId`.
 - `no-magic-strings` reports executable string literals inside function bodies unless the literal is the direct initializer of a `const` variable declaration. Ignore imports, directives, property names, and type nodes.
+- `no-short-string-constants` reports direct `const` string initializers containing fewer than two characters. This restriction complements, rather than removes, the direct-`const` exemption from `no-magic-strings`.
 - `no-complicated-expressions` counts leaves under `&&` and `||`; report the outermost logical expression when count exceeds `config.maxBooleanChecks`.
 
 - [ ] **Step 1: Add failing fixture tests**

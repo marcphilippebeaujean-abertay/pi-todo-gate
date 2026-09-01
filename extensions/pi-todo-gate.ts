@@ -19,10 +19,14 @@ export type {
 	WorkStateAction,
 } from "../src/extension-types.ts";
 
+const SUBAGENT_ENVIRONMENT = "PI_SUBAGENT_CHILD";
+
 export default function extension(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies = {},
 ): void {
+	const isSubagent = process.env[SUBAGENT_ENVIRONMENT] !== undefined;
+	if (isSubagent) return;
 	const runtime = createExtensionRuntime(pi, dependencies);
 	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));

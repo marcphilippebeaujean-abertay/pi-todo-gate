@@ -1,9 +1,15 @@
 import { spawn } from "node:child_process";
+import {
+	appendBounded,
+	type ClaimWorkerResult,
+	parseClaimResult,
+} from "./herdr-claim-worker-result.ts";
+import { buildPiWorkerArgs } from "./shared/pi-worker.ts";
 
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	onClaimComplete: () => void;
+	onClaimComplete: (result?: ClaimWorkerResult) => void;
 	onFailure: (message: string) => void;
 }
 
@@ -40,12 +46,8 @@ export interface WorkerProcess {
 }
 
 const DEFAULT_COMMAND = "pi";
-const MAX_DIAGNOSTIC_BYTES = 500;
-const MODE_FLAG = "--mode";
-const JSON_MODE = "json";
-const PROMPT_FLAG = "-p";
-const NO_SESSION_FLAG = "--no-session";
-const NO_EXTENSIONS_FLAG = "--no-extensions";
+const MISSING_CLAIM_EVIDENCE =
+	"Herdr claim worker completed without claim evidence.";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
 const DATA_EVENT = "data";
@@ -69,14 +71,7 @@ function spawnWorkerProcess(
 	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
 	return spawnWorker(
 		options.command ?? DEFAULT_COMMAND,
-		[
-			MODE_FLAG,
-			JSON_MODE,
-			PROMPT_FLAG,
-			NO_SESSION_FLAG,
-			NO_EXTENSIONS_FLAG,
-			`${request.instructions}\n\nParent user prompt:\n${request.prompt}`,
-		],
+		buildPiWorkerArgs(request.prompt, { instructions: request.instructions }),
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
@@ -89,6 +84,7 @@ function spawnWorkerProcess(
 interface WorkerState {
 	settled: boolean;
 	cancelled: boolean;
+	stdout: string;
 	stderr: string;
 }
 
@@ -97,15 +93,12 @@ function registerWorkerLifecycle(
 	request: ClaimWorkerRequest,
 	state: WorkerState,
 ): void {
-	child.stdout.on(DATA_EVENT, () => {
+	child.stdout.on(DATA_EVENT, (chunk) => {
 		// Worker output is intentionally private and never forwarded to the parent session.
+		state.stdout = appendBounded(state.stdout, chunk);
 	});
 	child.stderr.on(DATA_EVENT, (chunk) => {
-		const next = `${state.stderr}${chunk.toString()}`;
-		state.stderr =
-			next.length > MAX_DIAGNOSTIC_BYTES
-				? next.slice(-MAX_DIAGNOSTIC_BYTES)
-				: next;
+		state.stderr = appendBounded(state.stderr, chunk);
 	});
 
 	const fail = (message: string): void => {
@@ -128,7 +121,13 @@ function registerWorkerLifecycle(
 		state.settled = true;
 		const didSucceed = code === 0;
 		if (didSucceed) {
-			request.onClaimComplete();
+			const result = parseClaimResult(state.stdout);
+			const hasNoClaimResult = result === undefined;
+			if (hasNoClaimResult) {
+				request.onFailure(MISSING_CLAIM_EVIDENCE);
+				return;
+			}
+			request.onClaimComplete(result);
 			return;
 		}
 		const detail = state.stderr.trim();
@@ -143,7 +142,12 @@ export function startClaimWorker(
 	options: ClaimWorkerOptions = {},
 ): ClaimWorkerHandle {
 	const child = spawnWorkerProcess(request, options);
-	const state: WorkerState = { settled: false, cancelled: false, stderr: "" };
+	const state: WorkerState = {
+		settled: false,
+		cancelled: false,
+		stdout: "",
+		stderr: "",
+	};
 	registerWorkerLifecycle(child, request, state);
 
 	return {

@@ -28,9 +28,10 @@ export interface OpenPrInfo {
 	url: string | null;
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
-export { findOpenPr, matchesPinnedPr } from "./git-pr.ts";
+export { findOpenPr } from "./git-pr.ts";
 export {
 	inspectWorktree,
 	isLinkedWorktreePaths,
 	parseBranchName,
 } from "./git-worktree.ts";
+export { matchesPinnedPr } from "./shared/merge-matching.ts";

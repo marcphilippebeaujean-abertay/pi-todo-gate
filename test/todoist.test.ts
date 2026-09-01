@@ -27,6 +27,10 @@ const PREFERS_WEBURL_WHEN_RETURNING_A_CANONICAL_CLAIMED =
 	"prefers webUrl when returning a canonical claimed-task URL";
 const HTTPS_APP_TODOIST_COM_APP_TASK_42 = "https://app.todoist.com/app/task/42";
 const TASK_MOVED_SUCCESSFULLY = "Task moved successfully";
+const TASK_COMPLETED_SUCCESSFULLY = "Task completed successfully";
+const TASK_DELETED_SUCCESSFULLY = "Task deleted successfully";
+const REJECTS_MALFORMED_LIST_RESPONSE =
+	"rejects malformed list response before destructive sync";
 const ACCEPTS_THE_ALREADY_CLAIMED_TASK_AND_MOVES =
 	"accepts the already claimed task and moves a valid task";
 const TASK = "task";
@@ -257,7 +261,9 @@ describe("TodoistClient", () => {
 	});
 
 	it(COMPLETES_TASKS_WITH_SEPARATE_ARGUMENTS, async () => {
-		const fake = fakeTodoist({ "task complete id:42": ok({}) });
+		const fake = fakeTodoist({
+			"task complete id:42": okText(TASK_COMPLETED_SUCCESSFULLY),
+		});
 		await expect(
 			new TodoistClient(fake.exec).completeTask(ID_42),
 		).resolves.toBeUndefined();
@@ -273,8 +279,8 @@ describe("TodoistClient", () => {
 				task({ id: GRANDCHILD, parentId: CHILD }),
 			]),
 			"task list --parent grandchild --json": ok([]),
-			"task delete id:grandchild --yes": ok({}),
-			"task delete id:child --yes": ok({}),
+			"task delete id:grandchild --yes": okText(TASK_DELETED_SUCCESSFULLY),
+			"task delete id:child --yes": okText(TASK_DELETED_SUCCESSFULLY),
 		});
 		const client = new TodoistClient(fake.exec);
 		await expect(client.listDescendants(VALUE_42)).resolves.toMatchObject([
@@ -287,10 +293,20 @@ describe("TodoistClient", () => {
 		]);
 	});
 
+	it(REJECTS_MALFORMED_LIST_RESPONSE, async () => {
+		const fake = fakeTodoist({
+			"task list --parent 42 --json": ok({ unexpected: true }),
+		});
+
+		await expect(
+			new TodoistClient(fake.exec).listDescendants(VALUE_42),
+		).rejects.toThrow("unexpected JSON shape");
+	});
+
 	it(STOPS_RECURSIVE_DELETION_AFTER_CANCELLATION, async () => {
 		const fake = fakeTodoist({
-			"task delete id:grandchild --yes": ok({}),
-			"task delete id:child --yes": ok({}),
+			"task delete id:grandchild --yes": okText(TASK_DELETED_SUCCESSFULLY),
+			"task delete id:child --yes": okText(TASK_DELETED_SUCCESSFULLY),
 		});
 		const client = new TodoistClient(fake.exec);
 		const children = [

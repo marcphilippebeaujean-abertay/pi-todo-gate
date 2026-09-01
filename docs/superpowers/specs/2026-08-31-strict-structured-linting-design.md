@@ -34,6 +34,10 @@ const USER_NAME = "Bob";
 if (name === USER_NAME) return true;
 ```
 
+### `no-short-string-constants`
+
+Named string constants must contain at least two characters. This rule is separate from `no-magic-strings`: direct `const` initializers are valid magic-string definitions, but one-character and empty definitions are rejected as non-descriptive constants.
+
 ### `no-complicated-expressions`
 
 Count leaf checks in logical boolean expressions joined by `&&` and `||`. Report expressions with three or more checks. Parentheses and unary negation do not reduce the count.
@@ -107,7 +111,7 @@ Malformed or unreadable optional lint configuration falls back to defaults. Miss
 
 `test/lint.test.ts` uses temporary fixture files or in-memory source inputs through the exported checker API. Tests cover:
 
-- string literals that fail and direct `const` definitions that pass;
+- string literals that fail, direct `const` definitions that pass, and short string constants that fail;
 - ignored module/property/type syntax;
 - two-check and three-check boolean boundaries;
 - boolean identifiers, negated booleans, numeric truthiness, and comparison extraction;
