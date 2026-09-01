@@ -115,6 +115,7 @@ const CLEARS_INFERRED_TASK_AFTER_PENDING_CLAIM =
 	"clears inferred task after pending claim";
 const CLEARS_SET_TASK_DURING_PENDING_CLAIM =
 	"clears set_task during pending claim";
+const IGNORES_STALE_CLAIM_ERROR = "ignores stale claim error";
 const TASK_NAME = "task name";
 const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
@@ -903,6 +904,46 @@ describe("pi_todo_gate_state", () => {
 		expect(h.appended.at(-1)).not.toMatchObject({
 			data: { taskRef: TASK_A },
 		});
+	});
+
+	it(IGNORES_STALE_CLAIM_ERROR, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root);
+		let rejectClaim: ((error: Error) => void) | undefined;
+		const pendingClaim = new Promise<never>((_resolve, reject) => {
+			rejectClaim = reject;
+		});
+		const client = {
+			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
+			claimTask: async () => pendingClaim,
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const setting = h.tools[0].execute(
+			CALL,
+			{ action: SET_TASK, task: TASK_A },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const clearing = h.tools[0].execute(
+			CALL,
+			{ action: CLEAR_TASK },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await clearing;
+		rejectClaim?.(new Error(TODOIST_UNAVAILABLE));
+		await expect(setting).resolves.toBeDefined();
+		expect(h.appended.at(-1)).toMatchObject({ data: {} });
 	});
 
 	it(DOES_NOT_COMPLETE_ABA_RECLAIM, async () => {

@@ -143,7 +143,10 @@ async function linkInferredTaskNow(
 		persistInferredTask(runtime, session, claimed);
 		return true;
 	} catch (error) {
-		if (error instanceof TodoistOperationCancelled) return false;
+		const isStale = !isCurrent();
+		const isCancellation = error instanceof TodoistOperationCancelled;
+		const shouldIgnoreError = isStale || isCancellation;
+		if (shouldIgnoreError) return false;
 		session.context.ui.notify(C.message.taskNotLinked, C.value.warning);
 		return false;
 	}

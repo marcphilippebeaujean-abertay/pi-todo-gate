@@ -95,8 +95,10 @@ async function setTaskActionNow(
 		if (!isCurrentSession) return extensionResult(C.message.taskCleared);
 		return persistClaimedTask(runtime, session, claimed);
 	} catch (error) {
-		if (error instanceof TodoistOperationCancelled)
-			return extensionResult(C.message.taskCleared);
+		const isStale = !isCurrent();
+		const isCancellation = error instanceof TodoistOperationCancelled;
+		const shouldIgnoreError = isStale || isCancellation;
+		if (shouldIgnoreError) return extensionResult(C.message.taskCleared);
 		throw error;
 	}
 }
