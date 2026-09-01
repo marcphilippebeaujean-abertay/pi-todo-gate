@@ -1003,6 +1003,38 @@ describe("merge reminder", () => {
 		expect(h.notifications).toContain("Task marked as complete");
 	});
 
+	it("offers active task on quit through shared events", async () => {
+		const h = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: { taskRef: "42", taskName: "Implement feature" },
+			},
+		]);
+		const events = createSharedEvents();
+		const todoist = createTodoistModule(
+			h.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{ createTodoistClient: () => ({}) as TodoistClient, events },
+		);
+		await todoist.sessionStart({}, h.ctx);
+		let action: string | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				action = request.actions[0]?.label;
+			},
+			"present",
+		);
+		await events.emit("sessionWillClose", { reason: "quit" });
+		expect(action).toBe('Mark Todoist task "Implement feature" complete');
+	});
+
 	it("clears merged PR, records exact URL, and reminds once", async () => {
 		const h = harness("/project", [
 			{
