@@ -6,7 +6,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Exec, spawnExec } from "../shared/command.ts";
-import { detectMerge, type MergeEvent } from "../shared/merge-detection.ts";
+import type { SharedEvents } from "../shared/events.ts";
+import { detectMerge } from "../shared/merge-detection.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	appendCustomState,
@@ -34,6 +35,7 @@ export interface PrSessionReader {
 }
 
 export interface PrModuleDependencies {
+	events?: SharedEvents;
 	openSession?: (path: string) => PrSessionReader;
 	exec?: Exec;
 }
@@ -50,8 +52,7 @@ export interface PrModule {
 		command?: string;
 		content?: unknown;
 		isError: boolean;
-	}): Promise<MergeEvent | null>;
-	drainMergeEvents(): MergeEvent[];
+	}): Promise<void>;
 	deactivate(): void;
 }
 
@@ -128,7 +129,6 @@ export function createPrModule(
 	let registered = false;
 	let operationGeneration = 0;
 	let ready = false;
-	let mergeEvents: MergeEvent[] = [];
 
 	const appendState = (): void => {
 		appendCustomState(
@@ -167,15 +167,14 @@ export function createPrModule(
 		}
 	};
 
-	const recordMerge = (): MergeEvent | null => {
-		if (!state.prUrl) return null;
+	const recordMerge = async (): Promise<void> => {
+		if (!state.prUrl) return;
 		const event = { prUrl: state.prUrl };
 		state = recordMergedPr(state, new Date().toISOString());
-		mergeEvents.push(event);
 		allowDiscovery = true;
 		appendState();
 		refreshStatus();
-		return event;
+		await dependencies.events?.emit("prMerged", event);
 	};
 
 	const checkExternalMerge = async (
@@ -190,7 +189,7 @@ export function createPrModule(
 		);
 		if (generation !== operationGeneration || !context || state.prUrl !== prUrl)
 			return;
-		if (prState === "MERGED") recordMerge();
+		if (prState === "MERGED") await recordMerge();
 	};
 
 	const registerTool = (): void => {
@@ -244,7 +243,6 @@ export function createPrModule(
 		async sessionStart(event, nextContext) {
 			const generation = ++operationGeneration;
 			ready = false;
-			mergeEvents = [];
 			context = nextContext;
 			state = {};
 			workChanged = false;
@@ -345,10 +343,10 @@ export function createPrModule(
 			return messages;
 		},
 		async toolResult(input) {
-			if (!context || !ready || input.isError) return null;
+			if (!context || !ready || input.isError) return;
 			if (input.toolName === "edit" || input.toolName === "write")
 				workChanged = true;
-			if (input.toolName !== "bash") return null;
+			if (input.toolName !== "bash") return;
 			const command = input.command ?? "";
 			const generation = operationGeneration;
 			const prUrl = state.prUrl;
@@ -372,19 +370,13 @@ export function createPrModule(
 				context &&
 				state.prUrl === mergeEvent.prUrl
 			)
-				return recordMerge();
-			return null;
+				await recordMerge();
 		},
-		drainMergeEvents() {
-			const events = mergeEvents;
-			mergeEvents = [];
-			return events;
-		},
+
 		deactivate() {
 			++operationGeneration;
 			ready = false;
 			workChanged = false;
-			mergeEvents = [];
 			state = {};
 			if (context) context.ui.setStatus("pi-todo-gate-pr", undefined);
 			context = null;

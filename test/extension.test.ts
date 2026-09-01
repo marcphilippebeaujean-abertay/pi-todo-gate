@@ -208,12 +208,12 @@ describe("extension activation", () => {
 		const h = harness("/configured/project");
 		await start(h, { "/configured": "Merge TD" });
 		expect(h.tools.map((tool) => tool.name)).toEqual([
-			"pi_pr_gate_state",
 			"pi_todoist_gate_state",
+			"pi_pr_gate_state",
 		]);
 		expect(h.statusCalls.map(({ key }) => key)).toEqual([
-			"pi-todo-gate-pr",
 			"pi-todo-gate-task",
+			"pi-todo-gate-pr",
 		]);
 	});
 });
@@ -1080,7 +1080,31 @@ describe("merge reminder", () => {
 		});
 	});
 
-	it("completes Todoist task through merge event", async () => {
+	it("publishes merged PR through shared events", async () => {
+		const h = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-pr-gate-state",
+				data: { prUrl: "https://github.com/o/r/pull/42" },
+			},
+		]);
+		const events = createSharedEvents();
+		const merged = vi.fn();
+		events.on("prMerged", (request) => merged(request.payload.prUrl));
+		const exec = async (command: string, args: string[]) => {
+			if (command === "gh")
+				return {
+					stdout: JSON.stringify({ state: "MERGED", mergedAt: "now" }),
+					stderr: "",
+					code: 0,
+				};
+			return projectExec(command, args);
+		};
+		await start(h, {}, { exec, events });
+		expect(merged).toHaveBeenCalledWith("https://github.com/o/r/pull/42");
+	});
+
+	it("completes Todoist task from merged PR event", async () => {
 		const h = harness("/configured/project", [
 			{
 				type: "custom",
@@ -1094,6 +1118,11 @@ describe("merge reminder", () => {
 			},
 		]);
 		let completions = 0;
+		const events = createSharedEvents();
+		const merged = vi.fn();
+		events.on("prMerged", (request) => {
+			merged(request.payload.prUrl);
+		});
 		const client = {
 			completeTask: async () => {
 				completions += 1;
@@ -1114,6 +1143,7 @@ describe("merge reminder", () => {
 			{
 				exec,
 				createTodoistClient: () => client,
+				events,
 			},
 		);
 		expect(completions).toBe(1);
