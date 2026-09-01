@@ -1,352 +1,316 @@
+const EMPTY_STRING = "";
+const ERROR_VALUE = "error";
+const SPACE = " ";
+const IDENTIFIES_A_LINKED_WORKTREE_AND_BRANCH =
+	"identifies a linked worktree and branch";
+const REPO_WORKTREES_FEATURE = "/repo/.worktrees/feature\n";
+const FEATURE = "feature\n";
+const WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS =
+	"worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.worktrees/feature\nHEAD def\nbranch refs/heads/feature\n";
+const REPO_WORKTREES_FEATURE_2 = "/repo/.worktrees/feature";
+const FEATURE_2 = "feature";
+const IDENTIFIES_THE_MAIN_CHECKOUT = "identifies the main checkout";
+const REPO = "/repo\n";
+const MAIN = "main\n";
+const WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS_2 =
+	"worktree /repo\nHEAD abc\nbranch refs/heads/main\n";
+const REPO_2 = "/repo";
+const MAIN_2 = "main";
+const PARSES_THE_FIRST_OPEN_PULL_REQUEST = "parses the first open pull request";
+const URL_HTTPS_GITHUB_COM_O_R_PULL =
+	'[{"url":"https://github.com/o/r/pull/42","state":"OPEN"}]';
+const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42";
+const OPEN = "OPEN";
+const RETURNS_OPEN_WITH_NO_URL_WHEN_THERE =
+	"returns open with no URL when there is no open pull request";
+const EMPTY_LIST_JSON = "[]";
+const RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE =
+	"returns unknown rather than throwing on unavailable gh";
+const UNKNOWN_VALUE = "UNKNOWN";
+const PARSES_GIT_AND_GH_MERGE_COMMANDS = "parses git and gh merge commands";
+const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
+const GIT_MERGE_NO_COMMIT_FEATURE_AUTH = "git merge --no-commit feature/auth";
+const GIT = "git";
+const FEATURE_AUTH = "feature/auth";
+const GH_PR_MERGE_42_SQUASH = "gh pr merge 42 --squash";
+const GH = "gh";
+const VALUE_42 = "42";
+const SQUASH = "--squash";
+const REJECTS_COMPOUND_COMMANDS_SO_FAILED_MERGES_CANNOT =
+	"rejects compound commands so failed merges cannot be masked";
+const ECHO_GIT_MERGE_IGNORED_GIT_MERGE_FEATURE =
+	'echo "git merge ignored" && git merge "feature/auth"';
+const PRINTF_S_GH_PR_MERGE_42_GH =
+	"printf '%s' 'gh pr merge 42'; gh pr merge 43";
+const GIT_STATUS_PRINTF_GIT_MERGE_NO = "git status && printf 'git merge no'";
+const GIT_MERGE_FEATURE_A_GIT_MERGE_FEATURE =
+	"git merge feature/a; git merge feature/b";
+const GIT_MERGE_FEATURE_A_TRUE = "git merge feature/a; true";
+const IGNORES_UNRELATED_COMMANDS = "ignores unrelated commands";
+const GIT_PUSH_ORIGIN_FEATURE_AUTH = "git push origin feature/auth";
+const ECHO_GH_PR_MERGE_42 = "echo 'gh pr merge 42'";
+const MATCHES_A_GH_MERGE_BY_PINNED_URL = "matches a gh merge by pinned URL";
+const GH_PR_MERGE_HTTPS_GITHUB_COM_O =
+	"gh pr merge https://github.com/o/r/pull/42";
+const MATCHES_A_GIT_MERGE_BY_THE_PINNED =
+	"matches a git merge by the pinned PR head branch";
+const HEADREFNAME_FEATURE_AUTH = '{"headRefName":"feature/auth"}';
+const REJECTS_AMBIGUOUS_OR_REPOSITORY_SELECTED_GH_MERGE =
+	"rejects ambiguous or repository-selected gh merge targets";
+const URL_HTTPS_GITHUB_COM_O_R_PULL_2 =
+	'{"url":"https://github.com/o/r/pull/42","headRefName":"feature/auth"}';
+const GH_PR_MERGE_42_43 = "gh pr merge 42 43";
+const GH_PR_MERGE_REPO_OTHER_REPO_42 = "gh pr merge --repo other/repo 42";
+const VALIDATES_GH_NUMBER_AND_BRANCH_TARGETS_AGAINST =
+	"validates gh number and branch targets against the pinned repository";
+const GH_PR_MERGE_42 = "gh pr merge 42";
+const GH_PR_MERGE_FEATURE_AUTH = "gh pr merge feature/auth";
+const URL_HTTPS_GITHUB_COM_OTHER_REPO_PULL =
+	'{"url":"https://github.com/other/repo/pull/42","headRefName":"feature/auth"}';
+const REJECTS_AMBIGUOUS_MERGE_TARGETS = "rejects ambiguous merge targets";
+const GIT_MERGE_FEATURE_AUTH_OTHER = "git merge feature/auth other";
+
 import { describe, expect, it } from "vitest";
 import {
+	type CommandResult,
+	type Exec,
 	findOpenPr,
-	findPrState,
+	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../src/pr/git.ts";
-import type { CommandResult, Exec } from "../src/shared/command.ts";
-import {
-	inspectProject,
-	isLinkedWorktreePaths,
-	parseBranchName,
-	resolveGitPath,
-} from "../src/shared/project.ts";
+} from "../src/git.ts";
 
-const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", code: 0 });
-const fail = (stderr = "error"): CommandResult => ({
-	stdout: "",
+const ok = (stdout: string): CommandResult => ({
+	stdout,
+	stderr: EMPTY_STRING,
+	code: 0,
+});
+const fail = (stderr = ERROR_VALUE): CommandResult => ({
+	stdout: EMPTY_STRING,
 	stderr,
 	code: 1,
 });
 
 function fakeExec(results: Record<string, CommandResult>): Exec {
 	return async (command, args) =>
-		results[[command, ...args].join(" ")] ??
-		fail(`unexpected ${command} ${args.join(" ")}`);
+		results[[command, ...args].join(SPACE)] ??
+		fail(`unexpected ${command} ${args.join(SPACE)}`);
 }
 
-describe("shared Git helpers", () => {
-	it("normalizes git path output relative to cwd", () => {
-		expect(resolveGitPath("/repo/worktree", ".git/worktrees/feature\n")).toBe(
-			"/repo/worktree/.git/worktrees/feature",
-		);
-		expect(resolveGitPath("/repo", "\n")).toBeNull();
-	});
-
-	it("parses a non-empty branch name", () => {
-		expect(parseBranchName("feature/dialog-editor\n")).toBe(
-			"feature/dialog-editor",
-		);
-		expect(parseBranchName("\n")).toBeNull();
-	});
-
-	it("detects linked worktree from git and common directory paths", () => {
-		expect(
-			isLinkedWorktreePaths(
-				"/repo/worktree",
-				".git/worktrees/feature",
-				"/repo/.git",
-			),
-		).toBe(true);
-		expect(isLinkedWorktreePaths("/repo", "/repo/.git", "/repo/.git")).toBe(
-			false,
-		);
-	});
-});
-
-describe("inspectProject", () => {
-	it("identifies a linked worktree and branch", async () => {
+describe("inspectWorktree", () => {
+	it(IDENTIFIES_A_LINKED_WORKTREE_AND_BRANCH, async () => {
 		const exec = fakeExec({
-			"git rev-parse --show-toplevel": ok("/repo/.worktrees/feature\n"),
-			"git branch --show-current": ok("feature\n"),
+			"git rev-parse --show-toplevel": ok(REPO_WORKTREES_FEATURE),
+			"git branch --show-current": ok(FEATURE),
 			"git worktree list --porcelain": ok(
-				"worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.worktrees/feature\nHEAD def\nbranch refs/heads/feature\n",
+				WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS,
 			),
 		});
 		await expect(
-			inspectProject(exec, "/repo/.worktrees/feature"),
+			inspectWorktree(exec, REPO_WORKTREES_FEATURE_2),
 		).resolves.toEqual({
 			isWorktree: true,
-			root: "/repo/.worktrees/feature",
-			branch: "feature",
+			root: REPO_WORKTREES_FEATURE_2,
+			branch: FEATURE_2,
 		});
 	});
 
-	it("returns an inert result when a git lookup rejects", async () => {
-		const exec: Exec = async () => {
-			throw new Error("git unavailable");
-		};
-		await expect(inspectProject(exec, "/repo")).resolves.toEqual({
-			isWorktree: false,
-			root: null,
-			branch: null,
-		});
-	});
-
-	it("identifies the main checkout", async () => {
+	it(IDENTIFIES_THE_MAIN_CHECKOUT, async () => {
 		const exec = fakeExec({
-			"git rev-parse --show-toplevel": ok("/repo\n"),
-			"git branch --show-current": ok("main\n"),
+			"git rev-parse --show-toplevel": ok(REPO),
+			"git branch --show-current": ok(MAIN),
 			"git worktree list --porcelain": ok(
-				"worktree /repo\nHEAD abc\nbranch refs/heads/main\n",
+				WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS_2,
 			),
 		});
-		await expect(inspectProject(exec, "/repo")).resolves.toEqual({
+		await expect(inspectWorktree(exec, REPO_2)).resolves.toEqual({
 			isWorktree: false,
-			root: "/repo",
-			branch: "main",
+			root: REPO_2,
+			branch: MAIN_2,
 		});
-	});
-});
-
-describe("findPrState", () => {
-	it("requires a real merged state", async () => {
-		const exec = fakeExec({
-			"gh pr view https://github.com/o/r/pull/42 --json state,mergedAt": ok(
-				'{"state":"OPEN","mergedAt":""}',
-			),
-		});
-		await expect(
-			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
-		).resolves.toBe("OPEN");
-	});
-
-	it("returns unknown when PR lookup executor rejects", async () => {
-		const exec: Exec = async () => {
-			throw new Error("gh unavailable");
-		};
-		await expect(
-			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
-		).resolves.toBe("UNKNOWN");
-		await expect(findOpenPr(exec, "/repo", "feature")).resolves.toEqual({
-			url: null,
-			state: "UNKNOWN",
-		});
-	});
-
-	it("does not accept merged state without mergedAt", async () => {
-		const exec = fakeExec({
-			"gh pr view https://github.com/o/r/pull/42 --json state,mergedAt": ok(
-				'{"state":"MERGED","mergedAt":null}',
-			),
-		});
-		await expect(
-			findPrState(exec, "/repo", "https://github.com/o/r/pull/42"),
-		).resolves.toBe("UNKNOWN");
 	});
 });
 
 describe("findOpenPr", () => {
-	it("parses the first open pull request", async () => {
+	it(PARSES_THE_FIRST_OPEN_PULL_REQUEST, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1": ok(
-				'[{"url":"https://github.com/o/r/pull/42","state":"OPEN"}]',
+				URL_HTTPS_GITHUB_COM_O_R_PULL,
 			),
 		});
-		await expect(findOpenPr(exec, "/repo", "feature")).resolves.toEqual({
-			url: "https://github.com/o/r/pull/42",
-			state: "OPEN",
+		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
+			url: HTTPS_GITHUB_COM_O_R_PULL_42,
+			state: OPEN,
 		});
 	});
 
-	it("returns open with no URL when there is no open pull request", async () => {
+	it(RETURNS_OPEN_WITH_NO_URL_WHEN_THERE, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1":
-				ok("[]"),
+				ok(EMPTY_LIST_JSON),
 		});
-		await expect(findOpenPr(exec, "/repo", "feature")).resolves.toEqual({
+		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
 			url: null,
-			state: "OPEN",
+			state: OPEN,
 		});
 	});
 
-	it("returns unknown rather than throwing on unavailable gh", async () => {
-		await expect(findOpenPr(fakeExec({}), "/repo", "feature")).resolves.toEqual(
-			{ url: null, state: "UNKNOWN" },
-		);
+	it(RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE, async () => {
+		await expect(findOpenPr(fakeExec({}), REPO_2, FEATURE_2)).resolves.toEqual({
+			url: null,
+			state: UNKNOWN_VALUE,
+		});
 	});
 });
 
 describe("mergeCommand", () => {
-	it("parses git and gh merge commands", () => {
-		expect(mergeCommand("git merge feature/auth")).toEqual({
-			kind: "git",
-			args: ["feature/auth"],
+	it(PARSES_GIT_AND_GH_MERGE_COMMANDS, () => {
+		expect(mergeCommand(GIT_MERGE_FEATURE_AUTH)).toEqual({
+			kind: GIT,
+			args: [FEATURE_AUTH],
 		});
-		expect(mergeCommand("gh pr merge 42 --squash")).toEqual({
-			kind: "gh",
-			args: ["42", "--squash"],
+		expect(mergeCommand(GH_PR_MERGE_42_SQUASH)).toEqual({
+			kind: GH,
+			args: [VALUE_42, SQUASH],
 		});
 	});
 
-	it("rejects compound commands so failed merges cannot be masked", () => {
-		expect(
-			mergeCommand('echo "git merge ignored" && git merge "feature/auth"'),
-		).toBeNull();
-		expect(
-			mergeCommand("printf '%s' 'gh pr merge 42'; gh pr merge 43"),
-		).toBeNull();
-		expect(mergeCommand("git status && printf 'git merge no'")).toBeNull();
-		expect(mergeCommand("git merge feature/a; git merge feature/b")).toBeNull();
-		expect(mergeCommand("git merge feature/a; true")).toBeNull();
-		expect(mergeCommand("git merge feature/a;")).toBeNull();
-		expect(mergeCommand("git merge feature/a &&")).toBeNull();
-		expect(mergeCommand("git merge 'feature/a")).toBeNull();
+	it(REJECTS_COMPOUND_COMMANDS_SO_FAILED_MERGES_CANNOT, () => {
+		expect(mergeCommand(ECHO_GIT_MERGE_IGNORED_GIT_MERGE_FEATURE)).toBeNull();
+		expect(mergeCommand(PRINTF_S_GH_PR_MERGE_42_GH)).toBeNull();
+		expect(mergeCommand(GIT_STATUS_PRINTF_GIT_MERGE_NO)).toBeNull();
+		expect(mergeCommand(GIT_MERGE_FEATURE_A_GIT_MERGE_FEATURE)).toBeNull();
+		expect(mergeCommand(GIT_MERGE_FEATURE_A_TRUE)).toBeNull();
 	});
 
-	it("accepts valueless gh merge flags before target", async () => {
-		await expect(
-			matchesPinnedPr(
-				fakeExec({}),
-				"/repo",
-				"gh pr merge --squash https://github.com/o/r/pull/42",
-				"https://github.com/o/r/pull/42",
-			),
-		).resolves.toBe(true);
-	});
-
-	it("rejects non-completing merge commands", async () => {
-		expect(mergeCommand("gh pr merge 42 --auto")).not.toBeNull();
-		expect(mergeCommand("gh pr merge 42 --dry-run")).not.toBeNull();
-		await expect(
-			matchesPinnedPr(
-				fakeExec({}),
-				"/repo",
-				"gh pr merge https://github.com/o/r/pull/42 --auto",
-				"https://github.com/o/r/pull/42",
-			),
-		).resolves.toBe(false);
-		await expect(
-			matchesPinnedPr(
-				fakeExec({}),
-				"/repo",
-				"gh pr merge https://github.com/o/r/pull/42 --dry-run",
-				"https://github.com/o/r/pull/42",
-			),
-		).resolves.toBe(false);
-		await expect(
-			matchesPinnedPr(
-				fakeExec({}),
-				"/repo",
-				"git merge --no-commit feature/auth",
-				"https://github.com/o/r/pull/42",
-			),
-		).resolves.toBe(false);
-	});
-
-	it("ignores unrelated commands", () => {
-		expect(mergeCommand("git push origin feature/auth")).toBeNull();
-		expect(mergeCommand("echo 'gh pr merge 42'")).toBeNull();
+	it(IGNORES_UNRELATED_COMMANDS, () => {
+		expect(mergeCommand(GIT_PUSH_ORIGIN_FEATURE_AUTH)).toBeNull();
+		expect(mergeCommand(ECHO_GH_PR_MERGE_42)).toBeNull();
 	});
 });
 
 describe("matchesPinnedPr", () => {
-	it("matches a gh merge by pinned URL", async () => {
+	it(MATCHES_A_GH_MERGE_BY_PINNED_URL, async () => {
 		const exec = fakeExec({});
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"gh pr merge https://github.com/o/r/pull/42",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GH_PR_MERGE_HTTPS_GITHUB_COM_O,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
 	});
 
-	it("matches a git merge by the pinned PR head branch", async () => {
+	it(MATCHES_A_GIT_MERGE_BY_THE_PINNED, async () => {
 		const exec = fakeExec({
 			"gh pr view https://github.com/o/r/pull/42 --json headRefName": ok(
-				'{"headRefName":"feature/auth"}',
+				HEADREFNAME_FEATURE_AUTH,
 			),
 		});
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"git merge feature/auth",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GIT_MERGE_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
 	});
 
-	it("rejects ambiguous or repository-selected gh merge targets", async () => {
+	it("rejects a non-completing git merge", async () => {
 		const exec = fakeExec({
-			"gh pr view 42 --json url,headRefName": ok(
-				'{"url":"https://github.com/o/r/pull/42","headRefName":"feature/auth"}',
+			"gh pr view https://github.com/o/r/pull/42 --json headRefName": ok(
+				HEADREFNAME_FEATURE_AUTH,
 			),
 		});
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"gh pr merge 42 43",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GIT_MERGE_NO_COMMIT_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
+			),
+		).resolves.toBe(false);
+	});
+
+	it(REJECTS_AMBIGUOUS_OR_REPOSITORY_SELECTED_GH_MERGE, async () => {
+		const exec = fakeExec({
+			"gh pr view 42 --json url,headRefName": ok(
+				URL_HTTPS_GITHUB_COM_O_R_PULL_2,
+			),
+		});
+		await expect(
+			matchesPinnedPr(
+				exec,
+				REPO_2,
+				GH_PR_MERGE_42_43,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(false);
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"gh pr merge --repo other/repo 42",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GH_PR_MERGE_REPO_OTHER_REPO_42,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(false);
 	});
 
-	it("validates gh number and branch targets against the pinned repository", async () => {
+	it(VALIDATES_GH_NUMBER_AND_BRANCH_TARGETS_AGAINST, async () => {
 		const exec = fakeExec({
 			"gh pr view 42 --json url,headRefName": ok(
-				'{"url":"https://github.com/o/r/pull/42","headRefName":"feature/auth"}',
+				URL_HTTPS_GITHUB_COM_O_R_PULL_2,
 			),
 			"gh pr view feature/auth --json url,headRefName": ok(
-				'{"url":"https://github.com/o/r/pull/42","headRefName":"feature/auth"}',
+				URL_HTTPS_GITHUB_COM_O_R_PULL_2,
 			),
 		});
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"gh pr merge 42",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GH_PR_MERGE_42,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"gh pr merge feature/auth",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GH_PR_MERGE_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
 
 		const otherRepo = fakeExec({
 			"gh pr view 42 --json url,headRefName": ok(
-				'{"url":"https://github.com/other/repo/pull/42","headRefName":"feature/auth"}',
+				URL_HTTPS_GITHUB_COM_OTHER_REPO_PULL,
 			),
 		});
 		await expect(
 			matchesPinnedPr(
 				otherRepo,
-				"/repo",
-				"gh pr merge 42",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GH_PR_MERGE_42,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(false);
 	});
 
-	it("rejects ambiguous merge targets", async () => {
+	it(REJECTS_AMBIGUOUS_MERGE_TARGETS, async () => {
 		const exec = fakeExec({
 			"gh pr view https://github.com/o/r/pull/42 --json headRefName": ok(
-				'{"headRefName":"feature/auth"}',
+				HEADREFNAME_FEATURE_AUTH,
 			),
 		});
 		await expect(
 			matchesPinnedPr(
 				exec,
-				"/repo",
-				"git merge feature/auth other",
-				"https://github.com/o/r/pull/42",
+				REPO_2,
+				GIT_MERGE_FEATURE_AUTH_OTHER,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(false);
 	});

@@ -15,8 +15,10 @@ const STATE_KEYS = new Set<keyof TodoistState>([
 ]);
 
 export function isTodoistState(value: unknown): value is TodoistState {
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		return false;
+	const isObject = typeof value === "object";
+	if (!isObject) return false;
+	if (value === null) return false;
+	if (Array.isArray(value)) return false;
 	const record = value as Record<string, unknown>;
 	return Object.entries(record).every(
 		([key, item]) =>
@@ -30,7 +32,8 @@ export function applyTodoistStatePatch(
 ): TodoistState {
 	const next = { ...state };
 	for (const key of STATE_KEYS) {
-		if (!Object.hasOwn(patch, key)) continue;
+		const hasKey = Object.hasOwn(patch, key);
+		if (!hasKey) continue;
 		const value = patch[key];
 		if (value === undefined) delete next[key];
 		else next[key] = value;

@@ -1,4 +1,34 @@
+const STRING_LITERAL_TODOISTERROR_F35F50B5 = "TodoistError";
+const STRING_LITERAL_PROJECT_67DBF477 = "project";
+const STRING_LITERAL_LIST_53A8C595 = "list";
+const STRING_LITERAL_JSON_3C44146C = "--json";
+const STRING_LITERAL_ID_F94F1F69 = "id:";
+const STRING_LITERAL_PROJECT_LIST_3D60951A = "project list";
+const STRING_LITERAL_TASK_B8A94174 = "task";
+const STRING_LITERAL_VIEW_5E44D2A2 = "view";
+const STRING_LITERAL_COMPLETE_4DB320F6 = "complete";
+const STRING_LITERAL_TASK_CLAIM_8F24CDE6 = "task claim";
+const STRING_LITERAL_TASK_IS_OUTSIDE_THE_CONFIGURED_05550446 =
+	"task is outside the configured project";
+const STRING_LITERAL_SECTION_D7526181 = "section";
+const STRING_LITERAL_PROJECT_F844796C = "--project";
+const STRING_LITERAL_IN_PROGRESS_587BFFEA = "in progress";
+const STRING_LITERAL_TASK_IS_ALREADY_IN_PROGRESS_ED73545E =
+	"task is already in progress";
+const STRING_LITERAL_MOVE_D72C4D1E = "move";
+const STRING_LITERAL_SECTION_7E3A0078 = "--section";
+const STRING_LITERAL_IN_PROGRESS_940FF43E = "In Progress";
+
 import type { CommandResult } from "../shared/command.ts";
+import {
+	canonicalTaskId,
+	childList,
+	parsePayload,
+	record,
+	sanitizeError,
+	stringValue,
+	taskFromPayload,
+} from "./parsing.ts";
 
 export interface TodoistTask {
 	id: string;
@@ -15,92 +45,20 @@ export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;
 }
 
+interface ClaimProject {
+	id: string;
+	currentTaskId?: string;
+	allowInProgress?: boolean;
+}
+
 export class TodoistError extends Error {
 	readonly commandFamily: string;
 
 	constructor(commandFamily: string, detail: string) {
 		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
-		this.name = "TodoistError";
+		this.name = STRING_LITERAL_TODOISTERROR_F35F50B5;
 		this.commandFamily = commandFamily;
 	}
-}
-
-function sanitizeError(stderr: string): string {
-	return stderr
-		.replace(
-			/(?:token|password|secret|authorization|bearer)\s*[:=]?\s*[^\s,;]+/gi,
-			"$1=[redacted]",
-		)
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, 300);
-}
-
-function parsePayload(stdout: string, family: string): unknown {
-	try {
-		return JSON.parse(stdout);
-	} catch {
-		throw new TodoistError(family, "invalid JSON response");
-	}
-}
-
-function record(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		throw new TodoistError("response", "unexpected JSON shape");
-	}
-	return value as Record<string, unknown>;
-}
-
-function stringValue(value: unknown, fallback = ""): string {
-	return typeof value === "string" ? value : fallback;
-}
-
-function safeHttpUrl(value: unknown): string | undefined {
-	if (typeof value !== "string") return undefined;
-	try {
-		const url = new URL(value);
-		return url.protocol === "http:" || url.protocol === "https:"
-			? value
-			: undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function canonicalTaskId(ref: string): string {
-	return ref.trim().replace(/^id:/, "");
-}
-
-function nullableString(value: unknown): string | null | undefined {
-	if (value === null) return null;
-	return typeof value === "string" ? value : undefined;
-}
-
-function taskFromPayload(value: unknown): TodoistTask {
-	const data = record(value);
-	const id = stringValue(data.id);
-	const content = stringValue(data.content);
-	const projectId = stringValue(data.projectId ?? data.project_id);
-	if (!id || !content || !projectId)
-		throw new TodoistError("response", "task has missing required fields");
-	return {
-		id,
-		content,
-		description: stringValue(data.description),
-		projectId,
-		sectionId: nullableString(data.sectionId ?? data.section_id),
-		sectionName: nullableString(data.sectionName ?? data.section_name),
-		url: safeHttpUrl(data.url),
-		webUrl: safeHttpUrl(data.webUrl ?? data.web_url),
-	};
-}
-
-function childList(value: unknown): unknown[] {
-	if (Array.isArray(value)) return value;
-	const data = record(value);
-	if (Array.isArray(data.tasks)) return data.tasks;
-	if (Array.isArray(data.results)) return data.results;
-	throw new TodoistError("response", "expected a list payload");
 }
 
 export class TodoistClient {
@@ -111,7 +69,8 @@ export class TodoistClient {
 		parseJson = true,
 	): Promise<unknown> {
 		const result = await this.exec.run(args);
-		if (result.code !== 0) {
+		const commandFailed = result.code !== 0;
+		if (commandFailed) {
 			const family = args.slice(0, 2).join(" ");
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
@@ -121,16 +80,22 @@ export class TodoistClient {
 	}
 
 	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
-		const payload = await this.run(["project", "list", "--json"]);
+		const payload = await this.run([
+			STRING_LITERAL_PROJECT_67DBF477,
+			STRING_LITERAL_LIST_53A8C595,
+			STRING_LITERAL_JSON_3C44146C,
+		]);
 		const rows = childList(payload).map(record);
-		const target = ref.startsWith("id:") ? ref.slice(3) : ref;
+		const target = ref.startsWith(STRING_LITERAL_ID_F94F1F69)
+			? ref.slice(3)
+			: ref;
 		const match = rows.find(
 			(row) =>
 				stringValue(row.id) === target || stringValue(row.name) === target,
 		);
-		if (!match)
+		if (match === undefined)
 			throw new TodoistError(
-				"project list",
+				STRING_LITERAL_PROJECT_LIST_3D60951A,
 				`configured project not found: ${target}`,
 			);
 		return { id: stringValue(match.id), name: stringValue(match.name) };
@@ -138,67 +103,84 @@ export class TodoistClient {
 
 	async getTask(ref: string): Promise<TodoistTask> {
 		const task = taskFromPayload(
-			await this.run(["task", "view", ref, "--json"]),
+			await this.run([
+				STRING_LITERAL_TASK_B8A94174,
+				STRING_LITERAL_VIEW_5E44D2A2,
+				ref,
+				STRING_LITERAL_JSON_3C44146C,
+			]),
 		);
-		if (!task.url && !task.webUrl)
-			task.url = `https://app.todoist.com/app/task/${task.id}`;
+		const hasNoUrl = !task.url && !task.webUrl;
+		if (hasNoUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
 		return task;
 	}
 
 	async completeTask(ref: string): Promise<void> {
-		await this.run(["task", "complete", ref], false);
+		await this.run(
+			[STRING_LITERAL_TASK_B8A94174, STRING_LITERAL_COMPLETE_4DB320F6, ref],
+			false,
+		);
 	}
 
-	async claimTask(
-		ref: string,
-		project: {
-			id: string;
-			currentTaskId?: string;
-			allowInProgress?: boolean;
-		},
-	): Promise<TodoistTask> {
+	private async resolveSectionName(
+		task: TodoistTask,
+		projectId: string,
+	): Promise<string | null | undefined> {
+		let sectionName = task.sectionName;
+		const needsSectionLookup = !sectionName && Boolean(task.sectionId);
+		if (!needsSectionLookup) return sectionName;
+		const sections = await this.run([
+			STRING_LITERAL_SECTION_D7526181,
+			STRING_LITERAL_LIST_53A8C595,
+			STRING_LITERAL_PROJECT_F844796C,
+			`id:${projectId}`,
+			STRING_LITERAL_JSON_3C44146C,
+		]);
+		const section = childList(sections)
+			.map(record)
+			.find((item) => stringValue(item.id) === task.sectionId);
+		sectionName = section ? stringValue(section.name) || null : null;
+		return sectionName;
+	}
+
+	async claimTask(ref: string, project: ClaimProject): Promise<TodoistTask> {
 		const task = await this.getTask(ref);
-		if (task.projectId !== project.id) {
+		const isOutsideProject = task.projectId !== project.id;
+		if (isOutsideProject) {
 			throw new TodoistError(
-				"task claim",
-				"task is outside the configured project",
+				STRING_LITERAL_TASK_CLAIM_8F24CDE6,
+				STRING_LITERAL_TASK_IS_OUTSIDE_THE_CONFIGURED_05550446,
 			);
 		}
-		let sectionName = task.sectionName;
-		if (!sectionName && task.sectionId) {
-			const sections = await this.run([
-				"section",
-				"list",
-				"--project",
-				`id:${project.id}`,
-				"--json",
-			]);
-			const section = childList(sections)
-				.map(record)
-				.find((item) => stringValue(item.id) === task.sectionId);
-			sectionName = section ? stringValue(section.name) || null : null;
-		}
-		const isInProgress = sectionName?.trim().toLowerCase() === "in progress";
+		let sectionName = await this.resolveSectionName(task, project.id);
+		const isInProgress =
+			sectionName?.trim().toLowerCase() === STRING_LITERAL_IN_PROGRESS_587BFFEA;
 		const currentTaskId = project.currentTaskId
 			? canonicalTaskId(project.currentTaskId)
 			: undefined;
-		if (isInProgress && task.id !== currentTaskId && !project.allowInProgress) {
-			throw new TodoistError("task claim", "task is already in progress");
-		}
+		const isCurrentTask = task.id === currentTaskId;
+		const hasProgressCollision = isInProgress && !isCurrentTask;
+		const shouldRejectCollision =
+			hasProgressCollision && !project.allowInProgress;
+		if (shouldRejectCollision)
+			throw new TodoistError(
+				STRING_LITERAL_TASK_CLAIM_8F24CDE6,
+				STRING_LITERAL_TASK_IS_ALREADY_IN_PROGRESS_ED73545E,
+			);
 		if (!isInProgress) {
 			await this.run(
 				[
-					"task",
-					"move",
+					STRING_LITERAL_TASK_B8A94174,
+					STRING_LITERAL_MOVE_D72C4D1E,
 					ref,
-					"--section",
-					"In Progress",
-					"--project",
+					STRING_LITERAL_SECTION_7E3A0078,
+					STRING_LITERAL_IN_PROGRESS_940FF43E,
+					STRING_LITERAL_PROJECT_F844796C,
 					`id:${project.id}`,
 				],
 				false,
 			);
-			sectionName = "In Progress";
+			sectionName = STRING_LITERAL_IN_PROGRESS_940FF43E;
 		}
 		return {
 			...task,
