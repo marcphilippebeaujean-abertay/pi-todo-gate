@@ -5,6 +5,7 @@ export interface ProjectInfo {
 	isWorktree: boolean;
 	root: string | null;
 	branch: string | null;
+	mainRoot: string | null;
 }
 
 export function resolveGitPath(cwd: string, output: string): string | null {
@@ -48,7 +49,12 @@ export async function inspectProject(
 			exec("git", ["worktree", "list", "--porcelain"], { cwd }),
 		]);
 	} catch {
-		return { isWorktree: false, root: null, branch: null };
+		return {
+			isWorktree: false,
+			root: null,
+			branch: null,
+			mainRoot: null,
+		};
 	}
 	const root =
 		rootResult.code === 0 ? resolveGitPath(cwd, rootResult.stdout) : null;
@@ -63,5 +69,6 @@ export async function inspectProject(
 			root !== null && mainRoot !== null && root !== resolve(mainRoot),
 		root,
 		branch,
+		mainRoot,
 	};
 }

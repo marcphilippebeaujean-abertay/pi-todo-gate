@@ -70,6 +70,7 @@ describe("inspectProject", () => {
 			isWorktree: true,
 			root: "/repo/.worktrees/feature",
 			branch: "feature",
+			mainRoot: "/repo",
 		});
 	});
 
@@ -81,6 +82,7 @@ describe("inspectProject", () => {
 			isWorktree: false,
 			root: null,
 			branch: null,
+			mainRoot: null,
 		});
 	});
 
@@ -96,6 +98,7 @@ describe("inspectProject", () => {
 			isWorktree: false,
 			root: "/repo",
 			branch: "main",
+			mainRoot: "/repo",
 		});
 	});
 });
