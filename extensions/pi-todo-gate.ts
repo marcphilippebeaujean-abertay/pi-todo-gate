@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { createExitProtocolModule } from "../src/exit-protocol/module.ts";
 import {
 	type CommandRunner as HerdrCommandRunner,
 	installHerdrClaimGate,
@@ -9,6 +10,7 @@ import {
 } from "../src/herdr-claim-gate.ts";
 import { createPrModule, type PrModuleDependencies } from "../src/pr/module.ts";
 import type { Exec } from "../src/shared/command.ts";
+import { createSharedEvents } from "../src/shared/events.ts";
 import type { TaskClaimWorker } from "../src/todoist/claim-worker.ts";
 import type { TodoistClient } from "../src/todoist/client.ts";
 import type { TodoistProjectMapping } from "../src/todoist/config.ts";
@@ -18,6 +20,7 @@ import {
 	type TodoistModule,
 	type TodoistModuleDependencies,
 } from "../src/todoist/module.ts";
+import { createWorktreeModule } from "../src/worktree/module.ts";
 
 export interface ExtensionDependencies {
 	loadConfig?: () => Promise<TodoistProjectMapping>;
@@ -86,6 +89,9 @@ export default function extension(
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 	});
 
+	const events = createSharedEvents();
+	const worktree = createWorktreeModule(events, { exec: dependencies.exec });
+	const exitProtocol = createExitProtocolModule(events);
 	const prDependencies: PrModuleDependencies = {
 		openSession: dependencies.openSession,
 		exec: dependencies.exec,
@@ -95,6 +101,7 @@ export default function extension(
 		exec: dependencies.exec,
 		createTodoistClient: dependencies.createTodoistClient,
 		claimTaskWorker: dependencies.claimTaskWorker,
+		events,
 	};
 	const pr = createPrModule(pi, prDependencies);
 	let todoist: TodoistModule | null = null;
@@ -103,10 +110,13 @@ export default function extension(
 
 	pi.on("session_start", async (event, ctx) => {
 		const generation = ++sessionGeneration;
+		pr.deactivate();
 		if (todoist) {
 			todoist.deactivate();
 			todoistActive = false;
 		}
+		exitProtocol.sessionStart(ctx);
+		await forwardSafely(ctx, "Worktree", () => worktree.sessionStart(ctx));
 		await forwardSafely(ctx, "PR", () => pr.sessionStart(event, ctx));
 		if (generation !== sessionGeneration) return;
 
@@ -131,6 +141,10 @@ export default function extension(
 				return;
 			}
 		}
+		for (const mergeEvent of pr.drainMergeEvents())
+			await forwardSafely(ctx, "Exit protocol", () =>
+				events.emit("prMerged", mergeEvent),
+			);
 		updateActiveTools(pi, todoistActive);
 	});
 
@@ -149,11 +163,10 @@ export default function extension(
 		});
 		if (generation !== sessionGeneration) return undefined;
 		const mergeEvents = pr.drainMergeEvents();
-		if (sessionTodoist)
-			for (const mergeEvent of mergeEvents)
-				await forwardSafely(ctx, "Todoist", () =>
-					sessionTodoist.mergeDetected(mergeEvent),
-				);
+		for (const mergeEvent of mergeEvents)
+			await forwardSafely(ctx, "Exit protocol", () =>
+				events.emit("prMerged", mergeEvent),
+			);
 		if (generation !== sessionGeneration) return undefined;
 		if (sessionTodoist)
 			await forwardSafely(
@@ -195,9 +208,9 @@ export default function extension(
 			pr.toolResult(input),
 		);
 		if (generation !== sessionGeneration) return;
-		if (sessionTodoist && mergeEvent)
-			await forwardSafely(ctx, "Todoist", () =>
-				sessionTodoist.mergeDetected(mergeEvent),
+		if (mergeEvent)
+			await forwardSafely(ctx, "Exit protocol", () =>
+				events.emit("prMerged", mergeEvent),
 			);
 		if (generation !== sessionGeneration) return;
 		if (sessionTodoist)
@@ -209,10 +222,15 @@ export default function extension(
 			);
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (event, ctx) => {
 		++sessionGeneration;
+		await forwardSafely(ctx, "Exit protocol", () =>
+			events.emit("sessionWillClose", { reason: event.reason }),
+		);
 		pr.deactivate();
 		todoist?.deactivate();
+		worktree.deactivate();
+		exitProtocol.deactivate();
 		todoistActive = false;
 	});
 }

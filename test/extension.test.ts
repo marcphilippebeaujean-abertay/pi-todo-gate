@@ -8,6 +8,7 @@ import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
 } from "../src/herdr-claim-gate.ts";
+import { createSharedEvents } from "../src/shared/events.ts";
 import { type TodoistClient, TodoistError } from "../src/todoist/client.ts";
 import { createTodoistModule } from "../src/todoist/module.ts";
 
@@ -927,6 +928,7 @@ describe("merge reminder", () => {
 		]);
 		const completeTask = vi.fn(async () => {});
 		const client = { completeTask } as unknown as TodoistClient;
+		const events = createSharedEvents();
 		const todoist = createTodoistModule(
 			h.pi,
 			{
@@ -935,16 +937,27 @@ describe("merge reminder", () => {
 				triggersOnlyOnWorktree: false,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ createTodoistClient: () => client },
+			{ createTodoistClient: () => client, events },
+		);
+		events.on(
+			"prMerged",
+			async (request) => {
+				for (const action of request.actions) await action.execute();
+			},
+			"present",
 		);
 		await todoist.sessionStart({}, h.ctx);
 
-		await todoist.mergeDetected({ prUrl: "https://github.com/o/r/pull/42" });
+		await events.emit("prMerged", {
+			prUrl: "https://github.com/o/r/pull/42",
+		});
 
 		expect(completeTask).toHaveBeenCalledWith("42");
 		expect(h.appended.at(-1)).toEqual({
 			type: "pi-todoist-gate-state",
-			data: { mergePromptedPrUrl: "https://github.com/o/r/pull/42" },
+			data: {
+				mergePromptedPrUrl: "https://github.com/o/r/pull/42",
+			},
 		});
 		expect(h.statusCalls.at(-1)).toEqual({
 			key: "pi-todo-gate-task",
@@ -962,6 +975,7 @@ describe("merge reminder", () => {
 		]);
 		const completeTask = vi.fn(async () => {});
 		const client = { completeTask } as unknown as TodoistClient;
+		const events = createSharedEvents();
 		const todoist = createTodoistModule(
 			h.pi,
 			{
@@ -970,11 +984,20 @@ describe("merge reminder", () => {
 				triggersOnlyOnWorktree: false,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ createTodoistClient: () => client },
+			{ createTodoistClient: () => client, events },
+		);
+		events.on(
+			"prMerged",
+			async (request) => {
+				for (const action of request.actions) await action.execute();
+			},
+			"present",
 		);
 		await todoist.sessionStart({}, h.ctx);
 
-		await todoist.mergeDetected({ prUrl: "https://github.com/o/r/pull/42" });
+		await events.emit("prMerged", {
+			prUrl: "https://github.com/o/r/pull/42",
+		});
 
 		expect(completeTask).toHaveBeenCalledWith("42");
 		expect(h.notifications).toContain("Task marked as complete");
@@ -1057,7 +1080,7 @@ describe("merge reminder", () => {
 		});
 	});
 
-	it("does not call Todoist completion after a merge", async () => {
+	it("completes Todoist task through merge event", async () => {
 		const h = harness("/configured/project", [
 			{
 				type: "custom",
@@ -1093,7 +1116,7 @@ describe("merge reminder", () => {
 				createTodoistClient: () => client,
 			},
 		);
-		expect(completions).toBe(0);
+		expect(completions).toBe(1);
 	});
 });
 

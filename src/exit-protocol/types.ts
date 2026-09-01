@@ -1,6 +1,4 @@
-export type ExitActionId =
-	| "complete-todoist-task"
-	| "remove-worktree";
+export type ExitActionId = "complete-todoist-task" | "remove-worktree";
 
 export type ExitActionResult = "completed" | "deferred" | "failed";
 

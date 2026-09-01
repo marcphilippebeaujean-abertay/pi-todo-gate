@@ -5,8 +5,9 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { ExitAction } from "../exit-protocol/types.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
-import type { MergeEvent } from "../shared/merge-detection.ts";
+import type { SharedEvents } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	appendCustomState,
@@ -34,6 +35,7 @@ export interface TodoistSessionReader {
 
 export interface TodoistModuleDependencies {
 	loadConfig?: () => Promise<TodoistProjectMapping>;
+	events?: SharedEvents;
 	openSession?: (path: string) => TodoistSessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
@@ -47,7 +49,6 @@ export interface TodoistModule {
 		ctx: ExtensionContext,
 	): Promise<void>;
 	beforeAgentStart(prompt: string): Promise<string>;
-	mergeDetected(event: MergeEvent): Promise<void>;
 	toolResult(input: {
 		toolName: string;
 		command?: string;
@@ -353,6 +354,75 @@ export function createTodoistModule(
 		});
 	};
 
+	const completionAction = (
+		runContext: SessionContext,
+		generation: number,
+		taskRef: string,
+		taskName: string,
+	): ExitAction => ({
+		id: "complete-todoist-task",
+		label: `Mark Todoist task "${taskName}" complete`,
+		execute: async () => {
+			if (
+				!context ||
+				context !== runContext ||
+				generation !== operationGeneration ||
+				state.taskRef !== taskRef
+			)
+				return "failed";
+			context.ui.setStatus("pi-todo-gate-task", "Todoist Task: ⠋ completing |");
+			try {
+				await createClient(
+					runContext as ExtensionContext,
+					dependencies,
+				).completeTask(taskRef);
+				if (
+					generation !== operationGeneration ||
+					context !== runContext ||
+					state.taskRef !== taskRef
+				)
+					return "failed";
+				state = applyTodoistStatePatch(state, {
+					taskRef: undefined,
+					taskName: undefined,
+					taskUrl: undefined,
+				});
+				appendState();
+				context.ui.notify("Task marked as complete", "info");
+				return "completed";
+			} catch (error) {
+				if (generation !== operationGeneration || context !== runContext)
+					return "failed";
+				context.ui.notify(
+					`Todoist task completion failed: ${displayError(error)}`,
+					"warning",
+				);
+				return "failed";
+			} finally {
+				if (generation === operationGeneration && context === runContext)
+					refreshStatus();
+			}
+		},
+	});
+
+	if (dependencies.events) {
+		dependencies.events.on("prMerged", (request) => {
+			const runContext = context;
+			if (!runContext || !ready || !state.taskRef) return;
+			if (state.mergePromptedPrUrl === request.payload.prUrl) return;
+			const generation = operationGeneration;
+			const taskRef = state.taskRef;
+			const taskName = state.taskName ?? taskRef;
+			state = applyTodoistStatePatch(state, {
+				mergePromptedPrUrl: request.payload.prUrl,
+			});
+			appendState();
+			request.addAction(
+				completionAction(runContext, generation, taskRef, taskName),
+			);
+		});
+	}
+
 	return {
 		reconfigure(nextProject, nextConfig) {
 			++operationGeneration;
@@ -402,73 +472,6 @@ export function createTodoistModule(
 			if (!context || !ready) return "";
 			void analyzeTaskClaim(prompt);
 			return "";
-		},
-		async mergeDetected(event) {
-			const runContext = context;
-			if (
-				!runContext ||
-				!ready ||
-				!runContext.hasUI ||
-				!state.taskRef ||
-				state.mergePromptedPrUrl === event.prUrl
-			)
-				return;
-			const generation = operationGeneration;
-			const taskRef = state.taskRef;
-			const taskName = state.taskName ?? taskRef;
-			state = applyTodoistStatePatch(state, {
-				mergePromptedPrUrl: event.prUrl,
-			});
-			appendState();
-			const choice = await runContext.ui.select(
-				`Do you wish to mark task ${taskName} as complete?`,
-				["Yes", "No", "No and clear session task"],
-			);
-			if (
-				generation !== operationGeneration ||
-				context !== runContext ||
-				state.taskRef !== taskRef ||
-				state.mergePromptedPrUrl !== event.prUrl
-			)
-				return;
-			if (choice === "No and clear session task") {
-				++operationGeneration;
-				claimAnalysisComplete = true;
-				state = {};
-				appendState();
-				refreshStatus();
-				return;
-			}
-			if (choice !== "Yes") return;
-			runContext.ui.setStatus(
-				"pi-todo-gate-task",
-				"Todoist Task: ⠋ completing |",
-			);
-			try {
-				await createClient(
-					runContext as ExtensionContext,
-					dependencies,
-				).completeTask(taskRef);
-				if (generation !== operationGeneration || context !== runContext)
-					return;
-				state = applyTodoistStatePatch(state, {
-					taskRef: undefined,
-					taskName: undefined,
-					taskUrl: undefined,
-				});
-				appendState();
-				runContext.ui.notify("Task marked as complete", "info");
-			} catch (error) {
-				if (generation !== operationGeneration || context !== runContext)
-					return;
-				runContext.ui.notify(
-					`Todoist task completion failed: ${displayError(error)}`,
-					"warning",
-				);
-			} finally {
-				if (generation === operationGeneration && context === runContext)
-					refreshStatus();
-			}
 		},
 		async toolResult(_input) {
 			// Task claims are analyzed once before the first main-agent turn.
