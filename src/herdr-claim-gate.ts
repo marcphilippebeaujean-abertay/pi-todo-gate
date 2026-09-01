@@ -89,7 +89,7 @@ export interface ClaimGateOptions {
 }
 
 function isSubagent(): boolean {
-	return process.env.PI_SUBAGENT_CHILD === "1";
+	return process.env.PI_SUBAGENT_CHILD !== undefined;
 }
 
 function isInsideHerdr(): boolean {
@@ -218,13 +218,19 @@ function hasValidatedTabClaim(
 	initialLabel: string | undefined,
 	paneId: string | undefined,
 	claim?: { tabId: string; label: string },
+	expectedLabel?: string,
 ): boolean {
 	if (initialLabel === undefined) return false;
 	try {
 		const observedTabId = paneTabId(commandRunner, paneId);
 		if (!observedTabId) return false;
 		const currentLabel = tabLabel(commandRunner, observedTabId);
-		if (!labelIsDescriptive(currentLabel) || currentLabel === initialLabel)
+		if (!labelIsDescriptive(currentLabel)) return false;
+		if (
+			currentLabel === initialLabel &&
+			!claim &&
+			currentLabel !== expectedLabel
+		)
 			return false;
 		return (
 			!claim || (claim.tabId === observedTabId && claim.label === currentLabel)
@@ -278,6 +284,7 @@ export function installHerdrClaimGate(
 	pi: ExtensionAPI,
 	options: ClaimGateOptions = {},
 ): void {
+	if (isSubagent()) return;
 	let sessionCwd = options.cwd ?? process.cwd();
 	let sessionTabId: string | undefined;
 	let sessionPaneId: string | undefined;
@@ -363,6 +370,7 @@ export function installHerdrClaimGate(
 								sessionTabLabel,
 								sessionPaneId,
 								undefined,
+								promptTabLabel(event.prompt ?? ""),
 							))
 					) {
 						persistClaimed(ctx);

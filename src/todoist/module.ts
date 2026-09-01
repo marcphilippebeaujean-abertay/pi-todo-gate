@@ -357,53 +357,52 @@ export function createTodoistModule(
 	const completionAction = (
 		runContext: SessionContext,
 		generation: number,
-		taskRef: string,
-		taskName: string,
-	): ExitAction => ({
-		id: "complete-todoist-task",
-		label: `Mark Todoist task "${taskName}" complete`,
-		execute: async () => {
-			if (
-				!context ||
-				context !== runContext ||
-				generation !== operationGeneration ||
-				state.taskRef !== taskRef
-			)
-				return "failed";
-			context.ui.setStatus("pi-todo-gate-task", "Todoist Task: ⠋ completing |");
-			try {
-				await createClient(
-					runContext as ExtensionContext,
-					dependencies,
-				).completeTask(taskRef);
-				if (
-					generation !== operationGeneration ||
-					context !== runContext ||
-					state.taskRef !== taskRef
-				)
-					return "failed";
-				state = applyTodoistStatePatch(state, {
-					taskRef: undefined,
-					taskName: undefined,
-					taskUrl: undefined,
-				});
-				appendState();
-				context.ui.notify("Task marked as complete", "info");
-				return "completed";
-			} catch (error) {
-				if (generation !== operationGeneration || context !== runContext)
-					return "failed";
-				context.ui.notify(
-					`Todoist task completion failed: ${displayError(error)}`,
-					"warning",
+		taskState: TodoistState,
+	): ExitAction => {
+		const snapshot = structuredClone(taskState);
+		const taskRef = snapshot.taskRef;
+		const taskName = snapshot.taskName ?? taskRef ?? "unknown";
+		return {
+			id: "complete-todoist-task",
+			label: `Mark Todoist task "${taskName}" complete`,
+			execute: async () => {
+				if (!taskRef) return "failed";
+				runContext.ui.setStatus(
+					"pi-todo-gate-task",
+					"Todoist Task: ⠋ completing |",
 				);
-				return "failed";
-			} finally {
-				if (generation === operationGeneration && context === runContext)
-					refreshStatus();
-			}
-		},
-	});
+				try {
+					await createClient(
+						runContext as ExtensionContext,
+						dependencies,
+					).completeTask(taskRef);
+					if (
+						generation === operationGeneration &&
+						context === runContext &&
+						state.taskRef === taskRef
+					) {
+						state = applyTodoistStatePatch(state, {
+							taskRef: undefined,
+							taskName: undefined,
+							taskUrl: undefined,
+						});
+						appendState();
+					}
+					runContext.ui.notify("Task marked as complete", "info");
+					return "completed";
+				} catch (error) {
+					runContext.ui.notify(
+						`Todoist task completion failed: ${displayError(error)}`,
+						"warning",
+					);
+					return "failed";
+				} finally {
+					if (generation === operationGeneration && context === runContext)
+						refreshStatus();
+				}
+			},
+		};
+	};
 
 	if (dependencies.events) {
 		dependencies.events.on("prMerged", (request) => {
@@ -411,15 +410,12 @@ export function createTodoistModule(
 			if (!runContext || !ready || !state.taskRef) return;
 			if (state.mergePromptedPrUrl === request.payload.prUrl) return;
 			const generation = operationGeneration;
-			const taskRef = state.taskRef;
-			const taskName = state.taskName ?? taskRef;
+			const taskState = structuredClone(state);
 			state = applyTodoistStatePatch(state, {
 				mergePromptedPrUrl: request.payload.prUrl,
 			});
 			appendState();
-			request.addAction(
-				completionAction(runContext, generation, taskRef, taskName),
-			);
+			request.addAction(completionAction(runContext, generation, taskState));
 		});
 		dependencies.events.on("sessionWillClose", (request) => {
 			const runContext = context;
@@ -431,10 +427,8 @@ export function createTodoistModule(
 			)
 				return;
 			const generation = operationGeneration;
-			const taskRef = state.taskRef;
-			const taskName = state.taskName ?? taskRef;
 			request.addAction(
-				completionAction(runContext, generation, taskRef, taskName),
+				completionAction(runContext, generation, structuredClone(state)),
 			);
 		});
 	}

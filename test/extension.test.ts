@@ -4,6 +4,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
+import type { ExitAction } from "../src/exit-protocol/types.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
@@ -123,6 +124,20 @@ describe("extension activation", () => {
 		const h = harness("/project");
 		const previous = process.env.PI_SUBAGENT_CHILD;
 		process.env.PI_SUBAGENT_CHILD = "1";
+		try {
+			extension(h.pi, { loadConfig: async () => config({}) });
+		} finally {
+			if (previous === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previous;
+		}
+		expect(h.handlers.size).toBe(0);
+		expect(h.tools).toHaveLength(0);
+	});
+
+	it("does not register behavior for any subagent marker value", () => {
+		const h = harness("/project");
+		const previous = process.env.PI_SUBAGENT_CHILD;
+		process.env.PI_SUBAGENT_CHILD = "0";
 		try {
 			extension(h.pi, { loadConfig: async () => config({}) });
 		} finally {
@@ -1001,6 +1016,62 @@ describe("merge reminder", () => {
 
 		expect(completeTask).toHaveBeenCalledWith("42");
 		expect(h.notifications).toContain("Task marked as complete");
+	});
+
+	it("finishes captured Todoist task without clearing newer session state", async () => {
+		const first = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: { taskRef: "old", taskName: "Old task" },
+			},
+		]);
+		const second = harness("/configured/project", [
+			{
+				type: "custom",
+				customType: "pi-todoist-gate-state",
+				data: { taskRef: "new", taskName: "New task" },
+			},
+		]);
+		let releaseCompletion: (() => void) | undefined;
+		const completionStarted = new Promise<void>((resolve) => {
+			releaseCompletion = resolve;
+		});
+		const completeTask = vi.fn(async () => completionStarted);
+		const events = createSharedEvents();
+		const todoist = createTodoistModule(
+			first.pi,
+			{
+				codingRoot: "/configured",
+				todoistProjectRef: "Pi Extensions",
+				triggersOnlyOnWorktree: false,
+			},
+			{ projects: { "/configured": "Pi Extensions" } },
+			{
+				createTodoistClient: () =>
+					({ completeTask }) as unknown as TodoistClient,
+				events,
+			},
+		);
+		await todoist.sessionStart({}, first.ctx);
+		let action: ExitAction | undefined;
+		events.on(
+			"prMerged",
+			(request) => {
+				action = request.actions[0];
+			},
+			"present",
+		);
+		await events.emit("prMerged", { prUrl: "https://github.com/o/r/pull/42" });
+		const execution = action?.execute();
+		await vi.waitFor(() => expect(completeTask).toHaveBeenCalledWith("old"));
+		await todoist.sessionStart({}, second.ctx);
+		releaseCompletion?.();
+		expect(await execution).toBe("completed");
+		expect(second.appended.at(-1)).not.toEqual({
+			type: "pi-todoist-gate-state",
+			data: {},
+		});
 	});
 
 	it("offers active task on quit through shared events", async () => {
