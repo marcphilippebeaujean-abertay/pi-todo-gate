@@ -1,7 +1,7 @@
 {
-  "maxCyclomaticComplexity": 22,
-  "maxFunctionLines": 406,
-  "maxFunctionsPerFile": 27,
-  "maxNestedFunctionDepth": 3,
-  "maxBooleanChecks": 7
+  "maxCyclomaticComplexity": 10,
+  "maxFunctionLines": 50,
+  "maxFunctionsPerFile": 10,
+  "maxNestedFunctionDepth": 2,
+  "maxBooleanChecks": 2
 }

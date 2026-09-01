@@ -1,6 +1,21 @@
 const STRING_LITERAL_APPEND_SYSTEM_PROMPT_37FFD3BC = "--append-system-prompt";
 const STRING_LITERAL_THINKING_F687683B = "--thinking";
 const STRING_LITERAL_TEXT_FF4FD29E = "text";
+const STRING_LITERAL_ASSISTANT_4E38B6B0 = "assistant";
+const STRING_LITERAL_STRING_9B5A5E11 = "string";
+
+function isString(value: unknown): value is string {
+	return typeof value === STRING_LITERAL_STRING_9B5A5E11;
+}
+
+function textFromPart(part: unknown): string {
+	if (typeof part !== "object") return "";
+	if (part === null) return "";
+	const hasText = STRING_LITERAL_TEXT_FF4FD29E in part;
+	if (!hasText) return "";
+	return String((part as { text?: unknown }).text ?? "");
+}
+
 const BASE_PI_WORKER_ARGS = [
 	"--mode",
 	"json",
@@ -36,18 +51,13 @@ export function textFromAssistantMessage(
 	value: unknown,
 	separator = "\n",
 ): string {
-	if (typeof value !== "object" || value === null) return "";
+	if (typeof value !== "object") return "";
+	if (value === null) return "";
 	const message = value as { role?: unknown; content?: unknown };
-	if (message.role !== "assistant") return "";
-	if (typeof message.content === "string") return message.content;
+	const isAssistantMessage = message.role === STRING_LITERAL_ASSISTANT_4E38B6B0;
+	if (!isAssistantMessage) return "";
+	const textContent = isString(message.content) ? message.content : undefined;
+	if (textContent !== undefined) return textContent;
 	if (!Array.isArray(message.content)) return "";
-	return message.content
-		.map((part) =>
-			typeof part === "object" &&
-			part !== null &&
-			STRING_LITERAL_TEXT_FF4FD29E in part
-				? String((part as { text?: unknown }).text ?? "")
-				: "",
-		)
-		.join(separator);
+	return message.content.map(textFromPart).join(separator);
 }

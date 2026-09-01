@@ -23,7 +23,7 @@ Worker instructions and output stay inside worker process. User sees completion 
 
 ## Legacy gate cleanup
 
-`npm run install-local` removes only these obsolete files when present:
+`npm run install-local` does not remove obsolete files. Remove these legacy files manually when present:
 
 ```text
 ~/.pi/agent/extensions/herdr-claim-gate.ts

@@ -30,11 +30,7 @@ if not isinstance(config, dict):
 projects = config.setdefault("projects", {})
 if not isinstance(projects, dict):
     raise SystemExit("cannot update malformed configuration: projects must be an object")
-existing = projects.get(coding_root)
-if isinstance(existing, dict) and isinstance(existing.get("todoistProjectRef"), str):
-    existing["todoistProjectRef"] = project_ref
-else:
-    projects[coding_root] = project_ref
+projects[coding_root] = project_ref
 fd, temporary = tempfile.mkstemp(prefix="pi-todo-gate-", dir=os.path.dirname(path), text=True)
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -67,19 +63,11 @@ source_path="$source_dir/index.ts"
 target_path="$agent_dir/extensions/pi-todo-gate"
 legacy_file_path="$agent_dir/extensions/pi-todo-gate.ts"
 legacy_target_path="$agent_dir/extensions/pi-todo-gate"
-legacy_herdr_gate_path="$agent_dir/extensions/herdr-claim-gate.ts"
-legacy_herdr_test_path="$agent_dir/extensions/tests/herdr-claim-gate.test.ts"
 if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
 fi
 mkdir -p "$(dirname -- "$target_path")"
-for legacy_path in "$legacy_herdr_gate_path" "$legacy_herdr_test_path"; do
-  if [ -f "$legacy_path" ] || [ -L "$legacy_path" ]; then
-    rm -- "$legacy_path"
-    printf 'removed legacy file %s\n' "$legacy_path"
-  fi
-done
 if [ -L "$legacy_file_path" ] && [ "$(readlink "$legacy_file_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
   rm -- "$legacy_file_path"
 fi

@@ -37,6 +37,10 @@ const CONSTANT_SOURCE = `function check(name: string) {
 }`;
 const MODULE_PROPERTY_SOURCE = `import "side-effect";
 const record = { message: "ok" };
+function check(value: { status: string }) {
+	if (value.status === "ok") return true;
+	return false;
+}
 export type Status = "ok";`;
 const DYNAMIC_IMPORT_SOURCE = `async function load() {
 	return import("./module");
@@ -44,12 +48,21 @@ const DYNAMIC_IMPORT_SOURCE = `async function load() {
 const TYPE_SYNTAX_SOURCE = `function read(): "ok" {
 	return "ok";
 }`;
+const TYPE_ONLY_STRING_SOURCE = `function read() {
+	type Handler = (value: "ok") => "ok";
+	return true;
+}`;
 const DIRECTIVE_SOURCE = `function read() {
 	"use strict";
 	return true;
 }`;
 const EMPTY_STRING_SOURCE = `function read() {
 	return "";
+}`;
+const SHORT_STRING_CONSTANT_SOURCE = `function read() {
+	const EMPTY = "";
+	const LETTER = "x";
+	return EMPTY + LETTER;
 }`;
 const STANDALONE_STRING_SOURCE = `function read() {
 	"use strict";
@@ -65,6 +78,7 @@ const MAGIC_TEST =
 	"flags executable string literals but permits const definitions";
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
+const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
 const NAMED_IF_RULE = "named-if-condition";
 const NAMED_IF_TEST = "requires named boolean conditions";
@@ -80,6 +94,18 @@ const NON_BOOLEAN_IF_SOURCE = `function check(value: any, unknownValue: unknown,
 	if (unknownValue) return true;
 	if (objectValue) return true;
 	return false;
+}`;
+const COMPUTED_IF_SOURCE = `function check(value: { status: string }, ready: { value: boolean }, enabled: boolean, isReady: () => boolean) {
+	if (value.status === "ok") return true;
+	if (ready.value) return true;
+	if (isReady() && enabled) return true;
+	return false;
+}`;
+const NEGATED_TYPE_GUARD_SOURCE = `function check(value: unknown, objectValue: object) {
+	if (!(typeof value === "string")) return false;
+	if (!("ready" in objectValue)) return false;
+	if (!Array.isArray(value)) return false;
+	return true;
 }`;
 const METRIC_TEST = "reports function metrics over configured limits";
 const COMPLEX_SOURCE = `function complex(value: number) {
@@ -160,7 +186,7 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(CONSTANT_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
-		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).not.toContain(
+		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).toContain(
 			NO_MAGIC_RULE,
 		);
 		expect(ruleIds(await lintFixture(DYNAMIC_IMPORT_SOURCE))).not.toContain(
@@ -171,12 +197,25 @@ describe("lint diagnostics", () => {
 				(id) => id === NO_MAGIC_RULE,
 			),
 		).toHaveLength(1);
+		expect(ruleIds(await lintFixture(TYPE_ONLY_STRING_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
 		expect(ruleIds(await lintFixture(DIRECTIVE_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
 		expect(ruleIds(await lintFixture(EMPTY_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
+		expect(
+			ruleIds(await lintFixture(SHORT_STRING_CONSTANT_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(0);
+		expect(
+			ruleIds(await lintFixture(SHORT_STRING_CONSTANT_SOURCE)).filter(
+				(id) => id === NO_SHORT_STRING_CONSTANTS_RULE,
+			),
+		).toHaveLength(2);
 		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
 			NO_MAGIC_RULE,
 		);
@@ -201,6 +240,16 @@ describe("lint diagnostics", () => {
 				(id) => id === NAMED_IF_RULE,
 			),
 		).toHaveLength(3);
+		expect(
+			ruleIds(await lintFixture(COMPUTED_IF_SOURCE)).filter(
+				(id) => id === NAMED_IF_RULE,
+			),
+		).toHaveLength(3);
+		expect(
+			ruleIds(await lintFixture(NEGATED_TYPE_GUARD_SOURCE)).filter(
+				(id) => id === NAMED_IF_RULE,
+			),
+		).toHaveLength(0);
 	});
 
 	it(METRIC_TEST, async () => {

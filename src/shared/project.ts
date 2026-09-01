@@ -34,7 +34,9 @@ export function isLinkedWorktreePaths(
 ): boolean {
 	const gitDir = resolveGitPath(cwd, gitDirOutput);
 	const commonDir = resolveGitPath(cwd, commonDirOutput);
-	return gitDir !== null && commonDir !== null && gitDir !== commonDir;
+	if (gitDir === null) return false;
+	if (commonDir === null) return false;
+	return gitDir !== commonDir;
 }
 
 function firstWorktreePath(output: string): string | null {
@@ -89,10 +91,7 @@ export async function inspectProject(
 		listResult.code === 0
 			? resolveGitPath(cwd, firstWorktreePath(listResult.stdout) ?? "")
 			: null;
-	return {
-		isWorktree:
-			root !== null && mainRoot !== null && root !== resolve(mainRoot),
-		root,
-		branch,
-	};
+	if (root === null) return { isWorktree: false, root, branch };
+	if (mainRoot === null) return { isWorktree: false, root, branch };
+	return { isWorktree: root !== resolve(mainRoot), root, branch };
 }

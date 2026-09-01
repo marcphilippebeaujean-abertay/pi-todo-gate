@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check extensions src test && tsx src/lint-cli.ts",
     "install-local": "bash install.sh",
-    "configure": "bash install.sh configure"
+    "configure": "bash install.sh configure",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "keywords": [
     "pi-package",

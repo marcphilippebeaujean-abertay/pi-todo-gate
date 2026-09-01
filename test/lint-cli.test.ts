@@ -18,6 +18,11 @@ const MAGIC_SOURCE = `export function check(name: string) {
 	return name === "Bob";
 }`;
 const CLEAN_SOURCE = "export const answer = 42;\n";
+const IMPORTING_SOURCE =
+	'import "../other/secret";\nexport const answer = 42;\n';
+const OUT_OF_SCOPE_SOURCE = `export function secret(name: string) {
+	return name === "Bob";
+}`;
 const COLLECT_TEST = "collects only scoped TypeScript files in stable order";
 const FAIL_TEST = "returns one when custom lint reports a violation";
 const PASS_TEST = "returns zero for a clean project";
@@ -75,5 +80,18 @@ describe("lint CLI", () => {
 	it(PASS_TEST, async () => {
 		const root = await makeRoot(CLEAN_SOURCE);
 		expect(await runLint(root, () => undefined)).toBe(0);
+	});
+
+	it("does not lint imported files outside explicit roots", async () => {
+		const output: string[] = [];
+		const root = await makeRoot(IMPORTING_SOURCE);
+		await mkdir(join(root, OTHER_DIRECTORY), { recursive: true });
+		await writeFile(
+			join(root, OTHER_DIRECTORY, "secret.ts"),
+			OUT_OF_SCOPE_SOURCE,
+		);
+
+		expect(await runLint(root, (line) => output.push(line))).toBe(0);
+		expect(output.join(OUTPUT_SEPARATOR)).not.toContain(NO_MAGIC_STRINGS);
 	});
 });

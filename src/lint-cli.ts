@@ -90,7 +90,7 @@ export async function runLint(
 	const program = ts.createProgram(files, compilerOptionsFor(root));
 	const compilerDiagnostics = ts.getPreEmitDiagnostics(program);
 	const config = await loadLintConfig(join(root, LINT_CONFIG_NAME));
-	const customDiagnostics = lintProgram(program, config);
+	const customDiagnostics = lintProgram(program, config, files);
 	for (const diagnostic of compilerDiagnostics)
 		output(formatTypeScriptDiagnostic(diagnostic, root));
 	for (const diagnostic of customDiagnostics)

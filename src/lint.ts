@@ -1,4 +1,5 @@
 const NO_MAGIC_STRINGS = "no-magic-strings";
+const NO_SHORT_STRING_CONSTANTS = "no-short-string-constants";
 const NAMED_IF_CONDITION = "named-if-condition";
 const FUNCTIONS_PER_FILE = "functions-per-file";
 const CYCLOMATIC_COMPLEXITY = "cyclomatic-complexity";
@@ -11,6 +12,7 @@ import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
 
 export type LintRuleId =
 	| "no-magic-strings"
+	| "no-short-string-constants"
 	| "no-complicated-expressions"
 	| "named-if-condition"
 	| "cyclomatic-complexity"
@@ -30,6 +32,9 @@ export interface LintDiagnostic {
 
 const MAGIC_STRING_MESSAGE = "String literal must use named constant";
 const MAGIC_STRING_LIMIT = 0;
+const SHORT_STRING_CONSTANT_MESSAGE =
+	"String constants must contain at least two characters";
+const SHORT_STRING_CONSTANT_LIMIT = 1;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
 const NAMED_IF_MESSAGE =
 	"Extract condition into a descriptive boolean variable";
@@ -151,12 +156,9 @@ function isTypeofComparisonString(
 		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
 		parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
 	if (!isEquality) return false;
-	const other = parent.left === node ? parent.right : parent.left;
 	return (
 		(parent.right === node && ts.isTypeOfExpression(parent.left)) ||
-		(parent.left === node && ts.isTypeOfExpression(parent.right)) ||
-		ts.isPropertyAccessExpression(other) ||
-		ts.isElementAccessExpression(other)
+		(parent.left === node && ts.isTypeOfExpression(parent.right))
 	);
 }
 
@@ -250,6 +252,28 @@ function diagnostic(
 		value,
 		limit,
 	};
+}
+
+function collectShortStringConstants(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+): void {
+	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
+		if (isSingleCharacterLiteral(node) && isConstInitializer(node, ancestors)) {
+			diagnostics.push(
+				diagnostic(
+					sourceFile,
+					node,
+					NO_SHORT_STRING_CONSTANTS,
+					SHORT_STRING_CONSTANT_MESSAGE,
+					isStringLiteralLike(node) ? node.text.length : 0,
+					SHORT_STRING_CONSTANT_LIMIT,
+				),
+			);
+		}
+		ts.forEachChild(node, (child) => visit(child, [...ancestors, node]));
+	}
+	visit(sourceFile);
 }
 
 function collectMagicStrings(
@@ -346,108 +370,20 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
-function isNarrowingComparison(expression: ts.Expression): boolean {
-	if (!ts.isBinaryExpression(expression)) return false;
-	const operators = new Set<ts.SyntaxKind>([
-		ts.SyntaxKind.EqualsEqualsToken,
-		ts.SyntaxKind.EqualsEqualsEqualsToken,
-		ts.SyntaxKind.ExclamationEqualsToken,
-		ts.SyntaxKind.ExclamationEqualsEqualsToken,
-	]);
-	if (!operators.has(expression.operatorToken.kind)) return false;
-	return (
-		ts.isPropertyAccessExpression(expression.left) ||
-		ts.isElementAccessExpression(expression.left) ||
-		ts.isPropertyAccessExpression(expression.right) ||
-		ts.isElementAccessExpression(expression.right)
-	);
-}
-
 function isSafeConditionExpression(
 	expression: ts.Expression,
 	checker: ts.TypeChecker,
 ): boolean {
 	while (ts.isParenthesizedExpression(expression))
 		expression = expression.expression;
-	if (isTypeGuardExpression(expression) || isNarrowingComparison(expression))
-		return true;
-	if (isNullableIdentifier(expression, checker)) return true;
-	if (
+	if (isTypeGuardExpression(expression)) return true;
+	if (ts.isPrefixUnaryExpression(expression)) {
+		const isNegation = expression.operator === ts.SyntaxKind.ExclamationToken;
+		return isNegation && isSafeConditionExpression(expression.operand, checker);
+	}
+	return (
 		ts.isIdentifier(expression) &&
 		isNamedConditionType(checker.getTypeAtLocation(expression))
-	)
-		return true;
-	if (
-		ts.isCallExpression(expression) ||
-		ts.isPropertyAccessExpression(expression) ||
-		ts.isElementAccessExpression(expression)
-	)
-		return true;
-	if (ts.isPrefixUnaryExpression(expression))
-		return (
-			expression.operator === ts.SyntaxKind.ExclamationToken &&
-			isSafeConditionExpression(expression.operand, checker)
-		);
-	if (!ts.isBinaryExpression(expression)) return false;
-	if (
-		expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-		expression.operatorToken.kind === ts.SyntaxKind.BarBarToken
-	)
-		return (
-			isSafeConditionExpression(expression.left, checker) &&
-			isSafeConditionExpression(expression.right, checker)
-		);
-	const hasPropertyOrCall =
-		ts.isCallExpression(expression.left) ||
-		ts.isCallExpression(expression.right) ||
-		ts.isPropertyAccessExpression(expression.left) ||
-		ts.isPropertyAccessExpression(expression.right) ||
-		ts.isElementAccessExpression(expression.left) ||
-		ts.isElementAccessExpression(expression.right);
-	if (hasPropertyOrCall) return true;
-	const equalityOperators = new Set<ts.SyntaxKind>([
-		ts.SyntaxKind.EqualsEqualsToken,
-		ts.SyntaxKind.EqualsEqualsEqualsToken,
-		ts.SyntaxKind.ExclamationEqualsToken,
-		ts.SyntaxKind.ExclamationEqualsEqualsToken,
-	]);
-	const leftIsIdentifier = ts.isIdentifier(expression.left);
-	const rightIsIdentifier = ts.isIdentifier(expression.right);
-	const hasLiteral =
-		ts.isStringLiteralLike(expression.left) ||
-		ts.isNumericLiteral(expression.left) ||
-		expression.left.kind === ts.SyntaxKind.NullKeyword ||
-		(ts.isIdentifier(expression.left) &&
-			expression.left.text === "undefined") ||
-		ts.isStringLiteralLike(expression.right) ||
-		ts.isNumericLiteral(expression.right) ||
-		expression.right.kind === ts.SyntaxKind.NullKeyword ||
-		(ts.isIdentifier(expression.right) &&
-			expression.right.text === "undefined");
-	return (
-		(leftIsIdentifier &&
-			rightIsIdentifier &&
-			(equalityOperators.has(expression.operatorToken.kind) || !hasLiteral)) ||
-		(equalityOperators.has(expression.operatorToken.kind) &&
-			hasLiteral &&
-			(leftIsIdentifier || rightIsIdentifier))
-	);
-}
-
-function isNullableIdentifier(
-	expression: ts.Expression,
-	checker: ts.TypeChecker,
-): boolean {
-	if (!ts.isIdentifier(expression)) return false;
-	const type = checker.getTypeAtLocation(expression);
-	if ((type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) !== 0)
-		return true;
-	return (
-		type.isUnion() &&
-		type.types.some(
-			(member) =>
-				(member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) !== 0,
-		)
 	);
 }
 
@@ -455,24 +391,7 @@ function isNamedBooleanCondition(
 	condition: ts.Expression,
 	checker: ts.TypeChecker,
 ): boolean {
-	if (isSafeConditionExpression(condition, checker)) return true;
-	if (isLogicalExpression(condition)) return true;
-	let expression = condition;
-	while (ts.isParenthesizedExpression(expression))
-		expression = expression.expression;
-	if (ts.isPrefixUnaryExpression(expression)) {
-		if (expression.operator !== ts.SyntaxKind.ExclamationToken) return false;
-		expression = expression.operand;
-		while (ts.isParenthesizedExpression(expression))
-			expression = expression.expression;
-	}
-	if (isNullableIdentifier(expression, checker)) return true;
-	if (ts.isIdentifier(expression))
-		return isNamedConditionType(checker.getTypeAtLocation(expression));
-	return (
-		ts.isIdentifier(expression) &&
-		isNamedConditionType(checker.getTypeAtLocation(expression))
-	);
+	return isSafeConditionExpression(condition, checker);
 }
 
 function collectNamedIfConditions(
@@ -658,12 +577,22 @@ function collectComplicatedExpressions(
 export function lintProgram(
 	program: ts.Program,
 	config: Partial<LintConfig> = DEFAULT_LINT_CONFIG,
+	lintRoots?: readonly string[],
 ): LintDiagnostic[] {
 	const resolvedConfig = { ...DEFAULT_LINT_CONFIG, ...config };
 	const diagnostics: LintDiagnostic[] = [];
 	const checker = program.getTypeChecker();
+	const explicitRoots = lintRoots
+		? new Set(lintRoots.map((filePath) => ts.sys.resolvePath(filePath)))
+		: undefined;
 	for (const sourceFile of program.getSourceFiles()) {
-		if (sourceFile.isDeclarationFile) continue;
+		if (
+			sourceFile.isDeclarationFile ||
+			(explicitRoots !== undefined &&
+				!explicitRoots.has(ts.sys.resolvePath(sourceFile.fileName)))
+		)
+			continue;
+		collectShortStringConstants(sourceFile, diagnostics);
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
 		collectNamedIfConditions(sourceFile, diagnostics, checker);
 		collectComplicatedExpressions(

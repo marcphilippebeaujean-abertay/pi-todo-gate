@@ -6,6 +6,9 @@ const STRING_LITERAL_UTF8_D89108E9 = "utf8";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isPathAtOrBelow, normalizedPath } from "../shared/path.ts";
+import { isRecord } from "../shared/records.ts";
+import { parseProjectEntry } from "./config-entry.ts";
 export interface TodoistProjectSettings {
 	todoistProjectRef: string;
 	triggersOnlyOnWorktree?: boolean;
@@ -30,37 +33,19 @@ export function defaultConfigPath(): string {
 
 export const DEFAULT_CONFIG_PATH = defaultConfigPath();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export function parseConfig(raw: string): TodoistProjectMapping {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		if (!isRecord(parsed) || !isRecord(parsed.projects))
-			return { projects: {} };
+		const record = isRecord(parsed) ? parsed : null;
+		if (record === null) return { projects: {} };
+		const projectRecord = isRecord(record.projects) ? record.projects : null;
+		if (projectRecord === null) return { projects: {} };
 
 		const projects: Record<string, string | TodoistProjectSettings> = {};
-		for (const [path, project] of Object.entries(parsed.projects)) {
-			if (typeof path !== "string") continue;
-			const normalizedPath = path.trim();
-			const hasNormalizedPath = normalizedPath !== "";
-			if (!hasNormalizedPath) continue;
-			if (typeof project === "string") {
-				const normalizedProject = project.trim();
-				const hasNormalizedProject = normalizedProject !== "";
-				if (hasNormalizedProject) projects[normalizedPath] = normalizedProject;
-				continue;
-			}
-			if (!isRecord(project)) continue;
-			const projectRef = project.todoistProjectRef;
-			if (typeof projectRef !== "string" || !projectRef.trim()) continue;
-			projects[normalizedPath] = {
-				todoistProjectRef: projectRef.trim(),
-				...(typeof project.triggersOnlyOnWorktree === "boolean"
-					? { triggersOnlyOnWorktree: project.triggersOnlyOnWorktree }
-					: {}),
-			};
+		for (const [path, project] of Object.entries(projectRecord)) {
+			const entry = parseProjectEntry(path, project);
+			if (entry === null) continue;
+			projects[entry[0]] = entry[1];
 		}
 		return { projects };
 	} catch {
@@ -76,18 +61,6 @@ export async function loadConfig(
 	} catch {
 		return { projects: {} };
 	}
-}
-
-function normalizedPath(path: string): string {
-	return resolve(path);
-}
-
-function isPathAtOrBelow(path: string, ancestor: string): boolean {
-	const target = normalizedPath(path);
-	const parent = normalizedPath(ancestor);
-	const prefix =
-		parent.endsWith("/") || parent.endsWith("\\") ? parent : `${parent}/`;
-	return target === parent || target.startsWith(prefix);
 }
 
 export function resolveConfiguredProject(

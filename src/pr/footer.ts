@@ -36,7 +36,8 @@ export function renderPrLabel(
 ): string {
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = prNumber(url);
-	if (!number || !normalized) return STRING_LITERAL_PR_NONE_1D5B0664;
+	const hasNoPr = number === null || normalized === null;
+	if (hasNoPr) return STRING_LITERAL_PR_NONE_1D5B0664;
 	return hyperlink(
 		linkText(`PR #${boundedPrNumber(number)}`, theme),
 		normalized,
@@ -53,7 +54,8 @@ export function renderPrStatus(
 		theme?.fg(STRING_LITERAL_TEXT_7E3621F6, text) ?? text;
 	const normalized = url ? githubPrUrl(url) : null;
 	const number = prNumber(url);
-	if (!number || !normalized)
+	const hasNoPr = number === null || normalized === null;
+	if (hasNoPr)
 		return `${muted(STRING_LITERAL_PR_LINK_595A8DB4)}${value(STRING_LITERAL_NONE_D461DC85)}${muted(STRING_LITERAL_EMPTY_C922F3DA)}`;
 	return `${muted(STRING_LITERAL_PR_LINK_595A8DB4)}${hyperlink(linkText(`#${boundedPrNumber(number)}`, theme), normalized)}${muted(STRING_LITERAL_EMPTY_C922F3DA)}`;
 }
