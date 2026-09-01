@@ -13,7 +13,6 @@ import {
 const GIT_COMMAND = "git";
 const HERDR_COMMAND = "herdr";
 const HERDR_ENVIRONMENT = "HERDR_ENV";
-const SUBAGENT_ENVIRONMENT = "PI_SUBAGENT_CHILD";
 const UTF8_ENCODING = "utf8";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
@@ -22,10 +21,6 @@ const COMMON_DIRECTORY_ARGS = ["rev-parse", "--git-common-dir"];
 const CURRENT_BRANCH_ARGS = ["branch", "--show-current"];
 const TAB_GET_COMMAND = ["tab", "get"];
 const TAB_RENAME_COMMAND = ["tab", "rename"];
-export function isSubagent(): boolean {
-	return process.env[SUBAGENT_ENVIRONMENT] === "1";
-}
-
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";
 }

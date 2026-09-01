@@ -22,7 +22,8 @@ import {
 	spawnExec,
 } from "./git.ts";
 import { githubPrUrl } from "./pr-detection.ts";
-import { applyStatePatch, matchesWorkState } from "./session-state.ts";
+import { applyStatePatch, sameWorkState } from "./session-state.ts";
+import { matchesWorkState } from "./shared/work-state.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
@@ -136,17 +137,26 @@ async function completeMergedTask(
 	session: ActiveSession,
 	ctx: ExtensionContext,
 	taskRef: string,
+	stateSnapshot: ActiveSession["state"],
 ): Promise<void> {
 	try {
 		await createClient(ctx, runtime.dependencies).completeTask(taskRef);
-		session.state = applyStatePatch(session.state, {
+		const isCurrentSession = runtime.active === session;
+		const isCurrentState = sameWorkState(session.state, stateSnapshot);
+		const isCurrentCompletion = isCurrentSession && isCurrentState;
+		if (!isCurrentCompletion) return;
+		session.state = applyStatePatch(structuredClone(stateSnapshot), {
 			mergeCompletedAt: new Date().toISOString(),
 			todoistCompletionAttemptedAt: new Date().toISOString(),
 		});
 		appendState(runtime, session.state);
 		ctx.ui.notify(C.message.merged, C.value.info);
 	} catch {
-		session.state = applyStatePatch(session.state, {
+		const isCurrentSession = runtime.active === session;
+		const isCurrentState = sameWorkState(session.state, stateSnapshot);
+		const isCurrentCompletion = isCurrentSession && isCurrentState;
+		if (!isCurrentCompletion) return;
+		session.state = applyStatePatch(structuredClone(stateSnapshot), {
 			todoistCompletionAttemptedAt: new Date().toISOString(),
 		});
 		appendState(runtime, session.state);
@@ -177,6 +187,7 @@ async function handleBashResult(
 	if (!hasClaimedTaskAndPr) return;
 	const claimedPrUrl = prUrl ?? "";
 	const claimedTaskRef = taskRef ?? "";
+	const stateSnapshot = structuredClone(session.state);
 	const isPinnedPr = await matchesPinnedPr(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
@@ -191,7 +202,13 @@ async function handleBashResult(
 	const hasCompletionAttempt =
 		session.state.todoistCompletionAttemptedAt !== undefined;
 	if (hasCompletionAttempt) return;
-	await completeMergedTask(runtime, session, ctx, claimedTaskRef);
+	await completeMergedTask(
+		runtime,
+		session,
+		ctx,
+		claimedTaskRef,
+		stateSnapshot,
+	);
 }
 
 export async function handleToolResult(

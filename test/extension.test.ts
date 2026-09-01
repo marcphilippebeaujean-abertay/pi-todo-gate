@@ -9,6 +9,8 @@ const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
 	"does not register tools or perform external work for an unmatched project";
 const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 	"does not activate for dispatched subagent";
+const ACCEPTS_ONLY_SUBAGENT_MARKER_ONE =
+	"accepts only subagent marker value one";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
 const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
@@ -121,6 +123,8 @@ const RECORDS_FAILED_TODOIST_COMPLETION_ATTEMPTS =
 	"records failed Todoist completion attempts";
 const DOES_NOT_COMPLETE_STALE_MERGE_TASK =
 	"does not complete task after stale merge result";
+const DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION =
+	"does not overwrite newer state after completion";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
 const FEATURE_AUTH = "feature/auth";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
@@ -249,6 +253,20 @@ describe("lazy activation", () => {
 		expect(loadConfig).not.toHaveBeenCalled();
 		expect(h.handlers).toHaveLength(0);
 		expect(h.tools).toHaveLength(0);
+	});
+
+	it(ACCEPTS_ONLY_SUBAGENT_MARKER_ONE, () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const previous = process.env.PI_SUBAGENT_CHILD;
+		process.env.PI_SUBAGENT_CHILD = "0";
+		try {
+			extension(h.pi);
+		} finally {
+			if (previous === undefined) delete process.env.PI_SUBAGENT_CHILD;
+			else process.env.PI_SUBAGENT_CHILD = previous;
+		}
+
+		expect(h.handlers.size).toBeGreaterThan(0);
 	});
 
 	it(DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL, async () => {
@@ -900,6 +918,71 @@ describe("pi_todo_gate_state", () => {
 		await mergePromise;
 
 		expect(completeTask).not.toHaveBeenCalled();
+	});
+
+	it(DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root, [
+			{
+				type: CUSTOM,
+				customType: PI_TODO_GATE_STATE_2,
+				data: {
+					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+					taskRef: TASK_1,
+				},
+			},
+		]);
+		let resolveCompletion: (() => void) | undefined;
+		const completion = new Promise<void>((resolve) => {
+			resolveCompletion = resolve;
+		});
+		const completeTask = vi.fn(() => completion);
+		const client = {
+			listDescendants: async () => [],
+			completeTask,
+		};
+		const exec = async () => ({
+			stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
+			stderr: EMPTY_STRING,
+			code: 0,
+		});
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+			exec,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const mergePromise = h.handlers.get(TOOL_RESULT)?.(
+			{
+				type: TOOL_RESULT,
+				toolName: BASH,
+				input: { command: GIT_MERGE_FEATURE_AUTH },
+				isError: false,
+			},
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(completeTask).toHaveBeenCalledWith(TASK_1);
+		await h.tools[0].execute(
+			CALL,
+			{ action: CLEAR_TASK },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		resolveCompletion?.();
+		await mergePromise;
+
+		expect(h.appended.at(-1)).toEqual({
+			type: PI_TODO_GATE_STATE_2,
+			data: {
+				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+				prDiscoveryDisabled: true,
+			},
+		});
 	});
 
 	it(RECORDS_FAILED_TODOIST_COMPLETION_ATTEMPTS, async () => {

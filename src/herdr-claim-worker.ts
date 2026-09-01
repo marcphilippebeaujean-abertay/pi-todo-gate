@@ -4,6 +4,7 @@ import {
 	type ClaimWorkerResult,
 	parseClaimResult,
 } from "./herdr-claim-worker-result.ts";
+import { withWorkerMarker } from "./session.ts";
 import { buildPiWorkerArgs } from "./shared/pi-worker.ts";
 
 export interface ClaimWorkerRequest {
@@ -74,7 +75,7 @@ function spawnWorkerProcess(
 		buildPiWorkerArgs(request.prompt, { instructions: request.instructions }),
 		{
 			cwd: options.cwd ?? process.cwd(),
-			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
+			env: withWorkerMarker(),
 			shell: false,
 			stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_PIPE],
 		},

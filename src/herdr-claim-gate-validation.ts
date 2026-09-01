@@ -7,6 +7,18 @@ const TAB_GET_ARGS = ["tab", "get"];
 const PANE_GET_ARGS = ["pane", "get"];
 const STRING_TYPE = "string";
 
+function matchesWorkerClaim(
+	claim: ClaimWorkerResult | undefined,
+	tabId: string,
+	label: string,
+): boolean {
+	const hasClaim = claim !== undefined;
+	if (!hasClaim) return false;
+	const hasMatchingTab = claim.tabId === tabId;
+	const hasMatchingLabel = claim.label === label;
+	return hasMatchingTab && hasMatchingLabel;
+}
+
 function jsonResult<T>(output: string): T | undefined {
 	try {
 		return JSON.parse(output) as T;
@@ -57,11 +69,17 @@ export function hasValidatedTabClaim(
 		const currentLabel = tabLabel(commandRunner, observedTabId);
 		const hasDescriptiveLabel = labelIsDescriptive(currentLabel);
 		const hasChangedLabel = currentLabel !== initialLabel;
-		const hasValidObservedClaim = hasDescriptiveLabel && hasChangedLabel;
+		const hasMatchingWorkerClaim = matchesWorkerClaim(
+			claim,
+			observedTabId,
+			currentLabel ?? "",
+		);
+		const hasDescriptiveChangedLabel = hasDescriptiveLabel && hasChangedLabel;
+		const hasValidObservedClaim =
+			hasDescriptiveChangedLabel || hasMatchingWorkerClaim;
 		if (!hasValidObservedClaim) return false;
 		const hasWorkerClaim = claim !== undefined;
-		if (!hasWorkerClaim) return true;
-		return claim.tabId === observedTabId && claim.label === currentLabel;
+		return !hasWorkerClaim || hasMatchingWorkerClaim;
 	} catch {
 		return false;
 	}

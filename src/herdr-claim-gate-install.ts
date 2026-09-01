@@ -20,7 +20,6 @@ import {
 	claimWorktreeTab,
 	defaultStartWorker,
 	isInsideHerdr,
-	isSubagent,
 	tabLabel,
 } from "./herdr-claim-gate-environment.ts";
 import type {
@@ -84,7 +83,7 @@ truth.
 ### This step is enforced by a hook, not just by prose
 
 A global extension (\`~/.pi/agent/extensions/herdr-claim-gate.ts\`, auto-discovered) arms a gate at
-\`session_start\` for every non-subagent session inside Herdr (\`HERDR_ENV=1\`). While the gate is up,
+\`session_start\` for every session inside Herdr (\`HERDR_ENV=1\`). While the gate is up,
 the only bash commands allowed are the Herdr claim commands and inspection commands above
 (\`echo HERDR_ENV=…\`, \`herdr pane current\`, \`herdr pane list …\`, \`herdr tab get …\`,
 \`herdr agent list\`, \`herdr tab rename …\`, \`herdr pane move … --new-tab …\`, and equivalent
@@ -95,15 +94,6 @@ one of these happen in this session:
 - you run \`herdr tab rename …\` (claiming a generic tab),
 - you run \`herdr pane move … --new-tab …\` (moving out of a shared tab),
 - or a \`herdr tab get\` you ran returns a label that is already descriptive (tab already claimed).
-
-Subagent detection matches pi-subagents: the hook and both skills key on \`PI_SUBAGENT_CHILD=1\`.
-Dispatched children never arm the gate. There is no other detection path — Herdr's own integration does
-not distinguish subagents, so the subagent exemption is keyed on this same \`PI_SUBAGENT_CHILD=1\` marker.
-
-**Dispatched subagents skip all of that.** If \`PI_SUBAGENT_CHILD=1\`, or your prompt says you were
-_dispatched by another agent_, run no Herdr command at all: no tab claim, rename, or pane move. The
-agent that spawned you owns the tab and pane you are in; moving or renaming either destroys its
-claim.
 
 ### Worker completion
 
@@ -126,6 +116,12 @@ const CLAIM_GATE_MESSAGE =
 const CLAIM_VALIDATION_FAILED_MESSAGE =
 	"Herdr claim worker completed but could not validate tab claim.";
 const WORKER_START_FAILURE = "Herdr claim worker failed to start: ";
+
+interface ClaimAttemptState {
+	generation: number;
+	initialTabLabel: string | undefined;
+	sessionPaneId: string | undefined;
+}
 
 class HerdrClaimGate {
 	private readonly pi: ExtensionAPI;
@@ -170,7 +166,7 @@ class HerdrClaimGate {
 		this.gateActive = false;
 		this.initialTabLabel = undefined;
 		this.sessionPaneId = undefined;
-		this.herdrAvailable = isInsideHerdr() && !isSubagent();
+		this.herdrAvailable = isInsideHerdr();
 		const isNotHerdrSession = !this.herdrAvailable;
 		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
 		const hasClaim = alreadyClaimed(ctx);
@@ -205,32 +201,40 @@ class HerdrClaimGate {
 		const isSessionUnavailable = isUnavailable || isInactive;
 		const shouldSkip = isSessionUnavailable || hasWorker;
 		if (shouldSkip) return;
-		const generation = this.sessionGeneration;
+		const attempt = structuredClone<ClaimAttemptState>({
+			generation: this.sessionGeneration,
+			initialTabLabel: this.initialTabLabel,
+			sessionPaneId: this.sessionPaneId,
+		});
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
 				instructions: HERDR_INSTRUCTIONS,
-				onClaimComplete: this.completeClaim.bind(this, ctx, generation),
-				onFailure: this.failClaim.bind(this, ctx, generation),
+				onClaimComplete: this.completeClaim.bind(this, ctx, attempt),
+				onFailure: this.failClaim.bind(this, ctx, attempt.generation),
 			});
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
-			this.failClaim(ctx, generation, `${WORKER_START_FAILURE}${detail}`);
+			this.failClaim(
+				ctx,
+				attempt.generation,
+				`${WORKER_START_FAILURE}${detail}`,
+			);
 		}
 	}
 
 	private completeClaim(
 		ctx: ExtensionContext,
-		generation: number,
+		attempt: ClaimAttemptState,
 		claim?: Parameters<ClaimWorkerRequest["onClaimComplete"]>[0],
 	): void {
-		const isCurrentGeneration = generation === this.sessionGeneration;
+		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		const isValidated = hasValidatedTabClaim(
 			this.commandRunner,
-			this.initialTabLabel,
-			this.sessionPaneId,
+			attempt.initialTabLabel,
+			attempt.sessionPaneId,
 			claim,
 		);
 		if (!isValidated) {
