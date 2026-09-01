@@ -8,7 +8,6 @@ import type {
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import {
 	appendState,
-	createClient,
 	refreshFooterStatuses,
 	replaceSessionState,
 } from "./extension-lifecycle.ts";
@@ -25,6 +24,7 @@ import {
 import { githubPrUrl } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
 import { matchesWorkState } from "./shared/work-state.ts";
+import { completeMergedTask } from "./task-completion.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
@@ -131,55 +131,6 @@ export async function handleBeforeAgentStart(
 			display: false,
 		},
 	};
-}
-
-async function completeMergedTask(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	ctx: ExtensionContext,
-	taskRef: string,
-	stateSnapshot: ActiveSession["state"],
-	workRevision: number,
-): Promise<void> {
-	try {
-		await createClient(ctx, runtime.dependencies).completeTask(taskRef);
-		const isCurrentSession = runtime.active === session;
-		const isCurrentRevision = session.workRevision === workRevision;
-		const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
-		const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
-		const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
-		const isCurrentIdentity = isCurrentTask && isCurrentPr;
-		const isCurrentCompletion =
-			isCurrentSessionAndRevision && isCurrentIdentity;
-		if (!isCurrentCompletion) return;
-		replaceSessionState(
-			session,
-			applyStatePatch(session.state, {
-				mergeCompletedAt: new Date().toISOString(),
-				todoistCompletionAttemptedAt: new Date().toISOString(),
-			}),
-		);
-		appendState(runtime, session.state);
-		ctx.ui.notify(C.message.merged, C.value.info);
-	} catch {
-		const isCurrentSession = runtime.active === session;
-		const isCurrentRevision = session.workRevision === workRevision;
-		const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
-		const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
-		const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
-		const isCurrentIdentity = isCurrentTask && isCurrentPr;
-		const isCurrentCompletion =
-			isCurrentSessionAndRevision && isCurrentIdentity;
-		if (!isCurrentCompletion) return;
-		replaceSessionState(
-			session,
-			applyStatePatch(session.state, {
-				todoistCompletionAttemptedAt: new Date().toISOString(),
-			}),
-		);
-		appendState(runtime, session.state);
-		ctx.ui.notify(C.message.mergedFailed, C.value.warning);
-	}
 }
 
 async function handleBashResult(

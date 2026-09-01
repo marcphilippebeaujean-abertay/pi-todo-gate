@@ -16,6 +16,7 @@ import {
 	syncTodoistToPiTasks,
 	writePiTaskStore,
 } from "./pi-tasks-sync.ts";
+import { enqueueSessionOperation } from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
 
 const TODOIST_TASK_URL_RE =
@@ -77,7 +78,7 @@ export function inferClaimedTaskRef(
 		: undefined;
 }
 
-export async function linkInferredTask(
+async function linkInferredTaskNow(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 	prompt = "",
@@ -100,6 +101,8 @@ export async function linkInferredTask(
 			currentTaskId: taskRef,
 		});
 		await syncTodoistToPiTasks(client, claimed.id, taskPath(session));
+		const isCurrentSession = runtime.active === session;
+		if (!isCurrentSession) return false;
 		session.syncAvailable = true;
 		replaceSessionState(
 			session,
@@ -121,13 +124,39 @@ export async function linkInferredTask(
 	}
 }
 
-async function runScheduledSync(
+export function linkInferredTask(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	prompt = "",
+): Promise<boolean> {
+	return enqueueSessionOperation(
+		session,
+		linkInferredTaskNow.bind(null, runtime, session, prompt),
+	);
+}
+
+async function runScheduledSyncNow(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 	parentRef: string,
 	generation: number,
+	isQueued = false,
 ): Promise<void> {
-	session.syncTimer = undefined;
+	if (!isQueued) {
+		session.syncTimer = undefined;
+		void enqueueSessionOperation(
+			session,
+			runScheduledSyncNow.bind(
+				null,
+				runtime,
+				session,
+				parentRef,
+				generation,
+				true,
+			),
+		);
+		return;
+	}
 	const isSyncStale = !isCurrentSync(runtime.active, session, generation);
 	if (isSyncStale) return;
 	try {
@@ -157,7 +186,7 @@ export function scheduleSync(
 	cancelScheduledSync(session);
 	const generation = session.syncGeneration;
 	session.syncTimer = setTimeout(
-		runScheduledSync.bind(null, runtime, session, parentRef, generation),
+		runScheduledSyncNow.bind(null, runtime, session, parentRef, generation),
 		25,
 	);
 }

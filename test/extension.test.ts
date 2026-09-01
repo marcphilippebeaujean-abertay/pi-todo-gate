@@ -110,6 +110,9 @@ const CLEARING_A_TASK_CLEARS_ITS_COMPLETION_METADATA =
 	"clearing a task clears its completion metadata";
 const PI_TODO_GATE_EXTENSION = "pi-todo-gate-extension-";
 const TASK_1 = "task-1";
+const TASK_A = "task-a";
+const TASK_B = "task-b";
+const INFERRED_TASK = "inferred-task";
 const CLEAR_TASK = "clear_task";
 const PI_TASKS_OFF = "off";
 const KEEPS_STATE_WHEN_LOCAL_TASK_CLEARING_FAILS =
@@ -126,6 +129,9 @@ const DOES_NOT_COMPLETE_STALE_MERGE_TASK =
 const DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION =
 	"does not overwrite newer state after completion";
 const DOES_NOT_COMPLETE_ABA_RECLAIM = "does not complete ABA-reclaimed task";
+const SERIALIZES_CONCURRENT_TASK_CLAIMS = "serializes concurrent task claims";
+const CLEARS_INFERRED_TASK_AFTER_PENDING_CLAIM =
+	"clears inferred task after pending claim";
 const TASK_NAME = "task name";
 const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
@@ -923,6 +929,115 @@ describe("pi_todo_gate_state", () => {
 		expect(completeTask).not.toHaveBeenCalled();
 	});
 
+	it(SERIALIZES_CONCURRENT_TASK_CLAIMS, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root);
+		let releaseFirst: (() => void) | undefined;
+		const firstClaim = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		const claimedRefs: string[] = [];
+		const client = {
+			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
+			claimTask: async (ref: string) => {
+				claimedRefs.push(ref);
+				if (ref === TASK_A) await firstClaim;
+				return {
+					id: ref,
+					content: ref,
+					webUrl: `https://app.todoist.com/app/task/${ref}`,
+					projectId: PROJECT_1,
+				};
+			},
+			listDescendants: async () => [],
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const first = h.tools[0].execute(
+			CALL,
+			{ action: SET_TASK, task: TASK_A },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const second = h.tools[0].execute(
+			CALL,
+			{ action: SET_TASK, task: TASK_B },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(claimedRefs).toEqual([TASK_A]);
+		releaseFirst?.();
+		await first;
+		await second;
+		expect(claimedRefs).toEqual([TASK_A, TASK_B]);
+		expect(h.appended.at(-1)).toMatchObject({
+			data: { taskRef: TASK_B },
+		});
+	});
+
+	it(CLEARS_INFERRED_TASK_AFTER_PENDING_CLAIM, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root);
+		let releaseClaim: (() => void) | undefined;
+		const pendingClaim = new Promise<void>((resolve) => {
+			releaseClaim = resolve;
+		});
+		const client = {
+			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
+			claimTask: async () => {
+				await pendingClaim;
+				return {
+					id: INFERRED_TASK,
+					content: INFERRED_TASK,
+					webUrl: `https://app.todoist.com/app/task/${INFERRED_TASK}`,
+					projectId: PROJECT_1,
+				};
+			},
+			listDescendants: async () => [],
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const inference = h.handlers.get(BEFORE_AGENT_START)?.(
+			{
+				type: BEFORE_AGENT_START,
+				prompt: `claimed Todoist task id:${INFERRED_TASK}`,
+			},
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const clearing = h.tools[0].execute(
+			CALL,
+			{ action: CLEAR_TASK },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		releaseClaim?.();
+		await inference;
+		await clearing;
+
+		expect(h.appended.at(-1)).toMatchObject({ data: {} });
+		expect(h.appended.at(-1)).not.toMatchObject({
+			data: { taskRef: INFERRED_TASK },
+		});
+	});
+
 	it(DOES_NOT_COMPLETE_ABA_RECLAIM, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
@@ -937,11 +1052,11 @@ describe("pi_todo_gate_state", () => {
 				},
 			},
 		]);
-		let resolveCompletion: (() => void) | undefined;
-		const completion = new Promise<void>((resolve) => {
-			resolveCompletion = resolve;
+		let resolveExec: (() => void) | undefined;
+		const execReady = new Promise<void>((resolve) => {
+			resolveExec = resolve;
 		});
-		const completeTask = vi.fn(() => completion);
+		const completeTask = vi.fn(async () => undefined);
 		const client = {
 			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
 			claimTask: async () => ({
@@ -953,11 +1068,14 @@ describe("pi_todo_gate_state", () => {
 			listDescendants: async () => [],
 			completeTask,
 		};
-		const exec = async () => ({
-			stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
-			stderr: EMPTY_STRING,
-			code: 0,
-		});
+		const exec = async () => {
+			await execReady;
+			return {
+				stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
+				stderr: EMPTY_STRING,
+				code: 0,
+			};
+		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
@@ -991,7 +1109,7 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		);
-		resolveCompletion?.();
+		resolveExec?.();
 		await mergePromise;
 
 		const latest = (h.appended.at(-1) as { data: Record<string, unknown> })
@@ -1046,15 +1164,17 @@ describe("pi_todo_gate_state", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(completeTask).toHaveBeenCalledWith(TASK_1);
-		await h.tools[0].execute(
+		const clearing = h.tools[0].execute(
 			CALL,
 			{ action: CLEAR_TASK },
 			undefined,
 			undefined,
 			h.ctx,
 		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
 		resolveCompletion?.();
 		await mergePromise;
+		await clearing;
 
 		expect(h.appended.at(-1)).toEqual({
 			type: PI_TODO_GATE_STATE_2,

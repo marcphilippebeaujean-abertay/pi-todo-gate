@@ -94,6 +94,7 @@ function activateSession(
 		workChanged: false,
 		syncAvailable: true,
 		workRevision: 0,
+		operationQueue: Promise.resolve(),
 		syncGeneration: 0,
 	};
 	runtime.active = session;

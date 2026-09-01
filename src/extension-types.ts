@@ -54,6 +54,7 @@ export interface ActiveSession {
 	workChanged: boolean;
 	syncAvailable: boolean;
 	workRevision: number;
+	operationQueue: Promise<void>;
 	syncGeneration: number;
 	syncTimer?: ReturnType<typeof setTimeout>;
 }
