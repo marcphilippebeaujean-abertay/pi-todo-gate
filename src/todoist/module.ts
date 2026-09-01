@@ -421,6 +421,22 @@ export function createTodoistModule(
 				completionAction(runContext, generation, taskRef, taskName),
 			);
 		});
+		dependencies.events.on("sessionWillClose", (request) => {
+			const runContext = context;
+			if (
+				request.payload.reason !== "quit" ||
+				!runContext ||
+				!ready ||
+				!state.taskRef
+			)
+				return;
+			const generation = operationGeneration;
+			const taskRef = state.taskRef;
+			const taskName = state.taskName ?? taskRef;
+			request.addAction(
+				completionAction(runContext, generation, taskRef, taskName),
+			);
+		});
 	}
 
 	return {

@@ -96,6 +96,7 @@ export function createWorktreeModule(
 		worktree: WorktreeBaseline,
 		force: boolean,
 		generation: number,
+		successMessage = "Worktree and local branch deleted",
 	): Promise<ExitActionResult> => {
 		if (generation !== operationGeneration || baseline !== worktree)
 			return "failed";
@@ -140,7 +141,7 @@ export function createWorktreeModule(
 		}
 		baseline = null;
 		pendingCleanup = false;
-		notify("Worktree and local branch deleted");
+		notify(successMessage);
 		return "completed";
 	};
 
@@ -197,11 +198,13 @@ export function createWorktreeModule(
 		const state = await currentState(worktree.worktreePath);
 		if (generation !== operationGeneration || baseline !== worktree) return;
 		if (state && hasNoSessionWork(worktree, state)) {
-			const result = await cleanup(worktree, false, generation);
-			if (result === "completed") {
-				notify("Worktree deleted because no changes were made");
-				return;
-			}
+			const result = await cleanup(
+				worktree,
+				false,
+				generation,
+				"Worktree deleted because no changes were made",
+			);
+			if (result === "completed") return;
 		}
 		request.addAction(cleanupAction(worktree, generation));
 	});
