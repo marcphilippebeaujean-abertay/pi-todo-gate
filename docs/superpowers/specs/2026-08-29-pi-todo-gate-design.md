@@ -62,7 +62,7 @@ Automatic discovery scans session history oldest-to-newest and preserves first v
 
 Inferred task linking uses the same claim operation when session evidence identifies a claimed task. Missing-task warning is guidance only and never blocks work.
 
-Task actions and merge completion use a per-session FIFO operation queue. Each queued operation runs after prior remote work returns. Queue failures do not poison later operations. State writes verify active session and work identity before committing.
+Task claims and merge completion use a per-session FIFO operation queue. Each normal queued operation runs after prior remote work returns. `clear_task` and `clear_all` supersede pending task work synchronously, invalidate its generation, and clear session state without waiting for a remote claim. Todoist calls receive a cancellation predicate checked before each command; an already-running CLI command may finish, but stale follow-up calls and state writes are skipped. Queue failures do not poison later operations. State writes verify active session and work identity before committing.
 
 ## Merge Completion
 

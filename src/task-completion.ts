@@ -66,33 +66,28 @@ async function completeMergedTaskNow(
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
 ): Promise<void> {
-	const hasCompletionAttempt =
-		session.state.todoistCompletionAttemptedAt !== undefined;
-	const isStaleCompletion = !isCurrentCompletion(
+	const isCurrent = isCurrentCompletion.bind(
+		null,
 		runtime,
 		session,
 		stateSnapshot,
 		workRevision,
 	);
+	const hasCompletionAttempt =
+		session.state.todoistCompletionAttemptedAt !== undefined;
+	const isStaleCompletion = !isCurrent();
 	const shouldSkipCompletion = isStaleCompletion || hasCompletionAttempt;
 	if (shouldSkipCompletion) return;
 	try {
-		await createClient(ctx, runtime.dependencies).completeTask(taskRef);
-		const isStaleSuccess = !isCurrentCompletion(
-			runtime,
-			session,
-			stateSnapshot,
-			workRevision,
+		await createClient(ctx, runtime.dependencies).completeTask(
+			taskRef,
+			isCurrent,
 		);
+		const isStaleSuccess = !isCurrent();
 		if (isStaleSuccess) return;
 		recordSuccessfulCompletion(runtime, session, ctx);
 	} catch {
-		const isStaleFailure = !isCurrentCompletion(
-			runtime,
-			session,
-			stateSnapshot,
-			workRevision,
-		);
+		const isStaleFailure = !isCurrent();
 		if (isStaleFailure) return;
 		recordFailedCompletion(runtime, session, ctx);
 	}

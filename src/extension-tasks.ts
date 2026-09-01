@@ -7,8 +7,17 @@ import {
 } from "./extension-lifecycle.ts";
 import { branchTexts } from "./extension-message.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
-import { enqueueSessionOperation } from "./session-operations.ts";
+import {
+	enqueueSessionOperation,
+	getOperationGeneration,
+	isCurrentOperation,
+} from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
+import {
+	type IsCurrentOperation,
+	TodoistOperationCancelled,
+	type TodoistTask,
+} from "./todoist.ts";
 
 const TODOIST_TASK_URL_RE =
 	/https:\/\/app\.todoist\.com\/app\/task\/([A-Za-z0-9_-]+)/gi;
@@ -69,10 +78,40 @@ export function inferClaimedTaskRef(
 		: undefined;
 }
 
+function currentTaskOperation(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	generation: number,
+): IsCurrentOperation {
+	return () =>
+		runtime.active === session && isCurrentOperation(session, generation);
+}
+
+function persistInferredTask(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	claimed: TodoistTask,
+): void {
+	replaceSessionState(
+		session,
+		applyStatePatch(session.state, {
+			taskRef: claimed.id,
+			taskName: claimed.content,
+			taskUrl:
+				claimed.webUrl ??
+				claimed.url ??
+				`https://app.todoist.com/app/task/${claimed.id}`,
+		}),
+	);
+	appendState(runtime, session.state, !session.allowPrDiscovery);
+	refreshFooterStatuses(session);
+}
+
 async function linkInferredTaskNow(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 	prompt = "",
+	generation = getOperationGeneration(session),
 ): Promise<boolean> {
 	const hasExistingTaskRef = session.state.taskRef !== undefined;
 	if (hasExistingTaskRef) return false;
@@ -82,32 +121,29 @@ async function linkInferredTaskNow(
 	);
 	const hasTaskRef = taskRef !== undefined;
 	if (!hasTaskRef) return false;
+	const isCurrent = currentTaskOperation(runtime, session, generation);
+	const isCurrentBeforeClaim = isCurrent();
+	if (!isCurrentBeforeClaim) return false;
 	try {
 		const client = createClient(session.context, runtime.dependencies);
 		const project = await client.resolveProject(
 			session.project.todoistProjectRef,
+			isCurrent,
 		);
-		const claimed = await client.claimTask(taskRef, {
-			id: project.id,
-			currentTaskId: taskRef,
-		});
-		const isCurrentSession = runtime.active === session;
+		const claimed = await client.claimTask(
+			taskRef,
+			{
+				id: project.id,
+				currentTaskId: taskRef,
+			},
+			isCurrent,
+		);
+		const isCurrentSession = isCurrent();
 		if (!isCurrentSession) return false;
-		replaceSessionState(
-			session,
-			applyStatePatch(session.state, {
-				taskRef: claimed.id,
-				taskName: claimed.content,
-				taskUrl:
-					claimed.webUrl ??
-					claimed.url ??
-					`https://app.todoist.com/app/task/${claimed.id}`,
-			}),
-		);
-		appendState(runtime, session.state, !session.allowPrDiscovery);
-		refreshFooterStatuses(session);
+		persistInferredTask(runtime, session, claimed);
 		return true;
-	} catch {
+	} catch (error) {
+		if (error instanceof TodoistOperationCancelled) return false;
 		session.context.ui.notify(C.message.taskNotLinked, C.value.warning);
 		return false;
 	}
@@ -118,8 +154,9 @@ export function linkInferredTask(
 	session: ActiveSession,
 	prompt = "",
 ): Promise<boolean> {
+	const generation = getOperationGeneration(session);
 	return enqueueSessionOperation(
 		session,
-		linkInferredTaskNow.bind(null, runtime, session, prompt),
+		linkInferredTaskNow.bind(null, runtime, session, prompt, generation),
 	);
 }

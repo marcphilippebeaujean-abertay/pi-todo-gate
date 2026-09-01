@@ -90,6 +90,7 @@ function activateSession(
 		handoffContext,
 		workChanged: false,
 		workRevision: 0,
+		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 	};
 	runtime.active = session;

@@ -28,9 +28,7 @@ const PREFERS_WEBURL_WHEN_RETURNING_A_CANONICAL_CLAIMED =
 const HTTPS_APP_TODOIST_COM_APP_TASK_42 = "https://app.todoist.com/app/task/42";
 const TASK_MOVED_SUCCESSFULLY = "Task moved successfully";
 const TASK_COMPLETED_SUCCESSFULLY = "Task completed successfully";
-const TASK_DELETED_SUCCESSFULLY = "Task deleted successfully";
-const REJECTS_MALFORMED_LIST_RESPONSE =
-	"rejects malformed list response before destructive sync";
+const DOES_NOT_MOVE_CANCELLED_CLAIM = "does not move cancelled claim";
 const ACCEPTS_THE_ALREADY_CLAIMED_TASK_AND_MOVES =
 	"accepts the already claimed task and moves a valid task";
 const TASK = "task";
@@ -50,24 +48,6 @@ const COMPLETES_TASKS_WITH_SEPARATE_ARGUMENTS =
 	"completes tasks with separate arguments";
 const ID_42 = "id:42";
 const COMPLETE = "complete";
-const LISTS_RECURSIVE_DESCENDANTS_AND_DELETES_DEEPEST_FIRST =
-	"lists recursive descendants and deletes deepest first";
-const STOPS_RECURSIVE_DELETION_AFTER_CANCELLATION =
-	"stops recursive deletion after cancellation";
-const CHILD = "child";
-const GRANDCHILD = "grandchild";
-const VALUE_DELETE = "delete";
-const ID_GRANDCHILD = "id:grandchild";
-const YES = "--yes";
-const ID_CHILD = "id:child";
-const CREATES_SUBTASKS_WITHOUT_SHELL_INTERPOLATION =
-	"creates subtasks without shell interpolation";
-const VALUE_NEW = "new";
-const CONTENT_WITH_SPACES_HOME = "content with spaces; $HOME";
-const DESCRIPTION_RM_RF = "description && rm -rf /";
-const ADD = "add";
-const PARENT = "--parent";
-const DESCRIPTION = "--description";
 const RETURNS_A_TYPED_SANITIZED_ERROR_FOR_FAILED =
 	"returns a typed sanitized error for failed CLI commands";
 const TOKEN_SUPER_SECRET_FAILED = "token=super-secret failed";
@@ -80,6 +60,7 @@ import {
 	TodoistClient,
 	TodoistError,
 	type TodoistExec,
+	TodoistOperationCancelled,
 } from "../src/todoist.ts";
 
 const ok = (value: unknown): CommandResult => ({
@@ -260,6 +241,25 @@ describe("TodoistClient", () => {
 		).resolves.toMatchObject({ url: HTTPS_APP_TODOIST_COM_APP_TASK_42 });
 	});
 
+	it(DOES_NOT_MOVE_CANCELLED_CLAIM, async () => {
+		const fake = fakeTodoist({
+			"task view 42 --json": ok(task({ sectionName: TODO })),
+		});
+		let checks = 0;
+		const isCurrent = () => {
+			checks += 1;
+			return checks < 3;
+		};
+		await expect(
+			new TodoistClient(fake.exec).claimTask(
+				VALUE_42,
+				{ id: PROJECT_1 },
+				isCurrent,
+			),
+		).rejects.toBeInstanceOf(TodoistOperationCancelled);
+		expect(fake.calls).toEqual([[TASK, VIEW, VALUE_42, JSON_2]]);
+	});
+
 	it(COMPLETES_TASKS_WITH_SEPARATE_ARGUMENTS, async () => {
 		const fake = fakeTodoist({
 			"task complete id:42": okText(TASK_COMPLETED_SUCCESSFULLY),
@@ -268,83 +268,6 @@ describe("TodoistClient", () => {
 			new TodoistClient(fake.exec).completeTask(ID_42),
 		).resolves.toBeUndefined();
 		expect(fake.calls).toEqual([[TASK, COMPLETE, ID_42]]);
-	});
-
-	it(LISTS_RECURSIVE_DESCENDANTS_AND_DELETES_DEEPEST_FIRST, async () => {
-		const fake = fakeTodoist({
-			"task list --parent 42 --json": ok([
-				task({ id: CHILD, parentId: VALUE_42 }),
-			]),
-			"task list --parent child --json": ok([
-				task({ id: GRANDCHILD, parentId: CHILD }),
-			]),
-			"task list --parent grandchild --json": ok([]),
-			"task delete id:grandchild --yes": okText(TASK_DELETED_SUCCESSFULLY),
-			"task delete id:child --yes": okText(TASK_DELETED_SUCCESSFULLY),
-		});
-		const client = new TodoistClient(fake.exec);
-		await expect(client.listDescendants(VALUE_42)).resolves.toMatchObject([
-			{ id: CHILD, children: [{ id: GRANDCHILD }] },
-		]);
-		await client.deleteDescendants(await client.listDescendants(VALUE_42));
-		expect(fake.calls.slice(-2)).toEqual([
-			[TASK, VALUE_DELETE, ID_GRANDCHILD, YES],
-			[TASK, VALUE_DELETE, ID_CHILD, YES],
-		]);
-	});
-
-	it(REJECTS_MALFORMED_LIST_RESPONSE, async () => {
-		const fake = fakeTodoist({
-			"task list --parent 42 --json": ok({ unexpected: true }),
-		});
-
-		await expect(
-			new TodoistClient(fake.exec).listDescendants(VALUE_42),
-		).rejects.toThrow("unexpected JSON shape");
-	});
-
-	it(STOPS_RECURSIVE_DELETION_AFTER_CANCELLATION, async () => {
-		const fake = fakeTodoist({
-			"task delete id:grandchild --yes": okText(TASK_DELETED_SUCCESSFULLY),
-			"task delete id:child --yes": okText(TASK_DELETED_SUCCESSFULLY),
-		});
-		const client = new TodoistClient(fake.exec);
-		const children = [
-			{
-				...task({ id: CHILD }),
-				children: [{ ...task({ id: GRANDCHILD }), children: [] }],
-			},
-		];
-		let checks = 0;
-		const isCurrent = () => {
-			checks += 1;
-			return checks < 4;
-		};
-		await client.deleteDescendants(children, isCurrent);
-		expect(fake.calls).toEqual([[TASK, VALUE_DELETE, ID_GRANDCHILD, YES]]);
-	});
-
-	it(CREATES_SUBTASKS_WITHOUT_SHELL_INTERPOLATION, async () => {
-		const fake = fakeTodoist({
-			"task add content with spaces; $HOME --parent 42 --description description && rm -rf / --json":
-				ok(task({ id: VALUE_NEW })),
-		});
-		await expect(
-			new TodoistClient(fake.exec).createSubtask(VALUE_42, {
-				content: CONTENT_WITH_SPACES_HOME,
-				description: DESCRIPTION_RM_RF,
-			}),
-		).resolves.toMatchObject({ id: VALUE_NEW });
-		expect(fake.calls[0]).toEqual([
-			TASK,
-			ADD,
-			CONTENT_WITH_SPACES_HOME,
-			PARENT,
-			VALUE_42,
-			DESCRIPTION,
-			DESCRIPTION_RM_RF,
-			JSON_2,
-		]);
 	});
 
 	it(RETURNS_A_TYPED_SANITIZED_ERROR_FOR_FAILED, async () => {

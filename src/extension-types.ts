@@ -53,6 +53,7 @@ export interface ActiveSession {
 	handoffContext: boolean;
 	workChanged: boolean;
 	workRevision: number;
+	operationGeneration: number;
 	operationQueue: Promise<void>;
 }
 

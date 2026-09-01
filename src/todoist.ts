@@ -16,11 +16,7 @@ const TODOIST_IN_PROGRESS_LABEL = "In Progress";
 const MOVE = "move";
 const SECTION_FLAG = "--section";
 const COMPLETE = "complete";
-const PARENT = "--parent";
-const VALUE_DELETE = "delete";
-const YES = "--yes";
-const ADD = "add";
-const DESCRIPTION = "--description";
+const OPERATION_CANCELLED = "Todoist operation cancelled";
 
 import type { CommandResult } from "./git.ts";
 import {
@@ -35,6 +31,21 @@ import {
 
 export { TodoistError };
 
+export class TodoistOperationCancelled extends Error {
+	constructor() {
+		super(OPERATION_CANCELLED);
+	}
+}
+
+export type IsCurrentOperation = () => boolean;
+
+function assertCurrent(isCurrent?: IsCurrentOperation): void {
+	const hasCurrentCheck = isCurrent !== undefined;
+	if (!hasCurrentCheck) return;
+	const operationIsCurrent = isCurrent();
+	if (!operationIsCurrent) throw new TodoistOperationCancelled();
+}
+
 export interface TodoistTask {
 	id: string;
 	content: string;
@@ -47,10 +58,6 @@ export interface TodoistTask {
 	webUrl?: string;
 }
 
-export interface TodoistChild extends TodoistTask {
-	children?: TodoistChild[];
-}
-
 export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;
 }
@@ -61,8 +68,11 @@ export class TodoistClient {
 	private async run(
 		args: readonly string[],
 		parseJson = true,
+		isCurrent?: IsCurrentOperation,
 	): Promise<unknown> {
+		assertCurrent(isCurrent);
 		const result = await this.exec.run(args);
+		assertCurrent(isCurrent);
 		const commandFailed: boolean = !!(result.code !== 0);
 		if (commandFailed) {
 			const family = args.slice(0, 2).join(" ");
@@ -73,8 +83,15 @@ export class TodoistClient {
 			: result.stdout;
 	}
 
-	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
-		const payload = await this.run([PROJECT, LIST, JSON_OUTPUT_FLAG]);
+	async resolveProject(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
+	): Promise<{ id: string; name: string }> {
+		const payload = await this.run(
+			[PROJECT, LIST, JSON_OUTPUT_FLAG],
+			true,
+			isCurrent,
+		);
 		const rows = childList(payload).map(record);
 		const target = ref.startsWith(ID) ? ref.slice(3) : ref;
 		let match: Record<string, unknown> | undefined;
@@ -99,9 +116,12 @@ export class TodoistClient {
 		};
 	}
 
-	async getTask(ref: string): Promise<TodoistTask> {
+	async getTask(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
+	): Promise<TodoistTask> {
 		const task = taskFromPayload(
-			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG]),
+			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG], true, isCurrent),
 		);
 		const hasNoTaskUrl: boolean = !!(!task.url && !task.webUrl);
 		if (hasNoTaskUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
@@ -111,18 +131,17 @@ export class TodoistClient {
 	private async resolveClaimSection(
 		task: TodoistTask,
 		project: { id: string },
+		isCurrent?: IsCurrentOperation,
 	): Promise<string | null | undefined> {
 		const hasSectionName = Boolean(task.sectionName);
 		if (hasSectionName) return task.sectionName;
 		const hasSectionId = Boolean(task.sectionId);
 		if (!hasSectionId) return task.sectionName;
-		const sections = await this.run([
-			SECTION,
-			LIST,
-			PROJECT_FLAG,
-			`id:${project.id}`,
-			JSON_OUTPUT_FLAG,
-		]);
+		const sections = await this.run(
+			[SECTION, LIST, PROJECT_FLAG, `id:${project.id}`, JSON_OUTPUT_FLAG],
+			true,
+			isCurrent,
+		);
 		let section: Record<string, unknown> | undefined;
 		for (const item of childList(sections).map(record)) {
 			const isMatchingSection = stringValue(item.id) === task.sectionId;
@@ -137,8 +156,9 @@ export class TodoistClient {
 	async claimTask(
 		ref: string,
 		project: { id: string; currentTaskId?: string },
+		isCurrent?: IsCurrentOperation,
 	): Promise<TodoistTask> {
-		const task = await this.getTask(ref);
+		const task = await this.getTask(ref, isCurrent);
 		const isOutsideConfiguredProject = task.projectId !== project.id;
 		if (isOutsideConfiguredProject) {
 			throw new TodoistError(
@@ -146,7 +166,7 @@ export class TodoistClient {
 				TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 			);
 		}
-		let sectionName = await this.resolveClaimSection(task, project);
+		let sectionName = await this.resolveClaimSection(task, project, isCurrent);
 		const isInProgress =
 			sectionName?.trim().toLowerCase() === IN_PROGRESS_VALUE;
 		const isClaimedByAnotherTask =
@@ -167,6 +187,7 @@ export class TodoistClient {
 					`id:${project.id}`,
 				],
 				false,
+				isCurrent,
 			);
 			sectionName = TODOIST_IN_PROGRESS_LABEL;
 		}
@@ -180,52 +201,10 @@ export class TodoistClient {
 		};
 	}
 
-	async completeTask(ref: string): Promise<void> {
-		await this.run([TASK, COMPLETE, ref], false);
-	}
-
-	async listDescendants(ref: string): Promise<TodoistChild[]> {
-		const payload = await this.run([TASK, LIST, PARENT, ref, JSON_OUTPUT_FLAG]);
-		const children: TodoistChild[] = [];
-		for (const item of childList(payload)) {
-			const child = taskFromPayload(item) as TodoistChild;
-			child.children = await this.listDescendants(child.id);
-			children.push(child);
-		}
-		return children;
-	}
-
-	async deleteDescendants(
-		children: readonly TodoistChild[],
-		isCurrent?: () => boolean,
+	async completeTask(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
 	): Promise<void> {
-		for (const child of children) {
-			const isCancelledBeforeChild = isCurrent !== undefined && !isCurrent();
-			if (isCancelledBeforeChild) return;
-			const childTasks = child.children;
-			const hasChildTasks = childTasks !== undefined;
-			if (hasChildTasks) await this.deleteDescendants(childTasks, isCurrent);
-			const isCancelledAfterChildren = isCurrent !== undefined && !isCurrent();
-			if (isCancelledAfterChildren) return;
-			await this.run([TASK, VALUE_DELETE, `id:${child.id}`, YES], false);
-		}
-	}
-
-	async createSubtask(
-		parentRef: string,
-		input: { content: string; description: string },
-	): Promise<TodoistTask> {
-		return taskFromPayload(
-			await this.run([
-				TASK,
-				ADD,
-				input.content,
-				PARENT,
-				parentRef,
-				DESCRIPTION,
-				input.description,
-				JSON_OUTPUT_FLAG,
-			]),
-		);
+		await this.run([TASK, COMPLETE, ref], false, isCurrent);
 	}
 }

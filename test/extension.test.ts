@@ -113,6 +113,8 @@ const DOES_NOT_COMPLETE_ABA_RECLAIM = "does not complete ABA-reclaimed task";
 const SERIALIZES_CONCURRENT_TASK_CLAIMS = "serializes concurrent task claims";
 const CLEARS_INFERRED_TASK_AFTER_PENDING_CLAIM =
 	"clears inferred task after pending claim";
+const CLEARS_SET_TASK_DURING_PENDING_CLAIM =
+	"clears set_task during pending claim";
 const TASK_NAME = "task name";
 const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
@@ -292,7 +294,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42,
 				projectId: PROJECT_1,
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -339,7 +340,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42,
 				projectId: PROJECT_1,
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -383,7 +383,6 @@ describe("automatic Todoist task linking", () => {
 				webUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42,
 				projectId: PROJECT_1,
 			}),
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -654,8 +653,7 @@ describe("pi_todo_gate_state", () => {
 		]);
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
-			createTodoistClient: () =>
-				({ listDescendants: async () => [] }) as unknown as TodoistClient,
+			createTodoistClient: () => ({}) as unknown as TodoistClient,
 		});
 		await h.handlers.get(SESSION_START)?.(
 			{ type: SESSION_START, reason: STARTUP },
@@ -698,7 +696,6 @@ describe("pi_todo_gate_state", () => {
 		});
 		const completeTask = vi.fn(async () => undefined);
 		const client = {
-			listDescendants: async () => [],
 			completeTask,
 		};
 		const exec = vi.fn(() => pendingExec);
@@ -758,7 +755,6 @@ describe("pi_todo_gate_state", () => {
 					projectId: PROJECT_1,
 				};
 			},
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -812,7 +808,6 @@ describe("pi_todo_gate_state", () => {
 					projectId: PROJECT_1,
 				};
 			},
-			listDescendants: async () => [],
 		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -837,6 +832,12 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		);
+		let clearFinished = false;
+		void Promise.resolve(clearing).then(() => {
+			clearFinished = true;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(clearFinished).toBe(true);
 		releaseClaim?.();
 		await inference;
 		await clearing;
@@ -844,6 +845,63 @@ describe("pi_todo_gate_state", () => {
 		expect(h.appended.at(-1)).toMatchObject({ data: {} });
 		expect(h.appended.at(-1)).not.toMatchObject({
 			data: { taskRef: INFERRED_TASK },
+		});
+	});
+
+	it(CLEARS_SET_TASK_DURING_PENDING_CLAIM, async () => {
+		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
+		const h = harness(root);
+		let releaseClaim: (() => void) | undefined;
+		const pendingClaim = new Promise<void>((resolve) => {
+			releaseClaim = resolve;
+		});
+		const client = {
+			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
+			claimTask: async () => {
+				await pendingClaim;
+				return {
+					id: TASK_A,
+					content: TASK_A,
+					webUrl: `https://app.todoist.com/app/task/${TASK_A}`,
+					projectId: PROJECT_1,
+				};
+			},
+		};
+		extension(h.pi, {
+			loadConfig: async () => config({ [root]: MERGE_TD }),
+			createTodoistClient: () => client as unknown as TodoistClient,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const setting = h.tools[0].execute(
+			CALL,
+			{ action: SET_TASK, task: TASK_A },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const clearing = h.tools[0].execute(
+			CALL,
+			{ action: CLEAR_TASK },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		let clearFinished = false;
+		void Promise.resolve(clearing).then(() => {
+			clearFinished = true;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(clearFinished).toBe(true);
+		releaseClaim?.();
+		await setting;
+		await clearing;
+		expect(h.appended.at(-1)).toMatchObject({ data: {} });
+		expect(h.appended.at(-1)).not.toMatchObject({
+			data: { taskRef: TASK_A },
 		});
 	});
 
@@ -874,7 +932,6 @@ describe("pi_todo_gate_state", () => {
 				webUrl: TASK_URL,
 				projectId: PROJECT_1,
 			}),
-			listDescendants: async () => [],
 			completeTask,
 		};
 		const exec = async () => {
@@ -945,7 +1002,6 @@ describe("pi_todo_gate_state", () => {
 		});
 		const completeTask = vi.fn(() => completion);
 		const client = {
-			listDescendants: async () => [],
 			completeTask,
 		};
 		const exec = async () => ({
@@ -972,7 +1028,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(completeTask).toHaveBeenCalledWith(TASK_1);
+		expect(completeTask).toHaveBeenCalledWith(TASK_1, expect.any(Function));
 		const clearing = h.tools[0].execute(
 			CALL,
 			{ action: CLEAR_TASK },
@@ -1007,7 +1063,6 @@ describe("pi_todo_gate_state", () => {
 			},
 		]);
 		const client = {
-			listDescendants: async () => [],
 			completeTask: async () => {
 				throw new Error(TODOIST_UNAVAILABLE);
 			},
