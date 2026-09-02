@@ -6,7 +6,7 @@ import {
 	type CommandRunner as HerdrCommandRunner,
 	installHerdrClaimGate,
 	type StartBackgroundWorker,
-} from "../src/herdr-claim-gate.ts";
+} from "../src/herdr/claim-gate.ts";
 import { createPrModule, type PrModuleDependencies } from "../src/pr/module.ts";
 import type { Exec } from "../src/shared/command.ts";
 import type { TaskClaimWorker } from "../src/todoist/claim-worker.ts";

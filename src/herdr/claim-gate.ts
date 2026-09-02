@@ -8,14 +8,14 @@ import {
 	type ClaimWorkerRequest,
 	startClaimWorker,
 	type WorkerSpawner,
-} from "./herdr-claim-worker.ts";
-import { isLinkedWorktreePaths, parseBranchName } from "./shared/project.ts";
+} from "./claim-worker.ts";
+import { isLinkedWorktreePaths, parseBranchName } from "../shared/project.ts";
 
 export type {
 	ClaimWorkerHandle,
 	ClaimWorkerRequest,
 	WorkerSpawner,
-} from "./herdr-claim-worker.ts";
+} from "./claim-worker.ts";
 
 const CLAIM_CUSTOM_TYPE = "herdr-claim-gate";
 const HERDR_STATUS_KEY = "pi-todo-gate-herdr";

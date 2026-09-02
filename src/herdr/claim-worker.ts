@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import {
 	buildPiWorkerArgs,
 	textFromAssistantMessage,
-} from "./shared/pi-worker.ts";
+} from "../shared/pi-worker.ts";
 
 export interface ClaimWorkerResult {
 	tabId: string;

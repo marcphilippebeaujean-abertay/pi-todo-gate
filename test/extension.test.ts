@@ -7,7 +7,7 @@ import extension from "../extensions/pi-todo-gate.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "../src/herdr-claim-gate.ts";
+} from "../src/herdr/claim-gate.ts";
 import { type TodoistClient, TodoistError } from "../src/todoist/client.ts";
 import { createTodoistModule } from "../src/todoist/module.ts";
 
