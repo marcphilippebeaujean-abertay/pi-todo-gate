@@ -6,7 +6,7 @@ import {
 	startClaimWorker,
 	type WorkerProcess,
 	type WorkerSpawner,
-} from "../src/herdr/claim-worker.ts";
+} from "../../src/herdr/claim-worker.ts";
 
 class FakeProcess extends EventEmitter implements WorkerProcess {
 	readonly stdout = new PassThrough();

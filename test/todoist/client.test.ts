@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CommandResult } from "../src/shared/command.ts";
+import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	TodoistClient,
 	TodoistError,
 	type TodoistExec,
-} from "../src/todoist/client.ts";
+} from "../../src/todoist/client.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),

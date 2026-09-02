@@ -3,7 +3,7 @@ import {
 	firstGithubPrUrl,
 	firstUnmergedGithubPrUrl,
 	githubPrUrl,
-} from "../src/pr/detection.ts";
+} from "../../src/pr/detection.ts";
 
 describe("githubPrUrl", () => {
 	it("accepts a valid GitHub pull request URL", () => {

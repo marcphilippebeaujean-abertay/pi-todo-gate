@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	appendCustomState,
 	latestCustomState,
-} from "../src/shared/session-state.ts";
+} from "../../src/shared/session-state.ts";
 
 describe("shared session state", () => {
 	it("reads only the requested custom state type", () => {

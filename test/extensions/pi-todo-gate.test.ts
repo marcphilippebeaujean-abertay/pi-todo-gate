@@ -3,13 +3,13 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import extension from "../extensions/pi-todo-gate.ts";
+import extension from "../../extensions/pi-todo-gate.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "../src/herdr/claim-gate.ts";
-import { type TodoistClient, TodoistError } from "../src/todoist/client.ts";
-import { createTodoistModule } from "../src/todoist/module.ts";
+} from "../../src/herdr/claim-gate.ts";
+import { type TodoistClient, TodoistError } from "../../src/todoist/client.ts";
+import { createTodoistModule } from "../../src/todoist/module.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 type TestTool = {
