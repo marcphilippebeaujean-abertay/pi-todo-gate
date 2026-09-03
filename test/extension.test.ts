@@ -9,8 +9,7 @@ const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
 	"does not register tools or perform external work for an unmatched project";
 const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 	"does not activate for dispatched subagent";
-const ACCEPTS_ONLY_SUBAGENT_MARKER_ONE =
-	"accepts only subagent marker value one";
+const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
 const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
@@ -162,8 +161,10 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const ctx = {
 		cwd,
 		mode: PRINT,
+		hasUI: true,
 		ui: {
 			theme: { fg: (_color: string, text: string) => text },
+			confirm: vi.fn(async () => true),
 			notify: (message: string) => notifications.push(message),
 			setFooter: (factory: unknown) => footerCalls.push(factory),
 			setStatus: (key: string, text: string | undefined) =>
@@ -228,7 +229,7 @@ describe("lazy activation", () => {
 		expect(h.tools).toHaveLength(0);
 	});
 
-	it(ACCEPTS_ONLY_SUBAGENT_MARKER_ONE, () => {
+	it(SKIPS_ANY_DEFINED_SUBAGENT_MARKER, () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const previous = process.env.PI_SUBAGENT_CHILD;
 		process.env.PI_SUBAGENT_CHILD = "0";
@@ -239,7 +240,7 @@ describe("lazy activation", () => {
 			else process.env.PI_SUBAGENT_CHILD = previous;
 		}
 
-		expect(h.handlers.size).toBeGreaterThan(0);
+		expect(h.handlers.size).toBe(0);
 	});
 
 	it(DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL, async () => {

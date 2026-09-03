@@ -23,14 +23,14 @@ import {
 } from "./git.ts";
 import { githubPrUrl } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
-import { matchesWorkState } from "./shared/work-state.ts";
-import { completeMergedTask } from "./task-completion.ts";
+import { isCurrentMerge } from "./shared/work-state.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 const BASH_COMMAND = "command";
 const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
+
 export function persistPrIfAvailable(
 	runtime: ExtensionRuntime,
 	text: string,
@@ -134,7 +134,9 @@ async function handleBashResult(
 ): Promise<void> {
 	const commandValue = event.input[BASH_COMMAND];
 	const command =
-		typeof commandValue === STRING_TYPE ? (commandValue as string) : "";
+		typeof commandValue === STRING_TYPE
+			? (commandValue as string)
+			: C.worktree.empty;
 	const resultText = textOf(event.content);
 	const isMissingTaskRef = session.state.taskRef === undefined;
 	if (isMissingTaskRef)
@@ -147,10 +149,9 @@ async function handleBashResult(
 	const hasTaskRef = taskRef !== undefined;
 	const hasClaimedTaskAndPr = hasPrUrl && hasTaskRef;
 	if (!hasClaimedTaskAndPr) return;
-	const claimedPrUrl = prUrl ?? "";
-	const claimedTaskRef = taskRef ?? "";
-	const stateSnapshot = structuredClone(session.state);
-	const workRevision = session.workRevision;
+	const claimedPrUrl = prUrl ?? C.worktree.empty;
+	const claimedTaskRef = taskRef ?? C.worktree.empty;
+	const mergeWorkRevision = session.workRevision;
 	const isPinnedPr = await matchesPinnedPr(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
@@ -158,21 +159,18 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!isPinnedPr) return;
-	const isCurrentMerge =
-		runtime.active === session &&
-		matchesWorkState(session.state, claimedTaskRef, claimedPrUrl);
-	if (!isCurrentMerge) return;
+	const currentMerge = isCurrentMerge(
+		runtime,
+		session,
+		mergeWorkRevision,
+		claimedTaskRef,
+		claimedPrUrl,
+	);
+	if (!currentMerge) return;
 	const hasCompletionAttempt =
 		session.state.todoistCompletionAttemptedAt !== undefined;
 	if (hasCompletionAttempt) return;
-	await completeMergedTask(
-		runtime,
-		session,
-		ctx,
-		claimedTaskRef,
-		stateSnapshot,
-		workRevision,
-	);
+	await runtime.events.emit(C.event.prMerged, { prUrl: claimedPrUrl });
 }
 
 export async function handleToolResult(

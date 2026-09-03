@@ -2,17 +2,20 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
 } from "./herdr-tab-claim.ts";
+import type { SharedEvents } from "./shared/events.ts";
 import type { TodoistClient } from "./todoist.ts";
 import type {
 	ResolvedProject,
 	TodoistProjectMapping,
 	WorkState,
 } from "./types.ts";
+import type { WorktreeModule } from "./worktree/module.ts";
 
 export type WorkStateAction =
 	| { action: "status" }
@@ -60,6 +63,9 @@ export interface ActiveSession {
 export interface ExtensionRuntime {
 	pi: ExtensionAPI;
 	dependencies: ExtensionDependencies;
+	events: SharedEvents;
+	exitProtocol: ExitProtocolModule;
+	worktree: WorktreeModule;
 	active: ActiveSession | null;
 	registered: boolean;
 }

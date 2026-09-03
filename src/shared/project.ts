@@ -15,6 +15,7 @@ export interface ProjectInfo {
 	isWorktree: boolean;
 	root: string | null;
 	branch: string | null;
+	mainRoot: string | null;
 }
 
 export function resolveGitPath(cwd: string, output: string): string | null {
@@ -46,6 +47,18 @@ function firstWorktreePath(output: string): string | null {
 	return line
 		? line.slice(STRING_LITERAL_WORKTREE_05CE539E.length).trim()
 		: null;
+}
+
+function projectInfo(
+	root: string | null,
+	branch: string | null,
+	mainRoot: string | null,
+): ProjectInfo {
+	const hasRoot = root !== null;
+	const hasMainRoot = mainRoot !== null;
+	const missingPath = !hasRoot || !hasMainRoot;
+	if (missingPath) return { isWorktree: false, root, branch, mainRoot };
+	return { isWorktree: root !== resolve(mainRoot), root, branch, mainRoot };
 }
 
 export async function inspectProject(
@@ -81,7 +94,12 @@ export async function inspectProject(
 			),
 		]);
 	} catch {
-		return { isWorktree: false, root: null, branch: null };
+		return {
+			isWorktree: false,
+			root: null,
+			branch: null,
+			mainRoot: null,
+		};
 	}
 	const root =
 		rootResult.code === 0 ? resolveGitPath(cwd, rootResult.stdout) : null;
@@ -91,7 +109,5 @@ export async function inspectProject(
 		listResult.code === 0
 			? resolveGitPath(cwd, firstWorktreePath(listResult.stdout) ?? "")
 			: null;
-	if (root === null) return { isWorktree: false, root, branch };
-	if (mainRoot === null) return { isWorktree: false, root, branch };
-	return { isWorktree: root !== resolve(mainRoot), root, branch };
+	return projectInfo(root, branch, mainRoot);
 }

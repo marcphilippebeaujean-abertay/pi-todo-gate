@@ -15,6 +15,7 @@ import {
 	tabLabel,
 } from "./herdr-tab-environment.ts";
 import { hasValidatedTabClaim } from "./herdr-tab-validation.ts";
+import { isSubagent } from "./session.ts";
 
 const SESSION_START_EVENT = "session_start";
 const BEFORE_AGENT_START_EVENT = "before_agent_start";
@@ -193,5 +194,7 @@ export function installHerdrTabClaim(
 	pi: ExtensionAPI,
 	options: HerdrTabOptions = {},
 ): void {
+	const shouldSkip = isSubagent();
+	if (shouldSkip) return;
 	new HerdrTabClaim(pi, options);
 }
