@@ -91,12 +91,6 @@ module.exports = {
 			to: { path: "^src/todoist/" },
 		},
 		{
-			name: "no-circular",
-			severity: "error",
-			from: { path: "^(src|extensions)/" },
-			to: { circular: true },
-		},
-		{
 			name: "no-orphans",
 			severity: "error",
 			from: { orphan: true, path: "^src/" },

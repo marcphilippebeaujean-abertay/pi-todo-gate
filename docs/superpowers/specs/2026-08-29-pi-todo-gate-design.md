@@ -1,236 +1,120 @@
-# pi-todo-gate Design
+# Pi Todo Gate Design
 
 ## Status
 
-Approved design for standalone Pi extension project.
+Superseded historical design. Current implementation retains PR/task linking and merge completion, but removes all Pi-task plugin synchronization.
 
-- Project: `/Users/marcphilippebeaujean/Documents/pi-todo-gate`
-- Remote: `https://github.com/marcphilippebeaujean-abertay/pi-todo-gate.git`
-- Todoist integration: `td` CLI
-- Activation: explicit coding-project configuration only
+## Current Scope
 
-## Purpose
+Connect one coding session to one GitHub pull request and one Todoist task. Keep links visible, preserve them across session handoff, claim Todoist tasks, and complete the active task after its associated PR merges.
 
-Connect one Pi coding session to one GitHub pull request and one Todoist task. Keep those links visible, preserve them across session handoff, enforce configurable Todoist task claiming, and complete the task after the associated PR is merged.
-
-The extension is session-scoped. It must not create global PR/task ownership or infer a task from unrelated repositories.
+The extension is session-scoped and project-scoped. It does not create global ownership or activate for unrelated repositories.
 
 ## Activation and Configuration
 
-The extension is fully inert unless the current working directory or one of its parents matches a configured coding project.
-
-Configuration is stored at:
-
-`~/.pi/agent/pi-todo-gate.json`
-
-Example:
-
-```json
-{
-  "projects": {
-    "/Users/marcphilippebeaujean/Documents/tower-chess": "merge-td"
-  }
-}
-```
+Configuration is loaded from `~/.pi/agent/pi-todo-gate.json`.
 
 Rules:
 
 1. Resolve `ctx.cwd` and walk toward filesystem root.
-2. Select the nearest configured ancestor.
-3. The mapped value identifies the Todoist project by name or `id:<id>`.
-4. No matching ancestor means no extension behavior: no tools, commands, footer, prompt injection, PR detection, Git hooks, or Todoist calls.
-5. Project configuration is the only activation gate; there is no catch-all default project.
-6. Configuration loading and matching must be deterministic and read-only during startup.
-
-A future configuration command may edit this file, but configuration UI is outside the initial feature scope.
+2. Select nearest configured ancestor.
+3. Map configured value to Todoist project name or `id:<id>`.
+4. Unmatched projects remain inert: no tools, footer, prompt injection, PR detection, Git calls, or Todoist calls.
+5. Herdr tab naming has separate activation and remains non-blocking.
 
 ## Session State
 
-The active state is stored in Pi custom session entries:
+State is stored in Pi custom entries:
 
 ```ts
 type WorkState = {
   prUrl?: string;
   taskUrl?: string;
   taskRef?: string;
-  inheritedFrom?: string; // previous Pi session ID
+  inheritedFrom?: string;
   mergeCompletedAt?: string;
   todoistCompletionAttemptedAt?: string;
 };
 ```
 
-State rules:
-
-- Latest state entry on the active branch wins.
-- `inheritedFrom` stores the previous session ID, never a filesystem path.
-- On `session_start`, restore state from the current session first.
-- If current session has no state and `previousSessionFile` exists, open that session, read its latest state, and copy the pair into the new session.
-- Current session state always wins over inherited state.
-- Inherited state causes one hidden context addition on the first agent prompt:
-  `This is the task and PR that we were working on.` plus the two links.
-- State remains until the agent explicitly changes or clears it.
-- Old state must not reactivate after explicit clearing.
-- Forks follow the same previous-session inheritance rule unless the target already has state.
+Latest current-session state wins. When no current state exists, same-project previous-session state may be inherited. Explicit clearing prevents old state from reactivating.
 
 ## Pull Request Tracking
 
-GitHub PR URLs use this shape:
-
-`https://github.com/<owner>/<repo>/pull/<number>`
-
-Automatic discovery:
-
-- Scan current session history oldest-to-newest.
-- Inspect user, assistant, tool-result, and bash-execution text.
-- First valid GitHub PR URL wins.
-- Later URLs never replace an existing value.
-- Extension-generated content must not participate in discovery.
-
-Agent control is explicit through an LLM-callable `pi_todo_gate_state` tool:
+Recognized GitHub PR URLs use:
 
 ```text
-status
-set_pr(url)
-clear_pr
-set_task(todoistRef)
-clear_task
-clear_all
+https://github.com/<owner>/<repo>/pull/<number>
 ```
 
-`set_pr` is the explicit override to first-wins discovery. URL validation is required before persistence.
+Automatic discovery scans session history oldest-to-newest and preserves first valid URL. Explicit `set_pr` overrides discovery. `clear_pr` removes only PR state.
 
 ## Todoist Task Claiming
 
-`set_task` accepts a Todoist task URL, ID, or resolvable reference. It must:
+`set_task` accepts a Todoist URL, ID, or resolvable reference. It:
 
-1. Resolve the configured Todoist project for the coding project.
-2. Run `td task view <ref> --json`.
-3. Reject tasks outside the configured project.
-4. Detect whether task is already in `In Progress`.
-5. Reject a task already in progress unless it was claimed by this session.
-6. Move a valid task to `In Progress` using `td task move`.
-7. Store canonical task URL and task reference.
+1. Resolves configured Todoist project.
+2. Views requested task.
+3. Rejects tasks outside configured project.
+4. Rejects tasks already in `In Progress` when owned by another task/session.
+5. Moves valid task to `In Progress`.
+6. Stores canonical task URL and reference.
 
-When no active task exists, every real user prompt receives this hidden agent-context warning:
+Inferred task linking uses the same claim operation when session evidence identifies a claimed task. Missing-task warning is guidance only and never blocks work.
 
-`you have no claimed a todoist task yet!`
-
-The warning does not block work. It is omitted when a task is active.
-
-## Worktree PR Guidance
-
-Worktree detection uses Git commands, not Herdr state:
-
-- `git rev-parse --show-toplevel`
-- `git worktree list --porcelain`
-- `git branch --show-current`
-
-The extension tracks whether the session has performed meaningful work. Changes may be observed from successful edit/write tool results and Git state changes after tool results.
-
-On each user prompt, when all conditions hold:
-
-- current directory is a linked worktree;
-- session has made work changes;
-- current branch has no open GitHub PR;
-- configured project is active;
-
-inject concise guidance telling the agent to push the branch and create a PR when implementation is finished.
-
-This is guidance only. The extension never pushes or creates a PR automatically. If `gh` or a remote is unavailable, inject an actionable diagnostic instead.
-
-Open PR lookup uses the current branch and `gh pr list`/`gh pr view`. Lookup failures must not crash the session.
+Task claims and merge completion use a per-session FIFO operation queue. Each normal queued operation runs after prior remote work returns. `clear_task` and `clear_all` supersede pending task work synchronously, invalidate its generation, and clear session state without waiting for a remote claim. Todoist calls receive a cancellation predicate checked before each command; an already-running CLI command may finish, but stale follow-up calls and state writes are skipped. Queue failures do not poison later operations. State writes verify active session and work identity before committing.
 
 ## Merge Completion
 
-Inspect successful `bash` `tool_result` events. Candidate commands:
+Successful Bash results are inspected for verified merge commands matching the pinned PR. On verified merge:
 
-- `git merge ...`
-- `gh pr merge ...`
-
-A command must succeed before completion is attempted. The extension must conservatively verify that the merge target corresponds to the pinned PR. Ambiguous targets produce a diagnostic and do not complete Todoist.
-
-On a verified merge, or when a pinned PR is found externally to be merged:
-
-1. Run `td task complete <taskUrl>`.
+1. Run `td task complete <taskRef>`.
 2. Record completion attempt/idempotency state.
-3. On success, clear the pinned PR while retaining the Todoist task link.
-4. Notify the agent of success or failure.
-5. On Todoist failure, retain the pinned PR for diagnostic visibility.
+3. Notify success or failure.
+4. Keep PR/task links pinned until explicitly changed.
 
-No task completion occurs when no task or PR is active.
+Repeated and stale merge events do not overwrite newer task/PR state.
+
+## Removed Pi Task Synchronization
+
+Pi-task plugin integration and Pi↔Todoist descendant synchronization are removed from current implementation. The extension does not:
+
+- import or depend on `@tintinweb/pi-tasks`;
+- read or write `.pi/tasks` files;
+- listen for `TaskCreate`, `TaskUpdate`, `TaskStop`, or `TaskExecute` events;
+- schedule inbound or outbound descendant synchronization;
+- delete or recreate Todoist subtasks;
+- refresh Pi task lists on task claim or session start.
+
+Removed modules include `src/pi-tasks-sync.ts`, `src/pi-task-store.ts`, `src/pi-task-normalize.ts`, and `src/pi-tasks-sync-helpers.ts`, together with their tests.
+
+Todoist task claims affect only the parent task's section and session link. Existing Todoist subtasks remain untouched.
+
+## Worktree PR Guidance
+
+The extension uses Git worktree and branch inspection to provide guidance after meaningful work when the active branch has no open PR. It never pushes or creates PRs automatically.
 
 ## Footer
 
-Interactive TUI only. When active, use `ctx.ui.setFooter()` and Pi TUI `hyperlink()`/OSC 8 links.
+Interactive TUI shows clickable PR/task links and preserves existing extension statuses. Headless modes use notifications and hidden context only.
 
-Example:
+## Error and Safety Rules
 
-```text
-PR #42  Task: Implement authentication  |  branch: feature/auth
-```
-
-Rules:
-
-- PR and Todoist labels are clickable.
-- Missing values render as `PR: none` or `Task: none`.
-- Preserve existing extension statuses through `footerData.getExtensionStatuses()`, including pi-caveman.
-- Re-render after state and branch changes.
-- Keep footer compact; no animation or custom editor.
-- Non-TUI modes receive hidden context and notifications only.
-
-The custom footer replaces Pi’s built-in footer while active. This tradeoff is explicit and must be covered by manual TUI validation.
-
-## Error Handling and Safety
-
-- Invoke `git`, `gh`, and `td` with argument arrays; never interpolate untrusted values into shell commands.
-- Treat CLI output as untrusted text.
-- Missing authentication or binaries yields diagnostics, not thrown extension failures.
-- Repeated merge events are idempotent.
-- State writes are serialized.
+- Invoke `git`, `gh`, and `td` with argument arrays.
+- Treat CLI output as untrusted.
+- Missing binaries/authentication produce diagnostics.
 - Inactive projects perform no external calls.
+- Herdr worker output never enters main-session context.
 
-## Project Layout
+## Verification
 
-```text
-/Users/marcphilippebeaujean/Documents/pi-todo-gate/
-  package.json
-  extensions/pi-todo-gate.ts
-  src/config.ts
-  src/session-state.ts
-  src/pr-detection.ts
-  src/git.ts
-  src/todoist.ts
-  src/footer.ts
-  test/
-  install.sh
+Required checks:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+git diff --check
 ```
 
-The package uses a standalone repository and an install script that symlinks its extension directory into `~/.pi/agent/extensions/`. It may later add a Pi package manifest, but initial installation remains local and explicit.
-
-## Verification Criteria
-
-Unit tests must cover:
-
-- nearest configured ancestor and fully inert unmatched projects;
-- config parsing and Todoist project resolution;
-- PR extraction and first-wins behavior;
-- explicit PR override and clears;
-- session restore and previous-session inheritance;
-- exact missing-task warning behavior;
-- Todoist project/section claim validation;
-- worktree and open-PR detection;
-- guidance conditions and suppression;
-- merge target matching and idempotency;
-- Todoist CLI success/failure handling;
-- footer link rendering and width safety;
-- headless mode behavior.
-
-Manual TUI verification must confirm clickable PR/task footer links, Caveman status coexistence, session handoff, worktree reminder, and merge completion notification.
-
-## Non-Goals
-
-- Automatic PR creation or pushing.
-- Todoist REST API support.
-- Cross-session global task ownership.
-- Non-GitHub pull-request providers.
-- Changes to `AGENTS.md` or other project instruction files.
+Current tests cover project activation, state inheritance, Todoist claim validation, merge completion, FIFO operation ordering, Herdr tab naming, and stale async protection.
