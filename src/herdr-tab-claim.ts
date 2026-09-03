@@ -9,7 +9,6 @@ import type {
 } from "./herdr-claim-worker.ts";
 import {
 	boundCommandRunner,
-	claimWorktreeTab,
 	defaultStartWorker,
 	isInsideHerdr,
 	tabLabel,
@@ -97,11 +96,6 @@ class HerdrTabClaim {
 		} catch {
 			this.initialLabel = undefined;
 		}
-		const claimedByWorktree = claimWorktreeTab(
-			this.commandRunner,
-			this.sessionCwd,
-		);
-		if (claimedByWorktree) this.hasClaim = true;
 	}
 
 	private beforeAgentStart(
