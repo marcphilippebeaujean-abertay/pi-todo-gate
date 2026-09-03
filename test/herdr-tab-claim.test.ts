@@ -53,9 +53,10 @@ function herdrEnvironment(): () => void {
 	};
 }
 
-function worktreeRunner(): CommandRunner {
+function worktreeRunner(commands: string[] = []): CommandRunner {
 	return (command, args) => {
 		const input = args.join(" ");
+		commands.push([command, input].join(" "));
 		if (command === "git" && input === "rev-parse --git-dir")
 			return "/repo/.git/worktrees/feature\n";
 		if (command === "git" && input === "rev-parse --git-common-dir")
@@ -88,13 +89,14 @@ function worker() {
 }
 
 describe("background Herdr tab claim", () => {
-	it("does not dispatch worker after worktree rename succeeds", async () => {
+	it("leaves worktree tab naming to the launcher", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
+			const commands: string[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: worktreeRunner(),
+				commandRunner: worktreeRunner(commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -103,7 +105,11 @@ describe("background Herdr tab claim", () => {
 				context(),
 			);
 
-			expect(backgroundWorker.start).not.toHaveBeenCalled();
+			expect(commands).not.toContain("git branch --show-current");
+			expect(commands).not.toContain(
+				"herdr tab rename w1:t1 feature/dialog-editor",
+			);
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 			expect(pi.handlers.has("tool_call")).toBe(false);
 		} finally {
 			restore();

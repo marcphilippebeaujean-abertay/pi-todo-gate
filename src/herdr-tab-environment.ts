@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { isLinkedWorktreePaths, parseBranchName } from "./git.ts";
 import {
 	type ClaimWorkerRequest,
 	startClaimWorker,
@@ -10,17 +9,12 @@ import type {
 	StartBackgroundWorker,
 } from "./herdr-tab-claim.ts";
 
-const GIT_COMMAND = "git";
 const HERDR_COMMAND = "herdr";
 const HERDR_ENVIRONMENT = "HERDR_ENV";
 const UTF8_ENCODING = "utf8";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
-const GIT_DIRECTORY_ARGS = ["rev-parse", "--git-dir"];
-const COMMON_DIRECTORY_ARGS = ["rev-parse", "--git-common-dir"];
-const CURRENT_BRANCH_ARGS = ["branch", "--show-current"];
 const TAB_GET_COMMAND = ["tab", "get"];
-const TAB_RENAME_COMMAND = ["tab", "rename"];
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";
 }
@@ -72,47 +66,10 @@ export function tabLabel(commandRunner: CommandRunner): string | undefined {
 	return label || undefined;
 }
 
-export function isDefaultTabLabel(label: string | undefined): boolean {
-	return label !== undefined && /^\d+$/.test(label);
-}
-
 export function defaultStartWorker(
 	cwd: string,
 	spawnWorker: WorkerSpawner | undefined,
 	request: ClaimWorkerRequest,
 ): ReturnType<StartBackgroundWorker> {
 	return startClaimWorker(request, { cwd, spawnWorker });
-}
-
-export function claimWorktreeTab(
-	commandRunner: CommandRunner,
-	cwd: string,
-): boolean {
-	try {
-		const gitDir = commandRunner(GIT_COMMAND, GIT_DIRECTORY_ARGS);
-		const commonDir = commandRunner(GIT_COMMAND, COMMON_DIRECTORY_ARGS);
-		const isLinkedWorktree = isLinkedWorktreePaths(cwd, gitDir, commonDir);
-		if (!isLinkedWorktree) return false;
-
-		const tabId = process.env.HERDR_TAB_ID;
-		const branchName = parseBranchName(
-			commandRunner(GIT_COMMAND, CURRENT_BRANCH_ARGS),
-		);
-		const defaultTabLabel = tabLabel(commandRunner);
-		const hasTab = Boolean(tabId);
-		const hasBranch = Boolean(branchName);
-		const hasDefaultTabLabel = isDefaultTabLabel(defaultTabLabel);
-		const canRenameTab = hasTab && hasBranch;
-		if (!canRenameTab) return false;
-		if (!hasDefaultTabLabel) return false;
-
-		commandRunner(HERDR_COMMAND, [
-			...TAB_RENAME_COMMAND,
-			tabId ?? "",
-			branchName ?? "",
-		]);
-		return true;
-	} catch {
-		return false;
-	}
 }
