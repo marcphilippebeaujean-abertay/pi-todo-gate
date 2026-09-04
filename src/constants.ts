@@ -18,8 +18,6 @@ export const EXTENSION_CONSTANTS = {
 		status: "status",
 		setPr: "set_pr",
 		clearPr: "clear_pr",
-		setTask: "set_task",
-		clearTask: "clear_task",
 		clearAll: "clear_all",
 	},
 	event: {
@@ -44,21 +42,17 @@ export const EXTENSION_CONSTANTS = {
 		tui: "tui",
 	},
 	message: {
-		taskNotLinked: "Todoist task was not linked from session history",
 		inactive: "pi-todo-gate is inactive for this project",
 		invalidPr: "set_pr requires a valid GitHub pull request URL",
 		prCleared: "Cleared the pinned PR",
-		invalidTask: "set_task requires a Todoist task reference",
-		taskCleared: "Cleared the claimed Todoist task",
-		stateCleared: "Cleared session PR and task links",
+		stateCleared: "Cleared session PR state",
 		lookupUnavailable:
 			"GitHub PR lookup unavailable; verify gh authentication before creating the PR.",
 		createPr:
 			"When implementation is finished, push this branch and create a GitHub PR.",
 		context: "pi-todo-gate-context",
-		prDescription:
-			"Inspect or change this session's pinned GitHub PR and claimed Todoist task.",
-		prPrompt: "inspect or update the session PR and Todoist task",
+		prDescription: "Inspect or change this session's pinned GitHub PR.",
+		prPrompt: "inspect or update the session PR",
 		merged: "Merged PR detected; Todoist task completed",
 		mergedFailed: "Merged PR detected, but Todoist task completion failed",
 	},

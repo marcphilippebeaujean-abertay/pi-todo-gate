@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CommandResult } from "../../src/shared/command.ts";
+import { parseResult } from "../../src/todoist/claim-result.ts";
 import {
 	createTaskClaimWorker,
 	type TaskClaimWorkerInput,
@@ -22,8 +23,14 @@ const result = (stdout: string, code = 0, stderr = ""): CommandResult => ({
 	code,
 });
 
+const message = (text: string): string =>
+	JSON.stringify({
+		type: "message_end",
+		message: { role: "assistant", content: [{ type: "text", text }] },
+	});
+
 describe("Todoist task claim worker", () => {
-	it("runs isolated pi process with claim input and parses result", async () => {
+	it("runs an inspection-only worker and parses claim proposal", async () => {
 		const exec = vi.fn(
 			async (
 				command: string,
@@ -45,69 +52,51 @@ describe("Todoist task claim worker", () => {
 					]),
 				);
 				const prompt = args.at(-1) ?? "";
-				expect(prompt).toContain("create a new task");
+				expect(prompt).toContain("inspection");
 				expect(prompt).toContain("In Progress");
+				expect(prompt).toContain("Always propose a description");
+				expect(prompt).toContain("Do not modify");
 				expect(prompt).toContain(input.prompt);
-				expect(prompt).not.toContain('"history"');
 				expect(prompt).toContain(input.projectRef);
 				expect(prompt).toContain(input.worktree.branch ?? "");
 				return result(
-					JSON.stringify({
-						type: "message_end",
-						message: {
-							role: "assistant",
-							content: [
-								{ type: "text", text: '{"status":"claimed","taskRef":"42"}' },
-							],
-						},
-					}),
+					message(
+						'{"action":"claim","taskData":{"title":"Existing","description":"Details","id":"42"},"error":null}',
+					),
 				);
 			},
 		);
 
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
-			status: "claimed",
-			taskRef: "42",
+			action: "claim",
+			taskData: { title: "Existing", description: "Details", id: "42" },
+			error: null,
 		});
 	});
 
-	it("accepts the worker's claimed result wrapper", async () => {
+	it("parses create proposals", async () => {
 		const exec = async (): Promise<CommandResult> =>
 			result(
-				JSON.stringify({
-					type: "message_end",
-					message: {
-						role: "assistant",
-						content: [{ type: "text", text: '{"claimed":{"taskRef":"42"}}' }],
-					},
-				}),
+				message(
+					'{"action":"create","taskData":{"title":"New","description":"Proposed","id":null},"error":null}',
+				),
 			);
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
-			status: "claimed",
-			taskRef: "42",
+			action: "create",
+			taskData: { title: "New", description: "Proposed", id: null },
+			error: null,
 		});
 	});
 
-	it("accepts the worker's collision result wrapper", async () => {
+	it("parses error proposals", async () => {
 		const exec = async (): Promise<CommandResult> =>
 			result(
-				JSON.stringify({
-					type: "message_end",
-					message: {
-						role: "assistant",
-						content: [
-							{
-								type: "text",
-								text: '{"collision":{"taskRef":"42","taskName":"Existing"}}',
-							},
-						],
-					},
-				}),
+				message('{"action":"error","taskData":null,"error":"Unavailable"}'),
 			);
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
-			status: "collision",
-			taskRef: "42",
-			taskName: "Existing",
+			action: "error",
+			taskData: null,
+			error: "Unavailable",
 		});
 	});
 
@@ -119,10 +108,33 @@ describe("Todoist task claim worker", () => {
 		);
 	});
 
-	it("returns none for malformed worker output", async () => {
+	it("rejects legacy and inconsistent proposal output", () => {
+		expect(
+			parseResult(
+				message(
+					'{"action":"claim","taskData":{"title":"Bad","description":"Bad","id":null},"error":null}',
+				),
+			),
+		).toEqual({
+			action: "error",
+			taskData: null,
+			error: "Invalid claim worker result.",
+		});
+		expect(
+			parseResult(message('{"status":"collision","taskRef":"42"}')),
+		).toEqual({
+			action: "error",
+			taskData: null,
+			error: "Invalid claim worker result.",
+		});
+	});
+
+	it("returns an error proposal for malformed worker output", async () => {
 		const exec = async (): Promise<CommandResult> => result("not json");
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
-			status: "none",
+			action: "error",
+			taskData: null,
+			error: "Invalid claim worker result.",
 		});
 	});
 });

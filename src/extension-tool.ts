@@ -19,23 +19,10 @@ import type {
 } from "./extension-types.ts";
 import { githubPrUrl } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
-import {
-	clearAllAction,
-	clearTaskAction,
-	setTaskAction,
-} from "./task-operations.ts";
 
 export const stateParameters = Type.Object({
-	action: StringEnum([
-		"status",
-		"set_pr",
-		"clear_pr",
-		"set_task",
-		"clear_task",
-		"clear_all",
-	] as const),
+	action: StringEnum(["status", "set_pr", "clear_pr", "clear_all"] as const),
 	url: Type.Optional(Type.String()),
-	task: Type.Optional(Type.String()),
 });
 
 function statusAction(session: ActiveSession): AgentToolResult<undefined> {
@@ -53,8 +40,7 @@ function setPrAction(
 	params: StateToolParams,
 ): AgentToolResult<undefined> {
 	const url = githubPrUrl(params.url ?? "");
-	const hasInvalidUrl = url === null;
-	if (hasInvalidUrl) throw new Error(C.message.invalidPr);
+	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
 	replaceSessionState(
 		session,
@@ -74,9 +60,10 @@ function setPrAction(
 	return extensionResult(`Pinned PR ${url}`);
 }
 
-function clearPrAction(
+function clearPrState(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
+	message: string,
 ): AgentToolResult<undefined> {
 	replaceSessionState(
 		session,
@@ -89,7 +76,7 @@ function clearPrAction(
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
 	refreshFooterStatuses(session);
-	return extensionResult(C.message.prCleared);
+	return extensionResult(message);
 }
 
 export async function executeStateTool(
@@ -98,7 +85,7 @@ export async function executeStateTool(
 	params: StateToolParams,
 	_signal: AbortSignal | undefined,
 	_onUpdate: AgentToolUpdateCallback<undefined> | undefined,
-	ctx: ExtensionContext,
+	_ctx: ExtensionContext,
 ): Promise<AgentToolResult<undefined>> {
 	const session = runtime.active;
 	const hasSession = session !== null;
@@ -108,12 +95,9 @@ export async function executeStateTool(
 	const isSetPrAction = params.action === C.action.setPr;
 	if (isSetPrAction) return setPrAction(runtime, session, params);
 	const isClearPrAction = params.action === C.action.clearPr;
-	if (isClearPrAction) return clearPrAction(runtime, session);
-	const isSetTaskAction = params.action === C.action.setTask;
-	if (isSetTaskAction) return setTaskAction(runtime, session, params, ctx);
-	const isClearTaskAction = params.action === C.action.clearTask;
-	if (isClearTaskAction) return clearTaskAction(runtime, session);
-	return clearAllAction(runtime, session);
+	if (isClearPrAction)
+		return clearPrState(runtime, session, C.message.prCleared);
+	return clearPrState(runtime, session, C.message.stateCleared);
 }
 
 export function installStateTool(runtime: ExtensionRuntime): void {

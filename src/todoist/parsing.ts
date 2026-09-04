@@ -9,7 +9,8 @@ const STRING_LITERAL_EXPECTED_A_LIST_PAYLOAD_301A8473 =
 const STRING_LITERAL_HTTP = "http:";
 const STRING_LITERAL_HTTPS = "https:";
 
-import { TodoistError, type TodoistTask } from "./client.ts";
+import type { TodoistTask } from "./client.ts";
+import { TodoistError } from "./errors.ts";
 
 export function sanitizeError(stderr: string): string {
 	return stderr

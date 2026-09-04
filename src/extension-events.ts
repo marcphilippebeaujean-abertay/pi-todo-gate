@@ -12,7 +12,6 @@ import {
 	replaceSessionState,
 } from "./extension-lifecycle.ts";
 import { textOf } from "./extension-message.ts";
-import { linkInferredTask } from "./extension-tasks.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
 import {
 	type Exec,
@@ -24,6 +23,7 @@ import {
 import { githubPrUrl } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
 import { matchesWorkState } from "./shared/work-state.ts";
+import { maybeAnalyzeTaskClaim } from "./task-claiming.ts";
 import { completeMergedTask } from "./task-completion.ts";
 
 const STRING_TYPE = "string";
@@ -89,8 +89,6 @@ async function buildBeforeAgentMessages(
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionContext,
 ): Promise<string[]> {
-	const isMissingTaskRef = session.state.taskRef === undefined;
-	if (isMissingTaskRef) await linkInferredTask(runtime, session, event.prompt);
 	const messages: string[] = [];
 	const hasHandoffContext = session.handoffContext;
 	if (hasHandoffContext) {
@@ -101,6 +99,8 @@ async function buildBeforeAgentMessages(
 	}
 	const isMissingTaskRefForPrompt = session.state.taskRef === undefined;
 	if (isMissingTaskRefForPrompt) messages.push(MISSING_TASK_WARNING);
+	if (session.state.taskRef === undefined)
+		maybeAnalyzeTaskClaim(runtime, session, event.prompt);
 	const hasWorkChanged = session.workChanged;
 	if (hasWorkChanged) await appendWorktreePrompt(runtime, ctx, messages);
 	return messages;
@@ -135,10 +135,6 @@ async function handleBashResult(
 	const commandValue = event.input[BASH_COMMAND];
 	const command =
 		typeof commandValue === STRING_TYPE ? (commandValue as string) : "";
-	const resultText = textOf(event.content);
-	const isMissingTaskRef = session.state.taskRef === undefined;
-	if (isMissingTaskRef)
-		await linkInferredTask(runtime, session, `${command}\n${resultText}`);
 	const isGitMutation = GIT_MUTATION_RE.test(command);
 	if (isGitMutation) session.workChanged = true;
 	const prUrl = session.state.prUrl;

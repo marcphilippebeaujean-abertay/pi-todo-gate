@@ -14,11 +14,9 @@ const REJECTS_A_TASK_OUTSIDE_THE_CONFIGURED_PROJECT =
 	"rejects a task outside the configured project";
 const OTHER = "other";
 const CONFIGURED_PROJECT = "configured project";
-const REJECTS_ANOTHER_TASK_ALREADY_IN_PROGRESS =
-	"rejects another task already in progress";
+const ACCEPTS_ANOTHER_TASK_ALREADY_IN_PROGRESS =
+	"accepts another task already in progress";
 const IN_PROGRESS_VALUE = "In Progress";
-const VALUE_99 = "99";
-const ALREADY_IN_PROGRESS = "already in progress";
 const RESOLVES_SECTION_NAMES_THROUGH_SUPPORTED_TD_SECTION =
 	"resolves section names through supported td section list";
 const SECTION_1 = "section-1";
@@ -27,6 +25,9 @@ const PREFERS_WEBURL_WHEN_RETURNING_A_CANONICAL_CLAIMED =
 	"prefers webUrl when returning a canonical claimed-task URL";
 const HTTPS_APP_TODOIST_COM_APP_TASK_42 = "https://app.todoist.com/app/task/42";
 const TASK_MOVED_SUCCESSFULLY = "Task moved successfully";
+const CREATES_TASK_WITH_DESCRIPTION = "creates a task with a description";
+const ADD = "add";
+const DESCRIPTION = "--description";
 const TASK_COMPLETED_SUCCESSFULLY = "Task completed successfully";
 const DOES_NOT_MOVE_CANCELLED_CLAIM = "does not move cancelled claim";
 const ACCEPTS_THE_ALREADY_CLAIMED_TASK_AND_MOVES =
@@ -61,7 +62,7 @@ import {
 	TodoistError,
 	type TodoistExec,
 	TodoistOperationCancelled,
-} from "../src/todoist.ts";
+} from "../src/todoist/client.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),
@@ -145,16 +146,15 @@ describe("TodoistClient", () => {
 		).rejects.toThrow(CONFIGURED_PROJECT);
 	});
 
-	it(REJECTS_ANOTHER_TASK_ALREADY_IN_PROGRESS, async () => {
+	it(ACCEPTS_ANOTHER_TASK_ALREADY_IN_PROGRESS, async () => {
 		const fake = fakeTodoist({
 			"task view 42 --json": ok(task({ sectionName: IN_PROGRESS_VALUE })),
 		});
 		await expect(
 			new TodoistClient(fake.exec).claimTask(VALUE_42, {
 				id: PROJECT_1,
-				currentTaskId: VALUE_99,
 			}),
-		).rejects.toThrow(ALREADY_IN_PROGRESS);
+		).resolves.toMatchObject({ id: VALUE_42 });
 	});
 
 	it(RESOLVES_SECTION_NAMES_THROUGH_SUPPORTED_TD_SECTION, async () => {
@@ -169,9 +169,8 @@ describe("TodoistClient", () => {
 		await expect(
 			new TodoistClient(fake.exec).claimTask(VALUE_42, {
 				id: PROJECT_1,
-				currentTaskId: VALUE_99,
 			}),
-		).rejects.toThrow(ALREADY_IN_PROGRESS);
+		).resolves.toMatchObject({ id: VALUE_42 });
 	});
 
 	it(PREFERS_WEBURL_WHEN_RETURNING_A_CANONICAL_CLAIMED, async () => {
@@ -203,7 +202,6 @@ describe("TodoistClient", () => {
 		await expect(
 			new TodoistClient(fake.exec).claimTask(VALUE_42, {
 				id: PROJECT_1,
-				currentTaskId: VALUE_42,
 			}),
 		).resolves.toMatchObject({ id: VALUE_42 });
 		expect(fake.calls).toEqual([
@@ -258,6 +256,32 @@ describe("TodoistClient", () => {
 			),
 		).rejects.toBeInstanceOf(TodoistOperationCancelled);
 		expect(fake.calls).toEqual([[TASK, VIEW, VALUE_42, JSON_2]]);
+	});
+
+	it(CREATES_TASK_WITH_DESCRIPTION, async () => {
+		const fake = fakeTodoist({
+			"task add Implement feature --description Details --project id:project-1 --section In Progress --json":
+				ok(task({ id: "43", sectionName: IN_PROGRESS_VALUE })),
+		});
+		await expect(
+			new TodoistClient(fake.exec).createTask(IMPLEMENT_FEATURE, DETAILS, {
+				id: PROJECT_1,
+			}),
+		).resolves.toMatchObject({ id: "43", content: IMPLEMENT_FEATURE });
+		expect(fake.calls).toEqual([
+			[
+				TASK,
+				ADD,
+				IMPLEMENT_FEATURE,
+				DESCRIPTION,
+				DETAILS,
+				PROJECT,
+				ID_PROJECT_1,
+				SECTION,
+				IN_PROGRESS_VALUE,
+				JSON_2,
+			],
+		]);
 	});
 
 	it(COMPLETES_TASKS_WITH_SEPARATE_ARGUMENTS, async () => {
