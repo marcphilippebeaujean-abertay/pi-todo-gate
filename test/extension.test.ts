@@ -242,7 +242,6 @@ describe("extension activation", () => {
 						footerType: "pi-todo-gate-pr",
 						isLoading: false,
 						text: "| PR Link: none |",
-						isVisible: true,
 					},
 				},
 			},

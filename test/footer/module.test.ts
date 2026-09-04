@@ -2,10 +2,13 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
-import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+	FOOTER_SPINNER_INTERVAL_MS,
+	FOOTER_STATE_TYPE,
+} from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
-import { isFooterState } from "../../src/footer/state.ts";
+import { restoreFooterState } from "../../src/footer/state.ts";
 import type { FooterUpdate } from "../../src/footer/types.ts";
 
 function harness(branch: unknown[] = []) {
@@ -34,14 +37,26 @@ const update: FooterUpdate = {
 };
 
 describe("footer module", () => {
-	it("rejects persisted states whose keys do not match footer types", () => {
+	it("restores persisted footer using parsed footer type instead of map key", () => {
 		expect(
-			isFooterState({
+			restoreFooterState({
 				footers: {
-					wrongKey: { ...update, footerType: "actual-footer" },
+					wrongKey: {
+						footerType: "actual-footer",
+						text: "Footer",
+					},
 				},
 			}),
-		).toBe(false);
+		).toEqual({
+			footers: {
+				"actual-footer": {
+					footerType: "actual-footer",
+					isLoading: false,
+					text: "Footer",
+					isVisible: true,
+				},
+			},
+		});
 	});
 
 	it("starts a blank session without rendering default footers", async () => {
@@ -53,6 +68,32 @@ describe("footer module", () => {
 		expect(h.statusCalls).toEqual([]);
 		expect(h.appended).toEqual([]);
 		expect(footer.getState()).toEqual({ footers: {} });
+	});
+
+	it("animates loading footer text and stops after loading ends", async () => {
+		vi.useFakeTimers();
+		try {
+			const h = harness();
+			const footer = createFooterModule(h.pi);
+			await footer.sessionStart({}, h.context());
+
+			footer.update({
+				...update,
+				isLoading: true,
+				text: "Todoist Task: ⠋ loading |",
+			});
+			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
+
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
+			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
+
+			footer.update({ ...update, text: "Todoist Task: done |" });
+			const callsAfterLoading = h.statusCalls.length;
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
+			expect(h.statusCalls).toHaveLength(callsAfterLoading);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("persists updates and synchronizes visible and hidden states", async () => {
@@ -70,12 +111,26 @@ describe("footer module", () => {
 		expect(h.appended).toEqual([
 			{
 				type: FOOTER_STATE_TYPE,
-				data: { footers: { [update.footerType]: update } },
+				data: {
+					footers: {
+						[update.footerType]: {
+							footerType: update.footerType,
+							isLoading: update.isLoading,
+							text: update.text,
+						},
+					},
+				},
 			},
 			{
 				type: FOOTER_STATE_TYPE,
 				data: {
-					footers: { [update.footerType]: { ...update, isVisible: false } },
+					footers: {
+						[update.footerType]: {
+							footerType: update.footerType,
+							isLoading: update.isLoading,
+							text: null,
+						},
+					},
 				},
 			},
 		]);
@@ -84,12 +139,33 @@ describe("footer module", () => {
 		});
 	});
 
+	it("throws when live module update receives invalid data", async () => {
+		const h = harness();
+		const footer = createFooterModule(h.pi);
+		await footer.sessionStart({}, h.context());
+
+		expect(() =>
+			footer.update({
+				...update,
+				isVisible: "true",
+			} as unknown as FooterUpdate),
+		).toThrow(TypeError);
+	});
+
 	it("restores footer state from current session during resume", async () => {
 		const h = harness([
 			{
 				type: "custom",
 				customType: FOOTER_STATE_TYPE,
-				data: { footers: { [update.footerType]: update } },
+				data: {
+					footers: {
+						[update.footerType]: {
+							footerType: update.footerType,
+							isLoading: update.isLoading,
+							text: update.text,
+						},
+					},
+				},
 			},
 		]);
 		const footer = createFooterModule(h.pi);
@@ -102,12 +178,51 @@ describe("footer module", () => {
 		expect(h.appended).toEqual([]);
 	});
 
+	it("restarts spinner for a restored loading footer", async () => {
+		vi.useFakeTimers();
+		try {
+			const h = harness([
+				{
+					type: "custom",
+					customType: FOOTER_STATE_TYPE,
+					data: {
+						footers: {
+							[update.footerType]: {
+								footerType: update.footerType,
+								isLoading: true,
+								text: "Todoist Task: ⠋ loading |",
+							},
+						},
+					},
+				},
+			]);
+			const footer = createFooterModule(h.pi);
+
+			await footer.sessionStart({}, h.context());
+			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
+
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
+			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
+			footer.deactivate();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("inherits footer state from previous session during /new", async () => {
 		const previous = [
 			{
 				type: "custom",
 				customType: FOOTER_STATE_TYPE,
-				data: { footers: { [update.footerType]: update } },
+				data: {
+					footers: {
+						[update.footerType]: {
+							footerType: update.footerType,
+							isLoading: update.isLoading,
+							text: update.text,
+						},
+					},
+				},
 			},
 		];
 		const h = harness();
@@ -126,7 +241,15 @@ describe("footer module", () => {
 		expect(h.appended).toEqual([
 			{
 				type: FOOTER_STATE_TYPE,
-				data: { footers: { [update.footerType]: update } },
+				data: {
+					footers: {
+						[update.footerType]: {
+							footerType: update.footerType,
+							isLoading: update.isLoading,
+							text: update.text,
+						},
+					},
+				},
 			},
 		]);
 	});
