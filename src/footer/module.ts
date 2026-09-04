@@ -3,12 +3,8 @@ import {
 	type ExtensionContext,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { appendCustomState } from "../shared/session-state.ts";
-import {
-	FOOTER_SPINNER_FRAMES,
-	FOOTER_SPINNER_INTERVAL_MS,
-	FOOTER_STATE_TYPE,
-} from "./constants.ts";
+import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
+import { FooterDisplay } from "./display.ts";
 import { parseFooterEvent } from "./events.ts";
 import {
 	applyFooterUpdate,
@@ -37,164 +33,115 @@ export interface FooterModule {
 }
 
 type SessionContext = Pick<ExtensionContext, "ui" | "sessionManager">;
-type AnimationTimer = ReturnType<typeof setInterval>;
 
 function customEntryData(entry: unknown, customType: string): unknown {
-	if (typeof entry !== "object") return undefined;
-	if (entry === null) return undefined;
-	if (Array.isArray(entry)) return undefined;
+	const isObject = typeof entry === "object";
+	if (!isObject) return undefined;
+	const isNull = entry === null;
+	if (isNull) return undefined;
+	const isArray = Array.isArray(entry);
+	if (isArray) return undefined;
 	const candidate = entry as {
 		type?: unknown;
 		customType?: unknown;
 		data?: unknown;
 	};
-	if (candidate.type !== "custom") return undefined;
-	if (candidate.customType !== customType) return undefined;
+	const isCustomEntry = candidate.type === FOOTER_CUSTOM_ENTRY_TYPE;
+	if (!isCustomEntry) return undefined;
+	const hasRequestedType = candidate.customType === customType;
+	if (!hasRequestedType) return undefined;
 	return candidate.data;
 }
 
 function latestFooterState(entries: readonly unknown[]): FooterState | null {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const data = customEntryData(entries[index], FOOTER_STATE_TYPE);
-		if (data === undefined) continue;
+		const hasData = data !== undefined;
+		if (!hasData) continue;
 		const state = restoreFooterState(data);
-		if (state) return state;
+		const hasState = state !== null;
+		if (hasState) return state;
 	}
 	return null;
 }
 
-function loadingText(text: string, frame: string): string {
-	return text.replace(FOOTER_SPINNER_FRAMES[0], frame);
+class FooterModuleImpl implements FooterModule {
+	private context: SessionContext | null = null;
+	private state = emptyFooterState();
+	private readonly display = new FooterDisplay();
+
+	constructor(
+		private readonly pi: ExtensionAPI,
+		private readonly dependencies: FooterModuleDependencies,
+	) {}
+
+	private appendState(): void {
+		this.pi.appendEntry(FOOTER_STATE_TYPE, serializeFooterState(this.state));
+	}
+
+	async sessionStart(
+		event: { previousSessionFile?: string },
+		nextContext: ExtensionContext,
+	): Promise<void> {
+		this.context = nextContext;
+		this.state = emptyFooterState();
+		const currentState = latestFooterState(
+			nextContext.sessionManager.getBranch(),
+		);
+		const hasCurrentState = currentState !== null;
+		if (hasCurrentState) {
+			this.state = currentState;
+			this.display.start(nextContext, this.state);
+			return;
+		}
+		const previousSessionFile = event.previousSessionFile;
+		const hasPreviousSession = previousSessionFile !== undefined;
+		if (!hasPreviousSession) {
+			this.display.start(nextContext, this.state);
+			return;
+		}
+		const previous =
+			this.dependencies.openSession?.(previousSessionFile) ??
+			SessionManager.open(previousSessionFile);
+		const inherited = latestFooterState(previous.getBranch());
+		const hasInheritedState = inherited !== null;
+		if (hasInheritedState) {
+			this.state = inherited;
+			this.appendState();
+		}
+		this.display.start(nextContext, this.state);
+	}
+
+	update(event: FooterUpdate): void {
+		const parsed = parseFooterEvent(event);
+		const hasContext = this.context !== null;
+		if (!hasContext) return;
+		this.state = applyFooterUpdate(this.state, parsed);
+		this.appendState();
+		this.display.update(this.state, parsed);
+	}
+
+	getState(): FooterState {
+		return {
+			footers: Object.fromEntries(
+				Object.entries(this.state.footers).map(([key, event]) => [
+					key,
+					{ ...event },
+				]),
+			),
+		};
+	}
+
+	deactivate(): void {
+		this.display.deactivate();
+		this.context = null;
+		this.state = emptyFooterState();
+	}
 }
 
 export function createFooterModule(
 	pi: ExtensionAPI,
 	dependencies: FooterModuleDependencies = {},
 ): FooterModule {
-	let context: SessionContext | null = null;
-	let state = emptyFooterState();
-	let renderedFooterTypes = new Set<string>();
-	const animations = new Map<string, AnimationTimer>();
-
-	const appendState = (): void => {
-		appendCustomState(
-			(type, data) => pi.appendEntry(type, data),
-			FOOTER_STATE_TYPE,
-			serializeFooterState(state),
-		);
-	};
-
-	const stopAnimation = (footerType: string): void => {
-		const timer = animations.get(footerType);
-		if (!timer) return;
-		clearInterval(timer);
-		animations.delete(footerType);
-	};
-
-	const setVisual = (
-		runContext: SessionContext,
-		event: FooterUpdate,
-		text = event.text,
-	): void => {
-		renderedFooterTypes.add(event.footerType);
-		try {
-			runContext.ui.setStatus(
-				event.footerType,
-				event.isVisible ? text : undefined,
-			);
-		} catch {
-			// Headless modes may not expose status UI.
-		}
-	};
-
-	const syncEvent = (runContext: SessionContext, event: FooterUpdate): void => {
-		stopAnimation(event.footerType);
-		setVisual(runContext, event);
-		if (!event.isLoading || !event.isVisible) return;
-
-		let frameIndex = 0;
-		const timer = setInterval(() => {
-			const current = state.footers[event.footerType];
-			if (
-				!current ||
-				current !== event ||
-				!current.isLoading ||
-				!current.isVisible
-			) {
-				stopAnimation(event.footerType);
-				return;
-			}
-			frameIndex = (frameIndex + 1) % FOOTER_SPINNER_FRAMES.length;
-			setVisual(
-				runContext,
-				current,
-				loadingText(current.text, FOOTER_SPINNER_FRAMES[frameIndex]),
-			);
-		}, FOOTER_SPINNER_INTERVAL_MS);
-		animations.set(event.footerType, timer);
-	};
-
-	const clearVisuals = (runContext: SessionContext | null): void => {
-		for (const footerType of animations.keys()) stopAnimation(footerType);
-		if (!runContext) return;
-		for (const footerType of renderedFooterTypes) {
-			try {
-				runContext.ui.setStatus(footerType, undefined);
-			} catch {
-				// Headless modes may not expose status UI.
-			}
-		}
-		renderedFooterTypes = new Set<string>();
-	};
-
-	const syncState = (runContext: SessionContext): void => {
-		for (const event of Object.values(state.footers))
-			syncEvent(runContext, event);
-	};
-
-	return {
-		async sessionStart(event, nextContext) {
-			clearVisuals(context);
-			context = nextContext;
-			state = emptyFooterState();
-
-			const currentState = latestFooterState(
-				nextContext.sessionManager.getBranch(),
-			);
-			if (currentState) state = currentState;
-			else if (event.previousSessionFile) {
-				const previous =
-					dependencies.openSession?.(event.previousSessionFile) ??
-					SessionManager.open(event.previousSessionFile);
-				const inherited = latestFooterState(previous.getBranch());
-				if (inherited) {
-					state = inherited;
-					appendState();
-				}
-			}
-			syncState(nextContext);
-		},
-		update(event) {
-			const parsed = parseFooterEvent(event);
-			if (!context) return;
-			state = applyFooterUpdate(state, parsed);
-			appendState();
-			syncEvent(context, parsed);
-		},
-		getState() {
-			return {
-				footers: Object.fromEntries(
-					Object.entries(state.footers).map(([key, event]) => [
-						key,
-						{ ...event },
-					]),
-				),
-			};
-		},
-		deactivate() {
-			clearVisuals(context);
-			context = null;
-			state = emptyFooterState();
-		},
-	};
+	return new FooterModuleImpl(pi, dependencies);
 }
