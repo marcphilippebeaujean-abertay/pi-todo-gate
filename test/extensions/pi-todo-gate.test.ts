@@ -132,8 +132,8 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import extension from "../extensions/pi-todo-gate.ts";
-import type { TodoistClient } from "../src/todoist.ts";
+import extension from "../../extensions/pi-todo-gate.ts";
+import type { TodoistClient } from "../../src/todoist.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 type TestTool = {

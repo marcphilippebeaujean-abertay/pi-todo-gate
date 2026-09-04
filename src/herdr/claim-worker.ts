@@ -3,9 +3,9 @@ import {
 	appendBounded,
 	type ClaimWorkerResult,
 	parseClaimResult,
-} from "./herdr-claim-worker-result.ts";
-import { withWorkerMarker } from "./session.ts";
-import { buildPiWorkerArgs } from "./shared/pi-worker.ts";
+} from "../herdr-claim-worker-result.ts";
+import { withWorkerMarker } from "../session.ts";
+import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 
 export interface ClaimWorkerRequest {
 	prompt: string;

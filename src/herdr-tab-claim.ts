@@ -6,7 +6,7 @@ import type {
 	ClaimWorkerHandle,
 	ClaimWorkerRequest,
 	WorkerSpawner,
-} from "./herdr-claim-worker.ts";
+} from "./herdr/claim-worker.ts";
 import {
 	boundCommandRunner,
 	defaultStartWorker,

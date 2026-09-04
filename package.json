@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "npm run architecture && vitest run",
+    "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test",
     "typecheck": "tsc --noEmit",
     "lint:biome": "biome check extensions src test",
     "lint:strict": "tsx src/lint-cli.ts",
@@ -29,6 +30,7 @@
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@earendil-works/pi-tui": "0.84.2",
     "@types/node": "^25.0.0",
+    "dependency-cruiser": "^17.4.3",
     "tsx": "^4.23.13",
     "typebox": "^1.1.34",
     "typescript": "^6.0.0",

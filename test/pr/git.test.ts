@@ -78,7 +78,7 @@ import {
 	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../src/git.ts";
+} from "../../src/git.ts";
 
 const ok = (stdout: string): CommandResult => ({
 	stdout,
