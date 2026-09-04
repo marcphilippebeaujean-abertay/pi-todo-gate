@@ -36,13 +36,17 @@ export const DEFAULT_CONFIG_PATH = defaultConfigPath();
 export function parseConfig(raw: string): TodoistProjectMapping {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		const record = isRecord(parsed) ? parsed : null;
+		const isConfigRecord = isRecord(parsed);
+		const record = isConfigRecord ? parsed : null;
 		if (record === null) return { projects: {} };
-		const projectRecord = isRecord(record.projects) ? record.projects : null;
+		const isProjectRecord = isRecord(record.projects);
+		const projectRecord = isProjectRecord ? record.projects : null;
 		if (projectRecord === null) return { projects: {} };
 
 		const projects: Record<string, string | TodoistProjectSettings> = {};
-		for (const [path, project] of Object.entries(projectRecord)) {
+		for (const [path, project] of Object.entries(
+			projectRecord as Record<string, unknown>,
+		)) {
 			const entry = parseProjectEntry(path, project);
 			if (entry === null) continue;
 			projects[entry[0]] = entry[1];
@@ -69,27 +73,32 @@ export function resolveConfiguredProject(
 ): ResolvedProject | null {
 	const current = normalizedPath(cwd);
 	const candidates = Object.entries(config.projects)
-		.map(([codingRoot, project]) => ({
-			codingRoot: normalizedPath(codingRoot),
-			todoistProjectRef:
-				typeof project === "string" ? project : project.todoistProjectRef,
-			triggersOnlyOnWorktree:
-				typeof project === "string"
-					? true
-					: project.triggersOnlyOnWorktree !== false,
-		}))
+		.map(([codingRoot, project]) => {
+			const isStringProject = typeof project === "string";
+			const todoistProjectRef = isStringProject
+				? project
+				: project.todoistProjectRef;
+			const triggersOnlyOnWorktree = isStringProject
+				? true
+				: project.triggersOnlyOnWorktree !== false;
+			return {
+				codingRoot: normalizedPath(codingRoot),
+				todoistProjectRef,
+				triggersOnlyOnWorktree,
+			};
+		})
 		.filter(({ codingRoot }) => isPathAtOrBelow(current, codingRoot))
 		.sort((a, b) => b.codingRoot.length - a.codingRoot.length);
 
 	const match = candidates[0];
-	return match ? match : null;
+	const hasMatch = match !== undefined;
+	return hasMatch ? match : null;
 }
 
 export function configPathForAgentDir(agentDir: string): string {
-	return join(
-		isAbsolute(agentDir) ? agentDir : resolve(agentDir),
-		STRING_LITERAL_PI_TODO_GATE_JSON_67D8A0C1,
-	);
+	const isAbsoluteAgentDir = isAbsolute(agentDir);
+	const resolvedAgentDir = isAbsoluteAgentDir ? agentDir : resolve(agentDir);
+	return join(resolvedAgentDir, STRING_LITERAL_PI_TODO_GATE_JSON_67D8A0C1);
 }
 
 export function parentDirectory(path: string): string {

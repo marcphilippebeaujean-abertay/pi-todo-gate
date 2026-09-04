@@ -15,7 +15,9 @@ export class TodoistError extends Error {
 	readonly commandFamily: string;
 
 	constructor(commandFamily: string, detail: string) {
-		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
+		const hasDetail = detail !== "";
+		const detailSuffix = hasDetail ? `: ${detail}` : "";
+		super(`Todoist ${commandFamily} failed${detailSuffix}`);
 		this.name = TODOIST_ERROR_NAME;
 		this.commandFamily = commandFamily;
 	}
@@ -59,9 +61,9 @@ export function safeHttpUrl(value: unknown): string | undefined {
 	if (isNotString) return undefined;
 	try {
 		const url = new URL(value as string);
-		return url.protocol === HTTP || url.protocol === HTTPS
-			? (value as string)
-			: undefined;
+		const hasSupportedProtocol =
+			url.protocol === HTTP || url.protocol === HTTPS;
+		return hasSupportedProtocol ? (value as string) : undefined;
 	} catch {
 		return undefined;
 	}

@@ -132,8 +132,10 @@ function registerWorkerLifecycle(
 			return;
 		}
 		const detail = state.stderr.trim();
+		const hasDetail = detail !== "";
+		const detailSuffix = hasDetail ? `: ${detail}` : "";
 		request.onFailure(
-			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detail ? `: ${detail}` : ""}`,
+			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detailSuffix}`,
 		);
 	});
 }

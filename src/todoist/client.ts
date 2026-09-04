@@ -55,7 +55,9 @@ export class TodoistError extends Error {
 	readonly commandFamily: string;
 
 	constructor(commandFamily: string, detail: string) {
-		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
+		const hasDetail = detail !== "";
+		const detailSuffix = hasDetail ? `: ${detail}` : "";
+		super(`Todoist ${commandFamily} failed${detailSuffix}`);
 		this.name = STRING_LITERAL_TODOISTERROR_F35F50B5;
 		this.commandFamily = commandFamily;
 	}
@@ -86,9 +88,8 @@ export class TodoistClient {
 			STRING_LITERAL_JSON_3C44146C,
 		]);
 		const rows = childList(payload).map(record);
-		const target = ref.startsWith(STRING_LITERAL_ID_F94F1F69)
-			? ref.slice(3)
-			: ref;
+		const hasIdPrefix = ref.startsWith(STRING_LITERAL_ID_F94F1F69);
+		const target = hasIdPrefix ? ref.slice(3) : ref;
 		const match = rows.find(
 			(row) =>
 				stringValue(row.id) === target || stringValue(row.name) === target,
@@ -139,7 +140,8 @@ export class TodoistClient {
 		const section = childList(sections)
 			.map(record)
 			.find((item) => stringValue(item.id) === task.sectionId);
-		sectionName = section ? stringValue(section.name) || null : null;
+		const hasSection = section !== undefined;
+		sectionName = hasSection ? stringValue(section.name) || null : null;
 		return sectionName;
 	}
 
@@ -155,8 +157,9 @@ export class TodoistClient {
 		let sectionName = await this.resolveSectionName(task, project.id);
 		const isInProgress =
 			sectionName?.trim().toLowerCase() === STRING_LITERAL_IN_PROGRESS_587BFFEA;
-		const currentTaskId = project.currentTaskId
-			? canonicalTaskId(project.currentTaskId)
+		const hasCurrentTaskId = project.currentTaskId !== undefined;
+		const currentTaskId = hasCurrentTaskId
+			? canonicalTaskId(project.currentTaskId as string)
 			: undefined;
 		const isCurrentTask = task.id === currentTaskId;
 		const hasProgressCollision = isInProgress && !isCurrentTask;

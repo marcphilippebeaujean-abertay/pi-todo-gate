@@ -39,7 +39,8 @@ function prUrlOf(entry: MergedPr): string {
 }
 
 function isMergedPr(value: unknown): value is MergedPr {
-	const record = isRecord(value) ? value : null;
+	const isRecordValue = isRecord(value);
+	const record = isRecordValue ? value : null;
 	if (record === null) return false;
 	const hasPrUrl = typeof record.prUrl === STRING_LITERAL_STRING;
 	if (!hasPrUrl) return false;
@@ -49,7 +50,8 @@ function isMergedPr(value: unknown): value is MergedPr {
 }
 
 export function isPrState(value: unknown): value is PrState {
-	const record = isRecord(value) ? value : null;
+	const isRecordValue = isRecord(value);
+	const record = isRecordValue ? value : null;
 	if (record === null) return false;
 	const hasValidPrUrl =
 		record.prUrl === undefined || typeof record.prUrl === STRING_LITERAL_STRING;
@@ -68,8 +70,9 @@ export function recordMergedPr(state: PrState, detectedAt: string): PrState {
 	if (prUrl === undefined) return state;
 	const hasPrUrl = prUrl !== "";
 	if (!hasPrUrl) return state;
+	const existingMergedPrs = state.mergedPrs ?? [];
 	const mergedPrs = [
-		...(state.mergedPrs ? withoutPrUrl(state.mergedPrs, prUrl) : []),
+		...withoutPrUrl(existingMergedPrs, prUrl),
 		{ prUrl, detectedAt, reminderPending: true },
 	];
 	return { mergedPrs, discoveryDisabled: false };

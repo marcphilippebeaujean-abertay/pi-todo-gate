@@ -16,7 +16,8 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
-	const wrappedRecord = isRecord(value) ? value : null;
+	const isWrappedRecord = isRecord(value);
+	const wrappedRecord = isWrappedRecord ? value : null;
 	if (wrappedRecord === null) return undefined;
 	const wrapped = wrappedRecord as {
 		claimed?: { taskRef?: unknown };
@@ -38,15 +39,19 @@ function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
 	if (!hasCollisionTaskRef) return undefined;
 	const collision = wrapped.collision;
 	if (collision === undefined) return undefined;
+	const hasTaskName = typeof collision.taskName === "string";
+	const taskName = hasTaskName
+		? { taskName: collision.taskName as string }
+		: {};
+	const hasCollisionReason = typeof collision.collisionReason === "string";
+	const collisionReason = hasCollisionReason
+		? { collisionReason: collision.collisionReason as string }
+		: {};
 	return {
 		status: STRING_LITERAL_COLLISION_12B2356D,
 		taskRef: collisionTaskRef,
-		...(typeof collision.taskName === "string"
-			? { taskName: collision.taskName }
-			: {}),
-		...(typeof collision.collisionReason === "string"
-			? { collisionReason: collision.collisionReason }
-			: {}),
+		...taskName,
+		...collisionReason,
 	};
 }
 

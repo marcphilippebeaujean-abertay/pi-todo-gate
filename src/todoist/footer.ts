@@ -26,10 +26,13 @@ function displayTaskName(
 	id: string | undefined,
 ): string {
 	const name = taskName?.replace(/\s+/g, " ").trim();
-	if (name === undefined) return id ? `#${id}` : STRING_LITERAL_OPEN_B1DCBA62;
+	const hasId = id !== undefined;
+	if (name === undefined)
+		return hasId ? `#${id}` : STRING_LITERAL_OPEN_B1DCBA62;
 	const hasName = name !== "";
-	if (hasName) return name.length > 15 ? `${name.slice(0, 15)}...` : name;
-	return id ? `#${id}` : STRING_LITERAL_OPEN_B1DCBA62;
+	const exceedsNameLimit = name.length > 15;
+	if (hasName) return exceedsNameLimit ? `${name.slice(0, 15)}...` : name;
+	return hasId ? `#${id}` : STRING_LITERAL_OPEN_B1DCBA62;
 }
 
 export function renderTaskStatus(

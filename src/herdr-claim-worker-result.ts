@@ -11,9 +11,8 @@ const CLAIMED_STATUS = "claimed";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;
-	return next.length > MAX_DIAGNOSTIC_BYTES
-		? next.slice(-MAX_DIAGNOSTIC_BYTES)
-		: next;
+	const exceedsLimit = next.length > MAX_DIAGNOSTIC_BYTES;
+	return exceedsLimit ? next.slice(-MAX_DIAGNOSTIC_BYTES) : next;
 }
 
 function claimResult(value: unknown): ClaimWorkerResult | undefined {

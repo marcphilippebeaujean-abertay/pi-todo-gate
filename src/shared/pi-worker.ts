@@ -56,7 +56,8 @@ export function textFromAssistantMessage(
 	const message = value as { role?: unknown; content?: unknown };
 	const isAssistantMessage = message.role === STRING_LITERAL_ASSISTANT_4E38B6B0;
 	if (!isAssistantMessage) return "";
-	const textContent = isString(message.content) ? message.content : undefined;
+	const hasTextContent = isString(message.content);
+	const textContent = hasTextContent ? (message.content as string) : undefined;
 	if (textContent !== undefined) return textContent;
 	if (!Array.isArray(message.content)) return "";
 	return message.content.map(textFromPart).join(separator);

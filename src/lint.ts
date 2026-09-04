@@ -397,20 +397,26 @@ function isNamedBooleanCondition(
 	return isSafeConditionExpression(condition, checker);
 }
 
+function conditionExpressions(node: ts.Node): ts.Expression[] {
+	if (ts.isIfStatement(node)) return [node.expression];
+	if (ts.isWhileStatement(node)) return [node.expression];
+	if (ts.isDoStatement(node)) return [node.expression];
+	if (ts.isConditionalExpression(node)) return [node.condition];
+	return [];
+}
+
 function collectNamedIfConditions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
 	checker: ts.TypeChecker,
 ): void {
 	function visit(node: ts.Node): void {
-		if (
-			ts.isIfStatement(node) &&
-			!isNamedBooleanCondition(node.expression, checker)
-		) {
+		for (const expression of conditionExpressions(node)) {
+			if (isNamedBooleanCondition(expression, checker)) continue;
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
-					node.expression,
+					expression,
 					NAMED_IF_CONDITION,
 					NAMED_IF_MESSAGE,
 					1,

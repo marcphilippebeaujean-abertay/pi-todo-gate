@@ -82,6 +82,8 @@ const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
 const NAMED_IF_RULE = "named-if-condition";
 const NAMED_IF_TEST = "requires named boolean conditions";
+const NAMED_CONTROL_FLOW_TEST =
+	"requires named conditions across control-flow expressions";
 const IF_SOURCE = `function check(accountBalance: number, isClosed: boolean, count: number) {
 	if (accountBalance > 0) return true;
 	if (isClosed) return false;
@@ -106,6 +108,15 @@ const NEGATED_TYPE_GUARD_SOURCE = `function check(value: unknown, objectValue: o
 	if (!("ready" in objectValue)) return false;
 	if (!Array.isArray(value)) return false;
 	return true;
+}`;
+const COMPUTED_CONTROL_FLOW_SOURCE = `function check(value: number, ready: boolean) {
+	while (value > 0) value--;
+	do value--; while (value > 0);
+	for (; value > 0;) value--;
+	return value > 0 ? value : Number(ready);
+}`;
+const FOR_ITERATION_SOURCE = `function check(values: number[]) {
+	for (let index = 0; index < values.length; index += 1) values[index];
 }`;
 const METRIC_TEST = "reports function metrics over configured limits";
 const NORMALIZED_PATH_TEST = "sorts diagnostics by normalized path";
@@ -251,6 +262,20 @@ describe("lint diagnostics", () => {
 				(id) => id === NAMED_IF_RULE,
 			),
 		).toHaveLength(0);
+	});
+
+	it(NAMED_CONTROL_FLOW_TEST, async () => {
+		expect(
+			ruleIds(await lintFixture(COMPUTED_CONTROL_FLOW_SOURCE)).filter(
+				(id) => id === NAMED_IF_RULE,
+			),
+		).toHaveLength(3);
+	});
+
+	it("does not require names for for-loop iteration clauses", async () => {
+		expect(ruleIds(await lintFixture(FOR_ITERATION_SOURCE))).not.toContain(
+			NAMED_IF_RULE,
+		);
 	});
 
 	it(NORMALIZED_PATH_TEST, () => {

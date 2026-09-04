@@ -40,15 +40,17 @@ function addProject(
 export function parseConfig(raw: string): TodoistProjectMapping {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		const parsedRecord = isRecord(parsed) ? parsed : null;
+		const isParsedRecord = isRecord(parsed);
+		const parsedRecord = isParsedRecord ? parsed : null;
 		if (parsedRecord === null) return { projects: {} };
-		const projectRecord = isRecord(parsedRecord.projects)
-			? parsedRecord.projects
-			: null;
+		const isProjectRecord = isRecord(parsedRecord.projects);
+		const projectRecord = isProjectRecord ? parsedRecord.projects : null;
 		if (projectRecord === null) return { projects: {} };
 
 		const projects: Record<string, string> = {};
-		for (const [path, project] of Object.entries(projectRecord)) {
+		for (const [path, project] of Object.entries(
+			projectRecord as Record<string, unknown>,
+		)) {
 			const projectIsString = typeof project === STRING_TYPE;
 			if (!projectIsString) continue;
 			addProject(projects, path, project as string);
@@ -72,8 +74,8 @@ export async function loadConfig(
 function isPathAtOrBelow(path: string, ancestor: string): boolean {
 	const target = resolve(path);
 	const parent = resolve(ancestor);
-	const prefix =
-		parent.endsWith("/") || parent.endsWith("\\") ? parent : `${parent}/`;
+	const hasTrailingSeparator = parent.endsWith("/") || parent.endsWith("\\");
+	const prefix = hasTrailingSeparator ? parent : `${parent}/`;
 	return target === parent || target.startsWith(prefix);
 }
 
@@ -98,10 +100,9 @@ export function resolveConfiguredProject(
 }
 
 export function configPathForAgentDir(agentDir: string): string {
-	return join(
-		isAbsolute(agentDir) ? agentDir : resolve(agentDir),
-		PI_TODO_GATE_JSON,
-	);
+	const isAbsoluteAgentDir = isAbsolute(agentDir);
+	const resolvedAgentDir = isAbsoluteAgentDir ? agentDir : resolve(agentDir);
+	return join(resolvedAgentDir, PI_TODO_GATE_JSON);
 }
 
 export function parentDirectory(path: string): string {

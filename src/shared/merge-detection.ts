@@ -65,10 +65,10 @@ export function hasNonCompletingMergeOption(
 	kind: "git" | "gh",
 	args: readonly string[],
 ): boolean {
-	const options =
-		kind === STRING_LITERAL_GIT_9B1A99C5
-			? NON_COMPLETING_GIT_MERGE_OPTIONS
-			: NON_COMPLETING_GH_MERGE_OPTIONS;
+	const isGitKind = kind === STRING_LITERAL_GIT_9B1A99C5;
+	const options = isGitKind
+		? NON_COMPLETING_GIT_MERGE_OPTIONS
+		: NON_COMPLETING_GH_MERGE_OPTIONS;
 	for (const arg of args) {
 		const isEndOfOptions = arg === STRING_LITERAL_EMPTY_9BE26789;
 		if (isEndOfOptions) break;
@@ -166,7 +166,8 @@ export function normalizedUrl(value: string): string | null {
 		const match = url.pathname.match(
 			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 		);
-		return match
+		const hasMatch = match !== null;
+		return hasMatch
 			? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`
 			: null;
 	} catch {
@@ -260,7 +261,6 @@ export async function detectMerge(
 	command: string,
 	prUrl: string,
 ): Promise<MergeEvent | null> {
-	return (await matchesPinnedPr(exec, cwd, command, prUrl))
-		? { prUrl: normalizedUrl(prUrl) ?? prUrl }
-		: null;
+	const isPinnedMatch = await matchesPinnedPr(exec, cwd, command, prUrl);
+	return isPinnedMatch ? { prUrl: normalizedUrl(prUrl) ?? prUrl } : null;
 }

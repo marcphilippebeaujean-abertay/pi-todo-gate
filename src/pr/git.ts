@@ -138,7 +138,8 @@ function parseOpenPrResult(stdout: string): OpenPrInfo {
 		if (firstRow === null)
 			return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
 		const row = firstRow as { url?: unknown; state?: unknown };
-		const url = isString(row.url) ? githubPrUrl(row.url) : null;
+		const hasUrl = isString(row.url);
+		const url = hasUrl ? githubPrUrl(row.url as string) : null;
 		const isOpen = row.state === STRING_LITERAL_OPEN_59CCD2EF;
 		const isClosed = row.state === STRING_LITERAL_CLOSED_1E0B6F1C;
 		const isMerged = row.state === STRING_LITERAL_MERGED_A75B6D4F;

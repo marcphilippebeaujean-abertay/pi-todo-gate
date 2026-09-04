@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check extensions src test && tsx src/lint-cli.ts",
+    "lint:biome": "biome check extensions src test",
+    "lint:strict": "tsx src/lint-cli.ts",
+    "lint": "npm run lint:biome && npm run lint:strict",
     "install-local": "bash install.sh",
     "configure": "bash install.sh configure",
     "prepare": "git config core.hooksPath .githooks"

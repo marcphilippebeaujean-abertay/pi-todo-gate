@@ -10,14 +10,16 @@ export function commandOutput(result: {
 	stdout: string;
 	code: number;
 }): string | null {
-	return result.code === 0 ? result.stdout.trim() : null;
+	const commandSucceeded = result.code === 0;
+	return commandSucceeded ? result.stdout.trim() : null;
 }
 
 export function commandFailure(result: {
 	stderr: string;
 	code: number;
 }): string {
-	return result.code === 0
+	const commandSucceeded = result.code === 0;
+	return commandSucceeded
 		? C.worktree.empty
 		: result.stderr.trim().replace(/\s+/g, " ").slice(0, 200);
 }

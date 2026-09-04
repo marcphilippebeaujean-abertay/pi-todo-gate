@@ -46,7 +46,7 @@ Count leaf checks in logical boolean expressions joined by `&&` and `||`. Report
 
 ### `named-if-condition`
 
-An `if` condition must be a boolean identifier, optionally negated. Numeric comparisons, arithmetic, calls, logical combinations, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. TypeScript built-in type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing.
+`if`, `while`, and `do...while` conditions must be boolean identifiers, optionally negated. Conditional-expression predicates must follow same rule. Numeric comparisons, arithmetic, calls, logical combinations, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. `for` iteration clauses are excluded because their changing loop state cannot be extracted into one stable local predicate. TypeScript built-in type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing.
 
 ```ts
 const hasAccountBalance = accountBalance > 0;
