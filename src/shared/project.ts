@@ -1,12 +1,15 @@
-const STRING_LITERAL_WORKTREE_05CE539E = "worktree ";
-const STRING_LITERAL_GIT_12CD0102 = "git";
-const STRING_LITERAL_REV_PARSE_37D9BB4A = "rev-parse";
-const STRING_LITERAL_SHOW_TOPLEVEL_D0D6C236 = "--show-toplevel";
-const STRING_LITERAL_BRANCH_06286632 = "branch";
-const STRING_LITERAL_SHOW_CURRENT_E67F08AC = "--show-current";
-const STRING_LITERAL_WORKTREE_09F58E59 = "worktree";
-const STRING_LITERAL_LIST_5D101AA9 = "list";
-const STRING_LITERAL_PORCELAIN_BB6738A9 = "--porcelain";
+const WORKTREE_PREFIX = "worktree ";
+const GIT_COMMAND = "git";
+const REV_PARSE_COMMAND = "rev-parse";
+const SHOW_TOPLEVEL_FLAG = "--show-toplevel";
+const BRANCH_COMMAND = "branch";
+const SHOW_CURRENT_FLAG = "--show-current";
+const WORKTREE_COMMAND = "worktree";
+const LIST_COMMAND = "list";
+const PORCELAIN_FLAG = "--porcelain";
+const ROOT_COMMAND_ARGS = [REV_PARSE_COMMAND, SHOW_TOPLEVEL_FLAG];
+const BRANCH_COMMAND_ARGS = [BRANCH_COMMAND, SHOW_CURRENT_FLAG];
+const WORKTREE_COMMAND_ARGS = [WORKTREE_COMMAND, LIST_COMMAND, PORCELAIN_FLAG];
 
 import { resolve } from "node:path";
 import type { CommandResult, Exec } from "./command.ts";
@@ -44,11 +47,9 @@ export function isLinkedWorktreePaths(
 function firstWorktreePath(output: string): string | null {
 	const line = output
 		.split(/\r?\n/)
-		.find((value) => value.startsWith(STRING_LITERAL_WORKTREE_05CE539E));
+		.find((value) => value.startsWith(WORKTREE_PREFIX));
 	const hasLine = line !== undefined;
-	return hasLine
-		? line.slice(STRING_LITERAL_WORKTREE_05CE539E.length).trim()
-		: null;
+	return hasLine ? line.slice(WORKTREE_PREFIX.length).trim() : null;
 }
 
 function successfulResult<T>(result: CommandResult, value: T): T | null {
@@ -68,36 +69,6 @@ function projectInfo(
 	return { isWorktree: root !== resolve(mainRoot), root, branch, mainRoot };
 }
 
-async function projectCommands(
-	exec: Exec,
-	cwd: string,
-): Promise<[CommandResult, CommandResult, CommandResult]> {
-	return Promise.all([
-		exec(
-			STRING_LITERAL_GIT_12CD0102,
-			[
-				STRING_LITERAL_REV_PARSE_37D9BB4A,
-				STRING_LITERAL_SHOW_TOPLEVEL_D0D6C236,
-			],
-			{ cwd },
-		),
-		exec(
-			STRING_LITERAL_GIT_12CD0102,
-			[STRING_LITERAL_BRANCH_06286632, STRING_LITERAL_SHOW_CURRENT_E67F08AC],
-			{ cwd },
-		),
-		exec(
-			STRING_LITERAL_GIT_12CD0102,
-			[
-				STRING_LITERAL_WORKTREE_09F58E59,
-				STRING_LITERAL_LIST_5D101AA9,
-				STRING_LITERAL_PORCELAIN_BB6738A9,
-			],
-			{ cwd },
-		),
-	]);
-}
-
 export async function inspectProject(
 	exec: Exec,
 	cwd: string,
@@ -106,7 +77,11 @@ export async function inspectProject(
 	let branchResult: CommandResult;
 	let listResult: CommandResult;
 	try {
-		[rootResult, branchResult, listResult] = await projectCommands(exec, cwd);
+		[rootResult, branchResult, listResult] = await Promise.all([
+			exec(GIT_COMMAND, ROOT_COMMAND_ARGS, { cwd }),
+			exec(GIT_COMMAND, BRANCH_COMMAND_ARGS, { cwd }),
+			exec(GIT_COMMAND, WORKTREE_COMMAND_ARGS, { cwd }),
+		]);
 	} catch {
 		return {
 			isWorktree: false,
