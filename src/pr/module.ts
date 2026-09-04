@@ -5,6 +5,8 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { PR_FOOTER_TYPE } from "../footer/constants.ts";
+import type { FooterEventSink } from "../footer/types.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { detectMerge, type MergeEvent } from "../shared/merge-detection.ts";
 import { inspectProject } from "../shared/project.ts";
@@ -36,6 +38,7 @@ export interface PrSessionReader {
 export interface PrModuleDependencies {
 	openSession?: (path: string) => PrSessionReader;
 	exec?: Exec;
+	onFooterUpdate?: FooterEventSink;
 }
 
 export interface PrModule {
@@ -140,10 +143,12 @@ export function createPrModule(
 
 	const refreshStatus = (): void => {
 		if (!context) return;
-		context.ui.setStatus(
-			"pi-todo-gate-pr",
-			renderPrStatus(state.prUrl, context.ui.theme),
-		);
+		dependencies.onFooterUpdate?.({
+			footerType: PR_FOOTER_TYPE,
+			isLoading: false,
+			text: renderPrStatus(state.prUrl, context.ui.theme),
+			isVisible: true,
+		});
 	};
 
 	const setDiscoveredPr = async (
@@ -386,7 +391,13 @@ export function createPrModule(
 			workChanged = false;
 			mergeEvents = [];
 			state = {};
-			if (context) context.ui.setStatus("pi-todo-gate-pr", undefined);
+			if (context)
+				dependencies.onFooterUpdate?.({
+					footerType: PR_FOOTER_TYPE,
+					isLoading: false,
+					text: "",
+					isVisible: false,
+				});
 			context = null;
 		},
 	};

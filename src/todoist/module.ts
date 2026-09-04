@@ -5,6 +5,8 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { TODOIST_FOOTER_TYPE } from "../footer/constants.ts";
+import type { FooterEventSink } from "../footer/types.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import type { MergeEvent } from "../shared/merge-detection.ts";
 import { inspectProject } from "../shared/project.ts";
@@ -38,6 +40,7 @@ export interface TodoistModuleDependencies {
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
 	claimTaskWorker?: TaskClaimWorker;
+	onFooterUpdate?: FooterEventSink;
 }
 
 export interface TodoistModule {
@@ -140,10 +143,22 @@ export function createTodoistModule(
 		return choice === "Claim";
 	};
 
+	const updateFooter = (
+		text: string,
+		isLoading = false,
+		isVisible = true,
+	): void => {
+		dependencies.onFooterUpdate?.({
+			footerType: TODOIST_FOOTER_TYPE,
+			isLoading,
+			text,
+			isVisible,
+		});
+	};
+
 	const refreshStatus = (): void => {
 		if (!context) return;
-		context.ui.setStatus(
-			"pi-todo-gate-task",
+		updateFooter(
 			renderTaskStatus(state.taskUrl, context.ui.theme, state.taskName),
 		);
 	};
@@ -193,10 +208,7 @@ export function createTodoistModule(
 			return;
 		claimAnalysisComplete = true;
 		const generation = ++operationGeneration;
-		runContext.ui.setStatus(
-			"pi-todo-gate-task",
-			"Todoist Task: ⠋ evaluating |",
-		);
+		updateFooter("Todoist Task: ⠋ evaluating |", true);
 		let feedback: "none" | "claimed" = "none";
 		let failure: unknown;
 		try {
@@ -282,11 +294,7 @@ export function createTodoistModule(
 						throw new Error("set_task requires a Todoist task reference");
 					const generation = ++operationGeneration;
 					const runContext = context;
-					if (runContext)
-						runContext.ui.setStatus(
-							"pi-todo-gate-task",
-							"Todoist Task: ⠋ claiming |",
-						);
+					if (runContext) updateFooter("Todoist Task: ⠋ claiming |", true);
 					try {
 						const client = createClient(ctx, dependencies);
 						const resolved = await client.resolveProject(
@@ -440,10 +448,7 @@ export function createTodoistModule(
 				return;
 			}
 			if (choice !== "Yes") return;
-			runContext.ui.setStatus(
-				"pi-todo-gate-task",
-				"Todoist Task: ⠋ completing |",
-			);
+			updateFooter("Todoist Task: ⠋ completing |", true);
 			try {
 				await createClient(
 					runContext as ExtensionContext,
@@ -477,7 +482,7 @@ export function createTodoistModule(
 			++operationGeneration;
 			ready = false;
 			claimAnalysisComplete = true;
-			if (context) context.ui.setStatus("pi-todo-gate-task", undefined);
+			if (context) updateFooter("", false, false);
 			context = null;
 			state = {};
 		},

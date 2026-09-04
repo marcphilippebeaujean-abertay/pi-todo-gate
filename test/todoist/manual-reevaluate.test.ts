@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { FooterUpdate } from "../../src/footer/types.ts";
 import { createTodoistModule } from "../../src/todoist/module.ts";
 
 type CommandHandler = (args: string, ctx: unknown) => Promise<void>;
@@ -10,6 +11,7 @@ type CommandHandler = (args: string, ctx: unknown) => Promise<void>;
 function harness(cwd: string) {
 	const commands = new Map<string, CommandHandler>();
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
+	const footerEvents: FooterUpdate[] = [];
 	const pi = {
 		registerCommand: (name: string, options: { handler: CommandHandler }) =>
 			commands.set(name, options.handler),
@@ -30,7 +32,7 @@ function harness(cwd: string) {
 			getBranch: () => [],
 		},
 	} as unknown as ExtensionContext;
-	return { commands, ctx, pi, statusCalls };
+	return { commands, ctx, pi, statusCalls, footerEvents };
 }
 
 const rootExec = async (command: string, args: string[]) => {
@@ -60,7 +62,17 @@ describe("manual Todoist reevaluation", () => {
 				triggersOnlyOnWorktree: true,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ exec: rootExec, claimTaskWorker: worker },
+			{
+				exec: rootExec,
+				claimTaskWorker: worker,
+				onFooterUpdate: (event) => {
+					h.footerEvents.push(event);
+					h.statusCalls.push({
+						key: event.footerType,
+						text: event.isVisible ? event.text : undefined,
+					});
+				},
+			},
 		);
 
 		await todoist.sessionStart({}, h.ctx);

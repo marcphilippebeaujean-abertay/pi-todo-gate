@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { createFooterModule } from "../src/footer/module.ts";
 import {
 	type CommandRunner as HerdrCommandRunner,
 	installHerdrClaimGate,
@@ -81,17 +82,23 @@ export default function extension(
 	const isInSubagentSession = process.env.PI_SUBAGENT_CHILD === "1";
 	if (isInSubagentSession) return;
 
+	const footer = createFooterModule(pi, {
+		openSession: dependencies.openSession,
+	});
 	installHerdrClaimGate(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
+		onFooterUpdate: (event) => footer.update(event),
 	});
 
 	const prDependencies: PrModuleDependencies = {
+		onFooterUpdate: (event) => footer.update(event),
 		openSession: dependencies.openSession,
 		exec: dependencies.exec,
 	};
 	const todoistDependencies: TodoistModuleDependencies = {
 		openSession: dependencies.openSession,
+		onFooterUpdate: (event) => footer.update(event),
 		exec: dependencies.exec,
 		createTodoistClient: dependencies.createTodoistClient,
 		claimTaskWorker: dependencies.claimTaskWorker,
@@ -103,6 +110,8 @@ export default function extension(
 
 	pi.on("session_start", async (event, ctx) => {
 		const generation = ++sessionGeneration;
+		await footer.sessionStart(event, ctx);
+		if (generation !== sessionGeneration) return;
 		if (todoist) {
 			todoist.deactivate();
 			todoistActive = false;
@@ -211,6 +220,7 @@ export default function extension(
 
 	pi.on("session_shutdown", async () => {
 		++sessionGeneration;
+		footer.deactivate();
 		pr.deactivate();
 		todoist?.deactivate();
 		todoistActive = false;

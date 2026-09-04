@@ -3,6 +3,8 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { HERDR_FOOTER_TYPE } from "./footer/constants.ts";
+import type { FooterEventSink } from "./footer/types.ts";
 import {
 	type ClaimWorkerHandle,
 	type ClaimWorkerRequest,
@@ -18,7 +20,6 @@ export type {
 } from "./herdr-claim-worker.ts";
 
 const CLAIM_CUSTOM_TYPE = "herdr-claim-gate";
-const HERDR_STATUS_KEY = "pi-todo-gate-herdr";
 const HERDR_WORKING_STATUS = "Herdr: ⠋ working |";
 const HERDR_INSTRUCTIONS = `# STEP 0 — Setup Herdr (FIRST, NOT SKIPPABLE)
 
@@ -86,6 +87,7 @@ export interface ClaimGateOptions {
 	cwd?: string;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
+	onFooterUpdate?: FooterEventSink;
 }
 
 function isSubagent(): boolean {
@@ -246,17 +248,6 @@ function notify(
 	}
 }
 
-function setHerdrStatus(
-	ctx: Pick<ExtensionContext, "ui">,
-	text: string | undefined,
-): void {
-	try {
-		ctx.ui.setStatus(HERDR_STATUS_KEY, text);
-	} catch {
-		// Headless sessions may not expose status UI.
-	}
-}
-
 function alreadyClaimed(ctx: {
 	sessionManager: {
 		getEntries: () => Array<{ type?: string; customType?: string }>;
@@ -295,6 +286,18 @@ export function installHerdrClaimGate(
 	let gateActive = false;
 	let herdrAvailable = false;
 	let worker: ClaimWorkerHandle | undefined;
+	let workerGeneration = 0;
+	let sessionGeneration = 0;
+	const emitFooter = options.onFooterUpdate ?? (() => undefined);
+
+	const hideFooter = (): void => {
+		emitFooter({
+			footerType: HERDR_FOOTER_TYPE,
+			isLoading: false,
+			text: HERDR_WORKING_STATUS,
+			isVisible: false,
+		});
+	};
 
 	const lift = (ctx?: Pick<ExtensionContext, "ui">): void => {
 		gateActive = false;
@@ -311,10 +314,13 @@ export function installHerdrClaimGate(
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
+		++sessionGeneration;
+		worker?.cancel();
+		worker = undefined;
+		workerGeneration = 0;
 		sessionCwd = typeof ctx.cwd === "string" ? ctx.cwd : sessionCwd;
 		gateActive = false;
 		herdrAvailable = isInsideHerdr() && !isSubagent();
-		worker = undefined;
 		if (!herdrAvailable || alreadyClaimed(ctx)) return;
 		sessionTabId = process.env.HERDR_TAB_ID;
 		sessionPaneId = process.env.HERDR_PANE_ID;
@@ -326,6 +332,7 @@ export function installHerdrClaimGate(
 
 		gateActive = true;
 		if (claimWorktreeTab(commandRunner, sessionCwd)) {
+			hideFooter();
 			persistClaimed(ctx);
 			return;
 		}
@@ -338,13 +345,21 @@ export function installHerdrClaimGate(
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!herdrAvailable || !gateActive || worker) return;
+		const generation = sessionGeneration;
+		const currentWorkerGeneration = ++workerGeneration;
 		try {
-			worker = startWorker({
+			const startedWorker = startWorker({
 				prompt: event.prompt ?? "",
 				instructions: HERDR_INSTRUCTIONS,
 				onClaimComplete: (claim) => {
+					if (
+						generation !== sessionGeneration ||
+						workerGeneration !== currentWorkerGeneration
+					)
+						return;
 					worker = undefined;
-					setHerdrStatus(ctx, undefined);
+					workerGeneration = 0;
+					hideFooter();
 					if (
 						hasValidatedTabClaim(
 							commandRunner,
@@ -375,15 +390,40 @@ export function installHerdrClaimGate(
 					);
 				},
 				onFailure: (message) => {
+					if (
+						generation !== sessionGeneration ||
+						workerGeneration !== currentWorkerGeneration
+					)
+						return;
 					worker = undefined;
-					setHerdrStatus(ctx, undefined);
+					workerGeneration = 0;
+					hideFooter();
 					notify(ctx, message, "warning");
 				},
 			});
-			setHerdrStatus(ctx, HERDR_WORKING_STATUS);
+			if (
+				generation !== sessionGeneration ||
+				workerGeneration !== currentWorkerGeneration
+			) {
+				startedWorker.cancel();
+				return;
+			}
+			worker = startedWorker;
+			emitFooter({
+				footerType: HERDR_FOOTER_TYPE,
+				isLoading: true,
+				text: HERDR_WORKING_STATUS,
+				isVisible: true,
+			});
 		} catch (error) {
+			if (
+				generation !== sessionGeneration ||
+				workerGeneration !== currentWorkerGeneration
+			)
+				return;
 			worker = undefined;
-			setHerdrStatus(ctx, undefined);
+			workerGeneration = 0;
+			hideFooter();
 			const detail =
 				error instanceof Error
 					? error.message
@@ -394,10 +434,12 @@ export function installHerdrClaimGate(
 		return undefined;
 	});
 
-	pi.on("session_shutdown", async (_event, ctx) => {
+	pi.on("session_shutdown", async (_event, _ctx) => {
+		++sessionGeneration;
 		worker?.cancel();
 		worker = undefined;
-		setHerdrStatus(ctx, undefined);
+		workerGeneration = 0;
+		hideFooter();
 		sessionTabId = undefined;
 		sessionPaneId = undefined;
 		sessionTabLabel = undefined;

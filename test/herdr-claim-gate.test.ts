@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { FooterUpdate } from "../src/footer/types.ts";
 import type { CommandRunner } from "../src/herdr-claim-gate.ts";
 import {
 	type ClaimWorkerRequest,
@@ -12,6 +13,7 @@ interface FakePi {
 	entries: Array<{ type: string; data?: unknown; customType?: string }>;
 	notifications: Array<{ message: string; level: string }>;
 	statusCalls: Array<{ key: string; text: string | undefined }>;
+	footerEvents: FooterUpdate[];
 	sentMessages: unknown[];
 	contextMessages: unknown[];
 	on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
@@ -26,6 +28,7 @@ function createFakePi(): FakePi {
 		entries,
 		notifications: [],
 		statusCalls: [],
+		footerEvents: [],
 		sentMessages: [],
 		contextMessages: [],
 		on(event, handler) {
@@ -131,6 +134,13 @@ async function startGate(
 	installHerdrClaimGate(pi as unknown as ExtensionAPI, {
 		commandRunner: options.commandRunner ?? commandRunner,
 		startBackgroundWorker: options.worker?.start,
+		onFooterUpdate: (event) => {
+			pi.footerEvents.push(event);
+			pi.statusCalls.push({
+				key: event.footerType,
+				text: event.isVisible ? event.text : undefined,
+			});
+		},
 	});
 	const handler = pi.handlers.get("session_start")?.[0];
 	expect(handler).toBeDefined();
@@ -201,6 +211,62 @@ describe("Herdr claim gate activation", () => {
 			key: "pi-todo-gate-herdr",
 			text: undefined,
 		});
+		expect(pi.footerEvents.at(-1)).toEqual({
+			footerType: "pi-todo-gate-herdr",
+			isLoading: false,
+			text: "Herdr: ⠋ working |",
+			isVisible: false,
+		});
+	});
+
+	it("cancels and ignores a worker from an earlier session", async () => {
+		const pi = createFakePi();
+		const requests: ClaimWorkerRequest[] = [];
+		let cancellations = 0;
+		const startWorker: StartBackgroundWorker = vi.fn((request) => {
+			requests.push(request);
+			return { cancel: () => cancellations++ };
+		});
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousTab = process.env.HERDR_TAB_ID;
+		const previousPane = process.env.HERDR_PANE_ID;
+		process.env.HERDR_ENV = "1";
+		process.env.HERDR_TAB_ID = "w1:t1";
+		process.env.HERDR_PANE_ID = "w1:p1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner,
+				startBackgroundWorker: startWorker,
+				onFooterUpdate: (event) => pi.footerEvents.push(event),
+			});
+			const sessionStart = pi.handlers.get("session_start")?.[0];
+			await sessionStart?.({ reason: "startup" }, contextFor(pi));
+			await emit(
+				pi,
+				"before_agent_start",
+				{ prompt: "first session" },
+				contextFor(pi),
+			);
+			await sessionStart?.({ reason: "new" }, contextFor(pi));
+			await emit(
+				pi,
+				"before_agent_start",
+				{ prompt: "second session" },
+				contextFor(pi),
+			);
+
+			expect(cancellations).toBe(1);
+			expect(requests).toHaveLength(2);
+			requests[0]?.onFailure("late worker failure");
+			expect(pi.footerEvents).toHaveLength(2);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+			else process.env.HERDR_TAB_ID = previousTab;
+			if (previousPane === undefined) delete process.env.HERDR_PANE_ID;
+			else process.env.HERDR_PANE_ID = previousPane;
+		}
 	});
 
 	it("notifies user on worker completion without informing main agent", async () => {
@@ -584,6 +650,7 @@ describe("Herdr automatic linked-worktree claim", () => {
 		try {
 			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
 				commandRunner: runner,
+				onFooterUpdate: (event) => pi.footerEvents.push(event),
 			});
 			await pi.handlers.get("session_start")?.[0]?.(
 				{ reason: "startup" },
@@ -600,6 +667,47 @@ describe("Herdr automatic linked-worktree claim", () => {
 			"herdr tab rename w1:t1 feature/dialog-editor",
 		);
 		expect(pi.entries).toHaveLength(0);
+	});
+
+	it("hides the footer after an automatic linked-worktree claim", async () => {
+		const pi = createFakePi();
+		const runner: CommandRunner = (command, args) => {
+			if (command === "git" && args.join(" ") === "rev-parse --git-dir")
+				return "/repo/.git/worktrees/feature\n";
+			if (command === "git" && args.join(" ") === "rev-parse --git-common-dir")
+				return "/repo/.git\n";
+			if (command === "git" && args.join(" ") === "branch --show-current")
+				return "feature/dialog-editor\n";
+			if (command === "herdr" && args.join(" ") === "tab get w1:t1")
+				return '{"result":{"tab":{"label":"7"}}}';
+			return "{}";
+		};
+		const previousHerdr = process.env.HERDR_ENV;
+		const previousTab = process.env.HERDR_TAB_ID;
+		process.env.HERDR_ENV = "1";
+		process.env.HERDR_TAB_ID = "w1:t1";
+		try {
+			installHerdrClaimGate(pi as unknown as ExtensionAPI, {
+				commandRunner: runner,
+				onFooterUpdate: (event) => pi.footerEvents.push(event),
+			});
+			await pi.handlers.get("session_start")?.[0]?.(
+				{ reason: "startup" },
+				contextFor(pi),
+			);
+		} finally {
+			if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+			else process.env.HERDR_ENV = previousHerdr;
+			if (previousTab === undefined) delete process.env.HERDR_TAB_ID;
+			else process.env.HERDR_TAB_ID = previousTab;
+		}
+
+		expect(pi.footerEvents.at(-1)).toEqual({
+			footerType: "pi-todo-gate-herdr",
+			isLoading: false,
+			text: "Herdr: ⠋ working |",
+			isVisible: false,
+		});
 	});
 
 	it("renames numeric default tab and skips worker instructions", async () => {

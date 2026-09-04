@@ -4,6 +4,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../extensions/pi-todo-gate.ts";
+import { FOOTER_STATE_TYPE } from "../src/footer/constants.ts";
+import type { FooterUpdate } from "../src/footer/types.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
@@ -23,8 +25,14 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const commands = new Map<string, CommandHandler>();
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
+	const footerAppended: unknown[] = [];
 	const notifications: string[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
+	const footerUpdate = (event: FooterUpdate) =>
+		statusCalls.push({
+			key: event.footerType,
+			text: event.isVisible ? event.text : undefined,
+		});
 	let activeTools: string[] = [];
 	const pi = {
 		on: (event: string, handler: Handler) => {
@@ -41,7 +49,11 @@ function harness(cwd: string, branch: unknown[] = []) {
 		registerTool: (tool: TestTool) => tools.push(tool),
 		registerCommand: (name: string, options: { handler: CommandHandler }) =>
 			commands.set(name, options.handler),
-		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
+		appendEntry: (type: string, data: unknown) =>
+			(type === FOOTER_STATE_TYPE ? footerAppended : appended).push({
+				type,
+				data,
+			}),
 		getActiveTools: () => activeTools,
 		setActiveTools: (names: string[]) => {
 			activeTools = names;
@@ -72,8 +84,10 @@ function harness(cwd: string, branch: unknown[] = []) {
 		commands,
 		tools,
 		appended,
+		footerAppended,
 		notifications,
 		statusCalls,
+		footerUpdate,
 	};
 }
 
@@ -214,6 +228,25 @@ describe("extension activation", () => {
 			"pi-todo-gate-pr",
 			"pi-todo-gate-task",
 		]);
+	});
+
+	it("persists footer status updates through footer module", async () => {
+		const h = harness("/configured/project");
+		await start(h, { "/configured": "Merge TD" });
+
+		expect(h.footerAppended).toContainEqual({
+			type: FOOTER_STATE_TYPE,
+			data: {
+				footers: {
+					"pi-todo-gate-pr": {
+						footerType: "pi-todo-gate-pr",
+						isLoading: false,
+						text: "| PR Link: none |",
+						isVisible: true,
+					},
+				},
+			},
+		});
 	});
 });
 
@@ -385,7 +418,11 @@ describe("deferred Todoist task claiming", () => {
 				triggersOnlyOnWorktree: false,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ exec: projectExec, claimTaskWorker: worker },
+			{
+				exec: projectExec,
+				claimTaskWorker: worker,
+				onFooterUpdate: h.footerUpdate,
+			},
 		);
 		await todoist.sessionStart({}, h.ctx);
 
@@ -522,7 +559,11 @@ describe("deferred Todoist task claiming", () => {
 				triggersOnlyOnWorktree: false,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ exec: projectExec, createTodoistClient: () => client },
+			{
+				exec: projectExec,
+				createTodoistClient: () => client,
+				onFooterUpdate: h.footerUpdate,
+			},
 		);
 		await todoist.sessionStart({}, h.ctx);
 		const tool = h.tools.find((item) => item.name === "pi_todoist_gate_state");
@@ -935,7 +976,10 @@ describe("merge reminder", () => {
 				triggersOnlyOnWorktree: false,
 			},
 			{ projects: { "/configured": "Pi Extensions" } },
-			{ createTodoistClient: () => client },
+			{
+				createTodoistClient: () => client,
+				onFooterUpdate: h.footerUpdate,
+			},
 		);
 		await todoist.sessionStart({}, h.ctx);
 
