@@ -76,6 +76,24 @@ const THREE_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean, c: boolean) { if (a && b && c) return true; return false; }";
 const MAGIC_TEST =
 	"flags executable string literals but permits const definitions";
+const SIMILAR_STRING_RULE = "similar-string-literals";
+const SIMILAR_STRING_TEST = "flags singleton literals with highly similar text";
+const SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny walks the dog", "Tom walks the dog"];
+}`;
+const UNRELATED_STRING_SOURCE = `function describeThings() {
+	return ["Johnny walks the dog", "The process completed successfully"];
+}`;
+const EXACT_DUPLICATE_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny walks the dog", "Johnny walks the dog"];
+}`;
+const SHORT_SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny dog", "Tom dog"];
+}`;
+const TOP_LEVEL_SIMILAR_STRING_SOURCE = `const messages = {
+	johnny: "Johnny walks the dog",
+	tom: "Tom walks the dog",
+};`;
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
 const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
@@ -237,6 +255,26 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
 			NO_MAGIC_RULE,
 		);
+	});
+
+	it(SIMILAR_STRING_TEST, async () => {
+		expect(
+			ruleIds(await lintFixture(SIMILAR_STRING_SOURCE)).filter(
+				(id) => id === SIMILAR_STRING_RULE,
+			),
+		).toHaveLength(2);
+		expect(ruleIds(await lintFixture(UNRELATED_STRING_SOURCE))).not.toContain(
+			SIMILAR_STRING_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(EXACT_DUPLICATE_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(SHORT_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(TOP_LEVEL_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
 	});
 
 	it(EXPRESSION_TEST, async () => {
