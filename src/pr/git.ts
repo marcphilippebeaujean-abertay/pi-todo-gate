@@ -1,31 +1,31 @@
-const STRING_LITERAL_GH_9559D5B3 = "gh";
-const STRING_LITERAL_PR_6A09DBCA = "pr";
-const STRING_LITERAL_VIEW_E4AEC574 = "view";
-const STRING_LITERAL_JSON_D1E6AF38 = "--json";
-const STRING_LITERAL_STATE_MERGEDAT_C10E3112 = "state,mergedAt";
-const STRING_LITERAL_UNKNOWN_02388E71 = "UNKNOWN";
-const STRING_LITERAL_MERGED_A75B6D4F = "MERGED";
-const STRING_LITERAL_LIST_A2CBC387 = "list";
-const STRING_LITERAL_HEAD_942A95FD = "--head";
-const STRING_LITERAL_STATE_4D265FF9 = "--state";
-const STRING_LITERAL_OPEN_C3334D9B = "open";
-const STRING_LITERAL_URL_STATE_ECB484C2 = "url,state";
-const STRING_LITERAL_LIMIT_F923B577 = "--limit";
-const STRING_LITERAL_OPEN_59CCD2EF = "OPEN";
-const STRING_LITERAL_CLOSED_1E0B6F1C = "CLOSED";
-const STRING_LITERAL_OBJECT_5F2D4D70 = "object";
-const STRING_LITERAL_STRING_9B5A5E11 = "string";
+const GH_COMMAND = "gh";
+const PR_COMMAND = "pr";
+const VIEW_COMMAND = "view";
+const JSON_FLAG = "--json";
+const STATE_MERGED_AT_FIELDS = "state,mergedAt";
+const UNKNOWN_STATE = "UNKNOWN";
+const MERGED_STATE = "MERGED";
+const LIST_COMMAND = "list";
+const HEAD_FLAG = "--head";
+const STATE_FLAG = "--state";
+const OPEN_STATE_FILTER = "open";
+const URL_STATE_FIELDS = "url,state";
+const LIMIT_FLAG = "--limit";
+const OPEN_STATE = "OPEN";
+const CLOSED_STATE = "CLOSED";
+const OBJECT_TYPE = "object";
+const STRING_TYPE = "string";
 
 type MergedPrData = { state?: unknown; mergedAt?: unknown };
 
 function isString(value: unknown): value is string {
-	return typeof value === STRING_LITERAL_STRING_9B5A5E11;
+	return typeof value === STRING_TYPE;
 }
 
 function isMergedPrData(
 	data: MergedPrData,
 ): data is { state: "MERGED"; mergedAt: string } {
-	const hasMergedState = data.state === STRING_LITERAL_MERGED_A75B6D4F;
+	const hasMergedState = data.state === MERGED_STATE;
 	if (typeof data.mergedAt !== "string") return false;
 	const hasMergedAt = data.mergedAt.trim() !== "";
 	return hasMergedState && hasMergedAt;
@@ -33,12 +33,11 @@ function isMergedPrData(
 
 function stateFromMergedData(data: MergedPrData): OpenPrInfo["state"] {
 	const isMerged = isMergedPrData(data);
-	if (isMerged) return STRING_LITERAL_MERGED_A75B6D4F;
+	if (isMerged) return MERGED_STATE;
 	const isOpenOrClosed =
-		data.state === STRING_LITERAL_OPEN_59CCD2EF ||
-		data.state === STRING_LITERAL_CLOSED_1E0B6F1C;
+		data.state === OPEN_STATE || data.state === CLOSED_STATE;
 	if (isOpenOrClosed) return data.state as OpenPrInfo["state"];
-	return STRING_LITERAL_UNKNOWN_02388E71;
+	return UNKNOWN_STATE;
 }
 
 import type { CommandResult, Exec } from "../shared/command.ts";
@@ -57,14 +56,8 @@ async function runGhView(
 ): Promise<CommandResult | null> {
 	try {
 		return await exec(
-			STRING_LITERAL_GH_9559D5B3,
-			[
-				STRING_LITERAL_PR_6A09DBCA,
-				STRING_LITERAL_VIEW_E4AEC574,
-				target,
-				STRING_LITERAL_JSON_D1E6AF38,
-				fields,
-			],
+			GH_COMMAND,
+			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, fields],
 			{ cwd },
 		);
 	} catch {
@@ -77,24 +70,18 @@ export async function findPrState(
 	cwd: string,
 	prUrl: string,
 ): Promise<OpenPrInfo["state"]> {
-	const result = await runGhView(
-		exec,
-		cwd,
-		prUrl,
-		STRING_LITERAL_STATE_MERGEDAT_C10E3112,
-	);
-	if (result === null) return STRING_LITERAL_UNKNOWN_02388E71;
+	const result = await runGhView(exec, cwd, prUrl, STATE_MERGED_AT_FIELDS);
+	if (result === null) return UNKNOWN_STATE;
 	const commandFailed = result.code !== 0;
-	if (commandFailed) return STRING_LITERAL_UNKNOWN_02388E71;
+	if (commandFailed) return UNKNOWN_STATE;
 	try {
 		const row: unknown = JSON.parse(result.stdout);
-		if (typeof row !== STRING_LITERAL_OBJECT_5F2D4D70)
-			return STRING_LITERAL_UNKNOWN_02388E71;
-		if (row === null) return STRING_LITERAL_UNKNOWN_02388E71;
+		if (typeof row !== OBJECT_TYPE) return UNKNOWN_STATE;
+		if (row === null) return UNKNOWN_STATE;
 		const data = row as MergedPrData;
 		return stateFromMergedData(data);
 	} catch {
-		return STRING_LITERAL_UNKNOWN_02388E71;
+		return UNKNOWN_STATE;
 	}
 }
 
@@ -105,17 +92,17 @@ async function runGhList(
 ): Promise<CommandResult | null> {
 	try {
 		return await exec(
-			STRING_LITERAL_GH_9559D5B3,
+			GH_COMMAND,
 			[
-				STRING_LITERAL_PR_6A09DBCA,
-				STRING_LITERAL_LIST_A2CBC387,
-				STRING_LITERAL_HEAD_942A95FD,
+				PR_COMMAND,
+				LIST_COMMAND,
+				HEAD_FLAG,
 				branch,
-				STRING_LITERAL_STATE_4D265FF9,
-				STRING_LITERAL_OPEN_C3334D9B,
-				STRING_LITERAL_JSON_D1E6AF38,
-				STRING_LITERAL_URL_STATE_ECB484C2,
-				STRING_LITERAL_LIMIT_F923B577,
+				STATE_FLAG,
+				OPEN_STATE_FILTER,
+				JSON_FLAG,
+				URL_STATE_FIELDS,
+				LIMIT_FLAG,
 				"1",
 			],
 			{ cwd },
@@ -128,31 +115,29 @@ async function runGhList(
 function parseOpenPrResult(stdout: string): OpenPrInfo {
 	try {
 		const rows: unknown = JSON.parse(stdout);
-		if (!Array.isArray(rows))
-			return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
+		if (!Array.isArray(rows)) return { url: null, state: UNKNOWN_STATE };
 		const hasNoRows = rows.length === 0;
-		if (hasNoRows) return { url: null, state: STRING_LITERAL_OPEN_59CCD2EF };
+		if (hasNoRows) return { url: null, state: OPEN_STATE };
 		const firstRow = rows[0];
-		if (typeof firstRow !== STRING_LITERAL_OBJECT_5F2D4D70)
-			return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
-		if (firstRow === null)
-			return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
+		if (typeof firstRow !== OBJECT_TYPE)
+			return { url: null, state: UNKNOWN_STATE };
+		if (firstRow === null) return { url: null, state: UNKNOWN_STATE };
 		const row = firstRow as { url?: unknown; state?: unknown };
 		const hasUrl = isString(row.url);
 		const url = hasUrl ? githubPrUrl(row.url as string) : null;
-		const isOpen = row.state === STRING_LITERAL_OPEN_59CCD2EF;
-		const isClosed = row.state === STRING_LITERAL_CLOSED_1E0B6F1C;
-		const isMerged = row.state === STRING_LITERAL_MERGED_A75B6D4F;
+		const isOpen = row.state === OPEN_STATE;
+		const isClosed = row.state === CLOSED_STATE;
+		const isMerged = row.state === MERGED_STATE;
 		const state = isOpen
-			? STRING_LITERAL_OPEN_59CCD2EF
+			? OPEN_STATE
 			: isClosed
-				? STRING_LITERAL_CLOSED_1E0B6F1C
+				? CLOSED_STATE
 				: isMerged
-					? STRING_LITERAL_MERGED_A75B6D4F
-					: STRING_LITERAL_UNKNOWN_02388E71;
+					? MERGED_STATE
+					: UNKNOWN_STATE;
 		return { url, state };
 	} catch {
-		return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
+		return { url: null, state: UNKNOWN_STATE };
 	}
 }
 
@@ -162,11 +147,9 @@ export async function findOpenPr(
 	branch: string,
 ): Promise<OpenPrInfo> {
 	const result = await runGhList(exec, cwd, branch);
-	if (result === null)
-		return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
+	if (result === null) return { url: null, state: UNKNOWN_STATE };
 	const commandFailed = result.code !== 0;
-	if (commandFailed)
-		return { url: null, state: STRING_LITERAL_UNKNOWN_02388E71 };
+	if (commandFailed) return { url: null, state: UNKNOWN_STATE };
 	return parseOpenPrResult(result.stdout);
 }
 

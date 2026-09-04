@@ -1,17 +1,17 @@
-const STRING_LITERAL_APPEND_SYSTEM_PROMPT_37FFD3BC = "--append-system-prompt";
-const STRING_LITERAL_THINKING_F687683B = "--thinking";
-const STRING_LITERAL_TEXT_FF4FD29E = "text";
-const STRING_LITERAL_ASSISTANT_4E38B6B0 = "assistant";
-const STRING_LITERAL_STRING_9B5A5E11 = "string";
+const APPEND_SYSTEM_PROMPT_FLAG = "--append-system-prompt";
+const THINKING_FLAG = "--thinking";
+const TEXT_FIELD = "text";
+const ASSISTANT_ROLE = "assistant";
+const STRING_TYPE = "string";
 
 function isString(value: unknown): value is string {
-	return typeof value === STRING_LITERAL_STRING_9B5A5E11;
+	return typeof value === STRING_TYPE;
 }
 
 function textFromPart(part: unknown): string {
 	if (typeof part !== "object") return "";
 	if (part === null) return "";
-	const hasText = STRING_LITERAL_TEXT_FF4FD29E in part;
+	const hasText = TEXT_FIELD in part;
 	if (!hasText) return "";
 	return String((part as { text?: unknown }).text ?? "");
 }
@@ -39,10 +39,10 @@ export function buildPiWorkerArgs(
 		...BASE_PI_WORKER_ARGS,
 		...(options.instructions === undefined
 			? []
-			: [STRING_LITERAL_APPEND_SYSTEM_PROMPT_37FFD3BC, options.instructions]),
+			: [APPEND_SYSTEM_PROMPT_FLAG, options.instructions]),
 		...(options.thinking === undefined
 			? []
-			: [STRING_LITERAL_THINKING_F687683B, options.thinking]),
+			: [THINKING_FLAG, options.thinking]),
 		prompt,
 	];
 }
@@ -54,7 +54,7 @@ export function textFromAssistantMessage(
 	if (typeof value !== "object") return "";
 	if (value === null) return "";
 	const message = value as { role?: unknown; content?: unknown };
-	const isAssistantMessage = message.role === STRING_LITERAL_ASSISTANT_4E38B6B0;
+	const isAssistantMessage = message.role === ASSISTANT_ROLE;
 	if (!isAssistantMessage) return "";
 	const hasTextContent = isString(message.content);
 	const textContent = hasTextContent ? (message.content as string) : undefined;

@@ -4,9 +4,9 @@ const RETURNS_NO_DIAGNOSTICS_FOR_A_CLEAN_PROGRAM =
 	"returns no diagnostics for a clean program";
 const EXPORT_CONST_ANSWER_42 = "export const answer = 42;\n";
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
@@ -149,6 +149,12 @@ const NESTED_SOURCE = `function outer() {
 	};
 	return one();
 }`;
+const SOURCE_DIRECTORY = resolve(import.meta.dirname, "../src");
+const TYPESCRIPT_EXTENSION = ".ts";
+const UTF8_ENCODING = "utf8";
+const CRYPTIC_LITERAL_CONSTANT_PATTERN = /^const STRING_LITERAL_/m;
+const CRYPTIC_CONSTANT_TEST =
+	"does not use cryptic generated literal constant names";
 const METRIC_RULES = [
 	"cyclomatic-complexity",
 	"function-length",
@@ -276,6 +282,24 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(FOR_ITERATION_SOURCE))).not.toContain(
 			NAMED_IF_RULE,
 		);
+	});
+
+	it(CRYPTIC_CONSTANT_TEST, async () => {
+		const sourcePaths = await readdir(SOURCE_DIRECTORY, { recursive: true });
+		const typescriptPaths = sourcePaths.filter((path) =>
+			path.endsWith(TYPESCRIPT_EXTENSION),
+		);
+		const sourceFiles = await Promise.all(
+			typescriptPaths.map((path) =>
+				readFile(join(SOURCE_DIRECTORY, path), UTF8_ENCODING),
+			),
+		);
+
+		expect(
+			sourceFiles.some((source) =>
+				CRYPTIC_LITERAL_CONSTANT_PATTERN.test(source.toString()),
+			),
+		).toBe(false);
 	});
 
 	it(NORMALIZED_PATH_TEST, () => {

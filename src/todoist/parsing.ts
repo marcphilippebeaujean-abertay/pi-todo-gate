@@ -1,13 +1,11 @@
-const STRING_LITERAL_1_REDACTED_4089B42A = "$1=[redacted]";
-const STRING_LITERAL_INVALID_JSON_RESPONSE_384F0043 = "invalid JSON response";
-const STRING_LITERAL_RESPONSE_74970FA5 = "response";
-const STRING_LITERAL_UNEXPECTED_JSON_SHAPE_E8AE2192 = "unexpected JSON shape";
-const STRING_LITERAL_TASK_HAS_MISSING_REQUIRED_FIELDS_BA147756 =
-	"task has missing required fields";
-const STRING_LITERAL_EXPECTED_A_LIST_PAYLOAD_301A8473 =
-	"expected a list payload";
-const STRING_LITERAL_HTTP = "http:";
-const STRING_LITERAL_HTTPS = "https:";
+const REDACTED_VALUE_REPLACEMENT = "$1=[redacted]";
+const INVALID_JSON_RESPONSE_MESSAGE = "invalid JSON response";
+const RESPONSE_ERROR_FAMILY = "response";
+const UNEXPECTED_JSON_SHAPE_MESSAGE = "unexpected JSON shape";
+const MISSING_TASK_FIELDS_MESSAGE = "task has missing required fields";
+const EXPECTED_LIST_PAYLOAD_MESSAGE = "expected a list payload";
+const HTTP_PROTOCOL = "http:";
+const HTTPS_PROTOCOL = "https:";
 
 import { TodoistError, type TodoistTask } from "./client.ts";
 
@@ -15,7 +13,7 @@ export function sanitizeError(stderr: string): string {
 	return stderr
 		.replace(
 			/(?:token|password|secret|authorization|bearer)\s*[:=]?\s*[^\s,;]+/gi,
-			STRING_LITERAL_1_REDACTED_4089B42A,
+			REDACTED_VALUE_REPLACEMENT,
 		)
 		.replace(/\s+/g, " ")
 		.trim()
@@ -26,30 +24,27 @@ export function parsePayload(stdout: string, family: string): unknown {
 	try {
 		return JSON.parse(stdout);
 	} catch {
-		throw new TodoistError(
-			family,
-			STRING_LITERAL_INVALID_JSON_RESPONSE_384F0043,
-		);
+		throw new TodoistError(family, INVALID_JSON_RESPONSE_MESSAGE);
 	}
 }
 
 export function record(value: unknown): Record<string, unknown> {
 	if (typeof value !== "object") {
 		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_UNEXPECTED_JSON_SHAPE_E8AE2192,
+			RESPONSE_ERROR_FAMILY,
+			UNEXPECTED_JSON_SHAPE_MESSAGE,
 		);
 	}
 	if (value === null) {
 		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_UNEXPECTED_JSON_SHAPE_E8AE2192,
+			RESPONSE_ERROR_FAMILY,
+			UNEXPECTED_JSON_SHAPE_MESSAGE,
 		);
 	}
 	if (Array.isArray(value)) {
 		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_UNEXPECTED_JSON_SHAPE_E8AE2192,
+			RESPONSE_ERROR_FAMILY,
+			UNEXPECTED_JSON_SHAPE_MESSAGE,
 		);
 	}
 	return value as Record<string, unknown>;
@@ -63,8 +58,8 @@ export function safeHttpUrl(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	try {
 		const url = new URL(value);
-		const isHttp = url.protocol === STRING_LITERAL_HTTP;
-		const isHttps = url.protocol === STRING_LITERAL_HTTPS;
+		const isHttp = url.protocol === HTTP_PROTOCOL;
+		const isHttps = url.protocol === HTTPS_PROTOCOL;
 		const isUnsupportedProtocol = !isHttp && !isHttps;
 		if (isUnsupportedProtocol) return undefined;
 		return value;
@@ -89,22 +84,13 @@ export function taskFromPayload(value: unknown): TodoistTask {
 	const projectId = stringValue(data.projectId ?? data.project_id);
 	const hasId = id !== "";
 	if (!hasId)
-		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_TASK_HAS_MISSING_REQUIRED_FIELDS_BA147756,
-		);
+		throw new TodoistError(RESPONSE_ERROR_FAMILY, MISSING_TASK_FIELDS_MESSAGE);
 	const hasContent = content !== "";
 	if (!hasContent)
-		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_TASK_HAS_MISSING_REQUIRED_FIELDS_BA147756,
-		);
+		throw new TodoistError(RESPONSE_ERROR_FAMILY, MISSING_TASK_FIELDS_MESSAGE);
 	const hasProjectId = projectId !== "";
 	if (!hasProjectId)
-		throw new TodoistError(
-			STRING_LITERAL_RESPONSE_74970FA5,
-			STRING_LITERAL_TASK_HAS_MISSING_REQUIRED_FIELDS_BA147756,
-		);
+		throw new TodoistError(RESPONSE_ERROR_FAMILY, MISSING_TASK_FIELDS_MESSAGE);
 	return {
 		id,
 		content,
@@ -122,8 +108,5 @@ export function childList(value: unknown): unknown[] {
 	const data = record(value);
 	if (Array.isArray(data.tasks)) return data.tasks;
 	if (Array.isArray(data.results)) return data.results;
-	throw new TodoistError(
-		STRING_LITERAL_RESPONSE_74970FA5,
-		STRING_LITERAL_EXPECTED_A_LIST_PAYLOAD_301A8473,
-	);
+	throw new TodoistError(RESPONSE_ERROR_FAMILY, EXPECTED_LIST_PAYLOAD_MESSAGE);
 }

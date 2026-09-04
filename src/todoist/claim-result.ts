@@ -1,6 +1,6 @@
-const STRING_LITERAL_CLAIMED_84BF0B5E = "claimed";
-const STRING_LITERAL_COLLISION_12B2356D = "collision";
-const STRING_LITERAL_NONE_A228BF88 = "none";
+const CLAIMED_STATUS = "claimed";
+const COLLISION_STATUS = "collision";
+const NONE_STATUS = "none";
 
 import { Value } from "typebox/value";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
@@ -31,7 +31,7 @@ function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
 	const hasClaimedTaskRef = isNonEmptyString(claimedTaskRef);
 	if (hasClaimedTaskRef)
 		return {
-			status: STRING_LITERAL_CLAIMED_84BF0B5E,
+			status: CLAIMED_STATUS,
 			taskRef: claimedTaskRef,
 		};
 	const collisionTaskRef = wrapped.collision?.taskRef;
@@ -48,7 +48,7 @@ function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
 		? { collisionReason: collision.collisionReason as string }
 		: {};
 	return {
-		status: STRING_LITERAL_COLLISION_12B2356D,
+		status: COLLISION_STATUS,
 		taskRef: collisionTaskRef,
 		...taskName,
 		...collisionReason,
@@ -83,5 +83,5 @@ export function parseResult(stdout: string): TaskClaimWorkerResult {
 			// Try earlier assistant output.
 		}
 	}
-	return { status: STRING_LITERAL_NONE_A228BF88 };
+	return { status: NONE_STATUS };
 }

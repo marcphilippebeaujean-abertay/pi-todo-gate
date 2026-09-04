@@ -1,6 +1,6 @@
 export const PR_STATE_TYPE = "pi-pr-gate-state";
-const STRING_LITERAL_STRING = "string";
-const STRING_LITERAL_BOOLEAN = "boolean";
+const STRING_TYPE = "string";
+const BOOLEAN_TYPE = "boolean";
 
 import { isRecord } from "../shared/records.ts";
 
@@ -42,11 +42,11 @@ function isMergedPr(value: unknown): value is MergedPr {
 	const isRecordValue = isRecord(value);
 	const record = isRecordValue ? value : null;
 	if (record === null) return false;
-	const hasPrUrl = typeof record.prUrl === STRING_LITERAL_STRING;
+	const hasPrUrl = typeof record.prUrl === STRING_TYPE;
 	if (!hasPrUrl) return false;
-	const hasDetectedAt = typeof record.detectedAt === STRING_LITERAL_STRING;
+	const hasDetectedAt = typeof record.detectedAt === STRING_TYPE;
 	if (!hasDetectedAt) return false;
-	return typeof record.reminderPending === STRING_LITERAL_BOOLEAN;
+	return typeof record.reminderPending === BOOLEAN_TYPE;
 }
 
 export function isPrState(value: unknown): value is PrState {
@@ -54,11 +54,11 @@ export function isPrState(value: unknown): value is PrState {
 	const record = isRecordValue ? value : null;
 	if (record === null) return false;
 	const hasValidPrUrl =
-		record.prUrl === undefined || typeof record.prUrl === STRING_LITERAL_STRING;
+		record.prUrl === undefined || typeof record.prUrl === STRING_TYPE;
 	if (!hasValidPrUrl) return false;
 	const hasValidDiscoveryDisabled =
 		record.discoveryDisabled === undefined ||
-		typeof record.discoveryDisabled === STRING_LITERAL_BOOLEAN;
+		typeof record.discoveryDisabled === BOOLEAN_TYPE;
 	if (!hasValidDiscoveryDisabled) return false;
 	if (record.mergedPrs === undefined) return true;
 	if (!Array.isArray(record.mergedPrs)) return false;

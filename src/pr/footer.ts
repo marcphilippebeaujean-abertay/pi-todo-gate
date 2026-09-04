@@ -1,10 +1,10 @@
-const STRING_LITERAL_ACCENT_2B526673 = "accent";
-const STRING_LITERAL_PR_NONE_1D5B0664 = "PR: none";
-const STRING_LITERAL_MUTED_5970FB58 = "muted";
-const STRING_LITERAL_TEXT_7E3621F6 = "text";
-const STRING_LITERAL_PR_LINK_595A8DB4 = "| PR Link: ";
-const STRING_LITERAL_NONE_D461DC85 = "none";
-const STRING_LITERAL_EMPTY_C922F3DA = " |";
+const ACCENT_COLOR = "accent";
+const NO_PR_LABEL = "PR: none";
+const MUTED_COLOR = "muted";
+const TEXT_COLOR = "text";
+const PR_LINK_LABEL = "| PR Link: ";
+const NONE_LABEL = "none";
+const FOOTER_SEPARATOR = " |";
 
 import { hyperlink } from "@earendil-works/pi-tui";
 import { githubPrUrl } from "./detection.ts";
@@ -15,8 +15,7 @@ export interface PrFooterTheme {
 
 function linkText(text: string, theme?: PrFooterTheme): string {
 	const colored =
-		theme?.fg(STRING_LITERAL_ACCENT_2B526673, text) ??
-		`\u001b[34m${text}\u001b[39m`;
+		theme?.fg(ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
@@ -40,7 +39,7 @@ export function renderPrLabel(
 	const normalized = hasUrl ? githubPrUrl(url as string) : null;
 	const number = prNumber(url);
 	const hasNoPr = number === null || normalized === null;
-	if (hasNoPr) return STRING_LITERAL_PR_NONE_1D5B0664;
+	if (hasNoPr) return NO_PR_LABEL;
 	return hyperlink(
 		linkText(`PR #${boundedPrNumber(number)}`, theme),
 		normalized,
@@ -51,15 +50,13 @@ export function renderPrStatus(
 	url: string | undefined,
 	theme?: PrFooterTheme,
 ): string {
-	const muted = (text: string) =>
-		theme?.fg(STRING_LITERAL_MUTED_5970FB58, text) ?? text;
-	const value = (text: string) =>
-		theme?.fg(STRING_LITERAL_TEXT_7E3621F6, text) ?? text;
+	const muted = (text: string) => theme?.fg(MUTED_COLOR, text) ?? text;
+	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
 	const hasUrl = Boolean(url);
 	const normalized = hasUrl ? githubPrUrl(url as string) : null;
 	const number = prNumber(url);
 	const hasNoPr = number === null || normalized === null;
 	if (hasNoPr)
-		return `${muted(STRING_LITERAL_PR_LINK_595A8DB4)}${value(STRING_LITERAL_NONE_D461DC85)}${muted(STRING_LITERAL_EMPTY_C922F3DA)}`;
-	return `${muted(STRING_LITERAL_PR_LINK_595A8DB4)}${hyperlink(linkText(`#${boundedPrNumber(number)}`, theme), normalized)}${muted(STRING_LITERAL_EMPTY_C922F3DA)}`;
+		return `${muted(PR_LINK_LABEL)}${value(NONE_LABEL)}${muted(FOOTER_SEPARATOR)}`;
+	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}`, theme), normalized)}${muted(FOOTER_SEPARATOR)}`;
 }
