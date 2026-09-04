@@ -94,6 +94,10 @@ const TOP_LEVEL_SIMILAR_STRING_SOURCE = `const messages = {
 	johnny: "Johnny walks the dog",
 	tom: "Tom walks the dog",
 };`;
+const TYPE_ONLY_SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	type Walkers = "Johnny walks the dog" | "Tom walks the dog";
+	return true;
+}`;
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
 const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
@@ -274,6 +278,9 @@ describe("lint diagnostics", () => {
 		).not.toContain(SIMILAR_STRING_RULE);
 		expect(
 			ruleIds(await lintFixture(TOP_LEVEL_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(TYPE_ONLY_SIMILAR_STRING_SOURCE)),
 		).not.toContain(SIMILAR_STRING_RULE);
 	});
 

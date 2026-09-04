@@ -268,6 +268,7 @@ function collectStringLiteralOccurrences(
 		) {
 			occurrences.push({ node, text: node.text });
 		}
+		if (ts.isTypeNode(node)) return;
 		ts.forEachChild(node, (child) =>
 			visit(child, currentInsideFunction, [...ancestors, node]),
 		);
