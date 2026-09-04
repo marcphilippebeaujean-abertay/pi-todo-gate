@@ -17,14 +17,14 @@ Tests validate checker behavior through Vitest and remain covered by Biome, but 
 
 ### `no-magic-strings`
 
-String literals within function bodies must be extracted into named `const` declarations before use. A direct string initializer in a `const` declaration is an allowed constant definition. Top-level constant declarations are also allowed.
+Repeated string literals within function bodies must be extracted into named `const` declarations before use. A singleton executable string may remain inline when it is clearer than a one-use constant. A direct string initializer in a `const` declaration is an allowed constant definition. Top-level constant declarations are also allowed.
 
 Ignore module specifiers, directives, property names, and type-only syntax. The checker reports executable string literals that are not constant definitions.
 
 Example:
 
 ```ts
-if (name === "Bob") return true;
+if (name === "Bob" || name === "Bob") return true;
 ```
 
 fails. This passes:

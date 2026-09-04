@@ -1,6 +1,3 @@
-const OBJECT_TYPE = "object";
-const CUSTOM_ENTRY_TYPE = "custom";
-
 export function latestCustomState<T>(
 	entries: readonly unknown[],
 	customType: string,
@@ -8,12 +5,12 @@ export function latestCustomState<T>(
 ): T | null {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const entry = entries[index];
-		const isObject = typeof entry === OBJECT_TYPE;
+		const isObject = typeof entry === "object";
 		if (!isObject) continue;
 		if (entry === null) continue;
 		if (Array.isArray(entry)) continue;
 		const record = entry as { type?: unknown; customType?: unknown };
-		const isCustomStateEntry = record.type === CUSTOM_ENTRY_TYPE;
+		const isCustomStateEntry = record.type === "custom";
 		if (!isCustomStateEntry) continue;
 		const hasMatchingType = record.customType === customType;
 		if (!hasMatchingType) continue;

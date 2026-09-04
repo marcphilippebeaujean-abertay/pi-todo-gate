@@ -1,12 +1,7 @@
-const ACCENT_COLOR = "accent";
 const OPEN_TASK_LABEL = "open";
-const MUTED_COLOR = "muted";
-const TEXT_COLOR = "text";
 const TODOIST_TASK_LABEL = "Todoist Task: ";
 const FOOTER_SEPARATOR = " |";
 const NONE_LABEL = "none";
-const HTTP_PROTOCOL = "http:";
-const HTTPS_PROTOCOL = "https:";
 
 import { hyperlink } from "@earendil-works/pi-tui";
 
@@ -15,8 +10,7 @@ export interface TodoistFooterTheme {
 }
 
 function linkText(text: string, theme?: TodoistFooterTheme): string {
-	const colored =
-		theme?.fg(ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
+	const colored = theme?.fg("accent", text) ?? `\u001b[34m${text}\u001b[39m`;
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
@@ -38,8 +32,8 @@ export function renderTaskStatus(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	const muted = (text: string) => theme?.fg(MUTED_COLOR, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
+	const muted = (text: string) => theme?.fg("muted", text) ?? text;
+	const value = (text: string) => theme?.fg("text", text) ?? text;
 	const createMutedTaskLabel = (taskValue: string): string =>
 		`${muted(TODOIST_TASK_LABEL)}${taskValue}${muted(FOOTER_SEPARATOR)}`;
 	const hasUrl = Boolean(url);
@@ -48,7 +42,7 @@ export function renderTaskStatus(
 	try {
 		const parsed = new URL(inputUrl);
 		const isSupportedProtocol =
-			parsed.protocol === HTTP_PROTOCOL || parsed.protocol === HTTPS_PROTOCOL;
+			parsed.protocol === "http:" || parsed.protocol === "https:";
 		if (!isSupportedProtocol) return createMutedTaskLabel(value(NONE_LABEL));
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return createMutedTaskLabel(

@@ -31,6 +31,9 @@ const DIAGNOSTIC: LintDiagnostic = {
 const MAGIC_SOURCE = `function check(name: string) {
 	return name === "Bob";
 }`;
+const REPEATED_MAGIC_SOURCE = `function check(name: string) {
+	return name === "Bob" || name === "Bob";
+}`;
 const CONSTANT_SOURCE = `function check(name: string) {
 	const USER_NAME = "Bob";
 	return name === USER_NAME;
@@ -38,7 +41,7 @@ const CONSTANT_SOURCE = `function check(name: string) {
 const MODULE_PROPERTY_SOURCE = `import "side-effect";
 const record = { message: "ok" };
 function check(value: { status: string }) {
-	if (value.status === "ok") return true;
+	if (value.status === "ok") return value.status === "ok";
 	return false;
 }
 export type Status = "ok";`;
@@ -222,13 +225,22 @@ describe("lint diagnostics", () => {
 	});
 
 	it(MAGIC_TEST, async () => {
-		expect(ruleIds(await lintFixture(MAGIC_SOURCE))).toContain(NO_MAGIC_RULE);
+		expect(ruleIds(await lintFixture(MAGIC_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(REPEATED_MAGIC_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(2);
 		expect(ruleIds(await lintFixture(CONSTANT_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
-		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).toContain(
-			NO_MAGIC_RULE,
-		);
+		expect(
+			ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(2);
 		expect(ruleIds(await lintFixture(DYNAMIC_IMPORT_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
@@ -236,7 +248,7 @@ describe("lint diagnostics", () => {
 			ruleIds(await lintFixture(TYPE_SYNTAX_SOURCE)).filter(
 				(id) => id === NO_MAGIC_RULE,
 			),
-		).toHaveLength(1);
+		).toHaveLength(0);
 		expect(ruleIds(await lintFixture(TYPE_ONLY_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
@@ -256,7 +268,7 @@ describe("lint diagnostics", () => {
 				(id) => id === NO_SHORT_STRING_CONSTANTS_RULE,
 			),
 		).toHaveLength(2);
-		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
+		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
 	});

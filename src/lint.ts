@@ -400,6 +400,7 @@ function collectMagicStrings(
 	diagnostics: LintDiagnostic[],
 	limit: number,
 ): void {
+	const occurrences: StringLiteralOccurrence[] = [];
 	function visit(
 		node: ts.Node,
 		insideFunction: boolean,
@@ -411,16 +412,7 @@ function collectMagicStrings(
 			isStringLiteralLike(node) &&
 			!isIgnoredString(node, ancestors)
 		) {
-			diagnostics.push(
-				diagnostic(
-					sourceFile,
-					node,
-					NO_MAGIC_STRINGS,
-					MAGIC_STRING_MESSAGE,
-					1,
-					limit,
-				),
-			);
+			occurrences.push({ node, text: node.text });
 		}
 		if (ts.isTypeNode(node)) return;
 		ts.forEachChild(node, (child) =>
@@ -428,6 +420,24 @@ function collectMagicStrings(
 		);
 	}
 	visit(sourceFile, false);
+
+	const counts = new Map<string, number>();
+	for (const occurrence of occurrences) {
+		counts.set(occurrence.text, (counts.get(occurrence.text) ?? 0) + 1);
+	}
+	for (const occurrence of occurrences) {
+		if (counts.get(occurrence.text) === 1) continue;
+		diagnostics.push(
+			diagnostic(
+				sourceFile,
+				occurrence.node,
+				NO_MAGIC_STRINGS,
+				MAGIC_STRING_MESSAGE,
+				counts.get(occurrence.text) ?? 0,
+				limit,
+			),
+		);
+	}
 }
 
 function isNamedConditionType(type: ts.Type): boolean {

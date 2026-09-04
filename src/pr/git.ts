@@ -1,25 +1,16 @@
 const GH_COMMAND = "gh";
 const PR_COMMAND = "pr";
-const VIEW_COMMAND = "view";
 const JSON_FLAG = "--json";
-const STATE_MERGED_AT_FIELDS = "state,mergedAt";
 const UNKNOWN_STATE = "UNKNOWN";
 const MERGED_STATE = "MERGED";
-const LIST_COMMAND = "list";
-const HEAD_FLAG = "--head";
-const STATE_FLAG = "--state";
-const OPEN_STATE_FILTER = "open";
-const URL_STATE_FIELDS = "url,state";
-const LIMIT_FLAG = "--limit";
 const OPEN_STATE = "OPEN";
 const CLOSED_STATE = "CLOSED";
 const OBJECT_TYPE = "object";
-const STRING_TYPE = "string";
 
 type MergedPrData = { state?: unknown; mergedAt?: unknown };
 
 function isString(value: unknown): value is string {
-	return typeof value === STRING_TYPE;
+	return typeof value === "string";
 }
 
 function isMergedPrData(
@@ -57,7 +48,7 @@ async function runGhView(
 	try {
 		return await exec(
 			GH_COMMAND,
-			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, fields],
+			[PR_COMMAND, "view", target, JSON_FLAG, fields],
 			{ cwd },
 		);
 	} catch {
@@ -70,7 +61,7 @@ export async function findPrState(
 	cwd: string,
 	prUrl: string,
 ): Promise<OpenPrInfo["state"]> {
-	const result = await runGhView(exec, cwd, prUrl, STATE_MERGED_AT_FIELDS);
+	const result = await runGhView(exec, cwd, prUrl, "state,mergedAt");
 	if (result === null) return UNKNOWN_STATE;
 	const commandFailed = result.code !== 0;
 	if (commandFailed) return UNKNOWN_STATE;
@@ -95,14 +86,14 @@ async function runGhList(
 			GH_COMMAND,
 			[
 				PR_COMMAND,
-				LIST_COMMAND,
-				HEAD_FLAG,
+				"list",
+				"--head",
 				branch,
-				STATE_FLAG,
-				OPEN_STATE_FILTER,
+				"--state",
+				"open",
 				JSON_FLAG,
-				URL_STATE_FIELDS,
-				LIMIT_FLAG,
+				"url,state",
+				"--limit",
 				"1",
 			],
 			{ cwd },

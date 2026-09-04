@@ -16,7 +16,7 @@ const OTHER_DIRECTORY = "other";
 const LINT_INFRASTRUCTURE_NAME = "lint.ts";
 const SOURCE_NAME = "example.ts";
 const MAGIC_SOURCE = `export function check(name: string) {
-	return name === "Bob";
+	return name === "Bob" || name === "Bob";
 }`;
 const CLEAN_SOURCE = "export const answer = 42;\n";
 const IMPORTING_SOURCE =

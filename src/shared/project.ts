@@ -1,15 +1,5 @@
 const WORKTREE_PREFIX = "worktree ";
 const GIT_COMMAND = "git";
-const REV_PARSE_COMMAND = "rev-parse";
-const SHOW_TOPLEVEL_FLAG = "--show-toplevel";
-const BRANCH_COMMAND = "branch";
-const SHOW_CURRENT_FLAG = "--show-current";
-const WORKTREE_COMMAND = "worktree";
-const LIST_COMMAND = "list";
-const PORCELAIN_FLAG = "--porcelain";
-const ROOT_COMMAND_ARGS = [REV_PARSE_COMMAND, SHOW_TOPLEVEL_FLAG];
-const BRANCH_COMMAND_ARGS = [BRANCH_COMMAND, SHOW_CURRENT_FLAG];
-const WORKTREE_COMMAND_ARGS = [WORKTREE_COMMAND, LIST_COMMAND, PORCELAIN_FLAG];
 
 import { resolve } from "node:path";
 import type { CommandResult, Exec } from "./command.ts";
@@ -78,9 +68,9 @@ export async function inspectProject(
 	let listResult: CommandResult;
 	try {
 		[rootResult, branchResult, listResult] = await Promise.all([
-			exec(GIT_COMMAND, ROOT_COMMAND_ARGS, { cwd }),
-			exec(GIT_COMMAND, BRANCH_COMMAND_ARGS, { cwd }),
-			exec(GIT_COMMAND, WORKTREE_COMMAND_ARGS, { cwd }),
+			exec(GIT_COMMAND, ["rev-parse", "--show-toplevel"], { cwd }),
+			exec(GIT_COMMAND, ["branch", "--show-current"], { cwd }),
+			exec(GIT_COMMAND, ["worktree", "list", "--porcelain"], { cwd }),
 		]);
 	} catch {
 		return {

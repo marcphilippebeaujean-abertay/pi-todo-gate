@@ -1,13 +1,9 @@
 const GIT_COMMAND = "git";
 const GH_COMMAND = "gh";
 const END_OF_OPTIONS = "--";
-const AUTO_FLAG_PREFIX = "--auto=";
-const GITHUB_HOST = "github.com";
 const PR_COMMAND = "pr";
 const VIEW_COMMAND = "view";
 const JSON_FLAG = "--json";
-const HEAD_REF_NAME_FIELD = "headRefName";
-const URL_HEAD_REF_NAME_FIELDS = "url,headRefName";
 const MERGE_COMMAND = "merge";
 
 import { executableName, shellSegments, shellWords } from "../shell-parser.ts";
@@ -72,7 +68,7 @@ export function hasNonCompletingMergeOption(
 		const isEndOfOptions = arg === END_OF_OPTIONS;
 		if (isEndOfOptions) break;
 		const isGhKind = kind === GH_COMMAND;
-		const hasAutoPrefix = isGhKind && arg.startsWith(AUTO_FLAG_PREFIX);
+		const hasAutoPrefix = isGhKind && arg.startsWith("--auto=");
 		const isNonCompletingOption = options.has(arg) || hasAutoPrefix;
 		if (isNonCompletingOption) return true;
 	}
@@ -158,7 +154,7 @@ export function normalizedUrl(value: string): string | null {
 	if (hasNoCandidate) return null;
 	try {
 		const url = new URL(candidate.replace(/[.,;:!?)}\]]+$/g, ""));
-		const hasGithubHostname = url.hostname.toLowerCase() === GITHUB_HOST;
+		const hasGithubHostname = url.hostname.toLowerCase() === "github.com";
 		if (!hasGithubHostname) return null;
 		const match = url.pathname.match(
 			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
@@ -181,7 +177,7 @@ export async function queryPinnedHead(
 	try {
 		result = await exec(
 			GH_COMMAND,
-			[PR_COMMAND, VIEW_COMMAND, prUrl, JSON_FLAG, HEAD_REF_NAME_FIELD],
+			[PR_COMMAND, VIEW_COMMAND, prUrl, JSON_FLAG, "headRefName"],
 			{
 				cwd,
 			},
@@ -212,7 +208,7 @@ export async function queryCurrentPr(
 	try {
 		result = await exec(
 			GH_COMMAND,
-			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, URL_HEAD_REF_NAME_FIELDS],
+			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, "url,headRefName"],
 			{ cwd },
 		);
 	} catch {

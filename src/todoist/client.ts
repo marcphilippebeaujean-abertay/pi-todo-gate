@@ -1,20 +1,13 @@
 const TODOIST_ERROR_NAME = "TodoistError";
-const PROJECT_COMMAND = "project";
 const LIST_COMMAND = "list";
 const JSON_FLAG = "--json";
-const TASK_ID_PREFIX = "id:";
 const PROJECT_LIST_FAMILY = "project list";
 const TASK_COMMAND = "task";
-const VIEW_COMMAND = "view";
-const COMPLETE_COMMAND = "complete";
 const TASK_CLAIM_FAMILY = "task claim";
 const TASK_OUTSIDE_PROJECT_MESSAGE = "task is outside the configured project";
-const SECTION_COMMAND = "section";
 const PROJECT_FLAG = "--project";
 const IN_PROGRESS_SECTION_NAME = "in progress";
 const TASK_ALREADY_IN_PROGRESS_MESSAGE = "task is already in progress";
-const MOVE_COMMAND = "move";
-const SECTION_FLAG = "--section";
 const IN_PROGRESS_SECTION_TITLE = "In Progress";
 
 import type { CommandResult } from "../shared/command.ts";
@@ -80,9 +73,9 @@ export class TodoistClient {
 	}
 
 	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
-		const payload = await this.run([PROJECT_COMMAND, LIST_COMMAND, JSON_FLAG]);
+		const payload = await this.run(["project", LIST_COMMAND, JSON_FLAG]);
 		const rows = childList(payload).map(record);
-		const hasIdPrefix = ref.startsWith(TASK_ID_PREFIX);
+		const hasIdPrefix = ref.startsWith("id:");
 		const target = hasIdPrefix ? ref.slice(3) : ref;
 		const match = rows.find(
 			(row) =>
@@ -98,7 +91,7 @@ export class TodoistClient {
 
 	async getTask(ref: string): Promise<TodoistTask> {
 		const task = taskFromPayload(
-			await this.run([TASK_COMMAND, VIEW_COMMAND, ref, JSON_FLAG]),
+			await this.run([TASK_COMMAND, "view", ref, JSON_FLAG]),
 		);
 		const hasNoUrl = !task.url && !task.webUrl;
 		if (hasNoUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
@@ -106,7 +99,7 @@ export class TodoistClient {
 	}
 
 	async completeTask(ref: string): Promise<void> {
-		await this.run([TASK_COMMAND, COMPLETE_COMMAND, ref], false);
+		await this.run([TASK_COMMAND, "complete", ref], false);
 	}
 
 	private async resolveSectionName(
@@ -117,7 +110,7 @@ export class TodoistClient {
 		const needsSectionLookup = !sectionName && Boolean(task.sectionId);
 		if (!needsSectionLookup) return sectionName;
 		const sections = await this.run([
-			SECTION_COMMAND,
+			"section",
 			LIST_COMMAND,
 			PROJECT_FLAG,
 			`id:${projectId}`,
@@ -157,9 +150,9 @@ export class TodoistClient {
 			await this.run(
 				[
 					TASK_COMMAND,
-					MOVE_COMMAND,
+					"move",
 					ref,
-					SECTION_FLAG,
+					"--section",
 					IN_PROGRESS_SECTION_TITLE,
 					PROJECT_FLAG,
 					`id:${project.id}`,

@@ -1,7 +1,4 @@
-const PI_DIRECTORY_NAME = ".pi";
-const AGENT_DIRECTORY_NAME = "agent";
 const CONFIG_FILE_NAME = "pi-todo-gate.json";
-const UTF8_ENCODING = "utf8";
 
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -26,8 +23,7 @@ export interface ResolvedProject {
 
 export function defaultConfigPath(): string {
 	const agentDir =
-		process.env.PI_CODING_AGENT_DIR ??
-		join(homedir(), PI_DIRECTORY_NAME, AGENT_DIRECTORY_NAME);
+		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
 	return join(agentDir, CONFIG_FILE_NAME);
 }
 
@@ -61,7 +57,7 @@ export async function loadConfig(
 	path = defaultConfigPath(),
 ): Promise<TodoistProjectMapping> {
 	try {
-		return parseConfig(await readFile(path, UTF8_ENCODING));
+		return parseConfig(await readFile(path, "utf8"));
 	} catch {
 		return { projects: {} };
 	}

@@ -1,17 +1,11 @@
-const APPEND_SYSTEM_PROMPT_FLAG = "--append-system-prompt";
-const THINKING_FLAG = "--thinking";
-const TEXT_FIELD = "text";
-const ASSISTANT_ROLE = "assistant";
-const STRING_TYPE = "string";
-
 function isString(value: unknown): value is string {
-	return typeof value === STRING_TYPE;
+	return typeof value === "string";
 }
 
 function textFromPart(part: unknown): string {
 	if (typeof part !== "object") return "";
 	if (part === null) return "";
-	const hasText = TEXT_FIELD in part;
+	const hasText = "text" in part;
 	if (!hasText) return "";
 	return String((part as { text?: unknown }).text ?? "");
 }
@@ -39,10 +33,8 @@ export function buildPiWorkerArgs(
 		...BASE_PI_WORKER_ARGS,
 		...(options.instructions === undefined
 			? []
-			: [APPEND_SYSTEM_PROMPT_FLAG, options.instructions]),
-		...(options.thinking === undefined
-			? []
-			: [THINKING_FLAG, options.thinking]),
+			: ["--append-system-prompt", options.instructions]),
+		...(options.thinking === undefined ? [] : ["--thinking", options.thinking]),
 		prompt,
 	];
 }
@@ -54,7 +46,7 @@ export function textFromAssistantMessage(
 	if (typeof value !== "object") return "";
 	if (value === null) return "";
 	const message = value as { role?: unknown; content?: unknown };
-	const isAssistantMessage = message.role === ASSISTANT_ROLE;
+	const isAssistantMessage = message.role === "assistant";
 	if (!isAssistantMessage) return "";
 	const hasTextContent = isString(message.content);
 	const textContent = hasTextContent ? (message.content as string) : undefined;

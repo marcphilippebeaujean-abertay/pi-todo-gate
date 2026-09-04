@@ -4,8 +4,6 @@ const RESPONSE_ERROR_FAMILY = "response";
 const UNEXPECTED_JSON_SHAPE_MESSAGE = "unexpected JSON shape";
 const MISSING_TASK_FIELDS_MESSAGE = "task has missing required fields";
 const EXPECTED_LIST_PAYLOAD_MESSAGE = "expected a list payload";
-const HTTP_PROTOCOL = "http:";
-const HTTPS_PROTOCOL = "https:";
 
 import { TodoistError, type TodoistTask } from "./client.ts";
 
@@ -58,8 +56,8 @@ export function safeHttpUrl(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	try {
 		const url = new URL(value);
-		const isHttp = url.protocol === HTTP_PROTOCOL;
-		const isHttps = url.protocol === HTTPS_PROTOCOL;
+		const isHttp = url.protocol === "http:";
+		const isHttps = url.protocol === "https:";
 		const isUnsupportedProtocol = !isHttp && !isHttps;
 		if (isUnsupportedProtocol) return undefined;
 		return value;

@@ -16,9 +16,6 @@ const CREATE_INSTEAD_OF_NONE_PROMPT =
 	"Never output none because no task exists: create it instead.";
 const SINGLE_JSON_RESULT_PROMPT =
 	"Output exactly one JSON object and no explanation: claimed with taskRef, collision with taskRef, or none only when td cannot complete the operation.";
-const PI_COMMAND = "pi";
-const LOW_THINKING_LEVEL = "low";
-const TIMED_OUT_MESSAGE = "timed out";
 
 import { Type } from "typebox";
 import type { Exec } from "../shared/command.ts";
@@ -94,9 +91,9 @@ function sanitizeWorkerError(stderr: string): string {
 export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 	return async (input) => {
 		const result = await exec(
-			PI_COMMAND,
+			"pi",
 			buildPiWorkerArgs(workerPrompt(input), {
-				thinking: LOW_THINKING_LEVEL,
+				thinking: "low",
 			}),
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
@@ -104,7 +101,7 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 		if (workerFailed) {
 			const detail = sanitizeWorkerError(result.stderr);
 			const hasTimedOut = result.killed;
-			const timeout = hasTimedOut ? TIMED_OUT_MESSAGE : "";
+			const timeout = hasTimedOut ? "timed out" : "";
 			const reason = detail || timeout;
 			const hasReason = reason !== "";
 			const reasonSuffix = hasReason ? `: ${reason}` : "";
