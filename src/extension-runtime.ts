@@ -5,6 +5,7 @@ import type {
 	ExtensionDependencies,
 	ExtensionRuntime,
 } from "./extension-types.ts";
+import { createFooterModule } from "./footer/module.ts";
 import { createSharedEvents } from "./shared/events.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 
@@ -18,6 +19,9 @@ export function createExtensionRuntime(
 		dependencies,
 		events,
 		exitProtocol: createExitProtocolModule(events),
+		footer: createFooterModule(pi, {
+			openSession: dependencies.openSession,
+		}),
 		worktree: createWorktreeModule(events, { exec: dependencies.exec }),
 		active: null,
 		registered: false,

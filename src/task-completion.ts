@@ -39,7 +39,7 @@ function recordSuccessfulCompletion(
 		}),
 	);
 	appendState(runtime, session.state);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	ctx.ui.notify(C.message.merged, C.value.info);
 }
 
@@ -55,7 +55,7 @@ function recordFailedCompletion(
 		}),
 	);
 	appendState(runtime, session.state);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	ctx.ui.notify(C.message.mergedFailed, C.value.warning);
 }
 

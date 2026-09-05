@@ -133,6 +133,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import extension from "../../extensions/pi-todo-gate.ts";
+import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
 import type { TodoistClient } from "../../src/todoist.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
@@ -147,6 +148,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 	const handlers = new Map<string, TestHandler>();
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
+	const footerAppended: unknown[] = [];
 	const notifications: string[] = [];
 	const footerCalls: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
@@ -156,7 +158,11 @@ function harness(cwd: string, branch: unknown[] = []) {
 				if (!handlers.has(event)) handlers.set(event, handler as TestHandler);
 		},
 		registerTool: (tool: unknown) => tools.push(tool as TestTool),
-		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
+		appendEntry: (type: string, data: unknown) => {
+			const entry = { type, data };
+			if (type === FOOTER_STATE_TYPE) footerAppended.push(entry);
+			else appended.push(entry);
+		},
 	} as unknown as ExtensionAPI;
 	const ctx = {
 		cwd,
@@ -188,6 +194,7 @@ function harness(cwd: string, branch: unknown[] = []) {
 		handlers,
 		tools,
 		appended,
+		footerAppended,
 		notifications,
 		footerCalls,
 		statusCalls,
@@ -265,6 +272,7 @@ describe("lazy activation", () => {
 			{ key: PI_TODO_GATE_PR, text: PR_LINK_NONE },
 			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
 		]);
+		expect(h.footerAppended).toHaveLength(2);
 	});
 });
 

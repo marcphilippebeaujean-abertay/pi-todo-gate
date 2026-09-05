@@ -47,7 +47,7 @@ export function persistPrIfAvailable(
 	replaceSessionState(session, applyStatePatch(session.state, { prUrl: url }));
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 }
 
 export function handleMessageEnd(

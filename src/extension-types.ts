@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { ExitProtocolModule } from "./exit-protocol/module.ts";
+import type { FooterModule } from "./footer/module.ts";
 import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
@@ -65,6 +66,7 @@ export interface ExtensionRuntime {
 	dependencies: ExtensionDependencies;
 	events: SharedEvents;
 	exitProtocol: ExitProtocolModule;
+	footer: FooterModule;
 	worktree: WorktreeModule;
 	active: ActiveSession | null;
 	registered: boolean;

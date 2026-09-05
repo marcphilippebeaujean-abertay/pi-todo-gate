@@ -2,11 +2,13 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { FooterEventSink } from "./footer/types.ts";
 import type {
 	ClaimWorkerHandle,
 	ClaimWorkerRequest,
 	WorkerSpawner,
 } from "./herdr/claim-worker.ts";
+import { hideHerdrFooter, showHerdrFooter } from "./herdr/footer.ts";
 import {
 	boundCommandRunner,
 	defaultStartWorker,
@@ -42,6 +44,7 @@ export interface HerdrTabOptions {
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
+	onFooterUpdate?: FooterEventSink;
 }
 
 interface TabClaimAttempt {
@@ -54,6 +57,7 @@ class HerdrTabClaim {
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
+	private readonly emitFooter: FooterEventSink;
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
@@ -73,6 +77,7 @@ class HerdrTabClaim {
 			((request) =>
 				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
 		this.shouldActivate = options.shouldActivate;
+		this.emitFooter = options.onFooterUpdate ?? (() => undefined);
 		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
 		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
@@ -88,6 +93,7 @@ class HerdrTabClaim {
 		this.hasClaim = false;
 		this.initialLabel = undefined;
 		this.paneId = undefined;
+		hideHerdrFooter(this.emitFooter);
 		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
 		const shouldSkip = !this.herdrAvailable || isDisabled;
 		if (shouldSkip) return;
@@ -121,6 +127,7 @@ class HerdrTabClaim {
 				onClaimComplete: this.completeClaim.bind(this, ctx, attempt),
 				onFailure: this.failClaim.bind(this, ctx, attempt.generation),
 			});
+			showHerdrFooter(this.emitFooter);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
 			this.failClaim(
@@ -139,6 +146,7 @@ class HerdrTabClaim {
 		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
+		hideHerdrFooter(this.emitFooter);
 		const isValidated = hasValidatedTabClaim(
 			this.commandRunner,
 			attempt.initialLabel,
@@ -160,6 +168,7 @@ class HerdrTabClaim {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
+		hideHerdrFooter(this.emitFooter);
 		this.notify(ctx, message, WARNING_LEVEL);
 	}
 
@@ -167,6 +176,7 @@ class HerdrTabClaim {
 		this.sessionGeneration += 1;
 		this.worker?.cancel();
 		this.worker = undefined;
+		hideHerdrFooter(this.emitFooter);
 		this.hasClaim = false;
 		this.herdrAvailable = false;
 	}
