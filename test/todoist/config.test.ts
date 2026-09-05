@@ -42,7 +42,7 @@ import {
 	loadConfig,
 	parseConfig,
 	resolveConfiguredProject,
-} from "../src/config.ts";
+} from "../../src/config.ts";
 
 describe("parseConfig", () => {
 	it(ACCEPTS_PROJECT_MAPPINGS, () => {

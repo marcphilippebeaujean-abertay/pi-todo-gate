@@ -60,7 +60,8 @@ function current(context: ClaimPromptContext): boolean {
 }
 
 function proposalMessage(result: ActionableProposal): string {
-	const action = result.action === CREATE ? NEW_TASK : EXISTING_TASK;
+	const isCreateAction = result.action === CREATE;
+	const action = isCreateAction ? NEW_TASK : EXISTING_TASK;
 	const description = result.taskData.description || EMPTY_DESCRIPTION;
 	return [
 		`Action: ${action}`,
@@ -168,7 +169,8 @@ async function handleResult(
 ): Promise<void> {
 	const isStale = !current(context);
 	if (isStale) return;
-	const isErrorAction = result.action === ERROR;
+	const action = result.action;
+	const isErrorAction = action === ERROR;
 	if (isErrorAction) {
 		await handleError(context, result.error ?? UNKNOWN_ERROR);
 		return;
@@ -189,10 +191,9 @@ async function handleResult(
 		await handleError(context, INVALID_RESULT);
 		return;
 	}
-	const isClaimAction = result.action === CLAIM;
-	const hasUnexpectedId = isClaimAction
-		? taskData.id === null
-		: taskData.id !== null;
+	const isClaimAction = action === CLAIM;
+	const hasTaskId = taskData.id !== null;
+	const hasUnexpectedId = isClaimAction ? !hasTaskId : hasTaskId;
 	if (hasUnexpectedId) {
 		await handleError(context, INVALID_RESULT);
 		return;

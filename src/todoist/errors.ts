@@ -11,7 +11,9 @@ export class TodoistError extends Error {
 	readonly commandFamily: string;
 
 	constructor(commandFamily: string, detail: string) {
-		super(`Todoist ${commandFamily} failed${detail ? `: ${detail}` : ""}`);
+		const hasDetail = detail !== "";
+		const detailSuffix = hasDetail ? `: ${detail}` : "";
+		super(`Todoist ${commandFamily} failed${detailSuffix}`);
 		this.name = TODOIST_ERROR_NAME;
 		this.commandFamily = commandFamily;
 	}

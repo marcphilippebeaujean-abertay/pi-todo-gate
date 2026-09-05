@@ -19,6 +19,7 @@ const MAIN_2 = "main";
 const PARSES_THE_FIRST_OPEN_PULL_REQUEST = "parses the first open pull request";
 const URL_HTTPS_GITHUB_COM_O_R_PULL =
 	'[{"url":"https://github.com/o/r/pull/42","state":"OPEN"}]';
+const MALFORMED_PR_ROW = '[{"url":42,"state":"OPEN"}]';
 const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42";
 const OPEN = "OPEN";
 const RETURNS_OPEN_WITH_NO_URL_WHEN_THERE =
@@ -78,7 +79,7 @@ import {
 	inspectWorktree,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../src/git.ts";
+} from "../../src/git.ts";
 
 const ok = (stdout: string): CommandResult => ({
 	stdout,
@@ -152,6 +153,17 @@ describe("findOpenPr", () => {
 		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
 			url: null,
 			state: OPEN,
+		});
+	});
+
+	it("returns unknown for malformed pull request payloads", async () => {
+		const exec = fakeExec({
+			"gh pr list --head feature --state open --json url,state --limit 1":
+				ok(MALFORMED_PR_ROW),
+		});
+		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
+			url: null,
+			state: UNKNOWN_VALUE,
 		});
 	});
 

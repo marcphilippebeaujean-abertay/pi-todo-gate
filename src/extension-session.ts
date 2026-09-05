@@ -120,6 +120,8 @@ export async function handleSessionStart(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
+	runtime.exitProtocol.sessionStart(ctx);
+	void runtime.worktree.sessionStart(ctx);
 	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	const hasProject = project !== null;
@@ -170,10 +172,16 @@ export function persistInitialPr(
 	persistPrIfAvailable(runtime, firstGithubPrUrl(branchTexts(branch)) ?? "");
 }
 
-export function handleSessionShutdown(runtime: ExtensionRuntime): void {
+export async function handleSessionShutdown(
+	runtime: ExtensionRuntime,
+	event: { reason: "quit" | "new" | "resume" | "fork" | "reload" },
+): Promise<void> {
+	await runtime.events.emit(C.event.sessionWillClose, { reason: event.reason });
 	const session = runtime.active;
-	const hasSession = session !== null;
-	if (!hasSession) return;
-	deactivateSession(session);
-	runtime.active = null;
+	if (session !== null) {
+		deactivateSession(session);
+		runtime.active = null;
+	}
+	runtime.worktree.deactivate();
+	runtime.exitProtocol.deactivate();
 }

@@ -9,8 +9,7 @@ const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
 	"does not register tools or perform external work for an unmatched project";
 const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 	"does not activate for dispatched subagent";
-const ACCEPTS_ONLY_SUBAGENT_MARKER_ONE =
-	"accepts only subagent marker value one";
+const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
 const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
@@ -80,8 +79,8 @@ const TASK_B = "task-b";
 const INFERRED_TASK = "inferred-task";
 const CLEAR_TASK = "clear_task";
 const SET_TASK = "set_task";
-const RECORDS_FAILED_TODOIST_COMPLETION_ATTEMPTS =
-	"records failed Todoist completion attempts";
+const DOES_NOT_COMPLETE_BEFORE_EXIT_ACTION =
+	"does not complete a merged task before the exit action";
 const DOES_NOT_COMPLETE_STALE_MERGE_TASK =
 	"does not complete task after stale merge result";
 const DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION =
@@ -114,8 +113,8 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import extension from "../extensions/pi-todo-gate.ts";
-import type { TodoistClient } from "../src/todoist/client.ts";
+import extension from "../../extensions/pi-todo-gate.ts";
+import type { TodoistClient } from "../../src/todoist/client.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 type TestTool = {
@@ -227,7 +226,7 @@ describe("lazy activation", () => {
 		expect(h.tools).toHaveLength(0);
 	});
 
-	it(ACCEPTS_ONLY_SUBAGENT_MARKER_ONE, () => {
+	it(SKIPS_ANY_DEFINED_SUBAGENT_MARKER, () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const previous = process.env.PI_SUBAGENT_CHILD;
 		process.env.PI_SUBAGENT_CHILD = "0";
@@ -238,7 +237,8 @@ describe("lazy activation", () => {
 			else process.env.PI_SUBAGENT_CHILD = previous;
 		}
 
-		expect(h.handlers.size).toBeGreaterThan(0);
+		expect(h.handlers).toHaveLength(0);
+		expect(h.tools).toHaveLength(0);
 	});
 
 	it(DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL, async () => {
@@ -1152,7 +1152,7 @@ describe("pi_todo_gate_state", () => {
 		});
 	});
 
-	it(RECORDS_FAILED_TODOIST_COMPLETION_ATTEMPTS, async () => {
+	it(DOES_NOT_COMPLETE_BEFORE_EXIT_ACTION, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
 			{
@@ -1164,11 +1164,8 @@ describe("pi_todo_gate_state", () => {
 				},
 			},
 		]);
-		const client = {
-			completeTask: async () => {
-				throw new Error(TODOIST_UNAVAILABLE);
-			},
-		};
+		const completeTask = vi.fn();
+		const client = { completeTask };
 		const exec = async () => ({
 			stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
 			stderr: EMPTY_STRING,
@@ -1192,10 +1189,8 @@ describe("pi_todo_gate_state", () => {
 			},
 			h.ctx,
 		);
-		expect(
-			(h.appended.at(-1) as { data: { todoistCompletionAttemptedAt?: string } })
-				.data.todoistCompletionAttemptedAt,
-		).toEqual(expect.any(String));
+		expect(completeTask).not.toHaveBeenCalled();
+		expect(h.appended).toHaveLength(0);
 	});
 
 	it(REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM, async () => {

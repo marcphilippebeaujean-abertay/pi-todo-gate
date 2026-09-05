@@ -1,4 +1,3 @@
-const STRING_LITERAL_GITHUB_COM_7EE18816 = "github.com";
 const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 
@@ -6,8 +5,7 @@ function normalizedGithubPrUrl(candidate: string): string | null {
 	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
 	try {
 		const url = new URL(trimmed);
-		const hasGithubHostname =
-			url.hostname.toLowerCase() === STRING_LITERAL_GITHUB_COM_7EE18816;
+		const hasGithubHostname = url.hostname.toLowerCase() === "github.com";
 		if (!hasGithubHostname) return null;
 		const match = url.pathname.match(
 			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,

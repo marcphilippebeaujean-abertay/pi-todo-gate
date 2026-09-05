@@ -86,7 +86,8 @@ export class TodoistClient {
 			isCurrent,
 		);
 		const rows = childList(payload).map(record);
-		const target = ref.startsWith(ID) ? ref.slice(ID.length) : ref;
+		const hasIdPrefix = ref.startsWith(ID);
+		const target = hasIdPrefix ? ref.slice(ID.length) : ref;
 		const match = rows.find(
 			(row) =>
 				stringValue(row.id) === target || stringValue(row.name) === target,
@@ -129,7 +130,8 @@ export class TodoistClient {
 		const section = childList(sections)
 			.map(record)
 			.find((item) => stringValue(item.id) === task.sectionId);
-		return section ? stringValue(section.name) || null : null;
+		const hasSection = section !== undefined;
+		return hasSection ? stringValue(section.name) || null : null;
 	}
 
 	async claimTask(

@@ -4,9 +4,9 @@ const RETURNS_NO_DIAGNOSTICS_FOR_A_CLEAN_PROGRAM =
 	"returns no diagnostics for a clean program";
 const EXPORT_CONST_ANSWER_42 = "export const answer = 42;\n";
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
@@ -31,6 +31,9 @@ const DIAGNOSTIC: LintDiagnostic = {
 const MAGIC_SOURCE = `function check(name: string) {
 	return name === "Bob";
 }`;
+const REPEATED_MAGIC_SOURCE = `function check(name: string) {
+	return name === "Bob" || name === "Bob";
+}`;
 const CONSTANT_SOURCE = `function check(name: string) {
 	const USER_NAME = "Bob";
 	return name === USER_NAME;
@@ -38,7 +41,7 @@ const CONSTANT_SOURCE = `function check(name: string) {
 const MODULE_PROPERTY_SOURCE = `import "side-effect";
 const record = { message: "ok" };
 function check(value: { status: string }) {
-	if (value.status === "ok") return true;
+	if (value.status === "ok") return value.status === "ok";
 	return false;
 }
 export type Status = "ok";`;
@@ -76,12 +79,43 @@ const THREE_CHECKS_SOURCE =
 	"function check(a: boolean, b: boolean, c: boolean) { if (a && b && c) return true; return false; }";
 const MAGIC_TEST =
 	"flags executable string literals but permits const definitions";
+const SIMILAR_STRING_RULE = "similar-string-literals";
+const SIMILAR_STRING_TEST = "flags singleton literals with highly similar text";
+const SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny walks the dog", "Tom walks the dog"];
+}`;
+const SIMILARITY_79_5_SOURCE = `function compareStrings() {
+	return ["${"a".repeat(100)}", "${"a".repeat(59)}${"b".repeat(41)}"];
+}`;
+const SIMILARITY_80_SOURCE = `function compareStrings() {
+	return ["${"a".repeat(20)}", "${"a".repeat(12)}${"b".repeat(8)}"];
+}`;
+const UNRELATED_STRING_SOURCE = `function describeThings() {
+	return ["Johnny walks the dog", "The process completed successfully"];
+}`;
+const EXACT_DUPLICATE_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny walks the dog", "Johnny walks the dog"];
+}`;
+const SHORT_SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	return ["Johnny dog", "Tom dog"];
+}`;
+const TOP_LEVEL_SIMILAR_STRING_SOURCE = `const messages = {
+	johnny: "Johnny walks the dog",
+	tom: "Tom walks the dog",
+};`;
+const TYPE_ONLY_SIMILAR_STRING_SOURCE = `function describeWalkers() {
+	type Walkers = "Johnny walks the dog" | "Tom walks the dog";
+	return true;
+}`;
 const EXPRESSION_TEST = "flags three logical checks but permits two";
 const NO_MAGIC_RULE = "no-magic-strings";
 const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
 const NAMED_IF_RULE = "named-if-condition";
+const REPEATED_FIELD_CHECKS_RULE = "repeated-field-checks";
 const NAMED_IF_TEST = "requires named boolean conditions";
+const NAMED_CONTROL_FLOW_TEST =
+	"requires named conditions across control-flow expressions";
 const IF_SOURCE = `function check(accountBalance: number, isClosed: boolean, count: number) {
 	if (accountBalance > 0) return true;
 	if (isClosed) return false;
@@ -106,6 +140,28 @@ const NEGATED_TYPE_GUARD_SOURCE = `function check(value: unknown, objectValue: o
 	if (!("ready" in objectValue)) return false;
 	if (!Array.isArray(value)) return false;
 	return true;
+}`;
+const REPEATED_FIELD_CHECKS_SOURCE = `function stateOf(row: { state: string }) {
+	const isMerged = row.state === "MERGED";
+	const isOpen = row.state === "OPEN";
+	return isMerged || isOpen;
+}`;
+const DIFFERENT_FIELD_CHECKS_SOURCE = `function stateOf(row: { state: string; status: string }) {
+	const isMerged = row.state === "MERGED";
+	const isOpen = row.status === "OPEN";
+	return isMerged || isOpen;
+}`;
+const REPEATED_FIELD_READS_SOURCE = `function stateOf(row: { state: string }) {
+	return row.state + row.state;
+}`;
+const COMPUTED_CONTROL_FLOW_SOURCE = `function check(value: number, ready: boolean) {
+	while (value > 0) value--;
+	do value--; while (value > 0);
+	for (; value > 0;) value--;
+	return value > 0 ? value : Number(ready);
+}`;
+const FOR_ITERATION_SOURCE = `function check(values: number[]) {
+	for (let index = 0; index < values.length; index += 1) values[index];
 }`;
 const METRIC_TEST = "reports function metrics over configured limits";
 const NORMALIZED_PATH_TEST = "sorts diagnostics by normalized path";
@@ -138,6 +194,12 @@ const NESTED_SOURCE = `function outer() {
 	};
 	return one();
 }`;
+const SOURCE_DIRECTORY = resolve(import.meta.dirname, "../src");
+const TYPESCRIPT_EXTENSION = ".ts";
+const UTF8_ENCODING = "utf8";
+const CRYPTIC_LITERAL_CONSTANT_PATTERN = /^const STRING_LITERAL_/m;
+const CRYPTIC_CONSTANT_TEST =
+	"does not use cryptic generated literal constant names";
 const METRIC_RULES = [
 	"cyclomatic-complexity",
 	"function-length",
@@ -183,13 +245,22 @@ describe("lint diagnostics", () => {
 	});
 
 	it(MAGIC_TEST, async () => {
-		expect(ruleIds(await lintFixture(MAGIC_SOURCE))).toContain(NO_MAGIC_RULE);
+		expect(ruleIds(await lintFixture(MAGIC_SOURCE))).not.toContain(
+			NO_MAGIC_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(REPEATED_MAGIC_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(2);
 		expect(ruleIds(await lintFixture(CONSTANT_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
-		expect(ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE))).toContain(
-			NO_MAGIC_RULE,
-		);
+		expect(
+			ruleIds(await lintFixture(MODULE_PROPERTY_SOURCE)).filter(
+				(id) => id === NO_MAGIC_RULE,
+			),
+		).toHaveLength(2);
 		expect(ruleIds(await lintFixture(DYNAMIC_IMPORT_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
@@ -197,7 +268,7 @@ describe("lint diagnostics", () => {
 			ruleIds(await lintFixture(TYPE_SYNTAX_SOURCE)).filter(
 				(id) => id === NO_MAGIC_RULE,
 			),
-		).toHaveLength(1);
+		).toHaveLength(0);
 		expect(ruleIds(await lintFixture(TYPE_ONLY_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
@@ -217,9 +288,47 @@ describe("lint diagnostics", () => {
 				(id) => id === NO_SHORT_STRING_CONSTANTS_RULE,
 			),
 		).toHaveLength(2);
-		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).toContain(
+		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
+	}, 15_000);
+
+	it("does not flag 79.5% similarity below the threshold", async () => {
+		expect(ruleIds(await lintFixture(SIMILARITY_79_5_SOURCE))).not.toContain(
+			SIMILAR_STRING_RULE,
+		);
+	});
+
+	it("flags 80% similarity at the threshold", async () => {
+		const diagnostics = (await lintFixture(SIMILARITY_80_SOURCE)).filter(
+			({ ruleId }) => ruleId === SIMILAR_STRING_RULE,
+		);
+
+		expect(diagnostics).toHaveLength(2);
+		expect(diagnostics.map(({ value }) => value)).toEqual([80, 80]);
+	});
+
+	it(SIMILAR_STRING_TEST, async () => {
+		expect(
+			ruleIds(await lintFixture(SIMILAR_STRING_SOURCE)).filter(
+				(id) => id === SIMILAR_STRING_RULE,
+			),
+		).toHaveLength(2);
+		expect(ruleIds(await lintFixture(UNRELATED_STRING_SOURCE))).not.toContain(
+			SIMILAR_STRING_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(EXACT_DUPLICATE_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(SHORT_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(TOP_LEVEL_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
+		expect(
+			ruleIds(await lintFixture(TYPE_ONLY_SIMILAR_STRING_SOURCE)),
+		).not.toContain(SIMILAR_STRING_RULE);
 	});
 
 	it(EXPRESSION_TEST, async () => {
@@ -229,6 +338,20 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(TWO_CHECKS_SOURCE))).not.toContain(
 			NO_EXPRESSION_RULE,
 		);
+	});
+
+	it("flags repeated field checks and ignores unrelated reads", async () => {
+		const repeatedDiagnostics = (
+			await lintFixture(REPEATED_FIELD_CHECKS_SOURCE)
+		).filter(({ ruleId }) => ruleId === REPEATED_FIELD_CHECKS_RULE);
+		expect(repeatedDiagnostics).toHaveLength(1);
+		expect(repeatedDiagnostics[0]?.value).toBe(2);
+		expect(
+			ruleIds(await lintFixture(DIFFERENT_FIELD_CHECKS_SOURCE)),
+		).not.toContain(REPEATED_FIELD_CHECKS_RULE);
+		expect(
+			ruleIds(await lintFixture(REPEATED_FIELD_READS_SOURCE)),
+		).not.toContain(REPEATED_FIELD_CHECKS_RULE);
 	});
 
 	it(NAMED_IF_TEST, async () => {
@@ -251,6 +374,38 @@ describe("lint diagnostics", () => {
 				(id) => id === NAMED_IF_RULE,
 			),
 		).toHaveLength(0);
+	});
+
+	it(NAMED_CONTROL_FLOW_TEST, async () => {
+		expect(
+			ruleIds(await lintFixture(COMPUTED_CONTROL_FLOW_SOURCE)).filter(
+				(id) => id === NAMED_IF_RULE,
+			),
+		).toHaveLength(3);
+	});
+
+	it("does not require names for for-loop iteration clauses", async () => {
+		expect(ruleIds(await lintFixture(FOR_ITERATION_SOURCE))).not.toContain(
+			NAMED_IF_RULE,
+		);
+	});
+
+	it(CRYPTIC_CONSTANT_TEST, async () => {
+		const sourcePaths = await readdir(SOURCE_DIRECTORY, { recursive: true });
+		const typescriptPaths = sourcePaths.filter((path) =>
+			path.endsWith(TYPESCRIPT_EXTENSION),
+		);
+		const sourceFiles = await Promise.all(
+			typescriptPaths.map((path) =>
+				readFile(join(SOURCE_DIRECTORY, path), UTF8_ENCODING),
+			),
+		);
+
+		expect(
+			sourceFiles.some((source) =>
+				CRYPTIC_LITERAL_CONSTANT_PATTERN.test(source.toString()),
+			),
+		).toBe(false);
 	});
 
 	it(NORMALIZED_PATH_TEST, () => {

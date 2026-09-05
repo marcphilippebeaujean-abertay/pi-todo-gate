@@ -3,7 +3,7 @@ import {
 	type ClaimWorkerRequest,
 	startClaimWorker,
 	type WorkerSpawner,
-} from "./herdr-claim-worker.ts";
+} from "./herdr/claim-worker.ts";
 import type {
 	CommandRunner,
 	StartBackgroundWorker,

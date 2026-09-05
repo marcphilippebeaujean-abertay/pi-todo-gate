@@ -109,10 +109,13 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 		const workerFailed = result.code !== 0;
 		if (workerFailed) {
 			const detail = sanitizeWorkerError(result.stderr);
-			const timeout = result.killed ? TIMED_OUT : "";
+			const hasTimedOut = result.killed;
+			const timeout = hasTimedOut ? TIMED_OUT : "";
 			const reason = detail || timeout;
+			const hasReason = reason !== "";
+			const reasonSuffix = hasReason ? `: ${reason}` : "";
 			throw new Error(
-				`claim worker exited with code ${result.code}${reason ? `: ${reason}` : ""}`,
+				`claim worker exited with code ${result.code}${reasonSuffix}`,
 			);
 		}
 		return parseResult(result.stdout);

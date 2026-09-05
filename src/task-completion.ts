@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
+import type { ExitActionResult } from "./exit-protocol/types.ts";
 import {
 	appendState,
 	createClient,
@@ -65,7 +66,7 @@ async function completeMergedTaskNow(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
-): Promise<void> {
+): Promise<ExitActionResult> {
 	const isCurrent = isCurrentCompletion.bind(
 		null,
 		runtime,
@@ -77,19 +78,21 @@ async function completeMergedTaskNow(
 		session.state.todoistCompletionAttemptedAt !== undefined;
 	const isStaleCompletion = !isCurrent();
 	const shouldSkipCompletion = isStaleCompletion || hasCompletionAttempt;
-	if (shouldSkipCompletion) return;
+	if (shouldSkipCompletion) return C.exit.failed;
 	try {
 		await createClient(ctx, runtime.dependencies).completeTask(
 			taskRef,
 			isCurrent,
 		);
 		const isStaleSuccess = !isCurrent();
-		if (isStaleSuccess) return;
+		if (isStaleSuccess) return C.exit.failed;
 		recordSuccessfulCompletion(runtime, session, ctx);
+		return C.exit.completed;
 	} catch {
 		const isStaleFailure = !isCurrent();
-		if (isStaleFailure) return;
+		if (isStaleFailure) return C.exit.failed;
 		recordFailedCompletion(runtime, session, ctx);
+		return C.exit.failed;
 	}
 }
 
@@ -100,8 +103,8 @@ export async function completeMergedTask(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
-): Promise<void> {
-	await enqueueSessionOperation(
+): Promise<ExitActionResult> {
+	return enqueueSessionOperation(
 		session,
 		completeMergedTaskNow.bind(
 			null,

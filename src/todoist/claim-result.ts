@@ -17,7 +17,8 @@ function invalidResult(): TaskClaimWorkerResult {
 function isValidActionData(result: TaskClaimWorkerResult): boolean {
 	const hasTaskData = result.taskData !== null;
 	const hasError = result.error !== null;
-	const isErrorAction = result.action === ERROR;
+	const action = result.action;
+	const isErrorAction = action === ERROR;
 	if (isErrorAction) return !hasTaskData && hasError;
 	const hasInvalidTaskData = !hasTaskData;
 	if (hasInvalidTaskData) return false;
@@ -26,7 +27,7 @@ function isValidActionData(result: TaskClaimWorkerResult): boolean {
 	const hasMissingTaskData = taskData === null;
 	if (hasMissingTaskData) return false;
 	const hasId = taskData.id !== null;
-	const isClaimAction = result.action === CLAIM;
+	const isClaimAction = action === CLAIM;
 	return isClaimAction ? hasId : !hasId;
 }
 
@@ -38,9 +39,12 @@ function parseCandidate(text: string): TaskClaimWorkerResult | undefined {
 	try {
 		const value: unknown = JSON.parse(text.slice(start, end + 1));
 		const isSchemaResult = Value.Check(TaskClaimWorkerResultSchema, value);
-		if (!isSchemaResult) return undefined;
+		const hasInvalidSchemaResult = !isSchemaResult;
+		if (hasInvalidSchemaResult) return undefined;
 		const result = value as TaskClaimWorkerResult;
-		return isValidActionData(result) ? result : undefined;
+		const isValidResult = isValidActionData(result);
+		if (!isValidResult) return undefined;
+		return result;
 	} catch {
 		return undefined;
 	}

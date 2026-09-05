@@ -21,7 +21,7 @@ const HTTPS_GITHUB_COM_OLD_REPO_PULL_7 = "https://github.com/old/repo/pull/7";
 const HTTPS_GITHUB_COM_NEW_REPO_PULL_8 = "https://github.com/new/repo/pull/8";
 
 import { describe, expect, it } from "vitest";
-import { firstGithubPrUrl, githubPrUrl } from "../src/pr-detection.ts";
+import { firstGithubPrUrl, githubPrUrl } from "../../src/pr-detection.ts";
 
 describe("githubPrUrl", () => {
 	it(ACCEPTS_A_VALID_GITHUB_PULL_REQUEST_URL, () => {

@@ -3,9 +3,9 @@ import {
 	appendBounded,
 	type ClaimWorkerResult,
 	parseClaimResult,
-} from "./herdr-claim-worker-result.ts";
-import { withWorkerMarker } from "./session.ts";
-import { buildPiWorkerArgs } from "./shared/pi-worker.ts";
+} from "../herdr-claim-worker-result.ts";
+import { withWorkerMarker } from "../session.ts";
+import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 
 export interface ClaimWorkerRequest {
 	prompt: string;
@@ -132,8 +132,10 @@ function registerWorkerLifecycle(
 			return;
 		}
 		const detail = state.stderr.trim();
+		const hasDetail = detail !== "";
+		const detailSuffix = hasDetail ? `: ${detail}` : "";
 		request.onFailure(
-			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detail ? `: ${detail}` : ""}`,
+			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detailSuffix}`,
 		);
 	});
 }

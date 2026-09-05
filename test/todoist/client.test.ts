@@ -56,13 +56,13 @@ const SUPER_SECRET = "super-secret";
 const TASK_COMPLETE = "task complete";
 
 import { describe, expect, it } from "vitest";
-import type { CommandResult } from "../src/git.ts";
+import type { CommandResult } from "../../src/git.ts";
 import {
 	TodoistClient,
 	TodoistError,
 	type TodoistExec,
 	TodoistOperationCancelled,
-} from "../src/todoist/client.ts";
+} from "../../src/todoist/client.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),

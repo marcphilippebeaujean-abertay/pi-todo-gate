@@ -90,11 +90,12 @@ export async function executeStateTool(
 	const session = runtime.active;
 	const hasSession = session !== null;
 	if (!hasSession) throw new Error(C.message.inactive);
-	const isStatusAction = params.action === C.action.status;
+	const action = params.action;
+	const isStatusAction = action === C.action.status;
 	if (isStatusAction) return statusAction(session);
-	const isSetPrAction = params.action === C.action.setPr;
+	const isSetPrAction = action === C.action.setPr;
 	if (isSetPrAction) return setPrAction(runtime, session, params);
-	const isClearPrAction = params.action === C.action.clearPr;
+	const isClearPrAction = action === C.action.clearPr;
 	if (isClearPrAction)
 		return clearPrState(runtime, session, C.message.prCleared);
 	return clearPrState(runtime, session, C.message.stateCleared);

@@ -1,11 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import type { ClaimWorkerRequest } from "../src/herdr-claim-worker.ts";
+import type { ClaimWorkerRequest } from "../../src/herdr/claim-worker.ts";
 import {
 	type CommandRunner,
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
-} from "../src/herdr-tab-claim.ts";
+} from "../../src/herdr-tab-claim.ts";
 
 interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;

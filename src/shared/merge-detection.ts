@@ -1,14 +1,10 @@
-const STRING_LITERAL_GIT_9B1A99C5 = "git";
-const STRING_LITERAL_GH_24B57162 = "gh";
-const STRING_LITERAL_EMPTY_9BE26789 = "--";
-const STRING_LITERAL_AUTO_4D4984CD = "--auto=";
-const STRING_LITERAL_GITHUB_COM_7A4F50A3 = "github.com";
-const STRING_LITERAL_PR_BE5834CA = "pr";
-const STRING_LITERAL_VIEW_C69C8EE7 = "view";
-const STRING_LITERAL_JSON_C54094BE = "--json";
-const STRING_LITERAL_HEADREFNAME_582A7721 = "headRefName";
-const STRING_LITERAL_URL_HEADREFNAME_E699868E = "url,headRefName";
-const STRING_LITERAL_MERGE_2E9F4B61 = "merge";
+const GIT_COMMAND = "git";
+const GH_COMMAND = "gh";
+const END_OF_OPTIONS = "--";
+const PR_COMMAND = "pr";
+const VIEW_COMMAND = "view";
+const JSON_FLAG = "--json";
+const MERGE_COMMAND = "merge";
 
 import { executableName, shellSegments, shellWords } from "../shell-parser.ts";
 import type { CommandResult, Exec } from "./command.ts";
@@ -24,19 +20,18 @@ function parseMergeWords(
 	const hasTooFewWords = words.length < 2;
 	if (hasTooFewWords) return null;
 	const executable = executableName(words[0] ?? "");
-	const isGit = executable === STRING_LITERAL_GIT_9B1A99C5;
-	const isGitMerge = isGit && words[1] === STRING_LITERAL_MERGE_2E9F4B61;
-	if (isGitMerge)
-		return { kind: STRING_LITERAL_GIT_9B1A99C5, args: words.slice(2) };
+	const isGit = executable === GIT_COMMAND;
+	const isGitMerge = isGit && words[1] === MERGE_COMMAND;
+	if (isGitMerge) return { kind: GIT_COMMAND, args: words.slice(2) };
 	const hasTooFewGhWords = words.length < 3;
 	if (hasTooFewGhWords) return null;
-	const isGh = executable === STRING_LITERAL_GH_24B57162;
-	const hasPrCommand = words[1] === STRING_LITERAL_PR_BE5834CA;
-	const hasMergeCommand = words[2] === STRING_LITERAL_MERGE_2E9F4B61;
+	const isGh = executable === GH_COMMAND;
+	const hasPrCommand = words[1] === PR_COMMAND;
+	const hasMergeCommand = words[2] === MERGE_COMMAND;
 	if (!isGh) return null;
 	if (!hasPrCommand) return null;
 	if (!hasMergeCommand) return null;
-	return { kind: STRING_LITERAL_GH_24B57162, args: words.slice(3) };
+	return { kind: GH_COMMAND, args: words.slice(3) };
 }
 
 export function mergeCommand(
@@ -65,16 +60,15 @@ export function hasNonCompletingMergeOption(
 	kind: "git" | "gh",
 	args: readonly string[],
 ): boolean {
-	const options =
-		kind === STRING_LITERAL_GIT_9B1A99C5
-			? NON_COMPLETING_GIT_MERGE_OPTIONS
-			: NON_COMPLETING_GH_MERGE_OPTIONS;
+	const isGitKind = kind === GIT_COMMAND;
+	const options = isGitKind
+		? NON_COMPLETING_GIT_MERGE_OPTIONS
+		: NON_COMPLETING_GH_MERGE_OPTIONS;
 	for (const arg of args) {
-		const isEndOfOptions = arg === STRING_LITERAL_EMPTY_9BE26789;
+		const isEndOfOptions = arg === END_OF_OPTIONS;
 		if (isEndOfOptions) break;
-		const isGhKind = kind === STRING_LITERAL_GH_24B57162;
-		const hasAutoPrefix =
-			isGhKind && arg.startsWith(STRING_LITERAL_AUTO_4D4984CD);
+		const isGhKind = kind === GH_COMMAND;
+		const hasAutoPrefix = isGhKind && arg.startsWith("--auto=");
 		const isNonCompletingOption = options.has(arg) || hasAutoPrefix;
 		if (isNonCompletingOption) return true;
 	}
@@ -85,7 +79,7 @@ export function gitMergeTargets(args: string[]): string[] {
 	const targets: string[] = [];
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
-		const isEndOfOptions = arg === STRING_LITERAL_EMPTY_9BE26789;
+		const isEndOfOptions = arg === END_OF_OPTIONS;
 		if (isEndOfOptions) {
 			targets.push(...args.slice(index + 1));
 			break;
@@ -128,7 +122,7 @@ export function ghMergeTargets(args: string[]): string[] | null {
 	const targets: string[] = [];
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
-		const isEndOfOptions = arg === STRING_LITERAL_EMPTY_9BE26789;
+		const isEndOfOptions = arg === END_OF_OPTIONS;
 		if (isEndOfOptions) {
 			targets.push(...args.slice(index + 1));
 			break;
@@ -160,13 +154,13 @@ export function normalizedUrl(value: string): string | null {
 	if (hasNoCandidate) return null;
 	try {
 		const url = new URL(candidate.replace(/[.,;:!?)}\]]+$/g, ""));
-		const hasGithubHostname =
-			url.hostname.toLowerCase() === STRING_LITERAL_GITHUB_COM_7A4F50A3;
+		const hasGithubHostname = url.hostname.toLowerCase() === "github.com";
 		if (!hasGithubHostname) return null;
 		const match = url.pathname.match(
 			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 		);
-		return match
+		const hasMatch = match !== null;
+		return hasMatch
 			? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`
 			: null;
 	} catch {
@@ -182,14 +176,8 @@ export async function queryPinnedHead(
 	let result: CommandResult;
 	try {
 		result = await exec(
-			STRING_LITERAL_GH_24B57162,
-			[
-				STRING_LITERAL_PR_BE5834CA,
-				STRING_LITERAL_VIEW_C69C8EE7,
-				prUrl,
-				STRING_LITERAL_JSON_C54094BE,
-				STRING_LITERAL_HEADREFNAME_582A7721,
-			],
+			GH_COMMAND,
+			[PR_COMMAND, VIEW_COMMAND, prUrl, JSON_FLAG, "headRefName"],
 			{
 				cwd,
 			},
@@ -219,14 +207,8 @@ export async function queryCurrentPr(
 	let result: CommandResult;
 	try {
 		result = await exec(
-			STRING_LITERAL_GH_24B57162,
-			[
-				STRING_LITERAL_PR_BE5834CA,
-				STRING_LITERAL_VIEW_C69C8EE7,
-				target,
-				STRING_LITERAL_JSON_C54094BE,
-				STRING_LITERAL_URL_HEADREFNAME_E699868E,
-			],
+			GH_COMMAND,
+			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, "url,headRefName"],
 			{ cwd },
 		);
 	} catch {
@@ -260,7 +242,6 @@ export async function detectMerge(
 	command: string,
 	prUrl: string,
 ): Promise<MergeEvent | null> {
-	return (await matchesPinnedPr(exec, cwd, command, prUrl))
-		? { prUrl: normalizedUrl(prUrl) ?? prUrl }
-		: null;
+	const isPinnedMatch = await matchesPinnedPr(exec, cwd, command, prUrl);
+	return isPinnedMatch ? { prUrl: normalizedUrl(prUrl) ?? prUrl } : null;
 }

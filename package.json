@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "npm run architecture && vitest run",
+    "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check extensions src test && tsx src/lint-cli.ts",
+    "lint:biome": "biome check extensions src test",
+    "lint:strict": "tsx src/lint-cli.ts",
+    "lint": "npm run lint:biome && npm run lint:strict",
     "install-local": "bash install.sh",
     "configure": "bash install.sh configure",
     "prepare": "git config core.hooksPath .githooks"
@@ -27,6 +30,7 @@
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@earendil-works/pi-tui": "0.84.2",
     "@types/node": "^25.0.0",
+    "dependency-cruiser": "^17.4.3",
     "tsx": "^4.23.13",
     "typebox": "^1.1.34",
     "typescript": "^6.0.0",
@@ -36,5 +40,8 @@
     "extensions": [
       "./extensions/pi-todo-gate.ts"
     ]
+  },
+  "dependencies": {
+    "zod": "^4.5.4"
   }
 }
