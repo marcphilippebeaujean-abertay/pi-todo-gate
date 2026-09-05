@@ -32,7 +32,8 @@ function firstWorktreePath(output: string): string | null {
 	const line = output
 		.split(/\r?\n/)
 		.find((value) => value.startsWith(WORKTREE));
-	return line ? line.slice(WORKTREE.length).trim() : null;
+	const hasLine = line !== undefined;
+	return hasLine ? line.slice(WORKTREE.length).trim() : null;
 }
 
 function successfulPath(result: CommandResult): string | null {
@@ -58,7 +59,8 @@ export async function inspectWorktree(
 		exec(GIT, [WORKTREE_COMMAND, LIST, PORCELAIN], { cwd }),
 	]);
 	const rootValue = successfulPath(rootResult);
-	const root = rootValue === null ? null : resolve(rootValue);
+	const hasRoot = rootValue !== null;
+	const root = hasRoot ? resolve(rootValue) : null;
 	const branch = successfulPath(branchResult);
 	const mainRoot = firstWorktreePath(listResult.stdout);
 	const hasDistinctRoots = root !== null && mainRoot !== null;

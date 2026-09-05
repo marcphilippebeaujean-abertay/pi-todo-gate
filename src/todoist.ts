@@ -93,7 +93,8 @@ export class TodoistClient {
 			isCurrent,
 		);
 		const rows = childList(payload).map(record);
-		const target = ref.startsWith(ID) ? ref.slice(3) : ref;
+		const hasIdPrefix = ref.startsWith(ID);
+		const target = hasIdPrefix ? ref.slice(3) : ref;
 		let match: Record<string, unknown> | undefined;
 		for (const row of rows) {
 			const isMatchingProject =
@@ -150,7 +151,10 @@ export class TodoistClient {
 				break;
 			}
 		}
-		return section ? stringValue(section.name) || null : null;
+		const hasSection = section !== undefined;
+		return hasSection
+			? stringValue((section as Record<string, unknown>).name) || null
+			: null;
 	}
 
 	async claimTask(

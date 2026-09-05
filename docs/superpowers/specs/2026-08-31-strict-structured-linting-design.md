@@ -17,14 +17,14 @@ Tests validate checker behavior through Vitest and remain covered by Biome, but 
 
 ### `no-magic-strings`
 
-String literals within function bodies must be extracted into named `const` declarations before use. A direct string initializer in a `const` declaration is an allowed constant definition. Top-level constant declarations are also allowed.
+Repeated string literals within function bodies must be extracted into named `const` declarations before use. A singleton executable string may remain inline when it is clearer than a one-use constant. A direct string initializer in a `const` declaration is an allowed constant definition. Top-level constant declarations are also allowed.
 
 Ignore module specifiers, directives, property names, and type-only syntax. The checker reports executable string literals that are not constant definitions.
 
 Example:
 
 ```ts
-if (name === "Bob") return true;
+if (name === "Bob" || name === "Bob") return true;
 ```
 
 fails. This passes:
@@ -33,6 +33,10 @@ fails. This passes:
 const USER_NAME = "Bob";
 if (name === USER_NAME) return true;
 ```
+
+### `similar-string-literals`
+
+Distinct executable string literals that each occur once in the same source file are compared after lowercasing and collapsing whitespace. Literals at least 12 characters long with a normalized edit-distance similarity of at least 80% are reported at both locations. Exact duplicates remain handled by `no-magic-strings`; unrelated one-off strings remain valid. The diagnostic instructs authors to consolidate matching prose behind a parameterized function, such as `whoWalksTheDog(user)`. The checker reports the duplication but does not generate the function.
 
 ### `no-short-string-constants`
 
@@ -46,7 +50,7 @@ Count leaf checks in logical boolean expressions joined by `&&` and `||`. Report
 
 ### `named-if-condition`
 
-An `if` condition must be a boolean identifier, optionally negated. Numeric comparisons, arithmetic, calls, logical combinations, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. TypeScript built-in type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing.
+`if`, `while`, and `do...while` conditions must be boolean identifiers, optionally negated. Conditional-expression predicates must follow same rule. Numeric comparisons, arithmetic, calls, logical combinations, and other computed conditions must first be assigned to a local boolean with an intent-revealing name. `for` iteration clauses are excluded because their changing loop state cannot be extracted into one stable local predicate. TypeScript built-in type guards (`typeof`, nullish checks, `in`, `instanceof`, and `Array.isArray`) remain inline because their expression form enables compiler narrowing.
 
 ```ts
 const hasAccountBalance = accountBalance > 0;
@@ -112,6 +116,7 @@ Malformed or unreadable optional lint configuration falls back to defaults. Miss
 `test/lint.test.ts` uses temporary fixture files or in-memory source inputs through the exported checker API. Tests cover:
 
 - string literals that fail, direct `const` definitions that pass, and short string constants that fail;
+- similar singleton string literals that fail, unrelated and exact duplicate strings that pass the similarity rule, and short similar strings that pass;
 - ignored module/property/type syntax;
 - two-check and three-check boolean boundaries;
 - boolean identifiers, negated booleans, numeric truthiness, and comparison extraction;

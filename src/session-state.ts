@@ -24,7 +24,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isWorkState(value: unknown): value is WorkState {
-	const record = isRecord(value) ? value : null;
+	const isRecordValue = isRecord(value);
+	const record = isRecordValue ? value : null;
 	if (record === null) return false;
 	return STATE_KEYS.every(
 		(key) => record[key] === undefined || typeof record[key] === STRING_TYPE,
@@ -32,13 +33,15 @@ export function isWorkState(value: unknown): value is WorkState {
 }
 
 function stateFromEntry(entry: unknown): WorkState | null {
-	const record = isRecord(entry) ? entry : null;
+	const isRecordEntry = isRecord(entry);
+	const record = isRecordEntry ? entry : null;
 	if (record === null) return null;
 	const isCustomEntry = record.type === CUSTOM;
 	if (!isCustomEntry) return null;
 	const isStateEntry = record.customType === PI_TODO_GATE_STATE;
 	if (!isStateEntry) return null;
-	return isWorkState(record.data) ? { ...record.data } : null;
+	const hasValidState = isWorkState(record.data);
+	return hasValidState ? { ...(record.data as WorkState) } : null;
 }
 
 export function emptyWorkState(): WorkState {

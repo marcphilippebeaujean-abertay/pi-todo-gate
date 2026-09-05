@@ -1,6 +1,6 @@
-const STRING_LITERAL_CLAIMED_84BF0B5E = "claimed";
-const STRING_LITERAL_COLLISION_12B2356D = "collision";
-const STRING_LITERAL_NONE_A228BF88 = "none";
+const CLAIMED_STATUS = "claimed";
+const COLLISION_STATUS = "collision";
+const NONE_STATUS = "none";
 
 import { Value } from "typebox/value";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
@@ -16,7 +16,8 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
-	const wrappedRecord = isRecord(value) ? value : null;
+	const isWrappedRecord = isRecord(value);
+	const wrappedRecord = isWrappedRecord ? value : null;
 	if (wrappedRecord === null) return undefined;
 	const wrapped = wrappedRecord as {
 		claimed?: { taskRef?: unknown };
@@ -30,7 +31,7 @@ function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
 	const hasClaimedTaskRef = isNonEmptyString(claimedTaskRef);
 	if (hasClaimedTaskRef)
 		return {
-			status: STRING_LITERAL_CLAIMED_84BF0B5E,
+			status: CLAIMED_STATUS,
 			taskRef: claimedTaskRef,
 		};
 	const collisionTaskRef = wrapped.collision?.taskRef;
@@ -38,15 +39,19 @@ function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
 	if (!hasCollisionTaskRef) return undefined;
 	const collision = wrapped.collision;
 	if (collision === undefined) return undefined;
+	const hasTaskName = typeof collision.taskName === "string";
+	const taskName = hasTaskName
+		? { taskName: collision.taskName as string }
+		: {};
+	const hasCollisionReason = typeof collision.collisionReason === "string";
+	const collisionReason = hasCollisionReason
+		? { collisionReason: collision.collisionReason as string }
+		: {};
 	return {
-		status: STRING_LITERAL_COLLISION_12B2356D,
+		status: COLLISION_STATUS,
 		taskRef: collisionTaskRef,
-		...(typeof collision.taskName === "string"
-			? { taskName: collision.taskName }
-			: {}),
-		...(typeof collision.collisionReason === "string"
-			? { collisionReason: collision.collisionReason }
-			: {}),
+		...taskName,
+		...collisionReason,
 	};
 }
 
@@ -78,5 +83,5 @@ export function parseResult(stdout: string): TaskClaimWorkerResult {
 			// Try earlier assistant output.
 		}
 	}
-	return { status: STRING_LITERAL_NONE_A228BF88 };
+	return { status: NONE_STATUS };
 }

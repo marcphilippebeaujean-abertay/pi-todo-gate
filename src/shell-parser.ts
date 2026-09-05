@@ -47,21 +47,22 @@ function consumeSegmentCharacter(
 	character: string,
 ): string | null {
 	const isEscaped = state.escaped;
+	const quote = state.quote;
 	if (isEscaped) {
 		state.current += character;
 		state.escaped = false;
 		return null;
 	}
-	const startsEscape = isEscapeCharacter(character, state.quote);
+	const startsEscape = isEscapeCharacter(character, quote);
 	if (startsEscape) {
 		state.current += character;
 		state.escaped = true;
 		return null;
 	}
-	const isInsideQuote = state.quote !== null;
+	const isInsideQuote = quote !== null;
 	if (isInsideQuote) {
 		state.current += character;
-		const closesQuote = state.quote === character;
+		const closesQuote = quote === character;
 		if (closesQuote) state.quote = null;
 		return null;
 	}
@@ -99,19 +100,20 @@ function consumeWordCharacter(
 	character: string,
 ): void {
 	const isEscaped = state.escaped;
+	const quote = state.quote;
 	if (isEscaped) {
 		state.current += character;
 		state.escaped = false;
 		return;
 	}
-	const startsEscape = isEscapeCharacter(character, state.quote);
+	const startsEscape = isEscapeCharacter(character, quote);
 	if (startsEscape) {
 		state.escaped = true;
 		return;
 	}
-	const isInsideQuote = state.quote !== null;
+	const isInsideQuote = quote !== null;
 	if (isInsideQuote) {
-		const closesQuote = state.quote === character;
+		const closesQuote = quote === character;
 		if (closesQuote) state.quote = null;
 		else state.current += character;
 		return;

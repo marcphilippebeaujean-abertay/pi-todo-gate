@@ -1,8 +1,6 @@
 export const PR_STATE_TYPE = "pi-pr-gate-state";
-const STRING_LITERAL_STRING = "string";
-const STRING_LITERAL_BOOLEAN = "boolean";
 
-import { isRecord } from "../shared/records.ts";
+import { prStateDataSchema } from "./schemas.ts";
 
 export interface MergedPr {
 	prUrl: string;
@@ -38,29 +36,8 @@ function prUrlOf(entry: MergedPr): string {
 	return entry.prUrl;
 }
 
-function isMergedPr(value: unknown): value is MergedPr {
-	const record = isRecord(value) ? value : null;
-	if (record === null) return false;
-	const hasPrUrl = typeof record.prUrl === STRING_LITERAL_STRING;
-	if (!hasPrUrl) return false;
-	const hasDetectedAt = typeof record.detectedAt === STRING_LITERAL_STRING;
-	if (!hasDetectedAt) return false;
-	return typeof record.reminderPending === STRING_LITERAL_BOOLEAN;
-}
-
 export function isPrState(value: unknown): value is PrState {
-	const record = isRecord(value) ? value : null;
-	if (record === null) return false;
-	const hasValidPrUrl =
-		record.prUrl === undefined || typeof record.prUrl === STRING_LITERAL_STRING;
-	if (!hasValidPrUrl) return false;
-	const hasValidDiscoveryDisabled =
-		record.discoveryDisabled === undefined ||
-		typeof record.discoveryDisabled === STRING_LITERAL_BOOLEAN;
-	if (!hasValidDiscoveryDisabled) return false;
-	if (record.mergedPrs === undefined) return true;
-	if (!Array.isArray(record.mergedPrs)) return false;
-	return record.mergedPrs.every(isMergedPr);
+	return prStateDataSchema.safeParse(value).success;
 }
 
 export function recordMergedPr(state: PrState, detectedAt: string): PrState {
@@ -68,8 +45,9 @@ export function recordMergedPr(state: PrState, detectedAt: string): PrState {
 	if (prUrl === undefined) return state;
 	const hasPrUrl = prUrl !== "";
 	if (!hasPrUrl) return state;
+	const existingMergedPrs = state.mergedPrs ?? [];
 	const mergedPrs = [
-		...(state.mergedPrs ? withoutPrUrl(state.mergedPrs, prUrl) : []),
+		...withoutPrUrl(existingMergedPrs, prUrl),
 		{ prUrl, detectedAt, reminderPending: true },
 	];
 	return { mergedPrs, discoveryDisabled: false };
@@ -90,9 +68,10 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const mergedPrs = withoutPrUrl(existingMergedPrs, prUrl);
-	const hasSameLength = mergedPrs.length === existingMergedPrs.length;
+	const mergedPrsLength = mergedPrs.length;
+	const hasSameLength = mergedPrsLength === existingMergedPrs.length;
 	if (hasSameLength) return state;
-	const hasNoMergedPrs = mergedPrs.length === 0;
+	const hasNoMergedPrs = mergedPrsLength === 0;
 	if (hasNoMergedPrs) {
 		const { mergedPrs: _mergedPrs, ...next } = state;
 		return next;
