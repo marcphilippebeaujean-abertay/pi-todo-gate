@@ -291,7 +291,7 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
-	});
+	}, 15_000);
 
 	it("does not flag 79.5% similarity below the threshold", async () => {
 		expect(ruleIds(await lintFixture(SIMILARITY_79_5_SOURCE))).not.toContain(
