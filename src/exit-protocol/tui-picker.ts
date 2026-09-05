@@ -35,9 +35,10 @@ export class ExitActionPicker {
 			rows.push(`${marker} [${checkmark}] ${action.label}`);
 		}
 		rows.push(C.exit.empty);
-		const isSubmitFocused = this.state.focused === C.exit.submitKey;
+		const focused = this.state.focused;
+		const isSubmitFocused = focused === C.exit.submitKey;
 		const submitMarker = isSubmitFocused ? C.exit.focused : C.exit.unfocused;
-		const isCancelFocused = this.state.focused === C.exit.cancelKey;
+		const isCancelFocused = focused === C.exit.cancelKey;
 		const cancelMarker = isCancelFocused ? C.exit.focused : C.exit.unfocused;
 		rows.push(
 			`${submitMarker} ${C.exit.submit}    ${cancelMarker} ${C.exit.cancel}`,
@@ -80,12 +81,13 @@ export class ExitActionPicker {
 	}
 
 	private submitFocusedTarget(): void {
-		const submits = this.state.focused === C.exit.submitKey;
+		const focused = this.state.focused;
+		const submits = focused === C.exit.submitKey;
 		if (submits) {
 			this.done([...this.state.selectedIds]);
 			return;
 		}
-		const cancels = this.state.focused === C.exit.cancelKey;
+		const cancels = focused === C.exit.cancelKey;
 		if (cancels) {
 			this.done(null);
 			return;

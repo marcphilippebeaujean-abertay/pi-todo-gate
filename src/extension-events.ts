@@ -99,7 +99,8 @@ async function buildBeforeAgentMessages(
 		);
 		session.handoffContext = false;
 	}
-	const isMissingTaskRefForPrompt = session.state.taskRef === undefined;
+	const taskRef = session.state.taskRef;
+	const isMissingTaskRefForPrompt = taskRef === undefined;
 	if (isMissingTaskRefForPrompt) messages.push(MISSING_TASK_WARNING);
 	const hasWorkChanged = session.workChanged;
 	if (hasWorkChanged) await appendWorktreePrompt(runtime, ctx, messages);
@@ -182,11 +183,12 @@ export async function handleToolResult(
 	const shouldIgnoreToolResult = session === null || event.isError;
 	if (shouldIgnoreToolResult) return;
 	if (session === null) return;
-	const isEditTool = event.toolName === C.tool.edit;
-	const isWriteTool = event.toolName === C.tool.write;
+	const toolName = event.toolName;
+	const isEditTool = toolName === C.tool.edit;
+	const isWriteTool = toolName === C.tool.write;
 	const isFileMutation = isEditTool || isWriteTool;
 	if (isFileMutation) session.workChanged = true;
-	const isBashTool = event.toolName === C.tool.bash;
+	const isBashTool = toolName === C.tool.bash;
 	if (isBashTool) await handleBashResult(runtime, session, event, ctx);
 }
 

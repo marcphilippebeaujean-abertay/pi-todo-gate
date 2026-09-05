@@ -61,8 +61,8 @@ export function safeHttpUrl(value: unknown): string | undefined {
 	if (isNotString) return undefined;
 	try {
 		const url = new URL(value as string);
-		const hasSupportedProtocol =
-			url.protocol === HTTP || url.protocol === HTTPS;
+		const protocol = url.protocol;
+		const hasSupportedProtocol = protocol === HTTP || protocol === HTTPS;
 		return hasSupportedProtocol ? (value as string) : undefined;
 	} catch {
 		return undefined;

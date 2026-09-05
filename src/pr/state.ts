@@ -68,9 +68,10 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const mergedPrs = withoutPrUrl(existingMergedPrs, prUrl);
-	const hasSameLength = mergedPrs.length === existingMergedPrs.length;
+	const mergedPrsLength = mergedPrs.length;
+	const hasSameLength = mergedPrsLength === existingMergedPrs.length;
 	if (hasSameLength) return state;
-	const hasNoMergedPrs = mergedPrs.length === 0;
+	const hasNoMergedPrs = mergedPrsLength === 0;
 	if (hasNoMergedPrs) {
 		const { mergedPrs: _mergedPrs, ...next } = state;
 		return next;

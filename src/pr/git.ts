@@ -11,15 +11,17 @@ function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
 	const isInvalidData = !parsed.success;
 	if (isInvalidData) return UNKNOWN_STATE;
 	const row = parsed.data;
-	const hasMergedState = row.state === MERGED_STATE;
 	const hasMergedAt = row.mergedAt !== undefined && row.mergedAt.trim() !== "";
-	const isMergedData = hasMergedState && hasMergedAt;
-	if (isMergedData) return MERGED_STATE;
-	const isOpenState = row.state === OPEN_STATE;
-	if (isOpenState) return OPEN_STATE;
-	const isClosedState = row.state === CLOSED_STATE;
-	if (isClosedState) return CLOSED_STATE;
-	return UNKNOWN_STATE;
+	switch (row.state) {
+		case MERGED_STATE:
+			return hasMergedAt ? MERGED_STATE : UNKNOWN_STATE;
+		case OPEN_STATE:
+			return OPEN_STATE;
+		case CLOSED_STATE:
+			return CLOSED_STATE;
+		default:
+			return UNKNOWN_STATE;
+	}
 }
 
 import type { CommandResult, Exec } from "../shared/command.ts";
@@ -102,16 +104,20 @@ function parseOpenPrResult(stdout: string): OpenPrInfo {
 		const hasNoRow = row === undefined;
 		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
 		const url = row.url === undefined ? null : githubPrUrl(row.url);
-		const isOpen = row.state === OPEN_STATE;
-		const isClosed = row.state === CLOSED_STATE;
-		const isMerged = row.state === MERGED_STATE;
-		const state = isOpen
-			? OPEN_STATE
-			: isClosed
-				? CLOSED_STATE
-				: isMerged
-					? MERGED_STATE
-					: UNKNOWN_STATE;
+		let state: OpenPrInfo["state"];
+		switch (row.state) {
+			case OPEN_STATE:
+				state = OPEN_STATE;
+				break;
+			case CLOSED_STATE:
+				state = CLOSED_STATE;
+				break;
+			case MERGED_STATE:
+				state = MERGED_STATE;
+				break;
+			default:
+				state = UNKNOWN_STATE;
+		}
 		return { url, state };
 	} catch {
 		return { url: null, state: UNKNOWN_STATE };

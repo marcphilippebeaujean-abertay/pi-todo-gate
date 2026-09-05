@@ -41,8 +41,8 @@ export function renderTaskStatus(
 	const inputUrl = url ?? "";
 	try {
 		const parsed = new URL(inputUrl);
-		const isSupportedProtocol =
-			parsed.protocol === "http:" || parsed.protocol === "https:";
+		const protocol = parsed.protocol;
+		const isSupportedProtocol = protocol === "http:" || protocol === "https:";
 		if (!isSupportedProtocol) return createMutedTaskLabel(value(NONE_LABEL));
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return createMutedTaskLabel(

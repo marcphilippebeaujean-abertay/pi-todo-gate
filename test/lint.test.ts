@@ -112,6 +112,7 @@ const NO_MAGIC_RULE = "no-magic-strings";
 const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
 const NAMED_IF_RULE = "named-if-condition";
+const REPEATED_FIELD_CHECKS_RULE = "repeated-field-checks";
 const NAMED_IF_TEST = "requires named boolean conditions";
 const NAMED_CONTROL_FLOW_TEST =
 	"requires named conditions across control-flow expressions";
@@ -139,6 +140,19 @@ const NEGATED_TYPE_GUARD_SOURCE = `function check(value: unknown, objectValue: o
 	if (!("ready" in objectValue)) return false;
 	if (!Array.isArray(value)) return false;
 	return true;
+}`;
+const REPEATED_FIELD_CHECKS_SOURCE = `function stateOf(row: { state: string }) {
+	const isMerged = row.state === "MERGED";
+	const isOpen = row.state === "OPEN";
+	return isMerged || isOpen;
+}`;
+const DIFFERENT_FIELD_CHECKS_SOURCE = `function stateOf(row: { state: string; status: string }) {
+	const isMerged = row.state === "MERGED";
+	const isOpen = row.status === "OPEN";
+	return isMerged || isOpen;
+}`;
+const REPEATED_FIELD_READS_SOURCE = `function stateOf(row: { state: string }) {
+	return row.state + row.state;
 }`;
 const COMPUTED_CONTROL_FLOW_SOURCE = `function check(value: number, ready: boolean) {
 	while (value > 0) value--;
@@ -324,6 +338,20 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(TWO_CHECKS_SOURCE))).not.toContain(
 			NO_EXPRESSION_RULE,
 		);
+	});
+
+	it("flags repeated field checks and ignores unrelated reads", async () => {
+		const repeatedDiagnostics = (
+			await lintFixture(REPEATED_FIELD_CHECKS_SOURCE)
+		).filter(({ ruleId }) => ruleId === REPEATED_FIELD_CHECKS_RULE);
+		expect(repeatedDiagnostics).toHaveLength(1);
+		expect(repeatedDiagnostics[0]?.value).toBe(2);
+		expect(
+			ruleIds(await lintFixture(DIFFERENT_FIELD_CHECKS_SOURCE)),
+		).not.toContain(REPEATED_FIELD_CHECKS_RULE);
+		expect(
+			ruleIds(await lintFixture(REPEATED_FIELD_READS_SOURCE)),
+		).not.toContain(REPEATED_FIELD_CHECKS_RULE);
 	});
 
 	it(NAMED_IF_TEST, async () => {

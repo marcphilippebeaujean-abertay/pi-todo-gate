@@ -38,13 +38,20 @@ function parseOpenPrRows(rows: unknown): OpenPrInfo {
 	const hasNoRow = row === undefined;
 	if (hasNoRow) return unknownOpenPr();
 	const url = row.url === undefined ? null : githubPrUrl(row.url);
-	let state: OpenPrInfo["state"] = UNKNOWN_VALUE;
-	const isOpenState = row.state === OPEN_PR_STATE;
-	if (isOpenState) state = OPEN_PR_STATE;
-	const isClosedState = row.state === CLOSED;
-	if (isClosedState) state = CLOSED;
-	const isMergedState = row.state === MERGED;
-	if (isMergedState) state = MERGED;
+	let state: OpenPrInfo["state"];
+	switch (row.state) {
+		case OPEN_PR_STATE:
+			state = OPEN_PR_STATE;
+			break;
+		case CLOSED:
+			state = CLOSED;
+			break;
+		case MERGED:
+			state = MERGED;
+			break;
+		default:
+			state = UNKNOWN_VALUE;
+	}
 	return { url, state };
 }
 

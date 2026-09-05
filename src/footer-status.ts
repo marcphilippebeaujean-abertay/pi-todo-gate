@@ -56,8 +56,9 @@ export function taskLabel(
 	if (url === undefined) return TASK_NONE_LABEL;
 	try {
 		const parsed = new URL(url);
+		const protocol = parsed.protocol;
 		const hasSupportedProtocol =
-			parsed.protocol === HTTP_PROTOCOL || parsed.protocol === HTTPS_PROTOCOL;
+			protocol === HTTP_PROTOCOL || protocol === HTTPS_PROTOCOL;
 		if (!hasSupportedProtocol) return TASK_NONE_LABEL;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return `${TODOIST_TASK_LABEL}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
@@ -97,8 +98,9 @@ export function renderTaskStatus(
 	if (hasNoUrl) return `${muted(TODOIST_TASK_LABEL)}${value(NONE_VALUE)}`;
 	try {
 		const parsed = new URL(url);
+		const protocol = parsed.protocol;
 		const hasSupportedProtocol =
-			parsed.protocol === HTTP_PROTOCOL || parsed.protocol === HTTPS_PROTOCOL;
+			protocol === HTTP_PROTOCOL || protocol === HTTPS_PROTOCOL;
 		if (!hasSupportedProtocol)
 			return `${muted(TODOIST_TASK_LABEL)}${value(NONE_VALUE)}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];

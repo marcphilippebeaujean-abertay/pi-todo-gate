@@ -7,6 +7,7 @@ const CYCLOMATIC_COMPLEXITY = "cyclomatic-complexity";
 const FUNCTION_LENGTH = "function-length";
 const NESTED_FUNCTION_DEPTH = "nested-function-depth";
 const NO_COMPLICATED_EXPRESSIONS = "no-complicated-expressions";
+const REPEATED_FIELD_CHECKS = "repeated-field-checks";
 
 import ts from "typescript";
 import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
@@ -21,7 +22,8 @@ export type LintRuleId =
 	| "cyclomatic-complexity"
 	| "function-length"
 	| "functions-per-file"
-	| "nested-function-depth";
+	| "nested-function-depth"
+	| "repeated-field-checks";
 
 export interface LintDiagnostic {
 	filePath: string;
@@ -43,6 +45,9 @@ const SHORT_STRING_CONSTANT_MESSAGE =
 	"String constants must contain at least two characters";
 const SHORT_STRING_CONSTANT_LIMIT = 1;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
+const REPEATED_FIELD_CHECK_MESSAGE =
+	"Repeated field checks should use a local variable";
+const REPEATED_FIELD_CHECK_LIMIT = 1;
 const NAMED_IF_MESSAGE =
 	"Extract condition into a descriptive boolean variable";
 const NAMED_IF_LIMIT = 0;
@@ -499,6 +504,25 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
+function isEqualityOperator(operator: ts.SyntaxKind): boolean {
+	return (
+		operator === ts.SyntaxKind.EqualsEqualsToken ||
+		operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+		operator === ts.SyntaxKind.ExclamationEqualsToken ||
+		operator === ts.SyntaxKind.ExclamationEqualsEqualsToken
+	);
+}
+
+function equalityPropertyAccesses(
+	node: ts.Node,
+): ts.PropertyAccessExpression[] {
+	if (!ts.isBinaryExpression(node)) return [];
+	const isEquality = isEqualityOperator(node.operatorToken.kind);
+	if (!isEquality) return [];
+	const left = unparenthesized(node.left);
+	return ts.isPropertyAccessExpression(left) ? [left] : [];
+}
+
 function isSafeConditionExpression(
 	expression: ts.Expression,
 	checker: ts.TypeChecker,
@@ -529,6 +553,46 @@ function conditionExpressions(node: ts.Node): ts.Expression[] {
 	if (ts.isDoStatement(node)) return [node.expression];
 	if (ts.isConditionalExpression(node)) return [node.condition];
 	return [];
+}
+
+function collectRepeatedFieldChecks(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+): void {
+	function visit(node: ts.Node): void {
+		if (isFunctionLike(node) && node.body) {
+			const accesses = new Map<string, ts.PropertyAccessExpression[]>();
+			function visitBody(current: ts.Node): void {
+				for (const access of equalityPropertyAccesses(current)) {
+					const key = access.getText(sourceFile);
+					const occurrences = accesses.get(key) ?? [];
+					occurrences.push(access);
+					accesses.set(key, occurrences);
+				}
+				ts.forEachChild(current, (child) => {
+					if (!isFunctionLike(child)) visitBody(child);
+				});
+			}
+			visitBody(node.body);
+			for (const occurrences of accesses.values()) {
+				if (occurrences.length <= REPEATED_FIELD_CHECK_LIMIT) continue;
+				const repeatedAccess = occurrences[REPEATED_FIELD_CHECK_LIMIT];
+				if (repeatedAccess === undefined) continue;
+				diagnostics.push(
+					diagnostic(
+						sourceFile,
+						repeatedAccess,
+						REPEATED_FIELD_CHECKS,
+						REPEATED_FIELD_CHECK_MESSAGE,
+						occurrences.length,
+						REPEATED_FIELD_CHECK_LIMIT,
+					),
+				);
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(sourceFile);
 }
 
 function collectNamedIfConditions(
@@ -720,6 +784,7 @@ export function lintProgram(
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
 		collectSimilarStringLiterals(sourceFile, diagnostics);
 		collectNamedIfConditions(sourceFile, diagnostics, checker);
+		collectRepeatedFieldChecks(sourceFile, diagnostics);
 		collectComplicatedExpressions(
 			sourceFile,
 			diagnostics,
