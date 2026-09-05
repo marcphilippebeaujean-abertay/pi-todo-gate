@@ -40,5 +40,8 @@
     "extensions": [
       "./extensions/pi-todo-gate.ts"
     ]
+  },
+  "dependencies": {
+    "zod": "^4.5.4"
   }
 }

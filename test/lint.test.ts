@@ -84,6 +84,12 @@ const SIMILAR_STRING_TEST = "flags singleton literals with highly similar text";
 const SIMILAR_STRING_SOURCE = `function describeWalkers() {
 	return ["Johnny walks the dog", "Tom walks the dog"];
 }`;
+const SIMILARITY_79_5_SOURCE = `function compareStrings() {
+	return ["${"a".repeat(100)}", "${"a".repeat(59)}${"b".repeat(41)}"];
+}`;
+const SIMILARITY_80_SOURCE = `function compareStrings() {
+	return ["${"a".repeat(20)}", "${"a".repeat(12)}${"b".repeat(8)}"];
+}`;
 const UNRELATED_STRING_SOURCE = `function describeThings() {
 	return ["Johnny walks the dog", "The process completed successfully"];
 }`;
@@ -271,6 +277,21 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(STANDALONE_STRING_SOURCE))).not.toContain(
 			NO_MAGIC_RULE,
 		);
+	});
+
+	it("does not flag 79.5% similarity below the threshold", async () => {
+		expect(ruleIds(await lintFixture(SIMILARITY_79_5_SOURCE))).not.toContain(
+			SIMILAR_STRING_RULE,
+		);
+	});
+
+	it("flags 80% similarity at the threshold", async () => {
+		const diagnostics = (await lintFixture(SIMILARITY_80_SOURCE)).filter(
+			({ ruleId }) => ruleId === SIMILAR_STRING_RULE,
+		);
+
+		expect(diagnostics).toHaveLength(2);
+		expect(diagnostics.map(({ value }) => value)).toEqual([80, 80]);
 	});
 
 	it(SIMILAR_STRING_TEST, async () => {

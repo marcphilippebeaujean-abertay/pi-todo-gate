@@ -1,5 +1,10 @@
 import type { Exec, OpenPrInfo } from "./git.ts";
 import { ghMergeTargets, mergeCommand, positionalArgs } from "./git-merge.ts";
+import {
+	currentPrSchema,
+	headRefSchema,
+	openPrRowsSchema,
+} from "./pr/schemas.ts";
 import { githubPrUrl } from "./pr-detection.ts";
 
 const GH = "gh";
@@ -18,24 +23,21 @@ const MERGED = "MERGED";
 const VIEW = "view";
 const HEADREFNAME = "headRefName";
 const URL_HEADREFNAME = "url,headRefName";
-const OBJECT_TYPE = "object";
-const STRING_TYPE = "string";
 
 function unknownOpenPr(): OpenPrInfo {
 	return { url: null, state: UNKNOWN_VALUE };
 }
 
 function parseOpenPrRows(rows: unknown): OpenPrInfo {
-	const isRows = Array.isArray(rows);
-	if (!isRows) return unknownOpenPr();
-	const hasNoPullRequests = rows.length === 0;
+	const parsed = openPrRowsSchema.safeParse(rows);
+	const isInvalidRows = !parsed.success;
+	if (isInvalidRows) return unknownOpenPr();
+	const hasNoPullRequests = parsed.data.length === 0;
 	if (hasNoPullRequests) return { url: null, state: OPEN_PR_STATE };
-	const firstRow = rows[0];
-	const isObjectRow = typeof firstRow === OBJECT_TYPE && firstRow !== null;
-	if (!isObjectRow) return unknownOpenPr();
-	const row = firstRow as { url?: unknown; state?: unknown };
-	const hasUrl = typeof row.url === STRING_TYPE;
-	const url = hasUrl ? githubPrUrl(row.url as string) : null;
+	const row = parsed.data[0];
+	const hasNoRow = row === undefined;
+	if (hasNoRow) return unknownOpenPr();
+	const url = row.url === undefined ? null : githubPrUrl(row.url);
 	let state: OpenPrInfo["state"] = UNKNOWN_VALUE;
 	const isOpenState = row.state === OPEN_PR_STATE;
 	if (isOpenState) state = OPEN_PR_STATE;
@@ -95,12 +97,10 @@ async function queryPinnedHead(
 	const commandFailed: boolean = !!(result.code !== 0);
 	if (commandFailed) return null;
 	try {
-		const data: unknown = JSON.parse(result.stdout);
-		const isInvalidData = typeof data !== OBJECT_TYPE || data === null;
-		if (isInvalidData) return null;
-		const headRefName = (data as { headRefName?: unknown }).headRefName;
-		const hasHeadRefName = typeof headRefName === STRING_TYPE;
-		return hasHeadRefName ? (headRefName as string) : null;
+		const parsed = headRefSchema.safeParse(JSON.parse(result.stdout));
+		const hasValidHeadRef = parsed.success;
+		if (!hasValidHeadRef) return null;
+		return parsed.data.headRefName;
 	} catch {
 		return null;
 	}
@@ -121,18 +121,10 @@ async function queryCurrentPr(
 	const commandFailed: boolean = !!(result.code !== 0);
 	if (commandFailed) return null;
 	try {
-		const data: unknown = JSON.parse(result.stdout);
-		const isInvalidData = typeof data !== OBJECT_TYPE || data === null;
-		if (isInvalidData) return null;
-		const row = data as { url?: unknown; headRefName?: unknown };
-		const hasUrl = typeof row.url === STRING_TYPE;
-		const hasHeadRefName = typeof row.headRefName === STRING_TYPE;
-		const hasInvalidFields = !hasUrl || !hasHeadRefName;
-		if (hasInvalidFields) return null;
-		return {
-			url: row.url as string,
-			headRefName: row.headRefName as string,
-		};
+		const parsed = currentPrSchema.safeParse(JSON.parse(result.stdout));
+		const isInvalidCurrentPr = !parsed.success;
+		if (isInvalidCurrentPr) return null;
+		return parsed.data;
 	} catch {
 		return null;
 	}

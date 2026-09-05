@@ -1,8 +1,6 @@
 export const PR_STATE_TYPE = "pi-pr-gate-state";
-const STRING_TYPE = "string";
-const BOOLEAN_TYPE = "boolean";
 
-import { isRecord } from "../shared/records.ts";
+import { prStateDataSchema } from "./schemas.ts";
 
 export interface MergedPr {
 	prUrl: string;
@@ -38,31 +36,8 @@ function prUrlOf(entry: MergedPr): string {
 	return entry.prUrl;
 }
 
-function isMergedPr(value: unknown): value is MergedPr {
-	const isRecordValue = isRecord(value);
-	const record = isRecordValue ? value : null;
-	if (record === null) return false;
-	const hasPrUrl = typeof record.prUrl === STRING_TYPE;
-	if (!hasPrUrl) return false;
-	const hasDetectedAt = typeof record.detectedAt === STRING_TYPE;
-	if (!hasDetectedAt) return false;
-	return typeof record.reminderPending === BOOLEAN_TYPE;
-}
-
 export function isPrState(value: unknown): value is PrState {
-	const isRecordValue = isRecord(value);
-	const record = isRecordValue ? value : null;
-	if (record === null) return false;
-	const hasValidPrUrl =
-		record.prUrl === undefined || typeof record.prUrl === STRING_TYPE;
-	if (!hasValidPrUrl) return false;
-	const hasValidDiscoveryDisabled =
-		record.discoveryDisabled === undefined ||
-		typeof record.discoveryDisabled === BOOLEAN_TYPE;
-	if (!hasValidDiscoveryDisabled) return false;
-	if (record.mergedPrs === undefined) return true;
-	if (!Array.isArray(record.mergedPrs)) return false;
-	return record.mergedPrs.every(isMergedPr);
+	return prStateDataSchema.safeParse(value).success;
 }
 
 export function recordMergedPr(state: PrState, detectedAt: string): PrState {

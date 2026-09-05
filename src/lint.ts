@@ -245,8 +245,8 @@ function stringSimilarityPercent(left: string, right: string): number {
 	const normalizedRight = normalizedString(right);
 	const combinedLength = normalizedLeft.length + normalizedRight.length;
 	if (combinedLength === 0) return 100;
-	return Math.round(
-		(1 - editDistance(normalizedLeft, normalizedRight) / combinedLength) * 100,
+	return (
+		(1 - editDistance(normalizedLeft, normalizedRight) / combinedLength) * 100
 	);
 }
 
@@ -388,7 +388,7 @@ function collectSimilarStringLiterals(
 				occurrence.node,
 				SIMILAR_STRING_LITERALS,
 				SIMILAR_STRING_MESSAGE,
-				similarity,
+				Math.round(similarity),
 				SIMILAR_STRING_LIMIT,
 			),
 		);

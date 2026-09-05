@@ -5,34 +5,26 @@ const UNKNOWN_STATE = "UNKNOWN";
 const MERGED_STATE = "MERGED";
 const OPEN_STATE = "OPEN";
 const CLOSED_STATE = "CLOSED";
-const OBJECT_TYPE = "object";
 
-type MergedPrData = { state?: unknown; mergedAt?: unknown };
-
-function isString(value: unknown): value is string {
-	return typeof value === "string";
-}
-
-function isMergedPrData(
-	data: MergedPrData,
-): data is { state: "MERGED"; mergedAt: string } {
-	const hasMergedState = data.state === MERGED_STATE;
-	if (typeof data.mergedAt !== "string") return false;
-	const hasMergedAt = data.mergedAt.trim() !== "";
-	return hasMergedState && hasMergedAt;
-}
-
-function stateFromMergedData(data: MergedPrData): OpenPrInfo["state"] {
-	const isMerged = isMergedPrData(data);
-	if (isMerged) return MERGED_STATE;
-	const isOpenOrClosed =
-		data.state === OPEN_STATE || data.state === CLOSED_STATE;
-	if (isOpenOrClosed) return data.state as OpenPrInfo["state"];
+function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
+	const parsed = mergedPrDataSchema.safeParse(data);
+	const isInvalidData = !parsed.success;
+	if (isInvalidData) return UNKNOWN_STATE;
+	const row = parsed.data;
+	const hasMergedState = row.state === MERGED_STATE;
+	const hasMergedAt = row.mergedAt !== undefined && row.mergedAt.trim() !== "";
+	const isMergedData = hasMergedState && hasMergedAt;
+	if (isMergedData) return MERGED_STATE;
+	const isOpenState = row.state === OPEN_STATE;
+	if (isOpenState) return OPEN_STATE;
+	const isClosedState = row.state === CLOSED_STATE;
+	if (isClosedState) return CLOSED_STATE;
 	return UNKNOWN_STATE;
 }
 
 import type { CommandResult, Exec } from "../shared/command.ts";
 import { githubPrUrl } from "./detection.ts";
+import { mergedPrDataSchema, openPrRowsSchema } from "./schemas.ts";
 
 export interface OpenPrInfo {
 	url: string | null;
@@ -66,11 +58,7 @@ export async function findPrState(
 	const commandFailed = result.code !== 0;
 	if (commandFailed) return UNKNOWN_STATE;
 	try {
-		const row: unknown = JSON.parse(result.stdout);
-		if (typeof row !== OBJECT_TYPE) return UNKNOWN_STATE;
-		if (row === null) return UNKNOWN_STATE;
-		const data = row as MergedPrData;
-		return stateFromMergedData(data);
+		return stateFromMergedData(JSON.parse(result.stdout));
 	} catch {
 		return UNKNOWN_STATE;
 	}
@@ -105,17 +93,15 @@ async function runGhList(
 
 function parseOpenPrResult(stdout: string): OpenPrInfo {
 	try {
-		const rows: unknown = JSON.parse(stdout);
-		if (!Array.isArray(rows)) return { url: null, state: UNKNOWN_STATE };
-		const hasNoRows = rows.length === 0;
+		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
+		const isInvalidRows = !parsed.success;
+		if (isInvalidRows) return { url: null, state: UNKNOWN_STATE };
+		const hasNoRows = parsed.data.length === 0;
 		if (hasNoRows) return { url: null, state: OPEN_STATE };
-		const firstRow = rows[0];
-		if (typeof firstRow !== OBJECT_TYPE)
-			return { url: null, state: UNKNOWN_STATE };
-		if (firstRow === null) return { url: null, state: UNKNOWN_STATE };
-		const row = firstRow as { url?: unknown; state?: unknown };
-		const hasUrl = isString(row.url);
-		const url = hasUrl ? githubPrUrl(row.url as string) : null;
+		const row = parsed.data[0];
+		const hasNoRow = row === undefined;
+		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
+		const url = row.url === undefined ? null : githubPrUrl(row.url);
 		const isOpen = row.state === OPEN_STATE;
 		const isClosed = row.state === CLOSED_STATE;
 		const isMerged = row.state === MERGED_STATE;
