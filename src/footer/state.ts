@@ -88,13 +88,19 @@ export function restoreFooterState(value: unknown): FooterState | null {
 	return { footers: restored };
 }
 
+function serializedText(event: FooterUpdate): string | null {
+	const isVisible = event.isVisible;
+	if (!isVisible) return null;
+	return event.text;
+}
+
 export function serializeFooterState(state: FooterState): PersistedFooterState {
 	const footers: Record<string, PersistedFooterUpdate> = {};
 	for (const event of Object.values(state.footers)) {
 		footers[event.footerType] = {
 			footerType: event.footerType,
 			isLoading: event.isLoading,
-			text: event.isVisible ? event.text : null,
+			text: serializedText(event),
 		};
 	}
 	return { footers };

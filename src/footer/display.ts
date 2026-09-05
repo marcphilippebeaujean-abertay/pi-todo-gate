@@ -24,6 +24,12 @@ function loadingText(text: string, frame: string): string {
 	return text;
 }
 
+function eventText(event: FooterUpdate): string | undefined {
+	const isVisible = event.isVisible;
+	if (!isVisible) return undefined;
+	return event.text;
+}
+
 export class FooterDisplay {
 	private context: SessionContext | null = null;
 	private state: FooterState = { footers: {} };
@@ -47,7 +53,8 @@ export class FooterDisplay {
 	clear(): void {
 		for (const footerType of this.animations.keys())
 			this.stopAnimation(footerType);
-		if (this.context === null) return;
+		const hasContext = this.context !== null;
+		if (!hasContext) return;
 		for (const footerType of this.renderedFooterTypes)
 			this.setStatus(footerType, undefined);
 		this.renderedFooterTypes = new Set<string>();
@@ -68,9 +75,11 @@ export class FooterDisplay {
 	}
 
 	private setStatus(footerType: string, text: string | undefined): void {
-		if (this.context === null) return;
+		const context = this.context;
+		const hasContext = context !== null;
+		if (!hasContext) return;
 		try {
-			this.context.ui.setStatus(footerType, text);
+			context.ui.setStatus(footerType, text);
 		} catch {
 			// Headless modes may not expose status UI.
 		}
@@ -79,7 +88,7 @@ export class FooterDisplay {
 	private syncEvent(context: SessionContext, event: FooterUpdate): void {
 		this.stopAnimation(event.footerType);
 		this.renderedFooterTypes.add(event.footerType);
-		const visibleText = event.isVisible ? event.text : undefined;
+		const visibleText = eventText(event);
 		this.setStatus(event.footerType, visibleText);
 		const shouldAnimate = event.isLoading && event.isVisible;
 		if (!shouldAnimate) return;
