@@ -7,7 +7,9 @@
     "test": "npm run architecture && vitest run",
     "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check extensions src test && tsx src/lint-cli.ts",
+    "lint:biome": "biome check extensions src test",
+    "lint:strict": "tsx src/lint-cli.ts",
+    "lint": "npm run lint:biome && npm run lint:strict",
     "install-local": "bash install.sh",
     "configure": "bash install.sh configure",
     "prepare": "git config core.hooksPath .githooks"
@@ -38,5 +40,8 @@
     "extensions": [
       "./extensions/pi-todo-gate.ts"
     ]
+  },
+  "dependencies": {
+    "zod": "^4.5.4"
   }
 }

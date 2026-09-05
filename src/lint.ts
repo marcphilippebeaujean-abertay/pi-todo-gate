@@ -1,11 +1,13 @@
 const NO_MAGIC_STRINGS = "no-magic-strings";
 const NO_SHORT_STRING_CONSTANTS = "no-short-string-constants";
+const SIMILAR_STRING_LITERALS = "similar-string-literals";
 const NAMED_IF_CONDITION = "named-if-condition";
 const FUNCTIONS_PER_FILE = "functions-per-file";
 const CYCLOMATIC_COMPLEXITY = "cyclomatic-complexity";
 const FUNCTION_LENGTH = "function-length";
 const NESTED_FUNCTION_DEPTH = "nested-function-depth";
 const NO_COMPLICATED_EXPRESSIONS = "no-complicated-expressions";
+const REPEATED_FIELD_CHECKS = "repeated-field-checks";
 
 import ts from "typescript";
 import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
@@ -14,12 +16,14 @@ import { normalizedPath } from "./shared/path.ts";
 export type LintRuleId =
 	| "no-magic-strings"
 	| "no-short-string-constants"
+	| "similar-string-literals"
 	| "no-complicated-expressions"
 	| "named-if-condition"
 	| "cyclomatic-complexity"
 	| "function-length"
 	| "functions-per-file"
-	| "nested-function-depth";
+	| "nested-function-depth"
+	| "repeated-field-checks";
 
 export interface LintDiagnostic {
 	filePath: string;
@@ -33,10 +37,17 @@ export interface LintDiagnostic {
 
 const MAGIC_STRING_MESSAGE = "String literal must use named constant";
 const MAGIC_STRING_LIMIT = 0;
+const SIMILAR_STRING_MESSAGE =
+	"Similar string literals should share parameterized function";
+const SIMILAR_STRING_LIMIT = 80;
+const MIN_SIMILAR_STRING_LENGTH = 12;
 const SHORT_STRING_CONSTANT_MESSAGE =
 	"String constants must contain at least two characters";
 const SHORT_STRING_CONSTANT_LIMIT = 1;
 const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
+const REPEATED_FIELD_CHECK_MESSAGE =
+	"Repeated field checks should use a local variable";
+const REPEATED_FIELD_CHECK_LIMIT = 1;
 const NAMED_IF_MESSAGE =
 	"Extract condition into a descriptive boolean variable";
 const NAMED_IF_LIMIT = 0;
@@ -207,6 +218,70 @@ function isIgnoredString(
 	);
 }
 
+interface StringLiteralOccurrence {
+	node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral;
+	text: string;
+}
+
+function normalizedString(value: string): string {
+	return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function editDistance(left: string, right: string): number {
+	let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+	for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+		const current = [leftIndex];
+		for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+			const substitutionCost =
+				left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+			current[rightIndex] = Math.min(
+				current[rightIndex - 1] + 1,
+				previous[rightIndex] + 1,
+				previous[rightIndex - 1] + substitutionCost,
+			);
+		}
+		previous = current;
+	}
+	return previous[right.length];
+}
+
+function stringSimilarityPercent(left: string, right: string): number {
+	const normalizedLeft = normalizedString(left);
+	const normalizedRight = normalizedString(right);
+	const combinedLength = normalizedLeft.length + normalizedRight.length;
+	if (combinedLength === 0) return 100;
+	return (
+		(1 - editDistance(normalizedLeft, normalizedRight) / combinedLength) * 100
+	);
+}
+
+function collectStringLiteralOccurrences(
+	sourceFile: ts.SourceFile,
+): StringLiteralOccurrence[] {
+	const occurrences: StringLiteralOccurrence[] = [];
+	function visit(
+		node: ts.Node,
+		insideFunction: boolean,
+		ancestors: readonly ts.Node[] = [],
+	): void {
+		const currentInsideFunction = insideFunction || isFunctionLike(node);
+		if (
+			currentInsideFunction &&
+			isStringLiteralLike(node) &&
+			node.text.length >= MIN_SIMILAR_STRING_LENGTH &&
+			!isIgnoredString(node, ancestors)
+		) {
+			occurrences.push({ node, text: node.text });
+		}
+		if (ts.isTypeNode(node)) return;
+		ts.forEachChild(node, (child) =>
+			visit(child, currentInsideFunction, [...ancestors, node]),
+		);
+	}
+	visit(sourceFile, false);
+	return occurrences;
+}
+
 function isLogicalExpression(node: ts.Node): node is ts.BinaryExpression {
 	return (
 		ts.isBinaryExpression(node) &&
@@ -279,11 +354,58 @@ function collectShortStringConstants(
 	visit(sourceFile);
 }
 
+function collectSimilarStringLiterals(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+): void {
+	const occurrences = collectStringLiteralOccurrences(sourceFile);
+	const counts = new Map<string, number>();
+	for (const occurrence of occurrences) {
+		counts.set(occurrence.text, (counts.get(occurrence.text) ?? 0) + 1);
+	}
+	const singletons = occurrences.filter(
+		(occurrence) => counts.get(occurrence.text) === 1,
+	);
+	const matches = new Map<ts.Node, number>();
+	for (let leftIndex = 0; leftIndex < singletons.length; leftIndex += 1) {
+		for (
+			let rightIndex = leftIndex + 1;
+			rightIndex < singletons.length;
+			rightIndex += 1
+		) {
+			const left = singletons[leftIndex];
+			const right = singletons[rightIndex];
+			const similarity = stringSimilarityPercent(left.text, right.text);
+			if (similarity < SIMILAR_STRING_LIMIT) continue;
+			matches.set(left.node, Math.max(matches.get(left.node) ?? 0, similarity));
+			matches.set(
+				right.node,
+				Math.max(matches.get(right.node) ?? 0, similarity),
+			);
+		}
+	}
+	for (const occurrence of singletons) {
+		const similarity = matches.get(occurrence.node);
+		if (similarity === undefined) continue;
+		diagnostics.push(
+			diagnostic(
+				sourceFile,
+				occurrence.node,
+				SIMILAR_STRING_LITERALS,
+				SIMILAR_STRING_MESSAGE,
+				Math.round(similarity),
+				SIMILAR_STRING_LIMIT,
+			),
+		);
+	}
+}
+
 function collectMagicStrings(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
 	limit: number,
 ): void {
+	const occurrences: StringLiteralOccurrence[] = [];
 	function visit(
 		node: ts.Node,
 		insideFunction: boolean,
@@ -295,16 +417,7 @@ function collectMagicStrings(
 			isStringLiteralLike(node) &&
 			!isIgnoredString(node, ancestors)
 		) {
-			diagnostics.push(
-				diagnostic(
-					sourceFile,
-					node,
-					NO_MAGIC_STRINGS,
-					MAGIC_STRING_MESSAGE,
-					1,
-					limit,
-				),
-			);
+			occurrences.push({ node, text: node.text });
 		}
 		if (ts.isTypeNode(node)) return;
 		ts.forEachChild(node, (child) =>
@@ -312,6 +425,24 @@ function collectMagicStrings(
 		);
 	}
 	visit(sourceFile, false);
+
+	const counts = new Map<string, number>();
+	for (const occurrence of occurrences) {
+		counts.set(occurrence.text, (counts.get(occurrence.text) ?? 0) + 1);
+	}
+	for (const occurrence of occurrences) {
+		if (counts.get(occurrence.text) === 1) continue;
+		diagnostics.push(
+			diagnostic(
+				sourceFile,
+				occurrence.node,
+				NO_MAGIC_STRINGS,
+				MAGIC_STRING_MESSAGE,
+				counts.get(occurrence.text) ?? 0,
+				limit,
+			),
+		);
+	}
 }
 
 function isNamedConditionType(type: ts.Type): boolean {
@@ -373,6 +504,25 @@ function isTypeOfExpression(node: ts.Expression): boolean {
 	return ts.isTypeOfExpression(node);
 }
 
+function isEqualityOperator(operator: ts.SyntaxKind): boolean {
+	return (
+		operator === ts.SyntaxKind.EqualsEqualsToken ||
+		operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+		operator === ts.SyntaxKind.ExclamationEqualsToken ||
+		operator === ts.SyntaxKind.ExclamationEqualsEqualsToken
+	);
+}
+
+function equalityPropertyAccesses(
+	node: ts.Node,
+): ts.PropertyAccessExpression[] {
+	if (!ts.isBinaryExpression(node)) return [];
+	const isEquality = isEqualityOperator(node.operatorToken.kind);
+	if (!isEquality) return [];
+	const left = unparenthesized(node.left);
+	return ts.isPropertyAccessExpression(left) ? [left] : [];
+}
+
 function isSafeConditionExpression(
 	expression: ts.Expression,
 	checker: ts.TypeChecker,
@@ -397,20 +547,66 @@ function isNamedBooleanCondition(
 	return isSafeConditionExpression(condition, checker);
 }
 
+function conditionExpressions(node: ts.Node): ts.Expression[] {
+	if (ts.isIfStatement(node)) return [node.expression];
+	if (ts.isWhileStatement(node)) return [node.expression];
+	if (ts.isDoStatement(node)) return [node.expression];
+	if (ts.isConditionalExpression(node)) return [node.condition];
+	return [];
+}
+
+function collectRepeatedFieldChecks(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+): void {
+	function visit(node: ts.Node): void {
+		if (isFunctionLike(node) && node.body) {
+			const accesses = new Map<string, ts.PropertyAccessExpression[]>();
+			function visitBody(current: ts.Node): void {
+				for (const access of equalityPropertyAccesses(current)) {
+					const key = access.getText(sourceFile);
+					const occurrences = accesses.get(key) ?? [];
+					occurrences.push(access);
+					accesses.set(key, occurrences);
+				}
+				ts.forEachChild(current, (child) => {
+					if (!isFunctionLike(child)) visitBody(child);
+				});
+			}
+			visitBody(node.body);
+			for (const occurrences of accesses.values()) {
+				if (occurrences.length <= REPEATED_FIELD_CHECK_LIMIT) continue;
+				const repeatedAccess = occurrences[REPEATED_FIELD_CHECK_LIMIT];
+				if (repeatedAccess === undefined) continue;
+				diagnostics.push(
+					diagnostic(
+						sourceFile,
+						repeatedAccess,
+						REPEATED_FIELD_CHECKS,
+						REPEATED_FIELD_CHECK_MESSAGE,
+						occurrences.length,
+						REPEATED_FIELD_CHECK_LIMIT,
+					),
+				);
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(sourceFile);
+}
+
 function collectNamedIfConditions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
 	checker: ts.TypeChecker,
 ): void {
 	function visit(node: ts.Node): void {
-		if (
-			ts.isIfStatement(node) &&
-			!isNamedBooleanCondition(node.expression, checker)
-		) {
+		for (const expression of conditionExpressions(node)) {
+			if (isNamedBooleanCondition(expression, checker)) continue;
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
-					node.expression,
+					expression,
 					NAMED_IF_CONDITION,
 					NAMED_IF_MESSAGE,
 					1,
@@ -586,7 +782,9 @@ export function lintProgram(
 			continue;
 		collectShortStringConstants(sourceFile, diagnostics);
 		collectMagicStrings(sourceFile, diagnostics, MAGIC_STRING_LIMIT);
+		collectSimilarStringLiterals(sourceFile, diagnostics);
 		collectNamedIfConditions(sourceFile, diagnostics, checker);
+		collectRepeatedFieldChecks(sourceFile, diagnostics);
 		collectComplicatedExpressions(
 			sourceFile,
 			diagnostics,

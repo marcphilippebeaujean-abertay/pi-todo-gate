@@ -22,11 +22,15 @@ function linkText(text: string, theme?: FooterTheme): string {
 }
 
 export function prLabel(url: string | undefined, theme?: FooterTheme): string {
-	const normalized = url ? githubPrUrl(url) : null;
+	const hasUrl = Boolean(url);
+	const normalized = hasUrl ? githubPrUrl(url as string) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (normalized === null) return PR_NONE_LABEL;
 	if (number === undefined) return PR_NONE_LABEL;
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
+	const exceedsNumberLimit = number.length > 6;
+	const boundedNumber = exceedsNumberLimit
+		? `${(number as string).slice(0, 5)}…`
+		: number;
 	return hyperlink(linkText(`PR #${boundedNumber}`, theme), normalized);
 }
 
@@ -36,8 +40,12 @@ function displayTaskName(
 ): string {
 	const name = taskName?.replace(/\s+/g, " ").trim();
 	const hasNoName = name === undefined || name === "";
-	if (hasNoName) return id ? `#${id}` : OPEN_VALUE;
-	return name.length > 15 ? `${name.slice(0, 15)}...` : name;
+	if (hasNoName) {
+		const hasId = id !== undefined;
+		return hasId ? `#${id}` : OPEN_VALUE;
+	}
+	const exceedsNameLimit = name.length > 15;
+	return exceedsNameLimit ? `${name.slice(0, 15)}...` : name;
 }
 
 export function taskLabel(
@@ -48,8 +56,9 @@ export function taskLabel(
 	if (url === undefined) return TASK_NONE_LABEL;
 	try {
 		const parsed = new URL(url);
+		const protocol = parsed.protocol;
 		const hasSupportedProtocol =
-			parsed.protocol === HTTP_PROTOCOL || parsed.protocol === HTTPS_PROTOCOL;
+			protocol === HTTP_PROTOCOL || protocol === HTTPS_PROTOCOL;
 		if (!hasSupportedProtocol) return TASK_NONE_LABEL;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return `${TODOIST_TASK_LABEL}${hyperlink(linkText(displayTaskName(taskName, id), theme), url)}`;
@@ -64,13 +73,17 @@ export function renderPrStatus(
 ): string {
 	const muted = (text: string) => theme?.fg(MUTED_COLOR, text) ?? text;
 	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
-	const normalized = url ? githubPrUrl(url) : null;
+	const hasUrl = Boolean(url);
+	const normalized = hasUrl ? githubPrUrl(url as string) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	if (normalized === null)
 		return `${muted(PR_LINK_LABEL)}${value(NONE_VALUE)}${muted(LINK_SEPARATOR_SUFFIX)}`;
 	if (number === undefined)
 		return `${muted(PR_LINK_LABEL)}${value(NONE_VALUE)}${muted(LINK_SEPARATOR_SUFFIX)}`;
-	const boundedNumber = number.length > 6 ? `${number.slice(0, 5)}…` : number;
+	const exceedsNumberLimit = number.length > 6;
+	const boundedNumber = exceedsNumberLimit
+		? `${(number as string).slice(0, 5)}…`
+		: number;
 	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedNumber}`, theme), normalized)}${muted(LINK_SEPARATOR_SUFFIX)}`;
 }
 
@@ -85,8 +98,9 @@ export function renderTaskStatus(
 	if (hasNoUrl) return `${muted(TODOIST_TASK_LABEL)}${value(NONE_VALUE)}`;
 	try {
 		const parsed = new URL(url);
+		const protocol = parsed.protocol;
 		const hasSupportedProtocol =
-			parsed.protocol === HTTP_PROTOCOL || parsed.protocol === HTTPS_PROTOCOL;
+			protocol === HTTP_PROTOCOL || protocol === HTTPS_PROTOCOL;
 		if (!hasSupportedProtocol)
 			return `${muted(TODOIST_TASK_LABEL)}${value(NONE_VALUE)}`;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];

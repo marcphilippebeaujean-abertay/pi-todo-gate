@@ -16,19 +16,25 @@ export function parseProjectEntry(
 		if (!hasProject) return null;
 		return [normalizedPath, normalizedProject];
 	}
-	const objectProject = isRecord(project) ? project : null;
+	const isObjectProject = isRecord(project);
+	const objectProject = isObjectProject ? project : null;
 	if (objectProject === null) return null;
 	const projectRef = objectProject.todoistProjectRef;
 	if (typeof projectRef !== "string") return null;
 	const hasProjectRef = projectRef.trim() !== "";
 	if (!hasProjectRef) return null;
+	const hasTriggerSetting =
+		typeof objectProject.triggersOnlyOnWorktree === "boolean";
+	const triggerSetting = hasTriggerSetting
+		? {
+				triggersOnlyOnWorktree: objectProject.triggersOnlyOnWorktree as boolean,
+			}
+		: {};
 	return [
 		normalizedPath,
 		{
 			todoistProjectRef: projectRef.trim(),
-			...(typeof objectProject.triggersOnlyOnWorktree === "boolean"
-				? { triggersOnlyOnWorktree: objectProject.triggersOnlyOnWorktree }
-				: {}),
+			...triggerSetting,
 		},
 	];
 }

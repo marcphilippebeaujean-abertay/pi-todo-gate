@@ -103,17 +103,20 @@ export async function executeStateTool(
 	const session = runtime.active;
 	const hasSession = session !== null;
 	if (!hasSession) throw new Error(C.message.inactive);
-	const isStatusAction = params.action === C.action.status;
-	if (isStatusAction) return statusAction(session);
-	const isSetPrAction = params.action === C.action.setPr;
-	if (isSetPrAction) return setPrAction(runtime, session, params);
-	const isClearPrAction = params.action === C.action.clearPr;
-	if (isClearPrAction) return clearPrAction(runtime, session);
-	const isSetTaskAction = params.action === C.action.setTask;
-	if (isSetTaskAction) return setTaskAction(runtime, session, params, ctx);
-	const isClearTaskAction = params.action === C.action.clearTask;
-	if (isClearTaskAction) return clearTaskAction(runtime, session);
-	return clearAllAction(runtime, session);
+	switch (params.action) {
+		case C.action.status:
+			return statusAction(session);
+		case C.action.setPr:
+			return setPrAction(runtime, session, params);
+		case C.action.clearPr:
+			return clearPrAction(runtime, session);
+		case C.action.setTask:
+			return setTaskAction(runtime, session, params, ctx);
+		case C.action.clearTask:
+			return clearTaskAction(runtime, session);
+		default:
+			return clearAllAction(runtime, session);
+	}
 }
 
 export function installStateTool(runtime: ExtensionRuntime): void {
