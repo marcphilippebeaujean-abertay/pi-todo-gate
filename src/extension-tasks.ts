@@ -104,7 +104,7 @@ function persistInferredTask(
 		}),
 	);
 	appendState(runtime, session.state, !session.allowPrDiscovery);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 }
 
 async function linkInferredTaskNow(

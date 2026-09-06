@@ -32,6 +32,7 @@ function startExtensions(
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
+		onFooterUpdate: runtime.footer.update.bind(runtime.footer),
 	});
 }
 

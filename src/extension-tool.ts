@@ -70,7 +70,7 @@ function setPrAction(
 	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	return extensionResult(`Pinned PR ${url}`);
 }
 
@@ -88,7 +88,7 @@ function clearPrAction(
 	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	return extensionResult(C.message.prCleared);
 }
 

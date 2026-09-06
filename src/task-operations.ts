@@ -58,7 +58,7 @@ function persistClaimedTask(
 		}),
 	);
 	appendState(runtime, session.state, !session.allowPrDiscovery);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	return extensionResult(
 		`Claimed Todoist task ${claimed.webUrl ?? claimed.url ?? claimed.id}`,
 	);
@@ -120,7 +120,7 @@ async function clearTaskActionNow(
 		}),
 	);
 	appendState(runtime, session.state, !session.allowPrDiscovery);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	return extensionResult(C.message.taskCleared);
 }
 
@@ -133,7 +133,7 @@ async function clearAllActionNow(
 	replaceSessionState(session, {});
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	return extensionResult(C.message.stateCleared);
 }
 

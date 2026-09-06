@@ -44,27 +44,32 @@ export function appendState(
 	runtime.pi.appendEntry(C.entry.state, data);
 }
 
-export function refreshFooterStatuses(session: ActiveSession): void {
-	session.context.ui.setStatus(
-		C.status.pr,
-		renderPrStatus(session.state.prUrl, session.context.ui.theme),
-	);
-	session.context.ui.setStatus(
-		C.status.task,
-		renderTaskStatus(
+export function refreshFooterStatuses(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+): void {
+	runtime.footer.update({
+		footerType: C.status.pr,
+		isLoading: false,
+		text: renderPrStatus(session.state.prUrl, session.context.ui.theme),
+		isVisible: true,
+	});
+	runtime.footer.update({
+		footerType: C.status.task,
+		isLoading: false,
+		text: renderTaskStatus(
 			session.state.taskUrl,
 			session.context.ui.theme,
 			session.state.taskName,
 		),
-	);
+		isVisible: true,
+	});
 }
 
-export function clearFooterStatuses(session: ActiveSession): void {
-	session.context.ui.setStatus(C.status.pr, undefined);
-	session.context.ui.setStatus(C.status.task, undefined);
-}
-
-export function deactivateSession(session: ActiveSession): void {
-	clearFooterStatuses(session);
+export function deactivateSession(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+): void {
+	runtime.footer.deactivate();
 	session.context.ui.setFooter(undefined);
 }
