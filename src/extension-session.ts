@@ -28,7 +28,7 @@ function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
 	const session = runtime.active;
 	const hasSession = session !== null;
 	if (hasSession) {
-		deactivateSession(session);
+		deactivateSession(runtime, session);
 		const canManageActiveTools =
 			typeof runtime.pi.getActiveTools === FUNCTION_TYPE &&
 			typeof runtime.pi.setActiveTools === FUNCTION_TYPE;
@@ -40,6 +40,7 @@ function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
 			runtime.pi.setActiveTools(remainingTools);
 		}
 	}
+	if (!hasSession) runtime.footer.deactivate();
 	runtime.active = null;
 }
 
@@ -116,6 +117,18 @@ function manageActiveTools(runtime: ExtensionRuntime): void {
 	runtime.pi.setActiveTools([...activeTools, C.tool.state]);
 }
 
+async function startFooter(
+	runtime: ExtensionRuntime,
+	event: SessionStartEvent,
+	ctx: ExtensionContext,
+	inheritedHandoff: boolean,
+): Promise<void> {
+	const footerEvent = inheritedHandoff
+		? event
+		: { ...event, previousSessionFile: undefined };
+	await runtime.footer.sessionStart(footerEvent, ctx);
+}
+
 export async function handleSessionStart(
 	runtime: ExtensionRuntime,
 	event: SessionStartEvent,
@@ -130,7 +143,7 @@ export async function handleSessionStart(
 		deactivateUnconfiguredSession(runtime);
 		return;
 	}
-	if (runtime.active !== null) deactivateSession(runtime.active);
+	if (runtime.active !== null) deactivateSession(runtime, runtime.active);
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -144,6 +157,7 @@ export async function handleSessionStart(
 	);
 	state = inherited.state;
 	const inheritedHandoff = inherited.handoffContext;
+	await startFooter(runtime, event, ctx, inheritedHandoff);
 	const allowPrDiscovery = inheritedHandoff
 		? false
 		: stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
@@ -159,7 +173,7 @@ export async function handleSessionStart(
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	persistInitialPr(runtime, branch);
 }
 
@@ -180,8 +194,10 @@ export async function handleSessionShutdown(
 	await runtime.events.emit(C.event.sessionWillClose, { reason: event.reason });
 	const session = runtime.active;
 	if (session !== null) {
-		deactivateSession(session);
+		deactivateSession(runtime, session);
 		runtime.active = null;
+	} else {
+		runtime.footer.deactivate();
 	}
 	runtime.worktree.deactivate();
 	runtime.exitProtocol.deactivate();

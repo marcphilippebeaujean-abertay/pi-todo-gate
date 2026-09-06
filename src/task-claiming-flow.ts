@@ -74,7 +74,7 @@ function persistClaim(
 		}),
 	);
 	appendState(runtime, session.state, session.allowPrDiscovery === false);
-	refreshFooterStatuses(session);
+	refreshFooterStatuses(runtime, session);
 	session.context.ui.notify("Todoist task assigned", INFO);
 }
 
