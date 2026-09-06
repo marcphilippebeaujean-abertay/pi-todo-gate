@@ -47,8 +47,7 @@ export interface WorkerProcess {
 }
 
 const DEFAULT_COMMAND = "pi";
-const MISSING_CLAIM_EVIDENCE =
-	"Herdr claim worker completed without claim evidence.";
+const MISSING_CLAIM_EVIDENCE = "completed without claim evidence";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
 const DATA_EVENT = "data";

@@ -39,8 +39,6 @@ const BASH = "bash";
 const WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO =
 	"warns on every prompt only when no task is active";
 const WORK = "work";
-const YOU_HAVE_NO_CLAIMED_A_TODOIST_TASK_2 =
-	"you have no claimed a todoist task yet!";
 const DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES =
 	"discovers the first PR URL and ignores later URLs";
 const USER = "user";
@@ -121,7 +119,6 @@ type TestTool = {
 	name: string;
 	execute: (...args: unknown[]) => Promise<unknown> | unknown;
 };
-type BeforeAgentResult = { message: { content: string } };
 type StateToolResult = { content: Array<{ text: string }> };
 
 function harness(
@@ -266,8 +263,8 @@ describe("lazy activation", () => {
 	});
 });
 
-describe("confirmation-gated Todoist task claiming", () => {
-	it("shows and applies an existing-task proposal", async () => {
+describe("automatic Todoist task claiming", () => {
+	it("applies an existing-task proposal without confirmation", async () => {
 		const root = await mkdtemp(join(tmpdir(), "claim-confirm"));
 		const h = harness(root);
 		h.ctx.hasUI = true;
@@ -286,6 +283,7 @@ describe("confirmation-gated Todoist task claiming", () => {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
+				sessionId: SESSION_CURRENT,
 				action: "claim",
 				taskData: {
 					title: IMPLEMENT_FEATURE,
@@ -296,27 +294,31 @@ describe("confirmation-gated Todoist task claiming", () => {
 			}),
 		});
 		await start(h, { [root]: MERGE_TD });
+		await h.handlers.get(MESSAGE_END)?.(
+			{
+				type: MESSAGE_END,
+				message: {
+					role: ASSISTANT,
+					content: HTTPS_GITHUB_COM_O_R_PULL_1,
+				},
+			},
+			h.ctx,
+		);
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(h.confirmations[0]?.message).toContain("claim existing task");
-		expect(h.confirmations[0]?.message).toContain(IMPLEMENT_FEATURE);
-		expect(h.confirmations[0]?.message).toContain("Details");
-		expect(claimTask).toHaveBeenCalledWith(
-			VALUE_42,
-			{ id: PROJECT_1 },
-			expect.any(Function),
-		);
+		expect(h.confirmations).toHaveLength(0);
+		expect(claimTask).not.toHaveBeenCalled();
 		expect(h.appended.at(-1)).toMatchObject({
 			data: { taskRef: VALUE_42, taskName: IMPLEMENT_FEATURE },
 		});
 	});
 
-	it("does not mutate Todoist when a proposal is declined", async () => {
-		const root = await mkdtemp(join(tmpdir(), "decline-confirm"));
-		const h = harness(root, [], false);
+	it("ignores a claim result from another session", async () => {
+		const root = await mkdtemp(join(tmpdir(), "stale-session-claim"));
+		const h = harness(root);
 		h.ctx.hasUI = true;
 		const claimTask = vi.fn();
 		const client = {
@@ -327,6 +329,7 @@ describe("confirmation-gated Todoist task claiming", () => {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
+				sessionId: "previous-session",
 				action: "claim" as const,
 				taskData: {
 					title: IMPLEMENT_FEATURE,
@@ -342,14 +345,13 @@ describe("confirmation-gated Todoist task claiming", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(h.confirmations[0]?.message).toContain(IMPLEMENT_FEATURE);
+
 		expect(claimTask).not.toHaveBeenCalled();
-		expect(h.appended.at(-1)).not.toMatchObject({
-			data: { taskRef: expect.any(String) },
-		});
+		expect(h.appended).toHaveLength(0);
+		expect(h.selections).toHaveLength(0);
 	});
 
-	it("shows and applies a new-task proposal with its description", async () => {
+	it("applies a new-task proposal without confirmation", async () => {
 		const root = await mkdtemp(join(tmpdir(), "create-confirm"));
 		const h = harness(root);
 		h.ctx.hasUI = true;
@@ -368,11 +370,12 @@ describe("confirmation-gated Todoist task claiming", () => {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
-				action: "create",
+				sessionId: SESSION_CURRENT,
+				action: "claim",
 				taskData: {
 					title: "New task",
 					description: "Proposed details",
-					id: null,
+					id: "43",
 				},
 				error: null,
 			}),
@@ -384,33 +387,23 @@ describe("confirmation-gated Todoist task claiming", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 25));
 
-		expect(h.confirmations[0]?.message).toContain("new task");
-		expect(createTask).toHaveBeenCalledWith(
-			"New task",
-			"Proposed details",
-			{ id: PROJECT_1 },
-			expect.any(Function),
-		);
+		expect(h.confirmations).toHaveLength(0);
+		expect(createTask).not.toHaveBeenCalled();
 		expect(h.appended.at(-1)).toMatchObject({
 			data: { taskRef: "43", taskName: "New task" },
 		});
 	});
 
-	it("offers retry after an error proposal", async () => {
+	it("raises a warning after an error result", async () => {
 		const root = await mkdtemp(join(tmpdir(), "retry-confirm"));
 		const h = harness(root);
 		h.ctx.hasUI = true;
-		let attempts = 0;
-		const worker = vi.fn(async () => {
-			attempts += 1;
-			return attempts === 1
-				? { action: "error" as const, taskData: null, error: "Unavailable" }
-				: {
-						action: "create" as const,
-						taskData: { title: "Retry task", description: "Details", id: null },
-						error: null,
-					};
-		});
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: "Unavailable",
+		}));
 		const client = {
 			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
 			createTask: async () => ({
@@ -433,12 +426,11 @@ describe("confirmation-gated Todoist task claiming", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 50));
 
-		expect(h.selections[0]?.options).toEqual([
-			"Retry task claiming",
-			"Leave task unassigned",
-		]);
-		expect(worker).toHaveBeenCalledTimes(2);
-		expect(h.confirmations[0]?.message).toContain("Retry task");
+		expect(h.selections).toHaveLength(0);
+		expect(worker).toHaveBeenCalledTimes(1);
+		expect(h.notifications).toContain(
+			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
+		);
 	});
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
@@ -446,6 +438,7 @@ describe("confirmation-gated Todoist task claiming", () => {
 		const h = harness(root);
 		h.ctx.hasUI = false;
 		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
 			action: "error" as const,
 			taskData: null,
 			error: "not used",
@@ -462,7 +455,11 @@ describe("confirmation-gated Todoist task claiming", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toHaveLength(0);
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(worker).toHaveBeenCalledTimes(1);
+		expect(h.notifications).toContain(
+			"Warning: Todoist claim worker completed without claim evidence/ran into an error (not used)",
+		);
 	});
 });
 
@@ -470,13 +467,11 @@ describe("hidden lifecycle context", () => {
 	it(WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
-		const result = (await h.handlers.get(BEFORE_AGENT_START)?.(
+		const result = await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: WORK },
 			h.ctx,
-		)) as BeforeAgentResult;
-		expect(result.message.content).toContain(
-			YOU_HAVE_NO_CLAIMED_A_TODOIST_TASK_2,
 		);
+		expect(result).toBeUndefined();
 
 		const withTask = harness(CONFIGURED_PROJECT, [
 			{

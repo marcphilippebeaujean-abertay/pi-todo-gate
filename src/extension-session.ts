@@ -82,6 +82,7 @@ function activateSession(
 	allowPrDiscovery: boolean,
 ): ActiveSession {
 	const session: ActiveSession = {
+		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
 		project,
 		state,

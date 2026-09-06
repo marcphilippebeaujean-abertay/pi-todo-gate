@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace automatic Todoist task mutation with a read-only worker proposal and explicit user-confirmed claim/create flow.
+**Goal:** Run Todoist task claiming in a background worker without an interactive confirmation prompt.
 
-**Architecture:** `src/todoist/client.ts` becomes the single `td` transport/client boundary. An isolated worker returns one validated proposal envelope; an extension-owned flow presents it, performs the confirmed mutation, and persists session state. The existing Pi state tool loses all task actions while PR tracking remains available.
+**Architecture:** `src/todoist/client.ts` remains the Todoist completion boundary. An isolated worker receives session and PR context, inspects and mutates Todoist to complete a claim, then returns validated claim evidence. The extension persists only valid current-session results and raises generic warnings for failures. The existing Pi state tool loses all task actions while PR tracking remains available.
 
 **Tech Stack:** TypeScript ES2022, Vitest, Biome, TypeBox, Pi extension APIs, Todoist `td` CLI.
 
@@ -12,11 +12,13 @@
 
 ## Global Constraints
 
-- Worker output uses exactly `{ action: "error" | "claim" | "create"; taskData: { title: string; description: string; id: string | null } | null; error: string | null }`.
-- `claim` requires existing task ID and null error; `create` requires null ID and null error; `error` requires null task data and non-empty error.
-- Worker uses `td` for inspection only and never creates, moves, completes, clears, or claims tasks.
-- User confirmation is required before every claim or create mutation.
+- Worker output uses session-tagged claim evidence or an error result.
+- Worker may create, move, and claim Todoist tasks; it must not modify files or Git.
 - Any non-completed task may be claimed, including tasks already in `In Progress`.
+- New tasks must include a useful description and return completed claim evidence.
+- Claim results carry session ID; parent also validates generation.
+- Claim errors use generic JobType-templated warnings; no retry prompt.
+- Pass available PR reference to Todoist worker.
 - Remove `set_task` and `clear_task`; `clear_all` clears PR state only.
 - Todoist failures do not disable PR behavior; stale asynchronous results cannot mutate state.
 - Preserve merged-PR Todoist completion behavior.
@@ -30,7 +32,7 @@
 ### Modify
 
 - `src/todoist/client.ts` — canonical Todoist client; add task creation and remove collision ownership logic.
-- `src/todoist/claim-worker.ts` — exact stable proposal schema and read-only worker instructions.
+- `src/todoist/claim-worker.ts` — exact stable claim-result schema and worker instructions.
 - `src/todoist/claim-result.ts` — strict proposal parser.
 - `src/todoist/parsing.ts` — preserve task title/description/ID parsing needed by proposals and creation.
 - `src/extension-types.ts` — canonical Todoist client imports and claim-flow generation state.
@@ -44,13 +46,13 @@
 - `test/todoist/claim-worker.test.ts` — proposal prompt, parser integration, and failure cases.
 - `test/todoist/merge-prompt.test.ts` — canonical client creation and claim behavior.
 - `test/todoist/module.test.ts` — remove task-tool expectations and retain state validation.
-- `test/extension.test.ts` — confirmation flow, stale protection, removed actions, and merge completion.
+- `test/extension.test.ts` — background claim flow, stale protection, removed actions, and merge completion.
 - `test/todoist.test.ts` — move client tests to canonical module or remove duplicate test file after migration.
 - `test/architecture.test.ts` — enforce canonical Todoist domain boundaries if needed.
 
 ### Create or retain
 
-- `src/task-claiming-flow.ts` — worker orchestration, proposal UI, confirmed mutation, retry/leave-unassigned handling.
+- `src/task-claiming-flow.ts` — worker orchestration, result validation, persistence, and warning handling.
 - `src/task-claiming.ts` — one-at-a-time claim analysis trigger and typed context.
 - `src/todoist/client.ts` — existing modular file retained as canonical client.
 
@@ -63,8 +65,10 @@
 
 ## Execution status
 
-- [x] Canonical client, strict worker contract, confirmation flow, PR-only state tool, and module cleanup implemented.
-- [x] Focused and full verification completed: 129 passed, 8 skipped; typecheck, lint, and diff check pass.
+- [x] Canonical client, strict worker contract, background claim flow, PR-only state tool, and module cleanup implemented.
+- [x] Session ID/generation tagging and PR-reference dispatch implemented.
+- [x] Generic `JobType` claim warning handler implemented for Herdr and Todoist.
+- [x] Focused and full verification completed after behavior change.
 
 ## Task 1: Establish canonical Todoist client
 
@@ -166,7 +170,7 @@ Expected: PASS.
 
 ---
 
-## Task 2: Replace worker output with stable proposal envelope
+## Task 2: Replace worker output with stable claim envelope
 
 **Files:**
 - Modify: `src/todoist/claim-worker.ts`
@@ -177,12 +181,9 @@ Expected: PASS.
 
 ```ts
 export type TaskClaimWorkerResult = {
-  action: "error" | "claim" | "create";
-  taskData: {
-    title: string;
-    description: string;
-    id: string | null;
-  } | null;
+  sessionId: string;
+  action: "error" | "claim";
+  taskData: { title: string; description: string; id: string } | null;
   error: string | null;
 };
 ```
@@ -223,14 +224,14 @@ Use one object schema with nullable fields and validate action-specific invarian
 
 - [ ] **Step 4: Rewrite worker instructions**
 
-Require `td` inspection only. Explicitly state:
+Require `td` inspection and claim mutation only. Explicitly state:
 
 - Ignore `In Progress` as an ownership collision.
 - Consider only non-completed tasks.
-- Return `claim` with existing title, description, and ID.
-- Return `create` with concise title, useful description, and `id: null`.
+- Claim existing tasks or create and claim new tasks with useful descriptions.
+- Return `claim` only after successful Todoist mutation.
 - Return `error` for technical or decision failures.
-- Never create, move, claim, complete, or otherwise mutate Todoist.
+- Never modify files or Git.
 - Output exactly the stable envelope and no explanation.
 
 - [ ] **Step 5: Run worker tests**
@@ -241,7 +242,7 @@ Expected: PASS.
 
 ---
 
-## Task 3: Implement confirmed claim flow
+## Task 3: Implement background claim flow
 
 **Files:**
 - Modify: `src/task-claiming-flow.ts`
@@ -276,14 +277,14 @@ export function runTaskClaim(
 
 - [ ] **Step 1: Add failing extension tests**
 
-Add harness UI methods for `confirm` and `select`. Test:
+Test:
 
-1. Worker returns `claim`; confirmation message contains `claim existing`, title, description; confirming calls `claimTask`, persists task state, and updates footer.
-2. Worker returns `create`; confirmation contains `new task`; confirming calls `createTask` with title/description and persists returned task.
-3. Declining either proposal makes no client mutation and leaves state empty.
-4. Worker returns `error`; selecting retry starts one fresh worker; selecting leave-unassigned makes no Todoist mutation.
-5. A stale worker result, stale confirmation, or shutdown result cannot mutate state.
-6. Worker starts only once while task is absent and never for unconfigured projects.
+1. Worker returns completed `claim` evidence; parent persists task state without confirmation or Todoist mutation.
+2. Worker receives the available PR reference, or `null` when no PR exists.
+3. Worker errors and missing claim evidence use the generic Todoist warning handler.
+4. A stale worker result or shutdown result cannot notify or mutate state.
+5. Worker starts only once while task is absent and never for unconfigured projects.
+6. A new session with no inherited task dispatches a fresh worker on its first prompt; inherited task state suppresses dispatch.
 
 - [ ] **Step 2: Run new tests and verify failure**
 
@@ -295,13 +296,13 @@ Expected: FAIL because production flow is incomplete or still performs automatic
 
 Stop `handleSessionStart`, `handleBeforeAgentStart`, and `handleToolResult` from calling any history/text inference that mutates Todoist. Remove `src/extension-tasks.ts` once no callers remain. Claim analysis must be the only path that proposes and claims a task.
 
-- [ ] **Step 4: Implement proposal presentation**
+- [ ] **Step 4: Implement background result handling**
 
-For claim/create, use extension UI confirmation. Display action type, title, and description. Decline returns without mutation. For error, use selection with exactly `Retry task claiming` and `Leave task unassigned`; retry increments generation and starts a new worker.
+Remove claim confirmation and retry/leave-unassigned UI. Let worker perform Todoist claim mutations. Validate session ID and generation on result, persist only completed claim evidence, and route errors or missing evidence through the generic JobType warning handler.
 
-- [ ] **Step 5: Implement confirmed application**
+- [ ] **Step 5: Implement session context dispatch**
 
-After confirmation and current-generation validation, resolve project and invoke only `claimTask` or `createTask`. Persist state only after client success, then refresh footer and notify success. Catch confirmation-time errors without partial state writes.
+Pass current session ID and available PR reference into the worker. Start one worker on the first prompt when no task exists, including after `/new`; preserve inherited task state so linked tasks do not trigger duplicate dispatch.
 
 - [ ] **Step 6: Run focused extension tests**
 

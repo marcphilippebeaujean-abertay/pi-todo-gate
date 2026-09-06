@@ -29,7 +29,6 @@ const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 const BASH_COMMAND = "command";
-const MISSING_TASK_WARNING = "you have no claimed a todoist task yet!";
 
 export function persistPrIfAvailable(
 	runtime: ExtensionRuntime,
@@ -97,9 +96,6 @@ async function buildBeforeAgentMessages(
 		);
 		session.handoffContext = false;
 	}
-	const taskRef = session.state.taskRef;
-	const isMissingTaskRefForPrompt = taskRef === undefined;
-	if (isMissingTaskRefForPrompt) messages.push(MISSING_TASK_WARNING);
 	if (session.state.taskRef === undefined)
 		maybeAnalyzeTaskClaim(runtime, session, event.prompt);
 	const hasWorkChanged = session.workChanged;

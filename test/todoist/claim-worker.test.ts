@@ -7,9 +7,11 @@ import {
 } from "../../src/todoist/claim-worker.ts";
 
 const input: TaskClaimWorkerInput = {
+	sessionId: "session-current",
 	prompt: "Implement feature",
 	cwd: "/repo/.worktrees/feature",
 	projectRef: "Pi Extensions",
+	prRef: "https://github.com/org/repo/pull/42",
 	worktree: {
 		isWorktree: true,
 		root: "/repo/.worktrees/feature",
@@ -30,7 +32,7 @@ const message = (text: string): string =>
 	});
 
 describe("Todoist task claim worker", () => {
-	it("runs an inspection-only worker and parses claim proposal", async () => {
+	it("runs a claim worker with PR context and parses claim evidence", async () => {
 		const exec = vi.fn(
 			async (
 				command: string,
@@ -54,36 +56,41 @@ describe("Todoist task claim worker", () => {
 				const prompt = args.at(-1) ?? "";
 				expect(prompt).toContain("inspection");
 				expect(prompt).toContain("In Progress");
-				expect(prompt).toContain("Always propose a description");
-				expect(prompt).toContain("Do not modify");
+				expect(prompt).toContain("useful description");
+				expect(prompt).toContain("create");
+				expect(prompt).toContain("move");
 				expect(prompt).toContain(input.prompt);
 				expect(prompt).toContain(input.projectRef);
+				expect(prompt).toContain(input.prRef);
+				expect(prompt).toContain(input.sessionId);
 				expect(prompt).toContain(input.worktree.branch ?? "");
 				return result(
 					message(
-						'{"action":"claim","taskData":{"title":"Existing","description":"Details","id":"42"},"error":null}',
+						'{"sessionId":"session-current","action":"claim","taskData":{"title":"Existing","description":"Details","id":"42"},"error":null}',
 					),
 				);
 			},
 		);
 
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
+			sessionId: input.sessionId,
 			action: "claim",
 			taskData: { title: "Existing", description: "Details", id: "42" },
 			error: null,
 		});
 	});
 
-	it("parses create proposals", async () => {
+	it("parses completed creation as claim evidence", async () => {
 		const exec = async (): Promise<CommandResult> =>
 			result(
 				message(
-					'{"action":"create","taskData":{"title":"New","description":"Proposed","id":null},"error":null}',
+					'{"sessionId":"session-current","action":"claim","taskData":{"title":"New","description":"Proposed","id":"43"},"error":null}',
 				),
 			);
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
-			action: "create",
-			taskData: { title: "New", description: "Proposed", id: null },
+			sessionId: input.sessionId,
+			action: "claim",
+			taskData: { title: "New", description: "Proposed", id: "43" },
 			error: null,
 		});
 	});
@@ -91,12 +98,15 @@ describe("Todoist task claim worker", () => {
 	it("parses error proposals", async () => {
 		const exec = async (): Promise<CommandResult> =>
 			result(
-				message('{"action":"error","taskData":null,"error":"Unavailable"}'),
+				message(
+					'{"sessionId":"session-current","action":"error","taskData":null,"error":"Unavailable"}',
+				),
 			);
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
 			action: "error",
 			taskData: null,
 			error: "Unavailable",
+			sessionId: input.sessionId,
 		});
 	});
 
@@ -116,6 +126,7 @@ describe("Todoist task claim worker", () => {
 				),
 			),
 		).toEqual({
+			sessionId: "",
 			action: "error",
 			taskData: null,
 			error: "Invalid claim worker result.",
@@ -123,6 +134,7 @@ describe("Todoist task claim worker", () => {
 		expect(
 			parseResult(message('{"status":"collision","taskRef":"42"}')),
 		).toEqual({
+			sessionId: "",
 			action: "error",
 			taskData: null,
 			error: "Invalid claim worker result.",
@@ -132,6 +144,7 @@ describe("Todoist task claim worker", () => {
 	it("returns an error proposal for malformed worker output", async () => {
 		const exec = async (): Promise<CommandResult> => result("not json");
 		await expect(createTaskClaimWorker(exec)(input)).resolves.toEqual({
+			sessionId: input.sessionId,
 			action: "error",
 			taskData: null,
 			error: "Invalid claim worker result.",

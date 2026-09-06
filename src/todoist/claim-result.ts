@@ -10,8 +10,8 @@ import {
 	TaskClaimWorkerResultSchema,
 } from "./claim-worker.ts";
 
-function invalidResult(): TaskClaimWorkerResult {
-	return { action: ERROR, taskData: null, error: INVALID_RESULT };
+function invalidResult(sessionId: string): TaskClaimWorkerResult {
+	return { sessionId, action: ERROR, taskData: null, error: INVALID_RESULT };
 }
 
 function isValidActionData(result: TaskClaimWorkerResult): boolean {
@@ -28,7 +28,7 @@ function isValidActionData(result: TaskClaimWorkerResult): boolean {
 	if (hasMissingTaskData) return false;
 	const hasId = taskData.id !== null;
 	const isClaimAction = action === CLAIM;
-	return isClaimAction ? hasId : !hasId;
+	return isClaimAction && hasId;
 }
 
 function parseCandidate(text: string): TaskClaimWorkerResult | undefined {
@@ -65,12 +65,15 @@ function assistantTexts(stdout: string): string[] {
 	return texts;
 }
 
-export function parseResult(stdout: string): TaskClaimWorkerResult {
+export function parseResult(
+	stdout: string,
+	sessionId = EMPTY,
+): TaskClaimWorkerResult {
 	const texts = assistantTexts(stdout);
 	for (let index = texts.length - 1; index >= 0; index -= 1) {
 		const result = parseCandidate(texts[index].trim());
 		const hasResult = result !== undefined;
 		if (hasResult) return result;
 	}
-	return invalidResult();
+	return invalidResult(sessionId);
 }

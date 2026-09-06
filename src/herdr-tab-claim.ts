@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { handleClaimError } from "./claim-error.ts";
 import type {
 	ClaimWorkerHandle,
 	ClaimWorkerRequest,
@@ -19,9 +20,9 @@ import { isSubagent } from "./session.ts";
 const SESSION_START_EVENT = "session_start";
 const BEFORE_AGENT_START_EVENT = "before_agent_start";
 const SESSION_SHUTDOWN_EVENT = "session_shutdown";
-const WARNING_LEVEL = "warning";
-const TAB_CLAIM_FAILED = "Herdr background tab naming failed validation.";
-const TAB_CLAIM_START_FAILED = "Herdr background tab naming failed to start: ";
+const HERDR = "Herdr";
+const TAB_CLAIM_FAILED = "completed without claim evidence";
+const TAB_CLAIM_START_FAILED = "failed to start";
 const TAB_CLAIM_INSTRUCTIONS = `Rename current Herdr tab for task in parent prompt.
 Use bash. First run \`herdr pane current\`, then \`herdr tab get <tab-id>\`.
 If current label clearly describes task, leave tab unchanged. Otherwise inspect current tab panes and
@@ -149,7 +150,7 @@ class HerdrTabClaim {
 			this.hasClaim = true;
 			return;
 		}
-		this.notify(ctx, TAB_CLAIM_FAILED, WARNING_LEVEL);
+		handleClaimError(ctx, { jobType: HERDR, error: TAB_CLAIM_FAILED });
 	}
 
 	private failClaim(
@@ -160,7 +161,7 @@ class HerdrTabClaim {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
-		this.notify(ctx, message, WARNING_LEVEL);
+		handleClaimError(ctx, { jobType: HERDR, error: message });
 	}
 
 	private sessionShutdown(): void {
@@ -169,18 +170,6 @@ class HerdrTabClaim {
 		this.worker = undefined;
 		this.hasClaim = false;
 		this.herdrAvailable = false;
-	}
-
-	private notify(
-		ctx: Pick<ExtensionContext, "ui">,
-		message: string,
-		level: "warning",
-	): void {
-		try {
-			ctx.ui.notify(message, level);
-		} catch {
-			// Headless sessions have no user-facing UI.
-		}
 	}
 }
 

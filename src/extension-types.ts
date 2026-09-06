@@ -47,6 +47,7 @@ export type SessionReader = {
 };
 
 export interface ActiveSession {
+	sessionId: string;
 	context: ExtensionContext;
 	project: ResolvedProject;
 	state: WorkState;
