@@ -2,22 +2,23 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { handleClaimError } from "./claim-error.ts";
-import type { FooterEventSink } from "./footer/types.ts";
-import type {
-	ClaimWorkerHandle,
-	ClaimWorkerRequest,
-	WorkerSpawner,
-} from "./herdr/claim-worker.ts";
-import { hideHerdrFooter, showHerdrFooter } from "./herdr/footer.ts";
+import { handleClaimError } from "../claim-error.ts";
+import type { FooterEventSink } from "../footer/types.ts";
+import { isSubagent } from "../session.ts";
+import type { ClaimWorkerHandle, ClaimWorkerRequest } from "./claim-worker.ts";
 import {
 	boundCommandRunner,
 	defaultStartWorker,
 	isInsideHerdr,
 	tabLabel,
-} from "./herdr-tab-environment.ts";
-import { hasValidatedTabClaim } from "./herdr-tab-validation.ts";
-import { isSubagent } from "./session.ts";
+} from "./environment.ts";
+import { hideHerdrFooter, showHerdrFooter } from "./footer.ts";
+import { hasValidatedTabClaim } from "./tab-validation.ts";
+import type {
+	CommandRunner,
+	HerdrTabOptions,
+	StartBackgroundWorker,
+} from "./types.ts";
 
 const SESSION_START_EVENT = "session_start";
 const BEFORE_AGENT_START_EVENT = "before_agent_start";
@@ -34,19 +35,12 @@ After success or valid unchanged label, output only JSON:
 \`{"status":"claimed","tabId":"<current-tab-id>","label":"<current-tab-label>"}\`.
 Exit nonzero if claim cannot complete.`;
 
-export type CommandRunner = (command: string, args: string[]) => string;
-export type StartBackgroundWorker = (
-	request: ClaimWorkerRequest,
-) => ClaimWorkerHandle;
-
-export interface HerdrTabOptions {
-	commandRunner?: CommandRunner;
-	cwd?: string;
-	startBackgroundWorker?: StartBackgroundWorker;
-	spawnWorker?: WorkerSpawner;
-	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	onFooterUpdate?: FooterEventSink;
-}
+export type { ClaimWorkerRequest, WorkerSpawner } from "./claim-worker.ts";
+export type {
+	CommandRunner,
+	HerdrTabOptions,
+	StartBackgroundWorker,
+} from "./types.ts";
 
 interface TabClaimAttempt {
 	generation: number;

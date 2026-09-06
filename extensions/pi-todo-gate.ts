@@ -11,7 +11,7 @@ import {
 	handleSessionStart,
 } from "../src/extension-session.ts";
 import type { ExtensionDependencies } from "../src/extension-types.ts";
-import { installHerdrTabClaim } from "../src/herdr-tab-claim.ts";
+import { installHerdrTabClaim } from "../src/herdr/module.ts";
 import { isSubagent } from "../src/session.ts";
 
 export type {

@@ -5,7 +5,7 @@ import {
 	type CommandRunner,
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
-} from "../../src/herdr-tab-claim.ts";
+} from "../../src/herdr/tab-claim.ts";
 
 interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;

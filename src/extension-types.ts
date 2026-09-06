@@ -8,7 +8,7 @@ import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "./herdr-tab-claim.ts";
+} from "./herdr/module.ts";
 import type { SharedEvents } from "./shared/events.ts";
 import type { TaskClaimWorker } from "./todoist/claim-worker.ts";
 import type { TodoistClient } from "./todoist/client.ts";

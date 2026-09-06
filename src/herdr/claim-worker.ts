@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
+import { withWorkerMarker } from "../session.ts";
+import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 import {
 	appendBounded,
 	type ClaimWorkerResult,
 	parseClaimResult,
-} from "../herdr-claim-worker-result.ts";
-import { withWorkerMarker } from "../session.ts";
-import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
+} from "./claim-worker-result.ts";
 
 export interface ClaimWorkerRequest {
 	prompt: string;

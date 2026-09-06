@@ -1,5 +1,5 @@
-import type { ClaimWorkerResult } from "./herdr-claim-worker-result.ts";
-import type { CommandRunner } from "./herdr-tab-claim.ts";
+import type { ClaimWorkerResult } from "./claim-worker-result.ts";
+import type { CommandRunner } from "./types.ts";
 
 const HERDR_COMMAND = "herdr";
 const TAB_GET_ARGS = ["tab", "get"];
