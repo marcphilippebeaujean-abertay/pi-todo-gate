@@ -2,9 +2,11 @@ const DIM = "dim";
 const STATUS_SEPARATOR = " | ";
 
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { prLabel, taskLabel } from "./footer-status.ts";
+import { renderPrLabel } from "./pr/footer.ts";
+import { renderTaskLabel } from "./todoist/footer.ts";
 
-export { renderPrStatus, renderTaskStatus } from "./footer-status.ts";
+export { renderPrStatus } from "./pr/footer.ts";
+export { renderTaskStatusCompact as renderTaskStatus } from "./todoist/footer.ts";
 
 export interface FooterState {
 	prUrl?: string;
@@ -48,8 +50,8 @@ export function renderFooterLine(
 	const hasNoWidth: boolean = !!(width <= 0);
 	if (hasNoWidth) return "";
 	const parts = [
-		prLabel(state.prUrl, theme),
-		taskLabel(state.taskUrl, state.taskName, theme),
+		renderPrLabel(state.prUrl, theme),
+		renderTaskLabel(state.taskUrl, theme, state.taskName),
 	];
 	const hasBranch: boolean = !!state.branch;
 	if (hasBranch) parts.push(`branch: ${state.branch}`);
