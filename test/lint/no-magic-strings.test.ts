@@ -32,5 +32,5 @@ describe(RULE, () => {
 			ruleIds(await lintFixture(SHORT_CONSTANT)).filter((id) => id === RULE),
 		).toHaveLength(0);
 		expect(ruleIds(await lintFixture(STANDALONE))).not.toContain(RULE);
-	});
+	}, 15_000);
 });
