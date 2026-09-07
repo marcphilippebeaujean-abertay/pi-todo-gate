@@ -4,7 +4,7 @@
 
 **Goal:** Add TypeScript AST lint rules for magic strings, complicated boolean expressions, non-intentful `if` conditions, cyclomatic complexity, function length, functions per file, and nested-function depth; make the existing repository pass them; push a feature branch and open a GitHub PR.
 
-**Architecture:** A custom checker uses the TypeScript compiler API and type checker. `src/lint.ts` owns traversal and rules, `src/lint-config.ts` owns validated thresholds, and `src/lint-cli.ts` provides the command-line adapter. Biome remains the first lint stage; the custom checker runs second and returns a nonzero status for violations.
+**Architecture:** A custom checker uses the TypeScript compiler API and type checker. `src/lint/index.ts` owns rule orchestration, `src/lint/rules/` owns individual rules, `src/lint-config.ts` owns validated thresholds, and `src/lint/cli.ts` provides the command-line adapter. Biome remains the first lint stage; the custom checker runs second and returns a nonzero status for violations.
 
 **Tech Stack:** TypeScript 6, TypeScript compiler API, Node.js, Vitest, Biome, `tsx` CLI runner.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Lint only production files in `extensions/**/*.ts` and `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`; tests remain Biome/Vitest-only.
+- Lint only production files in `extensions/**/*.ts` and `src/**/*.ts`, excluding `src/lint/**` and `src/lint-config.ts`; tests remain Biome/Vitest-only.
 - String literals inside function bodies require named `const` extraction; direct `const` initializers are allowed.
 - Named string constants must contain at least two characters; empty and one-character definitions violate `no-short-string-constants`. Inline one-character literals remain exempt because they commonly represent deliberate character tokens.
 - Boolean expressions with three or more logical leaf checks violate `no-complicated-expressions`.
@@ -323,7 +323,7 @@ Expected: FAIL because `collectLintFiles()` and CLI entrypoint do not exist.
 
 - [ ] **Step 3: Implement CLI and direct `tsx` dependency**
 
-Use `tsx src/lint-cli.ts` in the package script. Set `lint` to `biome check extensions src test && tsx src/lint-cli.ts`. The CLI custom checker excludes test files and `src/lint*.ts`; add `tsx` as a direct dev dependency so the script does not depend on a transitive install.
+Use `tsx src/lint/cli.ts` in the package script. Set `lint` to `biome check extensions src test && tsx src/lint/cli.ts`. The CLI custom checker excludes test files and `src/lint/**`; add `tsx` as a direct dev dependency so the script does not depend on a transitive install.
 
 - [ ] **Step 4: Run CLI tests and commit**
 

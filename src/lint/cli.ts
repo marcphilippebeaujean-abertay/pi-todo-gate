@@ -2,8 +2,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { formatLintDiagnostic, lintProgram } from "./lint.ts";
-import { loadLintConfig } from "./lint-config.ts";
+import { loadLintConfig } from "../lint-config.ts";
+import { formatLintDiagnostic, lintProgram } from "./index.ts";
 
 const LINT_DIRECTORIES = ["extensions", "src", "test"];
 const TEST_DIRECTORY = "test";

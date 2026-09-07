@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectLintFiles, runLint } from "../src/lint-cli.ts";
+import { collectLintFiles, runLint } from "../src/lint/cli.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-cli-";
 const SRC_DIRECTORY = "src";
@@ -48,7 +48,7 @@ describe("lint CLI", () => {
 		expect(packageJson.scripts?.lint).toBe(
 			"npm run lint:biome && npm run lint:strict",
 		);
-		expect(packageJson.scripts?.["lint:strict"]).toBe("tsx src/lint-cli.ts");
+		expect(packageJson.scripts?.["lint:strict"]).toBe("tsx src/lint/cli.ts");
 	});
 
 	it(CI_WORKFLOW_TEST, async () => {

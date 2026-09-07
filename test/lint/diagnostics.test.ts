@@ -6,7 +6,7 @@ import {
 	formatLintDiagnostic,
 	type LintDiagnostic,
 	lintProgram,
-} from "../../src/lint.ts";
+} from "../../src/lint/index.ts";
 import { lintFixture } from "./helpers.ts";
 
 const FORMATTED_DIAGNOSTIC =

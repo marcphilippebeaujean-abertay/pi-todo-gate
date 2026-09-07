@@ -8,7 +8,7 @@
     "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test",
     "typecheck": "tsc --noEmit",
     "lint:biome": "biome check extensions src test",
-    "lint:strict": "tsx src/lint-cli.ts",
+    "lint:strict": "tsx src/lint/cli.ts",
     "lint": "npm run lint:biome && npm run lint:strict",
     "install-local": "bash install.sh",
     "configure": "bash install.sh configure",

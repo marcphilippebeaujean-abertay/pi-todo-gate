@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { type LintDiagnostic, lintProgram } from "../../src/lint.ts";
+import { type LintDiagnostic, lintProgram } from "../../src/lint/index.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-";
 const FIXTURE_NAME = "fixture.ts";

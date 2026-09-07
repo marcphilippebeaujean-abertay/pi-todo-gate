@@ -9,7 +9,7 @@ Add repository lint rules for explicit string constants, readable boolean condit
 Lint production TypeScript files in:
 
 - `extensions/**/*.ts`
-- `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`
+- `src/**/*.ts`, excluding `src/lint/**` and `src/lint-config.ts`
 
 Tests validate checker behavior through Vitest and remain covered by Biome, but are not targets of the custom rules. The checker runs only as a repository development tool. It does not inspect user projects at runtime.
 
@@ -85,7 +85,7 @@ Count function nesting depth independently from cyclomatic complexity. A top-lev
 
 ## Architecture
 
-`src/lint.ts` exposes the checker API and owns TypeScript AST traversal, rule evaluation, diagnostics, and sorting. It creates no files and performs no automatic fixes.
+`src/lint/index.ts` exposes the checker API. `src/lint/rules/` owns individual rule evaluation, while shared AST helpers, metrics, diagnostics, and types stay in neighboring lint modules. The checker creates no files and performs no automatic fixes.
 
 `src/lint-config.ts` owns defaults and optional `lint.config.json` overrides. Defaults are:
 
@@ -99,7 +99,7 @@ Count function nesting depth independently from cyclomatic complexity. A top-lev
 }
 ```
 
-`src/lint-cli.ts` discovers production TypeScript files under `extensions` and `src`, excluding the lint infrastructure modules, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintProgram()`, prints diagnostics, and exits with status 1 when violations exist.
+`src/lint/cli.ts` discovers production TypeScript files under `extensions` and `src`, excluding the lint infrastructure directory, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintProgram()`, prints diagnostics, and exits with status 1 when violations exist.
 
 `package.json` changes `lint` to run Biome followed by the custom checker. `tsconfig.json` includes the new checker modules.
 
