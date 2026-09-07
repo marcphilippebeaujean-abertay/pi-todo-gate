@@ -12,11 +12,6 @@ import { createSharedEvents } from "../src/shared/events.ts";
 
 const actions: ExitAction[] = [
 	{
-		id: "complete-todoist-task",
-		label: 'Mark Todoist task "Implement feature" complete',
-		execute: vi.fn(async () => "completed" as const),
-	},
-	{
 		id: "remove-worktree",
 		label:
 			'Delete worktree "/repo/.worktrees/feature" and local branch "feature"',
@@ -111,11 +106,13 @@ describe("exit protocol presenter", () => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
 		expect(actions[0].execute).toHaveBeenCalledOnce();
-		expect(actions[1].execute).toHaveBeenCalledOnce();
 	});
 
 	it("does not prompt when no actions are available", async () => {
@@ -124,7 +121,10 @@ describe("exit protocol presenter", () => {
 		const module = createExitProtocolModule(events);
 		module.sessionStart(ctx);
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
@@ -160,8 +160,11 @@ describe("exit protocol presenter", () => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 
-		expect(confirm).toHaveBeenCalledTimes(2);
+		expect(confirm).toHaveBeenCalledOnce();
 	});
 });

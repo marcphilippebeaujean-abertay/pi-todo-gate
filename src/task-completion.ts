@@ -43,20 +43,8 @@ function recordSuccessfulCompletion(
 	ctx.ui.notify(C.message.merged, C.value.info);
 }
 
-function recordFailedCompletion(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	ctx: ExtensionContext,
-): void {
-	replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			todoistCompletionAttemptedAt: new Date().toISOString(),
-		}),
-	);
-	appendState(runtime, session.state);
-	refreshFooterStatuses(runtime, session);
-	ctx.ui.notify(C.message.mergedFailed, C.value.warning);
+function recordFailedCompletion(_ctx: ExtensionContext): void {
+	_ctx.ui.notify(C.message.mergedFailed, C.value.warning);
 }
 
 async function completeMergedTaskNow(
@@ -74,10 +62,8 @@ async function completeMergedTaskNow(
 		stateSnapshot,
 		workRevision,
 	);
-	const hasCompletionAttempt =
-		session.state.todoistCompletionAttemptedAt !== undefined;
 	const isStaleCompletion = !isCurrent();
-	const shouldSkipCompletion = isStaleCompletion || hasCompletionAttempt;
+	const shouldSkipCompletion = isStaleCompletion;
 	if (shouldSkipCompletion) return C.exit.failed;
 	try {
 		await createClient(ctx, runtime.dependencies).completeTask(
@@ -91,7 +77,7 @@ async function completeMergedTaskNow(
 	} catch {
 		const isStaleFailure = !isCurrent();
 		if (isStaleFailure) return C.exit.failed;
-		recordFailedCompletion(runtime, session, ctx);
+		recordFailedCompletion(ctx);
 		return C.exit.failed;
 	}
 }
