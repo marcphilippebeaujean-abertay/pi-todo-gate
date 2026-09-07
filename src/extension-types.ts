@@ -53,6 +53,7 @@ export interface ActiveSession {
 	project: ResolvedProject;
 	state: WorkState;
 	allowPrDiscovery: boolean;
+	prDiscoveryTestedUrls: Set<string>;
 	handoffContext: boolean;
 	workChanged: boolean;
 	hasUncommittedChanges: boolean;

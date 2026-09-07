@@ -107,6 +107,10 @@ const REMOVES_TODOIST_TASK_ACTIONS =
 const CLEAR_ALL_PRESERVES_TASK_STATE =
 	"clear_all preserves internal task state while clearing PR state";
 const HTTPS_EXAMPLE_COM_PR_42 = "https://example.com/pr/42";
+const HTTPS_GITHUB_COM_OWNER_REPO_PULL_42_FAKE =
+	"https://github.com/owner/repo/pull/42";
+const REJECTS_FAKE_PR_LINKS_AND_REMEMBERS_FAILED_LOOKUPS =
+	"rejects fake PR links and remembers failed lookups";
 
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,7 +120,9 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import extension from "../../extensions/pi-todo-gate.ts";
+import extension, {
+	type ExtensionDependencies,
+} from "../../extensions/pi-todo-gate.ts";
 import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
 import type { TodoistClient } from "../../src/todoist/client.ts";
 
@@ -205,9 +211,11 @@ const config = (projects: Record<string, string>) => ({ projects });
 async function start(
 	h: ReturnType<typeof harness>,
 	projects: Record<string, string>,
+	dependencies: ExtensionDependencies = {},
 ) {
 	extension(h.pi, {
 		loadConfig: async () => config(projects),
+		...dependencies,
 	});
 	await h.handlers.get(SESSION_START)?.(
 		{ type: SESSION_START, reason: STARTUP },
@@ -563,7 +571,16 @@ describe("hidden lifecycle context", () => {
 				},
 			},
 		]);
-		await start(h, { "/configured": MERGE_TD });
+		const exec = vi.fn(async (command: string) => {
+			if (command !== "gh")
+				return { stdout: EMPTY_STRING, stderr: "not found", code: 1 };
+			return {
+				stdout: JSON.stringify({ url: HTTPS_GITHUB_COM_O_R_PULL_2 }),
+				stderr: EMPTY_STRING,
+				code: 0,
+			};
+		});
+		await start(h, { "/configured": MERGE_TD }, { exec });
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
@@ -593,6 +610,38 @@ describe("hidden lifecycle context", () => {
 			h.ctx,
 		);
 		expect(h.appended).toHaveLength(1);
+	});
+
+	it(REJECTS_FAKE_PR_LINKS_AND_REMEMBERS_FAILED_LOOKUPS, async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const exec = vi.fn(async (_command: string) => ({
+			stdout: EMPTY_STRING,
+			stderr: "not found",
+			code: 1,
+		}));
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": MERGE_TD }),
+			exec,
+		});
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
+		const message = {
+			type: MESSAGE_END,
+			message: {
+				role: ASSISTANT,
+				content: HTTPS_GITHUB_COM_OWNER_REPO_PULL_42_FAKE,
+			},
+		};
+
+		await h.handlers.get(MESSAGE_END)?.(message, h.ctx);
+		await h.handlers.get(MESSAGE_END)?.(message, h.ctx);
+
+		expect(h.appended).toHaveLength(0);
+		expect(
+			exec.mock.calls.filter(([command]) => command === "gh"),
+		).toHaveLength(1);
 	});
 
 	it(NEVER_SENDS_SYNCHRONIZATION_MESSAGES_TO_THE_AGENT, async () => {

@@ -19,12 +19,11 @@ const SCANS_OLDEST_TO_NEWEST_AND_KEEPS_THE =
 const NO_PULL_REQUEST_HERE = "No pull request here";
 const HTTPS_GITHUB_COM_OLD_REPO_PULL_7 = "https://github.com/old/repo/pull/7";
 const HTTPS_GITHUB_COM_NEW_REPO_PULL_8 = "https://github.com/new/repo/pull/8";
-const OMITS_THE_IGNORED_PR_URL = "omits the ignored PR URL";
-const OMITS_EVERY_PR_IN_IGNORED_REPOSITORY =
-	"omits every PR in the ignored repository";
+const ACCEPTS_A_PLACEHOLDER_SHAPED_PR_URL =
+	"accepts a placeholder-shaped PR URL for later verification";
+const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/o/r/pull/2";
 
 import { describe, expect, it } from "vitest";
-import { IGNORED_PR_URL } from "../../src/pr/constants.ts";
 import { firstGithubPrUrl, githubPrUrl } from "../../src/pr-detection.ts";
 
 describe("githubPrUrl", () => {
@@ -58,16 +57,9 @@ describe("firstGithubPrUrl", () => {
 		).toBe(HTTPS_GITHUB_COM_OLD_REPO_PULL_7);
 	});
 
-	it(OMITS_THE_IGNORED_PR_URL, () => {
-		expect(firstGithubPrUrl([IGNORED_PR_URL])).toBeNull();
-	});
-
-	it(OMITS_EVERY_PR_IN_IGNORED_REPOSITORY, () => {
-		expect(
-			firstGithubPrUrl([
-				"https://github.com/o/r/pull/2",
-				"https://github.com/o/r/pull/999",
-			]),
-		).toBeNull();
+	it(ACCEPTS_A_PLACEHOLDER_SHAPED_PR_URL, () => {
+		expect(firstGithubPrUrl([HTTPS_GITHUB_COM_O_R_PULL_2])).toBe(
+			HTTPS_GITHUB_COM_O_R_PULL_2,
+		);
 	});
 });

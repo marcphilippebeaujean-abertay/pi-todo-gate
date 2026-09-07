@@ -55,4 +55,5 @@ export {
 	isLinkedWorktreePaths,
 	parseBranchName,
 } from "./git-worktree.ts";
+export { isGithubPrAvailable } from "./pr/git.ts";
 export { matchesPinnedPr } from "./shared/merge-matching.ts";
