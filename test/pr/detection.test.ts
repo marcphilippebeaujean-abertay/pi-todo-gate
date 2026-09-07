@@ -19,8 +19,10 @@ const SCANS_OLDEST_TO_NEWEST_AND_KEEPS_THE =
 const NO_PULL_REQUEST_HERE = "No pull request here";
 const HTTPS_GITHUB_COM_OLD_REPO_PULL_7 = "https://github.com/old/repo/pull/7";
 const HTTPS_GITHUB_COM_NEW_REPO_PULL_8 = "https://github.com/new/repo/pull/8";
+const OMITS_THE_IGNORED_PR_URL = "omits the ignored PR URL";
 
 import { describe, expect, it } from "vitest";
+import { IGNORED_PR_URL } from "../../src/pr/constants.ts";
 import { firstGithubPrUrl, githubPrUrl } from "../../src/pr-detection.ts";
 
 describe("githubPrUrl", () => {
@@ -52,5 +54,9 @@ describe("firstGithubPrUrl", () => {
 				HTTPS_GITHUB_COM_NEW_REPO_PULL_8,
 			]),
 		).toBe(HTTPS_GITHUB_COM_OLD_REPO_PULL_7);
+	});
+
+	it(OMITS_THE_IGNORED_PR_URL, () => {
+		expect(firstGithubPrUrl([IGNORED_PR_URL])).toBeNull();
 	});
 });
