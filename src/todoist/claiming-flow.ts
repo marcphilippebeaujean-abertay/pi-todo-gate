@@ -1,14 +1,14 @@
-import { handleClaimError } from "./claim-error.ts";
+import { handleClaimError } from "../claim-error.ts";
 import {
 	appendState,
 	refreshFooterStatuses,
 	replaceSessionState,
-} from "./extension-lifecycle.ts";
-import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
-import { inspectWorktree, spawnExec } from "./git.ts";
-import { applyStatePatch } from "./session-state.ts";
-import type { TaskClaimWorkerResult } from "./todoist/claim-worker.ts";
-import { createTaskClaimWorker } from "./todoist/claim-worker.ts";
+} from "../extension-lifecycle.ts";
+import type { ActiveSession, ExtensionRuntime } from "../extension-types.ts";
+import { inspectWorktree, spawnExec } from "../git.ts";
+import { applyStatePatch } from "../session-state.ts";
+import type { TaskClaimWorkerResult } from "./claim-worker.ts";
+import { createTaskClaimWorker } from "./claim-worker.ts";
 
 const TODOIST = "Todoist";
 const CLAIM = "claim";

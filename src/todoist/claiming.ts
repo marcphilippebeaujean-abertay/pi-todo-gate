@@ -1,5 +1,5 @@
-import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
-import { runTaskClaim } from "./task-claiming-flow.ts";
+import type { ActiveSession, ExtensionRuntime } from "../extension-types.ts";
+import { runTaskClaim } from "./claiming-flow.ts";
 
 const STARTED = true;
 

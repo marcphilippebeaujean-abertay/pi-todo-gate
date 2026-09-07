@@ -23,7 +23,7 @@ import {
 import { githubPrUrl } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
 import { isCurrentMerge } from "./shared/work-state.ts";
-import { maybeAnalyzeTaskClaim } from "./task-claiming.ts";
+import { maybeAnalyzeTaskClaim } from "./todoist/module.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =
