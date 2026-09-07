@@ -20,7 +20,7 @@ import type {
 } from "./extension-types.ts";
 import { firstGithubPrUrl } from "./pr-detection.ts";
 import { extractInheritedState, latestState } from "./session-state.ts";
-import type { TodoistProjectMapping } from "./types.ts";
+import type { TodoistProjectMapping } from "./todoist/config.ts";
 
 const FUNCTION_TYPE = "function";
 

@@ -1,6 +1,8 @@
 const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 
+import { IGNORED_PR_URL } from "./constants.ts";
+
 function normalizedGithubPrUrl(candidate: string): string | null {
 	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
 	try {
@@ -23,7 +25,9 @@ export function githubPrUrls(text: string): string[] {
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
 		const normalized = normalizedGithubPrUrl(candidate);
 		const hasNormalized = normalized !== null;
-		if (hasNormalized) urls.push(normalized);
+		const isIgnored = normalized === IGNORED_PR_URL;
+		const shouldInclude = hasNormalized && !isIgnored;
+		if (shouldInclude) urls.push(normalized);
 	}
 	return urls;
 }

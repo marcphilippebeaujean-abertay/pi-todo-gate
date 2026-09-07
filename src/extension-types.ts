@@ -15,8 +15,8 @@ import type { TodoistClient } from "./todoist/client.ts";
 import type {
 	ResolvedProject,
 	TodoistProjectMapping,
-	WorkState,
-} from "./types.ts";
+} from "./todoist/config.ts";
+import type { WorkState } from "./types.ts";
 import type { WorktreeModule } from "./worktree/module.ts";
 
 export type WorkStateAction =

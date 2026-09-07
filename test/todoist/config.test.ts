@@ -1,5 +1,8 @@
 const ACCEPTS_PROJECT_MAPPINGS = "accepts project mappings";
+const ACCEPTS_PROJECT_SETTINGS = "accepts object project settings";
 const PROJECTS_REPO_MERGE_TD = '{"projects":{"/repo":"merge-td"}}';
+const PROJECTS_REPO_SETTINGS =
+	'{"projects":{"/repo":{"todoistProjectRef":"merge-td","triggersOnlyOnWorktree":false}}}';
 const MERGE_TD = "merge-td";
 const RETURNS_EMPTY_CONFIGURATION_FOR_MALFORMED_INPUT =
 	"returns empty configuration for malformed input";
@@ -51,6 +54,17 @@ describe("parseConfig", () => {
 		});
 	});
 
+	it(ACCEPTS_PROJECT_SETTINGS, () => {
+		expect(parseConfig(PROJECTS_REPO_SETTINGS)).toEqual({
+			projects: {
+				"/repo": {
+					todoistProjectRef: MERGE_TD,
+					triggersOnlyOnWorktree: false,
+				},
+			},
+		});
+	});
+
 	it(RETURNS_EMPTY_CONFIGURATION_FOR_MALFORMED_INPUT, () => {
 		expect(parseConfig(NOT_JSON)).toEqual({ projects: {} });
 		expect(parseConfig(PROJECTS_REPO)).toEqual({ projects: {} });
@@ -72,6 +86,7 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve(REPO),
 			todoistProjectRef: MERGE_TD,
+			triggersOnlyOnWorktree: true,
 		});
 	});
 
@@ -86,6 +101,7 @@ describe("resolveConfiguredProject", () => {
 		).toEqual({
 			codingRoot: resolve(REPO_PACKAGES),
 			todoistProjectRef: PACKAGES_PROJECT,
+			triggersOnlyOnWorktree: true,
 		});
 	});
 

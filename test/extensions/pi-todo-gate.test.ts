@@ -503,7 +503,7 @@ describe("hidden lifecycle context", () => {
 				message: {
 					role: USER,
 					content: [
-						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_1 },
+						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_2 },
 					],
 				},
 			},
@@ -515,7 +515,7 @@ describe("hidden lifecycle context", () => {
 				message: {
 					role: ASSISTANT,
 					content: [
-						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_2 },
+						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_3 },
 					],
 				},
 			},
@@ -524,7 +524,7 @@ describe("hidden lifecycle context", () => {
 		expect(h.appended).toEqual([
 			{
 				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_2 },
 			},
 		]);
 		await h.handlers.get(MESSAGE_END)?.(
