@@ -8,9 +8,10 @@ import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "./herdr-tab-claim.ts";
+} from "./herdr/module.ts";
 import type { SharedEvents } from "./shared/events.ts";
-import type { TodoistClient } from "./todoist.ts";
+import type { TaskClaimWorker } from "./todoist/claim-worker.ts";
+import type { TodoistClient } from "./todoist/client.ts";
 import type {
 	ResolvedProject,
 	TodoistProjectMapping,
@@ -22,23 +23,20 @@ export type WorkStateAction =
 	| { action: "status" }
 	| { action: "set_pr"; url: string }
 	| { action: "clear_pr" }
-	| { action: "set_task"; task: string }
-	| { action: "clear_task" }
 	| { action: "clear_all" };
 
 export type StateToolParams =
-	| { action: "status"; url?: string; task?: string }
-	| { action: "set_pr"; url?: string; task?: string }
-	| { action: "clear_pr"; url?: string; task?: string }
-	| { action: "set_task"; url?: string; task?: string }
-	| { action: "clear_task"; url?: string; task?: string }
-	| { action: "clear_all"; url?: string; task?: string };
+	| { action: "status"; url?: string }
+	| { action: "set_pr"; url?: string }
+	| { action: "clear_pr"; url?: string }
+	| { action: "clear_all"; url?: string };
 
 export interface ExtensionDependencies {
 	loadConfig?: (path?: string) => Promise<TodoistProjectMapping>;
 	openSession?: (path: string) => SessionReader;
 	exec?: Exec;
 	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => TodoistClient;
+	taskClaimWorker?: TaskClaimWorker;
 	herdrCommandRunner?: HerdrCommandRunner;
 	herdrStartBackgroundWorker?: StartBackgroundWorker;
 }
@@ -50,6 +48,7 @@ export type SessionReader = {
 };
 
 export interface ActiveSession {
+	sessionId: string;
 	context: ExtensionContext;
 	project: ResolvedProject;
 	state: WorkState;
@@ -59,6 +58,8 @@ export interface ActiveSession {
 	workRevision: number;
 	operationGeneration: number;
 	operationQueue: Promise<void>;
+	taskClaimAnalysisStarted: boolean;
+	taskClaimGeneration: number;
 }
 
 export interface ExtensionRuntime {

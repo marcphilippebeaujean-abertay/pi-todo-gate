@@ -3,11 +3,8 @@ import {
 	type ClaimWorkerRequest,
 	startClaimWorker,
 	type WorkerSpawner,
-} from "./herdr/claim-worker.ts";
-import type {
-	CommandRunner,
-	StartBackgroundWorker,
-} from "./herdr-tab-claim.ts";
+} from "./claim-worker.ts";
+import type { CommandRunner, StartBackgroundWorker } from "./types.ts";
 
 const HERDR_COMMAND = "herdr";
 const HERDR_ENVIRONMENT = "HERDR_ENV";

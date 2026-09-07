@@ -2,14 +2,15 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { formatLintDiagnostic, lintProgram } from "./lint.ts";
-import { loadLintConfig } from "./lint-config.ts";
+import { loadLintConfig } from "../lint-config.ts";
+import { formatLintDiagnostic, lintProgram } from "./index.ts";
 
 const LINT_DIRECTORIES = ["extensions", "src", "test"];
 const TEST_DIRECTORY = "test";
 const LINT_INFRASTRUCTURE_PATHS = new Set([
 	"src/lint.ts",
 	"src/lint-config.ts",
+	"src/lint/",
 	"src/lint-cli.ts",
 ]);
 const TS_EXTENSION = ".ts";
@@ -28,7 +29,14 @@ function isExcludedPath(relativePath: string): boolean {
 	const isTestPath =
 		normalizedPath === TEST_DIRECTORY ||
 		normalizedPath.startsWith(`${TEST_DIRECTORY}/`);
-	return isTestPath || LINT_INFRASTRUCTURE_PATHS.has(normalizedPath);
+	return (
+		isTestPath ||
+		[...LINT_INFRASTRUCTURE_PATHS].some((path) =>
+			path.endsWith("/")
+				? normalizedPath.startsWith(path)
+				: normalizedPath === path,
+		)
+	);
 }
 
 function collectDirectoryFiles(

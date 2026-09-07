@@ -1,87 +1,79 @@
-const CLAIMED_STATUS = "claimed";
-const COLLISION_STATUS = "collision";
-const NONE_STATUS = "none";
+const INVALID_RESULT = "Invalid claim worker result.";
+const EMPTY = String();
+const CLAIM = "claim";
+const ERROR = "error";
 
 import { Value } from "typebox/value";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
-import { isRecord } from "../shared/records.ts";
 import {
 	type TaskClaimWorkerResult,
 	TaskClaimWorkerResultSchema,
 } from "./claim-worker.ts";
 
-function isNonEmptyString(value: unknown): value is string {
-	if (typeof value !== "string") return false;
-	return value.length > 0;
+function invalidResult(sessionId: string): TaskClaimWorkerResult {
+	return { sessionId, action: ERROR, taskData: null, error: INVALID_RESULT };
 }
 
-function parseWrappedResult(value: unknown): TaskClaimWorkerResult | undefined {
-	const isWrappedRecord = isRecord(value);
-	const wrappedRecord = isWrappedRecord ? value : null;
-	if (wrappedRecord === null) return undefined;
-	const wrapped = wrappedRecord as {
-		claimed?: { taskRef?: unknown };
-		collision?: {
-			taskRef?: unknown;
-			taskName?: unknown;
-			collisionReason?: unknown;
-		};
-	};
-	const claimedTaskRef = wrapped.claimed?.taskRef;
-	const hasClaimedTaskRef = isNonEmptyString(claimedTaskRef);
-	if (hasClaimedTaskRef)
-		return {
-			status: CLAIMED_STATUS,
-			taskRef: claimedTaskRef,
-		};
-	const collisionTaskRef = wrapped.collision?.taskRef;
-	const hasCollisionTaskRef = isNonEmptyString(collisionTaskRef);
-	if (!hasCollisionTaskRef) return undefined;
-	const collision = wrapped.collision;
-	if (collision === undefined) return undefined;
-	const hasTaskName = typeof collision.taskName === "string";
-	const taskName = hasTaskName
-		? { taskName: collision.taskName as string }
-		: {};
-	const hasCollisionReason = typeof collision.collisionReason === "string";
-	const collisionReason = hasCollisionReason
-		? { collisionReason: collision.collisionReason as string }
-		: {};
-	return {
-		status: COLLISION_STATUS,
-		taskRef: collisionTaskRef,
-		...taskName,
-		...collisionReason,
-	};
+function isValidActionData(result: TaskClaimWorkerResult): boolean {
+	const hasTaskData = result.taskData !== null;
+	const hasError = result.error !== null;
+	const action = result.action;
+	const isErrorAction = action === ERROR;
+	if (isErrorAction) return !hasTaskData && hasError;
+	const hasInvalidTaskData = !hasTaskData;
+	if (hasInvalidTaskData) return false;
+	if (hasError) return false;
+	const taskData = result.taskData;
+	const hasMissingTaskData = taskData === null;
+	if (hasMissingTaskData) return false;
+	const hasId = taskData.id !== null;
+	const isClaimAction = action === CLAIM;
+	return isClaimAction && hasId;
 }
 
-export function parseResult(stdout: string): TaskClaimWorkerResult {
+function parseCandidate(text: string): TaskClaimWorkerResult | undefined {
+	const start = text.indexOf("{");
+	const end = text.lastIndexOf("}");
+	const hasInvalidBounds = start < 0 || end <= start;
+	if (hasInvalidBounds) return undefined;
+	try {
+		const value: unknown = JSON.parse(text.slice(start, end + 1));
+		const isSchemaResult = Value.Check(TaskClaimWorkerResultSchema, value);
+		const hasInvalidSchemaResult = !isSchemaResult;
+		if (hasInvalidSchemaResult) return undefined;
+		const result = value as TaskClaimWorkerResult;
+		const isValidResult = isValidActionData(result);
+		if (!isValidResult) return undefined;
+		return result;
+	} catch {
+		return undefined;
+	}
+}
+
+function assistantTexts(stdout: string): string[] {
 	const texts: string[] = [];
 	for (const line of stdout.split(/\r?\n/)) {
 		try {
 			const event = JSON.parse(line) as { message?: unknown };
-			const text = textFromAssistantMessage(event.message, "");
-			texts.push(text);
+			const text = textFromAssistantMessage(event.message, EMPTY);
+			const hasText = text !== EMPTY;
+			if (hasText) texts.push(text);
 		} catch {
 			// Ignore non-JSON process output.
 		}
 	}
+	return texts;
+}
 
+export function parseResult(
+	stdout: string,
+	sessionId = EMPTY,
+): TaskClaimWorkerResult {
+	const texts = assistantTexts(stdout);
 	for (let index = texts.length - 1; index >= 0; index -= 1) {
-		const text = texts[index].trim();
-		const start = text.indexOf("{");
-		const end = text.lastIndexOf("}");
-		const hasInvalidBounds = start < 0 || end <= start;
-		if (hasInvalidBounds) continue;
-		try {
-			const value: unknown = JSON.parse(text.slice(start, end + 1));
-			const isValidResult = Value.Check(TaskClaimWorkerResultSchema, value);
-			if (isValidResult) return value as TaskClaimWorkerResult;
-			const wrappedResult = parseWrappedResult(value);
-			if (wrappedResult !== undefined) return wrappedResult;
-		} catch {
-			// Try earlier assistant output.
-		}
+		const result = parseCandidate(texts[index].trim());
+		const hasResult = result !== undefined;
+		if (hasResult) return result;
 	}
-	return { status: NONE_STATUS };
+	return invalidResult(sessionId);
 }

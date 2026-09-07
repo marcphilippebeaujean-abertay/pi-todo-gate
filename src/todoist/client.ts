@@ -1,18 +1,25 @@
-const TODOIST_ERROR_NAME = "TodoistError";
-const LIST_COMMAND = "list";
-const JSON_FLAG = "--json";
-const PROJECT_LIST_FAMILY = "project list";
-const TASK_COMMAND = "task";
-const TASK_CLAIM_FAMILY = "task claim";
-const TASK_OUTSIDE_PROJECT_MESSAGE = "task is outside the configured project";
+const PROJECT = "project";
+const LIST = "list";
+const JSON_OUTPUT_FLAG = "--json";
+const ID = "id:";
+const PROJECT_LIST = "project list";
+const TASK = "task";
+const VIEW = "view";
+const ADD = "add";
+const COMPLETE = "complete";
+const TASK_CLAIM = "task claim";
+const TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT =
+	"task is outside the configured project";
+const SECTION = "section";
 const PROJECT_FLAG = "--project";
-const IN_PROGRESS_SECTION_NAME = "in progress";
-const TASK_ALREADY_IN_PROGRESS_MESSAGE = "task is already in progress";
-const IN_PROGRESS_SECTION_TITLE = "In Progress";
+const SECTION_FLAG = "--section";
+const DESCRIPTION_FLAG = "--description";
+const IN_PROGRESS_VALUE = "in progress";
+const IN_PROGRESS_LABEL = "In Progress";
+const MOVE = "move";
 
 import type { CommandResult } from "../shared/command.ts";
 import {
-	canonicalTaskId,
 	childList,
 	parsePayload,
 	record,
@@ -36,23 +43,11 @@ export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;
 }
 
-interface ClaimProject {
-	id: string;
-	currentTaskId?: string;
-	allowInProgress?: boolean;
-}
+export type IsCurrentOperation = () => boolean;
 
-export class TodoistError extends Error {
-	readonly commandFamily: string;
+import { TodoistError, TodoistOperationCancelled } from "./errors.ts";
 
-	constructor(commandFamily: string, detail: string) {
-		const hasDetail = detail !== "";
-		const detailSuffix = hasDetail ? `: ${detail}` : "";
-		super(`Todoist ${commandFamily} failed${detailSuffix}`);
-		this.name = TODOIST_ERROR_NAME;
-		this.commandFamily = commandFamily;
-	}
-}
+export { TodoistError, TodoistOperationCancelled } from "./errors.ts";
 
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}
@@ -60,8 +55,17 @@ export class TodoistClient {
 	private async run(
 		args: readonly string[],
 		parseJson = true,
+		isCurrent?: IsCurrentOperation,
 	): Promise<unknown> {
+		if (isCurrent !== undefined) {
+			const isCurrentBeforeRun = isCurrent();
+			if (!isCurrentBeforeRun) throw new TodoistOperationCancelled();
+		}
 		const result = await this.exec.run(args);
+		if (isCurrent !== undefined) {
+			const isCurrentAfterRun = isCurrent();
+			if (!isCurrentAfterRun) throw new TodoistOperationCancelled();
+		}
 		const commandFailed = result.code !== 0;
 		if (commandFailed) {
 			const family = args.slice(0, 2).join(" ");
@@ -72,94 +76,99 @@ export class TodoistClient {
 			: result.stdout;
 	}
 
-	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
-		const payload = await this.run(["project", LIST_COMMAND, JSON_FLAG]);
+	async resolveProject(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
+	): Promise<{ id: string; name: string }> {
+		const payload = await this.run(
+			[PROJECT, LIST, JSON_OUTPUT_FLAG],
+			true,
+			isCurrent,
+		);
 		const rows = childList(payload).map(record);
-		const hasIdPrefix = ref.startsWith("id:");
-		const target = hasIdPrefix ? ref.slice(3) : ref;
+		const hasIdPrefix = ref.startsWith(ID);
+		const target = hasIdPrefix ? ref.slice(ID.length) : ref;
 		const match = rows.find(
 			(row) =>
 				stringValue(row.id) === target || stringValue(row.name) === target,
 		);
-		if (match === undefined)
+		const hasNoProjectMatch = match === undefined;
+		if (hasNoProjectMatch)
 			throw new TodoistError(
-				PROJECT_LIST_FAMILY,
+				PROJECT_LIST,
 				`configured project not found: ${target}`,
 			);
 		return { id: stringValue(match.id), name: stringValue(match.name) };
 	}
 
-	async getTask(ref: string): Promise<TodoistTask> {
+	async getTask(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
+	): Promise<TodoistTask> {
 		const task = taskFromPayload(
-			await this.run([TASK_COMMAND, "view", ref, JSON_FLAG]),
+			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG], true, isCurrent),
 		);
-		const hasNoUrl = !task.url && !task.webUrl;
-		if (hasNoUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
+		const hasNoTaskUrl = !task.url && !task.webUrl;
+		if (hasNoTaskUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
 		return task;
-	}
-
-	async completeTask(ref: string): Promise<void> {
-		await this.run([TASK_COMMAND, "complete", ref], false);
 	}
 
 	private async resolveSectionName(
 		task: TodoistTask,
 		projectId: string,
+		isCurrent?: IsCurrentOperation,
 	): Promise<string | null | undefined> {
-		let sectionName = task.sectionName;
-		const needsSectionLookup = !sectionName && Boolean(task.sectionId);
-		if (!needsSectionLookup) return sectionName;
-		const sections = await this.run([
-			"section",
-			LIST_COMMAND,
-			PROJECT_FLAG,
-			`id:${projectId}`,
-			JSON_FLAG,
-		]);
+		const hasSectionName = Boolean(task.sectionName);
+		if (hasSectionName) return task.sectionName;
+		const hasSectionId = Boolean(task.sectionId);
+		if (!hasSectionId) return task.sectionName;
+		const sections = await this.run(
+			[SECTION, LIST, PROJECT_FLAG, `${ID}${projectId}`, JSON_OUTPUT_FLAG],
+			true,
+			isCurrent,
+		);
 		const section = childList(sections)
 			.map(record)
 			.find((item) => stringValue(item.id) === task.sectionId);
 		const hasSection = section !== undefined;
-		sectionName = hasSection ? stringValue(section.name) || null : null;
-		return sectionName;
+		return hasSection ? stringValue(section.name) || null : null;
 	}
 
-	async claimTask(ref: string, project: ClaimProject): Promise<TodoistTask> {
-		const task = await this.getTask(ref);
+	async claimTask(
+		ref: string,
+		project: { id: string },
+		isCurrent?: IsCurrentOperation,
+	): Promise<TodoistTask> {
+		const task = await this.getTask(ref, isCurrent);
 		const isOutsideProject = task.projectId !== project.id;
-		if (isOutsideProject) {
-			throw new TodoistError(TASK_CLAIM_FAMILY, TASK_OUTSIDE_PROJECT_MESSAGE);
-		}
-		let sectionName = await this.resolveSectionName(task, project.id);
-		const isInProgress =
-			sectionName?.trim().toLowerCase() === IN_PROGRESS_SECTION_NAME;
-		const hasCurrentTaskId = project.currentTaskId !== undefined;
-		const currentTaskId = hasCurrentTaskId
-			? canonicalTaskId(project.currentTaskId as string)
-			: undefined;
-		const isCurrentTask = task.id === currentTaskId;
-		const hasProgressCollision = isInProgress && !isCurrentTask;
-		const shouldRejectCollision =
-			hasProgressCollision && !project.allowInProgress;
-		if (shouldRejectCollision)
+		if (isOutsideProject)
 			throw new TodoistError(
-				TASK_CLAIM_FAMILY,
-				TASK_ALREADY_IN_PROGRESS_MESSAGE,
+				TASK_CLAIM,
+				TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 			);
-		if (!isInProgress) {
+		let sectionName = await this.resolveSectionName(
+			task,
+			project.id,
+			isCurrent,
+		);
+		const isInProgress =
+			sectionName?.trim().toLowerCase() === IN_PROGRESS_VALUE;
+		const needsInProgressMove = !isInProgress;
+		if (needsInProgressMove) {
 			await this.run(
 				[
-					TASK_COMMAND,
-					"move",
+					TASK,
+					MOVE,
 					ref,
-					"--section",
-					IN_PROGRESS_SECTION_TITLE,
+					SECTION_FLAG,
+					IN_PROGRESS_LABEL,
 					PROJECT_FLAG,
-					`id:${project.id}`,
+					`${ID}${project.id}`,
 				],
 				false,
+				isCurrent,
 			);
-			sectionName = IN_PROGRESS_SECTION_TITLE;
+			sectionName = IN_PROGRESS_LABEL;
 		}
 		return {
 			...task,
@@ -169,5 +178,45 @@ export class TodoistClient {
 				task.url ??
 				`https://app.todoist.com/app/task/${task.id}`,
 		};
+	}
+
+	async createTask(
+		title: string,
+		description: string,
+		project: { id: string },
+		isCurrent?: IsCurrentOperation,
+	): Promise<TodoistTask> {
+		const task = taskFromPayload(
+			await this.run(
+				[
+					TASK,
+					ADD,
+					title,
+					DESCRIPTION_FLAG,
+					description,
+					PROJECT_FLAG,
+					`${ID}${project.id}`,
+					SECTION_FLAG,
+					IN_PROGRESS_LABEL,
+					JSON_OUTPUT_FLAG,
+				],
+				true,
+				isCurrent,
+			),
+		);
+		return {
+			...task,
+			url:
+				task.webUrl ??
+				task.url ??
+				`https://app.todoist.com/app/task/${task.id}`,
+		};
+	}
+
+	async completeTask(
+		ref: string,
+		isCurrent?: IsCurrentOperation,
+	): Promise<void> {
+		await this.run([TASK, COMPLETE, ref], false, isCurrent);
 	}
 }

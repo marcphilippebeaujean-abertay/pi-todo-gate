@@ -2,28 +2,30 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import type { FooterEventSink } from "./footer/types.ts";
-import type {
-	ClaimWorkerHandle,
-	ClaimWorkerRequest,
-	WorkerSpawner,
-} from "./herdr/claim-worker.ts";
-import { hideHerdrFooter, showHerdrFooter } from "./herdr/footer.ts";
+import { handleClaimError } from "../claim-error.ts";
+import type { FooterEventSink } from "../footer/types.ts";
+import { isSubagent } from "../session.ts";
+import type { ClaimWorkerHandle, ClaimWorkerRequest } from "./claim-worker.ts";
 import {
 	boundCommandRunner,
 	defaultStartWorker,
 	isInsideHerdr,
 	tabLabel,
-} from "./herdr-tab-environment.ts";
-import { hasValidatedTabClaim } from "./herdr-tab-validation.ts";
-import { isSubagent } from "./session.ts";
+} from "./environment.ts";
+import { hideHerdrFooter, showHerdrFooter } from "./footer.ts";
+import { hasValidatedTabClaim } from "./tab-validation.ts";
+import type {
+	CommandRunner,
+	HerdrTabOptions,
+	StartBackgroundWorker,
+} from "./types.ts";
 
 const SESSION_START_EVENT = "session_start";
 const BEFORE_AGENT_START_EVENT = "before_agent_start";
 const SESSION_SHUTDOWN_EVENT = "session_shutdown";
-const WARNING_LEVEL = "warning";
-const TAB_CLAIM_FAILED = "Herdr background tab naming failed validation.";
-const TAB_CLAIM_START_FAILED = "Herdr background tab naming failed to start: ";
+const HERDR = "Herdr";
+const TAB_CLAIM_FAILED = "completed without claim evidence";
+const TAB_CLAIM_START_FAILED = "failed to start";
 const TAB_CLAIM_INSTRUCTIONS = `Rename current Herdr tab for task in parent prompt.
 Use bash. First run \`herdr pane current\`, then \`herdr tab get <tab-id>\`.
 If current label clearly describes task, leave tab unchanged. Otherwise inspect current tab panes and
@@ -33,19 +35,12 @@ After success or valid unchanged label, output only JSON:
 \`{"status":"claimed","tabId":"<current-tab-id>","label":"<current-tab-label>"}\`.
 Exit nonzero if claim cannot complete.`;
 
-export type CommandRunner = (command: string, args: string[]) => string;
-export type StartBackgroundWorker = (
-	request: ClaimWorkerRequest,
-) => ClaimWorkerHandle;
-
-export interface HerdrTabOptions {
-	commandRunner?: CommandRunner;
-	cwd?: string;
-	startBackgroundWorker?: StartBackgroundWorker;
-	spawnWorker?: WorkerSpawner;
-	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	onFooterUpdate?: FooterEventSink;
-}
+export type { ClaimWorkerRequest, WorkerSpawner } from "./claim-worker.ts";
+export type {
+	CommandRunner,
+	HerdrTabOptions,
+	StartBackgroundWorker,
+} from "./types.ts";
 
 interface TabClaimAttempt {
 	generation: number;
@@ -157,7 +152,7 @@ class HerdrTabClaim {
 			this.hasClaim = true;
 			return;
 		}
-		this.notify(ctx, TAB_CLAIM_FAILED, WARNING_LEVEL);
+		handleClaimError(ctx, { jobType: HERDR, error: TAB_CLAIM_FAILED });
 	}
 
 	private failClaim(
@@ -169,7 +164,7 @@ class HerdrTabClaim {
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
-		this.notify(ctx, message, WARNING_LEVEL);
+		handleClaimError(ctx, { jobType: HERDR, error: message });
 	}
 
 	private sessionShutdown(): void {
@@ -179,18 +174,6 @@ class HerdrTabClaim {
 		hideHerdrFooter(this.emitFooter);
 		this.hasClaim = false;
 		this.herdrAvailable = false;
-	}
-
-	private notify(
-		ctx: Pick<ExtensionContext, "ui">,
-		message: string,
-		level: "warning",
-	): void {
-		try {
-			ctx.ui.notify(message, level);
-		} catch {
-			// Headless sessions have no user-facing UI.
-		}
 	}
 }
 

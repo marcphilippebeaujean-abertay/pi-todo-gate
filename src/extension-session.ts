@@ -12,7 +12,6 @@ import {
 	refreshFooterStatuses,
 } from "./extension-lifecycle.ts";
 import { branchTexts, latestStateData } from "./extension-message.ts";
-import { linkInferredTask } from "./extension-tasks.ts";
 import { installStateTool } from "./extension-tool.ts";
 import type {
 	ActiveSession,
@@ -84,6 +83,7 @@ function activateSession(
 	allowPrDiscovery: boolean,
 ): ActiveSession {
 	const session: ActiveSession = {
+		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
 		project,
 		state,
@@ -93,6 +93,8 @@ function activateSession(
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
+		taskClaimAnalysisStarted: false,
+		taskClaimGeneration: 0,
 	};
 	runtime.active = session;
 	return session;
@@ -167,8 +169,6 @@ export async function handleSessionStart(
 		inherited.handoffContext,
 		allowPrDiscovery,
 	);
-	if (session.state.taskRef === undefined)
-		await linkInferredTask(runtime, session);
 	installStateTool(runtime);
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;

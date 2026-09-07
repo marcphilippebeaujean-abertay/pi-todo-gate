@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
+import { withWorkerMarker } from "../session.ts";
+import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 import {
 	appendBounded,
 	type ClaimWorkerResult,
 	parseClaimResult,
-} from "../herdr-claim-worker-result.ts";
-import { withWorkerMarker } from "../session.ts";
-import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
+} from "./claim-worker-result.ts";
 
 export interface ClaimWorkerRequest {
 	prompt: string;
@@ -47,8 +47,7 @@ export interface WorkerProcess {
 }
 
 const DEFAULT_COMMAND = "pi";
-const MISSING_CLAIM_EVIDENCE =
-	"Herdr claim worker completed without claim evidence.";
+const MISSING_CLAIM_EVIDENCE = "completed without claim evidence";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
 const DATA_EVENT = "data";

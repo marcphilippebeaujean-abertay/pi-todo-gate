@@ -81,18 +81,16 @@ export class ExitActionPicker {
 	}
 
 	private submitFocusedTarget(): void {
-		const focused = this.state.focused;
-		const submits = focused === C.exit.submitKey;
-		if (submits) {
-			this.done([...this.state.selectedIds]);
-			return;
+		switch (this.state.focused) {
+			case C.exit.submitKey:
+				this.done([...this.state.selectedIds]);
+				return;
+			case C.exit.cancelKey:
+				this.done(null);
+				return;
+			default:
+				this.toggleFocusedAction();
 		}
-		const cancels = focused === C.exit.cancelKey;
-		if (cancels) {
-			this.done(null);
-			return;
-		}
-		this.toggleFocusedAction();
 	}
 
 	private moveFocus(direction: 1 | -1): void {

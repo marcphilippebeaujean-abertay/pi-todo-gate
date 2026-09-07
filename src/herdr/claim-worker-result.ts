@@ -1,4 +1,4 @@
-import { textFromAssistantMessage } from "./shared/pi-worker.ts";
+import { textFromAssistantMessage } from "../shared/pi-worker.ts";
 
 export interface ClaimWorkerResult {
 	tabId: string;

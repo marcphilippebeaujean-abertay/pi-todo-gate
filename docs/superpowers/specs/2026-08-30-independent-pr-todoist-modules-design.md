@@ -2,29 +2,23 @@
 
 ## Status
 
-Design approved in chat. Implementation deferred until written-spec review.
+Scope revised: task-claim architecture only. Implementation is deferred until written-spec review.
 
 ## Goal
 
-Refactor the single `pi-todo-gate` extension so PR tracking and Todoist task tracking are independent domains while retaining one Pi extension entrypoint.
+Refactor the single `pi-todo-gate` extension so PR tracking and Todoist task claiming are independent domains while retaining one Pi extension entrypoint.
 
-PR tracking must work in every normal project, even when no Todoist project is configured. Todoist behavior must remain conditional on a matching Todoist project configuration.
+PR tracking must work in every normal project, even when no Todoist project is configured. Todoist task-claim analysis must remain conditional on a matching Todoist project configuration.
 
-After a confirmed PR merge, the extension must add this hidden context to the next agent prompt:
-
-> Please ensure you have closed all completed tasks for this session if you have been using task tracking
-
-When a session task is active, Todoist must prompt the user:
-
-> Do you wish to mark task <task name> as complete?
-
-with `Yes`, `No`, and `No and clear session task` choices. The extension must not automatically complete Todoist tasks without user confirmation.
+The first Todoist slice is a confirmation-gated claim flow. It reads Todoist, proposes either an existing task or a new task, presents the proposed action to the user, and mutates Todoist only after confirmation. The design must make the boundaries between CLI access, read-only analysis, user interaction, and session persistence explicit.
 
 ## Non-goals
 
 - Do not split behavior into multiple Pi plugins.
 - Do not preserve the combined public state tool or state-entry format.
-- Do not add automatic Todoist completion without user confirmation.
+- Do not add generic Todoist Pi commands in this phase. In particular, do not expose `set_task`, `create_task`, `remove_task`, `clear_task`, or `complete_task` as agent-invoked tool actions.
+- Do not add a separate `TodoistCommands` command layer until the claim flow has been validated.
+- Do not complete, remove, or clear tasks as a standalone action in this phase.
 - Do not enable tracking inside dispatched subagent sessions.
 - Do not change GitHub or Todoist CLI behavior beyond the tracking boundaries.
 
@@ -49,9 +43,11 @@ src/pr/
   footer.ts           # PR status rendering
 
 src/todoist/
-  module.ts           # Todoist lifecycle, tool, context
+  module.ts           # Todoist lifecycle and claim context
   state.ts            # TodoistState
-  client.ts           # Todoist CLI client
+  client.ts           # Todoist CLI execution and parsing
+  claim-worker.ts     # Read-only proposal worker
+  claim-result.ts     # Worker result parsing and validation
   config.ts           # Todoist project mapping and resolution
   footer.ts           # Todoist status rendering
 ```
@@ -64,6 +60,9 @@ The exact file names may vary during implementation, but domain ownership and im
 - Todoist code may import shared code and external dependencies, never PR code.
 - Shared code may import neither domain.
 - Only the extension composition root may import both domain entrypoints.
+- `TodoistClient` may import shared command/parsing helpers but not session, UI, or extension lifecycle code.
+- The claim worker may import worker/process and result-parser helpers, but never the Todoist client or mutation/orchestration code.
+- The claim interaction may depend on the client and session/UI adapters, but no generic Todoist command module is allowed in this phase.
 - Domain tests must not import the opposite domain's implementation.
 
 ## Domain state
@@ -104,18 +103,14 @@ Existing `pi-todo-gate-state` entries are not migrated. Existing combined tool b
 
 ## Public tools
 
-Register tools independently:
+Register only the PR state tool in this phase:
 
 - `pi_pr_gate_state`
   - `status`
   - `set_pr`
   - `clear_pr`
-- `pi_todoist_gate_state`
-  - `status`
-  - `set_task`
-  - `clear_task`
 
-Neither tool exposes operations owned by the other domain. There is no `clear_all` operation because cross-domain mutation would violate separation.
+Todoist registers no Pi-facing task command tool. There are no `set_task`, `create_task`, `remove_task`, `clear_task`, or `complete_task` actions for the agent to invoke. The claim flow is an extension-controlled interaction started from the agent prompt, not a general-purpose command surface. There is no `clear_all` operation because cross-domain mutation would violate separation.
 
 ## Activation and lifecycle
 
@@ -171,36 +166,31 @@ On `clear_pr`:
 On `session_start`:
 
 - Resolve the configured project for the current path.
-- If no project matches, remain inactive and register no Todoist tool/status/context.
-- Read Todoist state.
+- If no project matches, remain inactive and register no Todoist status or context.
+- Read Todoist state only after activation.
 - If the session was created by clearing context and the previous session belongs to the same configured coding project, inherit its task state.
-- Select active-task mode or new-task mode.
+- Select active-task mode or claim-analysis mode.
 
-Before generating context, attempt existing task inference from session history/current prompt. Then:
+The task-claim flow has four explicit boundaries:
 
-Active-task mode emits context equivalent to:
+1. **`TodoistClient`** owns `td` execution and parsing. It has no session state, prompts, or user decisions. Its narrow operations are `resolveProject`, `getTask`, `createTask`, `moveTask`, and `completeTask`; mutation methods are called only by the confirmed claim flow in this phase.
+2. **Claim worker** runs in an isolated process and uses Todoist only for inspection. It never creates, moves, completes, clears, or otherwise mutates a task. It returns exactly one structured result:
+   - `claim_existing`: task ID, title, and description for a non-completed matching task;
+   - `create_new`: proposed title and description when no suitable non-completed task exists;
+   - `error`: a safe human-readable reason when inspection or matching fails.
+3. **Main-agent interaction** receives the proposal as hidden context, presents the action type, title, and description, and waits for explicit user confirmation. The proposal is not treated as a claim and is discarded when the session is stale or the user declines.
+4. **Confirmed claim application** performs only the operation selected by the proposal, validates the configured project and task data, persists the resulting task state, and refreshes the footer. This is an internal claim flow, not a set of generic Pi-facing Todoist commands.
+
+Any non-completed task may be claimed. The `In Progress` section is workflow state, not an ownership lock; an existing task in that section must not produce a collision or rejection solely because it is already `In Progress`.
+
+The active-task context remains equivalent to:
 
 ```text
 We are tracking tasks with Todoist and you are currently working on task task-ref.
 Continue working on and tracking this task in Todoist.
 ```
 
-New-task mode emits instructions equivalent to:
-
-```text
-# Todoist Task Gate (MANDATORY)
-
-Before code changes:
-1. Find or create a Todoist task matching this work in the configured project.
-2. Assign it through pi_todoist_gate_state using set_task.
-3. Do not proceed until task is claimed and tracked.
-```
-
-The new-task context must identify the configured Todoist project and must not contain a hardcoded project ID.
-
-`set_task` validates the task, ensures it belongs to the configured project, and moves it to `In Progress`. `clear_task` removes task state and returns the module to new-task mode.
-
-The Todoist module receives normalized merge events through the composition root. It prompts the user once per merged PR when a session task is active. `Yes` completes the task; `No` keeps it linked; `No and clear session task` clears session task state without changing Todoist.
+While no task is linked, the extension may start claim analysis for the current prompt. It may provide a missing-task warning, but analysis and confirmation must not block unrelated agent work. No standalone Todoist command prompt is emitted.
 
 ### Context composition
 
@@ -228,11 +218,12 @@ If multiple merges occur before the next prompt, one reminder context is suffici
 
 - Missing or malformed Todoist config leaves PR tracking active and Todoist inactive.
 - Unavailable `gh` or unknown PR state produces no merge reminder; manual PR operations remain available.
-- Todoist CLI errors are contained within Todoist behavior and may notify the user without disabling PR behavior.
+- Todoist CLI errors are contained within Todoist claim behavior and may notify the user without disabling PR behavior.
 - No Todoist failure can block PR discovery or reminder generation.
 - No PR failure can mutate Todoist state.
-- Todoist completion requires explicit user choice; failures notify the user.
-- Repeated merge events do not repeat the completion prompt.
+- Worker failures return or surface an `error` proposal with sanitized details; worker output is never treated as a claim.
+- Declined or stale proposals do not mutate Todoist or session state.
+- A confirmed claim validates project membership before moving or creating a task, then persists state and refreshes the footer atomically from the session's perspective.
 - Shared merge detection must remain independent of PR and Todoist implementations.
 
 ## Testing strategy
@@ -256,11 +247,16 @@ Cover:
 Cover:
 
 - Configured and unconfigured activation.
-- New-task prompt with configured project identity.
-- Active current-task prompt.
-- Inherited-task prompt after `/new`.
-- Clear-task returning to new-task mode.
-- Task inference, claim, project validation, and move behavior.
+- `TodoistClient` command argument construction and strict output parsing for project/task lookup and claim mutations.
+- Read-only claim-worker prompts and structured result parsing for `claim_existing`, `create_new`, and `error`.
+- Existing-task proposals include task ID, title, and description.
+- New-task proposals include a non-empty title and description.
+- Worker inspection never invokes create, move, complete, clear, or other mutation commands.
+- Confirmation displays action type, title, and description before any mutation.
+- Declined, stale, malformed, or error proposals do not mutate task or session state.
+- Any non-completed task, including one already in `In Progress`, can be claimed without collision rejection.
+- Confirmed claim validates project membership, persists session state, and refreshes the footer.
+- No Todoist Pi-facing task command tool is registered.
 - Todoist errors isolated from PR behavior.
 
 ### Extension integration tests
@@ -291,10 +287,15 @@ npm run lint
 
 - One installed Pi extension remains the runtime entrypoint.
 - PR tracking works in an unconfigured project.
-- Todoist tracking exists only for configured projects.
-- PR and Todoist modules have separate state, tools, lifecycle logic, and status rendering.
-- Static architecture tests enforce no cross-domain imports.
+- Todoist claim analysis exists only for configured projects.
+- PR and Todoist modules have separate state, lifecycle logic, and status rendering.
+- `TodoistClient` contains all `td` execution/parsing and has no session/UI dependencies.
+- The claim worker is read-only and returns only `claim_existing`, `create_new`, or `error` proposals.
+- The main-agent flow presents proposal action, title, and description and waits for explicit confirmation.
+- Confirmed claims alone can mutate Todoist and session state; declined/stale/error proposals cannot.
+- Any non-completed task can be claimed, including tasks already in `In Progress`.
+- No generic Todoist Pi command actions are registered in this phase.
+- Static architecture tests enforce no cross-domain imports and keep claim responsibilities separated.
 - A merged PR clears the displayed PR and records its exact URL in merged history.
 - A later distinct PR becomes the displayed active PR.
-- Merge detection adds the exact reminder context and emits a shared event; Todoist prompts for user-confirmed completion when a task is active.
-- Existing tests are updated or replaced to reflect intentional removal of combined state/tool compatibility.
+- Existing tests are updated or replaced to reflect intentional removal of combined state/tool compatibility and Todoist command actions.

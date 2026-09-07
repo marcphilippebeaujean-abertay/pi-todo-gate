@@ -7,7 +7,7 @@ import type {
 } from "./extension-types.ts";
 import { renderPrStatus, renderTaskStatus } from "./footer.ts";
 import { spawnExec } from "./git.ts";
-import { TodoistClient } from "./todoist.ts";
+import { TodoistClient } from "./todoist/client.ts";
 
 export function createClient(
 	ctx: ExtensionContext,

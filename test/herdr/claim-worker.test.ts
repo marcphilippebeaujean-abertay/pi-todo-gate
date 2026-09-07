@@ -120,7 +120,7 @@ describe("startClaimWorker", () => {
 
 		expect(setupState.onClaimComplete).not.toHaveBeenCalled();
 		expect(setupState.onFailure).toHaveBeenCalledWith(
-			"Herdr claim worker completed without claim evidence.",
+			"completed without claim evidence",
 		);
 	});
 

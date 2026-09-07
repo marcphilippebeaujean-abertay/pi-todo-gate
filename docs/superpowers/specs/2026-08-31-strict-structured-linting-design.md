@@ -2,14 +2,14 @@
 
 ## Goal
 
-Add repository lint rules for explicit string constants, readable boolean conditions, and maintainable function structure. Integrate these rules into `npm run lint` while keeping existing Biome checks.
+Add repository lint rules for explicit string constants, readable boolean conditions, maintainable function structure, and clear equality dispatch. Integrate these rules into `npm run lint` while keeping existing Biome checks.
 
 ## Scope
 
 Lint production TypeScript files in:
 
 - `extensions/**/*.ts`
-- `src/**/*.ts`, excluding `src/lint.ts`, `src/lint-config.ts`, and `src/lint-cli.ts`
+- `src/**/*.ts`, excluding `src/lint/**` and `src/lint-config.ts`
 
 Tests validate checker behavior through Vitest and remain covered by Biome, but are not targets of the custom rules. The checker runs only as a repository development tool. It does not inspect user projects at runtime.
 
@@ -61,6 +61,10 @@ if (hasAccountBalance) {
 
 The TypeScript type checker determines whether identifier conditions are boolean-like or object guards. The rule does not enforce a naming prefix because intent naming is semantic and cannot be reliably inferred; its diagnostic instructs the author to choose a descriptive boolean name.
 
+### `prefer-switch-dispatch`
+
+When multiple `if` statements dispatch mutually exclusive cases from one discriminant, prefer a `switch`. Direct equality checks may be separated by assignments that bind other equality checks to named boolean variables; unrelated statements break the detected dispatch run. This rule reports repeated strict-equality cases and does not require `switch` for independent predicates or existing `else` chains.
+
 ### `cyclomatic-complexity`
 
 For each function-like construct, start at complexity 1 and add one for each `if`, loop, `catch`, conditional expression, switch case, and logical operator. Report values greater than 10.
@@ -81,7 +85,7 @@ Count function nesting depth independently from cyclomatic complexity. A top-lev
 
 ## Architecture
 
-`src/lint.ts` exposes the checker API and owns TypeScript AST traversal, rule evaluation, diagnostics, and sorting. It creates no files and performs no automatic fixes.
+`src/lint/index.ts` exposes the checker API. `src/lint/rules/` owns individual rule evaluation, while shared AST helpers, metrics, diagnostics, and types stay in neighboring lint modules. The checker creates no files and performs no automatic fixes.
 
 `src/lint-config.ts` owns defaults and optional `lint.config.json` overrides. Defaults are:
 
@@ -95,7 +99,7 @@ Count function nesting depth independently from cyclomatic complexity. A top-lev
 }
 ```
 
-`src/lint-cli.ts` discovers production TypeScript files under `extensions` and `src`, excluding the lint infrastructure modules, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintProgram()`, prints diagnostics, and exits with status 1 when violations exist.
+`src/lint/cli.ts` discovers production TypeScript files under `extensions` and `src`, excluding the lint infrastructure directory, loads `tsconfig.json`, creates a TypeScript program and type checker, invokes `lintProgram()`, prints diagnostics, and exits with status 1 when violations exist.
 
 `package.json` changes `lint` to run Biome followed by the custom checker. `tsconfig.json` includes the new checker modules.
 

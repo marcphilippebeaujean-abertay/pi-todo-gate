@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectLintFiles, runLint } from "../src/lint-cli.ts";
+import { collectLintFiles, runLint } from "../src/lint/cli.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-cli-";
 const SRC_DIRECTORY = "src";
@@ -14,6 +14,7 @@ const EXTENSIONS_DIRECTORY = "extensions";
 const TEST_DIRECTORY = "test";
 const OTHER_DIRECTORY = "other";
 const LINT_INFRASTRUCTURE_NAME = "lint.ts";
+const LINT_DIRECTORY = "lint";
 const SOURCE_NAME = "example.ts";
 const MAGIC_SOURCE = `export function check(name: string) {
 	return name === "Bob" || name === "Bob";
@@ -47,7 +48,7 @@ describe("lint CLI", () => {
 		expect(packageJson.scripts?.lint).toBe(
 			"npm run lint:biome && npm run lint:strict",
 		);
-		expect(packageJson.scripts?.["lint:strict"]).toBe("tsx src/lint-cli.ts");
+		expect(packageJson.scripts?.["lint:strict"]).toBe("tsx src/lint/cli.ts");
 	});
 
 	it(CI_WORKFLOW_TEST, async () => {
@@ -71,6 +72,7 @@ describe("lint CLI", () => {
 			mkdir(join(root, TEST_DIRECTORY), { recursive: true }),
 			mkdir(join(root, TEST_DIRECTORY, "nested"), { recursive: true }),
 			mkdir(join(root, SRC_DIRECTORY, "nested"), { recursive: true }),
+			mkdir(join(root, SRC_DIRECTORY, LINT_DIRECTORY), { recursive: true }),
 			mkdir(join(root, OTHER_DIRECTORY), { recursive: true }),
 		]);
 		await Promise.all([
@@ -88,6 +90,10 @@ describe("lint CLI", () => {
 			writeFile(
 				join(root, SRC_DIRECTORY, "nested", LINT_INFRASTRUCTURE_NAME),
 				CLEAN_SOURCE,
+			),
+			writeFile(
+				join(root, SRC_DIRECTORY, LINT_DIRECTORY, SOURCE_NAME),
+				MAGIC_SOURCE,
 			),
 			writeFile(join(root, OTHER_DIRECTORY, SOURCE_NAME), MAGIC_SOURCE),
 		]);

@@ -5,7 +5,8 @@ const UNEXPECTED_JSON_SHAPE_MESSAGE = "unexpected JSON shape";
 const MISSING_TASK_FIELDS_MESSAGE = "task has missing required fields";
 const EXPECTED_LIST_PAYLOAD_MESSAGE = "expected a list payload";
 
-import { TodoistError, type TodoistTask } from "./client.ts";
+import type { TodoistTask } from "./client.ts";
+import { TodoistError } from "./errors.ts";
 
 export function sanitizeError(stderr: string): string {
 	return stderr
