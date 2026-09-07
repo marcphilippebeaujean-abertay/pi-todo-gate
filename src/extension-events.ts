@@ -169,6 +169,7 @@ async function handleBashResult(
 	const claimedPrUrl = prUrl;
 	const claimedTaskRef = session.state.taskRef;
 	const mergeWorkRevision = session.workRevision;
+	const mergeOperationGeneration = session.operationGeneration;
 	const isPinnedPr = await matchesPinnedPr(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
@@ -180,6 +181,7 @@ async function handleBashResult(
 		runtime,
 		session,
 		mergeWorkRevision,
+		mergeOperationGeneration,
 		claimedTaskRef,
 		claimedPrUrl,
 	);
