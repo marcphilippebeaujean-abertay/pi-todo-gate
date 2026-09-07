@@ -22,5 +22,8 @@ coverage/
 # SDD scratch workspace
 .superpowers/
 
+# Git worktrees
+.worktrees/
+
 # macOS
 .DS_Store
