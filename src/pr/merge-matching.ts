@@ -1,6 +1,6 @@
 const GH_KIND = "gh";
 
-import type { Exec } from "./command.ts";
+import type { Exec } from "../shared/command.ts";
 import {
 	ghMergeTargets,
 	gitMergeTargets,

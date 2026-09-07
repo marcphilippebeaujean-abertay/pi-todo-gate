@@ -11,4 +11,4 @@ export type Exec = (
 	options?: { timeout?: number; signal?: AbortSignal; cwd?: string },
 ) => Promise<CommandResult>;
 
-export { spawnExec } from "../command-exec.ts";
+export { spawnExec } from "./command-exec.ts";

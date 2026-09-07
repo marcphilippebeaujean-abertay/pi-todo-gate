@@ -18,8 +18,9 @@ import type {
 	ExtensionRuntime,
 	SessionReader,
 } from "./extension-types.ts";
-import { hasUncommittedChanges, spawnExec } from "./git.ts";
 import { extractInheritedState, latestState } from "./session-state.ts";
+import { spawnExec } from "./shared/command.ts";
+import { hasUncommittedChanges } from "./shared/project.ts";
 import type { TodoistProjectMapping } from "./todoist/config.ts";
 
 const FUNCTION_TYPE = "function";

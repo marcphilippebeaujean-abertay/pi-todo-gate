@@ -43,6 +43,24 @@ module.exports = {
 			to: { path: "^src/pr/" },
 		},
 		{
+			name: "no-footer-to-pr",
+			severity: "error",
+			from: { path: "^src/footer" },
+			to: { path: "^src/pr/" },
+		},
+		{
+			name: "no-worktree-to-pr",
+			severity: "error",
+			from: { path: "^src/worktree/" },
+			to: { path: "^src/pr/" },
+		},
+		{
+			name: "no-exit-protocol-to-pr",
+			severity: "error",
+			from: { path: "^src/exit-protocol/" },
+			to: { path: "^src/pr/" },
+		},
+		{
 			name: "no-shared-to-todoist",
 			severity: "error",
 			from: { path: "^src/shared/" },
@@ -53,6 +71,24 @@ module.exports = {
 			severity: "error",
 			from: { path: "^src/shared/" },
 			to: { path: "^src/herdr/" },
+		},
+		{
+			name: "no-footer-test-to-pr",
+			severity: "error",
+			from: { path: "^test/footer" },
+			to: { path: "^src/pr/" },
+		},
+		{
+			name: "no-worktree-test-to-pr",
+			severity: "error",
+			from: { path: "^test/worktree" },
+			to: { path: "^src/pr/" },
+		},
+		{
+			name: "no-exit-protocol-test-to-pr",
+			severity: "error",
+			from: { path: "^test/exit-protocol" },
+			to: { path: "^src/pr/" },
 		},
 		{
 			name: "no-pr-test-to-todoist",

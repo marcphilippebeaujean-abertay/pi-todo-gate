@@ -5,8 +5,9 @@ import {
 	replaceSessionState,
 } from "../extension-lifecycle.ts";
 import type { ActiveSession, ExtensionRuntime } from "../extension-types.ts";
-import { inspectWorktree, spawnExec } from "../git.ts";
 import { applyStatePatch } from "../session-state.ts";
+import { spawnExec } from "../shared/command.ts";
+import { inspectProject } from "../shared/project.ts";
 import type { TaskClaimWorkerResult } from "./claim-worker.ts";
 import { createTaskClaimWorker } from "./claim-worker.ts";
 
@@ -108,7 +109,7 @@ export async function runTaskClaim(
 ): Promise<void> {
 	try {
 		const exec = runtime.dependencies.exec ?? spawnExec;
-		const worktree = await inspectWorktree(exec, session.context.cwd);
+		const worktree = await inspectProject(exec, session.context.cwd);
 		const worker =
 			runtime.dependencies.taskClaimWorker ?? createTaskClaimWorker(exec);
 		const result = await worker({

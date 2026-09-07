@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { detectMerge } from "../../src/pr/merge-detection.ts";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
-import { detectMerge } from "../../src/shared/merge-detection.ts";
 
 const ok = (stdout: string): CommandResult => ({
 	stdout,

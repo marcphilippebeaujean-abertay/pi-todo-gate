@@ -24,7 +24,7 @@ const ACCEPTS_A_PLACEHOLDER_SHAPED_PR_URL =
 const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/o/r/pull/2";
 
 import { describe, expect, it } from "vitest";
-import { firstGithubPrUrl, githubPrUrl } from "../../src/pr-detection.ts";
+import { firstGithubPrUrl, githubPrUrl } from "../../src/pr/detection.ts";
 
 describe("githubPrUrl", () => {
 	it(ACCEPTS_A_VALID_GITHUB_PULL_REQUEST_URL, () => {

@@ -15,16 +15,14 @@ import {
 import { textOf } from "./extension-message.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
 import {
-	type Exec,
 	findOpenPr,
-	hasUncommittedChanges,
-	inspectWorktree,
+	githubPrUrls,
 	isGithubPrAvailable,
 	matchesPinnedPr,
-	spawnExec,
-} from "./git.ts";
-import { githubPrUrls } from "./pr-detection.ts";
+} from "./pr/module.ts";
 import { applyStatePatch } from "./session-state.ts";
+import { type Exec, spawnExec } from "./shared/command.ts";
+import { hasUncommittedChanges, inspectProject } from "./shared/project.ts";
 import { isCurrentMerge } from "./shared/work-state.ts";
 import { maybeAnalyzeTaskClaim } from "./todoist/module.ts";
 
@@ -90,7 +88,7 @@ async function appendWorktreePrompt(
 	ctx: ExtensionContext,
 	messages: string[],
 ): Promise<void> {
-	const worktree = await inspectWorktree(
+	const worktree = await inspectProject(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
 	);
@@ -166,13 +164,10 @@ async function handleBashResult(
 	const isGitMutation = GIT_MUTATION_RE.test(command);
 	if (isGitMutation) session.workChanged = true;
 	const prUrl = session.state.prUrl;
-	const taskRef = session.state.taskRef;
 	const hasPrUrl = prUrl !== undefined;
-	const hasTaskRef = taskRef !== undefined;
-	const hasClaimedTaskAndPr = hasPrUrl && hasTaskRef;
-	if (!hasClaimedTaskAndPr) return;
-	const claimedPrUrl = prUrl ?? C.worktree.empty;
-	const claimedTaskRef = taskRef ?? C.worktree.empty;
+	if (!hasPrUrl) return;
+	const claimedPrUrl = prUrl;
+	const claimedTaskRef = session.state.taskRef;
 	const mergeWorkRevision = session.workRevision;
 	const isPinnedPr = await matchesPinnedPr(
 		runtime.dependencies.exec ?? spawnExec,
@@ -189,10 +184,10 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!currentMerge) return;
-	const hasCompletionAttempt =
-		session.state.todoistCompletionAttemptedAt !== undefined;
-	if (hasCompletionAttempt) return;
-	await runtime.events.emit(C.event.prMerged, { prUrl: claimedPrUrl });
+	await runtime.events.emit(C.event.prMerged, {
+		prUrl: claimedPrUrl,
+		taskMarkedAsCompleted: false,
+	});
 }
 
 export async function handleToolResult(

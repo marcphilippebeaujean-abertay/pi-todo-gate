@@ -74,14 +74,9 @@ const REJECTS_AMBIGUOUS_MERGE_TARGETS = "rejects ambiguous merge targets";
 const GIT_MERGE_FEATURE_AUTH_OTHER = "git merge feature/auth other";
 
 import { describe, expect, it } from "vitest";
-import {
-	type CommandResult,
-	type Exec,
-	findOpenPr,
-	inspectWorktree,
-	matchesPinnedPr,
-	mergeCommand,
-} from "../../src/git.ts";
+import { findOpenPr, matchesPinnedPr, mergeCommand } from "../../src/pr/git.ts";
+import type { CommandResult, Exec } from "../../src/shared/command.ts";
+import { inspectProject } from "../../src/shared/project.ts";
 
 const ok = (stdout: string): CommandResult => ({
 	stdout,
@@ -110,11 +105,12 @@ describe("inspectWorktree", () => {
 			),
 		});
 		await expect(
-			inspectWorktree(exec, REPO_WORKTREES_FEATURE_2),
+			inspectProject(exec, REPO_WORKTREES_FEATURE_2),
 		).resolves.toEqual({
 			isWorktree: true,
 			root: REPO_WORKTREES_FEATURE_2,
 			branch: FEATURE_2,
+			mainRoot: REPO_2,
 		});
 	});
 
@@ -126,10 +122,11 @@ describe("inspectWorktree", () => {
 				WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS_2,
 			),
 		});
-		await expect(inspectWorktree(exec, REPO_2)).resolves.toEqual({
+		await expect(inspectProject(exec, REPO_2)).resolves.toEqual({
 			isWorktree: false,
 			root: REPO_2,
 			branch: MAIN_2,
+			mainRoot: REPO_2,
 		});
 	});
 });

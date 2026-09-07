@@ -6,7 +6,8 @@ import type {
 	ExtensionRuntime,
 } from "./extension-types.ts";
 import { renderPrStatus, renderTaskStatus } from "./footer.ts";
-import { spawnExec } from "./git.ts";
+import { invalidateOperations } from "./session-operations.ts";
+import { spawnExec } from "./shared/command.ts";
 import { TodoistClient } from "./todoist/client.ts";
 
 export function createClient(
@@ -85,6 +86,7 @@ export function deactivateSession(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 ): void {
+	invalidateOperations(session);
 	runtime.footer.deactivate();
 	session.context.ui.setFooter(undefined);
 }
