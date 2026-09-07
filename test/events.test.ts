@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExitAction } from "../src/exit-protocol/types.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
 
-const action = (
-	id: ExitAction["id"] = "complete-todoist-task",
-): ExitAction => ({
+const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
 	id,
 	label: id,
 	execute: async () => "completed",
