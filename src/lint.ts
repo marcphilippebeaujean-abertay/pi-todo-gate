@@ -725,23 +725,20 @@ function collectPreferSwitchDispatch(
 				if (!firstDispatch) continue;
 				const dispatches = [firstDispatch];
 				let nextIndex = index + 1;
-				while (nextIndex < statements.length) {
-					const next = statements[nextIndex];
-					if (!next) break;
+				for (const next of statements.slice(nextIndex)) {
+					nextIndex += 1;
 					const nextEntries = conditionAssignments(next, sourceFile);
 					const hasMatchingAssignment = nextEntries.some(
 						(entry) => entry.dispatch?.subject === firstDispatch.subject,
 					);
 					if (hasMatchingAssignment) {
 						applyAssignments(next);
-						nextIndex += 1;
 						continue;
 					}
 					if (!ts.isIfStatement(next) || next.elseStatement) break;
 					const dispatch = dispatchFor(next.expression);
 					if (!dispatch || dispatch.subject !== firstDispatch.subject) break;
 					dispatches.push(dispatch);
-					nextIndex += 1;
 				}
 				const caseValues = new Set(
 					dispatches.map((dispatch) => dispatch.caseValue),
