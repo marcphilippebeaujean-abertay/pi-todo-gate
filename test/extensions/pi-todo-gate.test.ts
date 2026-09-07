@@ -56,6 +56,10 @@ const SET_PR = "set_pr";
 const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42?tab=files";
 const HTTPS_GITHUB_COM_O_R_PULL_42_2 = "https://github.com/o/r/pull/42";
 const PR_LINK = "PR Link:";
+const MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT =
+	"marks PR link while worktree is dirty and removes star after commit";
+const GIT_COMMIT_AM_DONE = "git commit -am done";
+const MODIFIED_FILE = " M file\n";
 const CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION =
 	"cleans up configured UI when a session becomes inactive";
 const RESUME = "resume";
@@ -209,6 +213,56 @@ async function start(
 		h.ctx,
 	);
 }
+
+describe("working tree status", () => {
+	it(
+		MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT,
+		async () => {
+			const h = harness(CONFIGURED_PROJECT, [
+				{
+					type: CUSTOM,
+					customType: PI_TODO_GATE_STATE_ENTRY,
+					data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				},
+			]);
+			let isDirty = true;
+			const exec = async (command: string, args: string[]) => {
+				const isStatus =
+					command === "git" &&
+					args.join(" ") === "status --porcelain=v1 --untracked-files=all";
+				return {
+					stdout: isStatus && isDirty ? MODIFIED_FILE : EMPTY_STRING,
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
+			};
+			extension(h.pi, {
+				loadConfig: async () => config({ "/configured": MERGE_TD }),
+				exec,
+			});
+			await h.handlers.get(SESSION_START)?.(
+				{ type: SESSION_START, reason: STARTUP },
+				h.ctx,
+			);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(h.statusCalls.at(-2)?.text).toContain("#42*");
+
+			isDirty = false;
+			await h.handlers.get(TOOL_RESULT)?.(
+				{
+					type: TOOL_RESULT,
+					toolName: BASH,
+					input: { command: GIT_COMMIT_AM_DONE },
+					isError: false,
+				},
+				h.ctx,
+			);
+
+			expect(h.statusCalls.at(-2)?.text).toContain("#42");
+			expect(h.statusCalls.at(-2)?.text).not.toContain("#42*");
+		},
+	);
+});
 
 describe("lazy activation", () => {
 	it(DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT, () => {

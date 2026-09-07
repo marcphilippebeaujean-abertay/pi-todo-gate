@@ -18,6 +18,7 @@ import type {
 	ExtensionRuntime,
 	SessionReader,
 } from "./extension-types.ts";
+import { hasUncommittedChanges, spawnExec } from "./git.ts";
 import { firstGithubPrUrl } from "./pr-detection.ts";
 import { extractInheritedState, latestState } from "./session-state.ts";
 import type { TodoistProjectMapping } from "./todoist/config.ts";
@@ -90,6 +91,7 @@ function activateSession(
 		allowPrDiscovery,
 		handoffContext,
 		workChanged: false,
+		hasUncommittedChanges: false,
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
@@ -127,6 +129,23 @@ async function startFooter(
 		? event
 		: { ...event, previousSessionFile: undefined };
 	await runtime.footer.sessionStart(footerEvent, ctx);
+}
+
+async function initializeWorkingTreeStatus(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	cwd: string,
+): Promise<void> {
+	if (session.state.prUrl === undefined) return;
+	const status = await hasUncommittedChanges(
+		runtime.dependencies.exec ?? spawnExec,
+		cwd,
+	);
+	const isCurrentSession = runtime.active === session;
+	const shouldSkipStatusUpdate = !isCurrentSession || status === null;
+	if (shouldSkipStatusUpdate) return;
+	session.hasUncommittedChanges = status;
+	refreshFooterStatuses(runtime, session);
 }
 
 export async function handleSessionStart(
@@ -173,8 +192,9 @@ export async function handleSessionStart(
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
-	refreshFooterStatuses(runtime, session);
 	persistInitialPr(runtime, branch);
+	refreshFooterStatuses(runtime, session);
+	void initializeWorkingTreeStatus(runtime, session, ctx.cwd);
 }
 
 export function persistInitialPr(

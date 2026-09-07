@@ -10,12 +10,14 @@ import {
 	appendState,
 	refreshFooterStatuses,
 	replaceSessionState,
+	updateWorkingTreeStatus,
 } from "./extension-lifecycle.ts";
 import { textOf } from "./extension-message.ts";
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
 import {
 	type Exec,
 	findOpenPr,
+	hasUncommittedChanges,
 	inspectWorktree,
 	matchesPinnedPr,
 	spawnExec,
@@ -182,6 +184,14 @@ export async function handleToolResult(
 	if (isFileMutation) session.workChanged = true;
 	const isBashTool = toolName === C.tool.bash;
 	if (isBashTool) await handleBashResult(runtime, session, event, ctx);
+	const shouldRefreshWorkingTreeStatus = isFileMutation || isBashTool;
+	if (!shouldRefreshWorkingTreeStatus) return;
+	const workingTreeStatus = await hasUncommittedChanges(
+		runtime.dependencies.exec ?? spawnExec,
+		ctx.cwd,
+	);
+	if (workingTreeStatus === null) return;
+	updateWorkingTreeStatus(runtime, session, workingTreeStatus);
 }
 
 export async function findOpenPrSafe(

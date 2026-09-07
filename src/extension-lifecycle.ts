@@ -51,7 +51,11 @@ export function refreshFooterStatuses(
 	runtime.footer.update({
 		footerType: C.status.pr,
 		isLoading: false,
-		text: renderPrStatus(session.state.prUrl, session.context.ui.theme),
+		text: renderPrStatus(
+			session.state.prUrl,
+			session.context.ui.theme,
+			session.hasUncommittedChanges,
+		),
 		isVisible: true,
 	});
 	runtime.footer.update({
@@ -64,6 +68,17 @@ export function refreshFooterStatuses(
 		),
 		isVisible: true,
 	});
+}
+
+export function updateWorkingTreeStatus(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	hasUncommittedChanges: boolean,
+): void {
+	const hasStatusChanged =
+		session.hasUncommittedChanges !== hasUncommittedChanges;
+	session.hasUncommittedChanges = hasUncommittedChanges;
+	if (hasStatusChanged) refreshFooterStatuses(runtime, session);
 }
 
 export function deactivateSession(
