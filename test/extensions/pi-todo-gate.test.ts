@@ -44,8 +44,8 @@ const DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES =
 const USER = "user";
 const HTTPS_GITHUB_COM_O_R_PULL_1 = "https://github.com/o/r/pull/1";
 const MESSAGE_END = "message_end";
-const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/o/r/pull/2";
-const HTTPS_GITHUB_COM_O_R_PULL_3 = "https://github.com/o/r/pull/3";
+const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/owner/repo/pull/2";
+const HTTPS_GITHUB_COM_O_R_PULL_3 = "https://github.com/owner/repo/pull/3";
 const NEVER_SENDS_SYNCHRONIZATION_MESSAGES_TO_THE_AGENT =
 	"never sends synchronization messages to the agent";
 const VALIDATES_AND_PERSISTS_AN_EXPLICIT_PR_OVERRIDE =
@@ -53,8 +53,9 @@ const VALIDATES_AND_PERSISTS_AN_EXPLICIT_PR_OVERRIDE =
 const OLD = "old";
 const CALL = "call";
 const SET_PR = "set_pr";
-const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42?tab=files";
-const HTTPS_GITHUB_COM_O_R_PULL_42_2 = "https://github.com/o/r/pull/42";
+const HTTPS_GITHUB_COM_O_R_PULL_42 =
+	"https://github.com/owner/repo/pull/42?tab=files";
+const HTTPS_GITHUB_COM_O_R_PULL_42_2 = "https://github.com/owner/repo/pull/42";
 const PR_LINK = "PR Link:";
 const CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION =
 	"cleans up configured UI when a session becomes inactive";

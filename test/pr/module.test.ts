@@ -216,17 +216,24 @@ describe("firstUnmergedGithubPrUrl", () => {
 	it("selects next URL while excluding every merged URL", () => {
 		expect(
 			firstUnmergedGithubPrUrl(
-				["https://github.com/o/r/pull/42 https://github.com/o/r/pull/43"],
-				["https://github.com/o/r/pull/42"],
+				[
+					"https://github.com/owner/repo/pull/42 https://github.com/owner/repo/pull/43",
+				],
+				["https://github.com/owner/repo/pull/42"],
 			),
-		).toBe("https://github.com/o/r/pull/43");
+		).toBe("https://github.com/owner/repo/pull/43");
 	});
 
 	it("returns null when all discovered URLs were already merged", () => {
 		expect(
 			firstUnmergedGithubPrUrl(
-				["https://github.com/o/r/pull/42 https://github.com/o/r/pull/43"],
-				["https://github.com/o/r/pull/42", "https://github.com/o/r/pull/43"],
+				[
+					"https://github.com/owner/repo/pull/42 https://github.com/owner/repo/pull/43",
+				],
+				[
+					"https://github.com/owner/repo/pull/42",
+					"https://github.com/owner/repo/pull/43",
+				],
 			),
 		).toBeNull();
 	});
