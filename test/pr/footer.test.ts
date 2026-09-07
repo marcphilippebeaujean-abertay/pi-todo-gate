@@ -7,6 +7,8 @@ const IMPLEMENT_FEATURE = "Implement feature";
 const MUTED_PR_LINK_MUTED = "<muted>| PR Link: </muted>";
 const VALUE_4_M_ACCENT_42_ACCENT_24_M =
 	"\u001b[4m<accent>#42</accent>\u001b[24m";
+const VALUE_4_M_ACCENT_42_STAR_ACCENT_24_M =
+	"\u001b[4m<accent>#42*</accent>\u001b[24m";
 const MUTED_MUTED = "<muted> |</muted>";
 const MUTED_TODOIST_TASK_MUTED = "<muted>Todoist Task: </muted>";
 const VALUE_4_M_ACCENT_IMPLEMENT_FEATU_ACCENT_24 =
@@ -73,6 +75,15 @@ describe("renderFooterLine", () => {
 		expect(task).toContain(MUTED_TODOIST_TASK_MUTED);
 		expect(task).toContain(VALUE_4_M_ACCENT_IMPLEMENT_FEATU_ACCENT_24);
 		expect(task).not.toContain(VALUE_7);
+	});
+
+	it("marks dirty PR links with a star", () => {
+		const pr = renderPrStatus(
+			HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
+			styledTheme,
+			true,
+		);
+		expect(pr).toContain(VALUE_4_M_ACCENT_42_STAR_ACCENT_24_M);
 	});
 
 	it(TRUNCATES_LONG_TASK_NAMES_AFTER_15_CHARACTERS, () => {

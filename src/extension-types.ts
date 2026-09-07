@@ -55,6 +55,7 @@ export interface ActiveSession {
 	allowPrDiscovery: boolean;
 	handoffContext: boolean;
 	workChanged: boolean;
+	hasUncommittedChanges: boolean;
 	workRevision: number;
 	operationGeneration: number;
 	operationQueue: Promise<void>;

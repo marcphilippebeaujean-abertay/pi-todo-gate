@@ -44,6 +44,7 @@ export function renderPrLabel(
 export function renderPrStatus(
 	url: string | undefined,
 	theme?: PrFooterTheme,
+	hasUncommittedChanges = false,
 ): string {
 	const muted = (text: string) => theme?.fg("muted", text) ?? text;
 	const value = (text: string) => theme?.fg("text", text) ?? text;
@@ -53,5 +54,6 @@ export function renderPrStatus(
 	const hasNoPr = number === null || normalized === null;
 	if (hasNoPr)
 		return `${muted(PR_LINK_LABEL)}${value("none")}${muted(FOOTER_SEPARATOR)}`;
-	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}`, theme), normalized)}${muted(FOOTER_SEPARATOR)}`;
+	const dirtyMarker = hasUncommittedChanges ? "*" : "";
+	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_SEPARATOR)}`;
 }
