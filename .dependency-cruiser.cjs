@@ -13,6 +13,20 @@ module.exports = {
 			to: { path: "^src/herdr/" },
 		},
 		{
+			name: "no-pr-to-feature-modules",
+			severity: "error",
+			from: { path: "^src/pr/" },
+			to: { path: "^src/(?!pr/|shared/)" },
+		},
+		{
+			name: "no-non-composition-to-pr",
+			severity: "error",
+			from: {
+				path: "^src/(?!pr/|extension-events\\.ts$|extension-session\\.ts$|extension-tool\\.ts$|merge-protocol\\.ts$)",
+			},
+			to: { path: "^src/pr/" },
+		},
+		{
 			name: "no-todoist-to-pr",
 			severity: "error",
 			from: { path: "^src/todoist/" },
@@ -88,6 +102,12 @@ module.exports = {
 			name: "no-exit-protocol-test-to-pr",
 			severity: "error",
 			from: { path: "^test/exit-protocol" },
+			to: { path: "^src/pr/" },
+		},
+		{
+			name: "no-non-pr-test-to-pr",
+			severity: "error",
+			from: { path: "^test/(?!pr/)" },
 			to: { path: "^src/pr/" },
 		},
 		{
