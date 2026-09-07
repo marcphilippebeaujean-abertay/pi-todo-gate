@@ -69,8 +69,6 @@ fi
 
 source_dir="$repo_dir/extensions"
 source_path="$source_dir/index.ts"
-skills_source_dir="$repo_dir/skills"
-skills_target_path="$agent_dir/skills/pi-todo-gate"
 target_path="$agent_dir/extensions/pi-todo-gate"
 legacy_file_path="$agent_dir/extensions/pi-todo-gate.ts"
 legacy_target_path="$agent_dir/extensions/pi-todo-gate"
@@ -78,11 +76,7 @@ if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
 fi
-if [ ! -d "$skills_source_dir" ]; then
-  printf 'missing skills source: %s\n' "$skills_source_dir" >&2
-  exit 1
-fi
-mkdir -p "$(dirname -- "$target_path")" "$(dirname -- "$skills_target_path")"
+mkdir -p "$(dirname -- "$target_path")"
 if [ -L "$legacy_file_path" ] && [ "$(readlink "$legacy_file_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
   rm -- "$legacy_file_path"
 fi
@@ -98,12 +92,3 @@ if [ -e "$target_path" ] || [ -L "$target_path" ]; then
 fi
 ln -s "$source_dir" "$target_path"
 printf 'installed %s -> %s\n' "$target_path" "$source_dir"
-if [ -e "$skills_target_path" ] || [ -L "$skills_target_path" ]; then
-  if [ ! -L "$skills_target_path" ] && [ "$force" = false ]; then
-    printf 'refusing to replace non-symlink: %s (use --force)\n' "$skills_target_path" >&2
-    exit 1
-  fi
-  rm -rf -- "$skills_target_path"
-fi
-ln -s "$skills_source_dir" "$skills_target_path"
-printf 'installed %s -> %s\n' "$skills_target_path" "$skills_source_dir"

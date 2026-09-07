@@ -181,7 +181,7 @@ describe("merge protocol skill", () => {
 		const packageManifest = JSON.parse(
 			await readFile("package.json", "utf8"),
 		) as { pi?: { skills?: string[] } };
-		expect(packageManifest.pi?.skills).toEqual(["./skills"]);
+		expect(packageManifest.pi?.skills).toBeUndefined();
 
 		const extension = await readFile("src/merge-protocol.ts", "utf8");
 		expect(extension).not.toContain('pi.on("input"');

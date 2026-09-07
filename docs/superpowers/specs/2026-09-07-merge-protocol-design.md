@@ -74,7 +74,7 @@ Add `skills/merge-protocol/SKILL.md` with valid Agent Skills frontmatter:
 
 Instructions tell the agent to load session state, use only the pinned PR, ask explicit confirmation before running `gh pr merge <url> --merge`, stop on failure, and never complete Todoist directly. After an agent-run merge, the extension's verified tool-result detection emits the same event; the Todoist event consumer owns the one completion question.
 
-The extension does not inspect normal `input` text for `merge`. The agent decides when to load the skill. Pi discovers the skill through the package's `skills/` convention and exposes `/skill:merge-protocol` when skill commands are enabled.
+The extension does not inspect normal `input` text for `merge`. The agent decides when to load the skill. The extension contributes the skill path through `resources_discover`; the package manifest and installer do not statically expose it. Pi exposes `/skill:merge-protocol` when the loaded skill commands are enabled.
 
 ## Todoist flow
 

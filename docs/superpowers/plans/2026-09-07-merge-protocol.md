@@ -273,12 +273,12 @@ git commit -m "feat: add immediate merge command"
 
 **Interfaces:**
 - Skill frontmatter has `name: merge-protocol` and a non-empty description.
-- Package manifest includes `"skills": ["./skills"]` under `pi`.
+- Package manifest does not declare `pi.skills`; extension `resources_discover` supplies the skill path only when extension loads.
 - Skill instructs agent to use pinned PR only, ask explicit confirmation, run `gh pr merge <url> --merge`, stop on failure, and let the extension event consumer own Todoist completion confirmation.
 
 - [ ] **Step 1: Write failing skill-resource tests**
 
-Read the skill file in the test and assert frontmatter, no natural-input extension matcher, pinned-PR requirement, merge confirmation, exact merge command, and no direct Todoist completion instruction. Assert package manifest includes the skill directory.
+Read the skill file in the test and assert frontmatter, no natural-input extension matcher, pinned-PR requirement, merge confirmation, exact merge command, and no direct Todoist completion instruction. Assert package manifest omits static `pi.skills` exposure.
 
 ```ts
 expect(skill).toContain("name: merge-protocol");
@@ -300,7 +300,7 @@ Use valid Agent Skills frontmatter. State that the skill is for standalone merge
 
 Run: `npm run typecheck && npm run architecture && npx vitest run test/merge-protocol.test.ts`
 
-Expected: PASS; Pi package declares discoverable skills without adding an extension input matcher.
+Expected: PASS; extension dynamically contributes the skill without adding static package discovery or an input matcher.
 
 - [ ] **Step 5: Commit skill**
 

@@ -39,9 +39,6 @@
   "pi": {
     "extensions": [
       "./extensions/pi-todo-gate.ts"
-    ],
-    "skills": [
-      "./skills"
     ]
   },
   "dependencies": {

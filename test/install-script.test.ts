@@ -64,7 +64,7 @@ describe("install.sh", () => {
 		);
 	});
 
-	it("installs the merge protocol skill beside the extension", async () => {
+	it("does not install the merge protocol skill globally", async () => {
 		const agentDir = await mkdtemp(join(TMP, PI_TODO_GATE_AGENT));
 		await execute([], { PI_CODING_AGENT_DIR: agentDir });
 		const skill = join(
@@ -74,9 +74,9 @@ describe("install.sh", () => {
 			MERGE_PROTOCOL,
 			SKILL_MD,
 		);
-		await expect(readFile(skill, UTF8_ENCODING)).resolves.toContain(
-			"name: merge-protocol",
-		);
+		await expect(readFile(skill, UTF8_ENCODING)).rejects.toMatchObject({
+			code: "ENOENT",
+		});
 	});
 
 	it(DOES_NOT_REPLACE_AN_UNRELATED_NON_SYMLINK, async () => {
