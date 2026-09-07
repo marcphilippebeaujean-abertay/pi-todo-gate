@@ -20,6 +20,8 @@ const NO_PULL_REQUEST_HERE = "No pull request here";
 const HTTPS_GITHUB_COM_OLD_REPO_PULL_7 = "https://github.com/old/repo/pull/7";
 const HTTPS_GITHUB_COM_NEW_REPO_PULL_8 = "https://github.com/new/repo/pull/8";
 const OMITS_THE_IGNORED_PR_URL = "omits the ignored PR URL";
+const OMITS_EVERY_PR_IN_IGNORED_REPOSITORY =
+	"omits every PR in the ignored repository";
 
 import { describe, expect, it } from "vitest";
 import { IGNORED_PR_URL } from "../../src/pr/constants.ts";
@@ -58,5 +60,14 @@ describe("firstGithubPrUrl", () => {
 
 	it(OMITS_THE_IGNORED_PR_URL, () => {
 		expect(firstGithubPrUrl([IGNORED_PR_URL])).toBeNull();
+	});
+
+	it(OMITS_EVERY_PR_IN_IGNORED_REPOSITORY, () => {
+		expect(
+			firstGithubPrUrl([
+				"https://github.com/o/r/pull/2",
+				"https://github.com/o/r/pull/999",
+			]),
+		).toBeNull();
 	});
 });
