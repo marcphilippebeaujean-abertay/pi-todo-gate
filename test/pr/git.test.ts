@@ -17,8 +17,10 @@ const WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS_2 =
 const REPO_2 = "/repo";
 const MAIN_2 = "main";
 const PARSES_THE_FIRST_OPEN_PULL_REQUEST = "parses the first open pull request";
-const URL_HTTPS_GITHUB_COM_O_R_PULL =
-	'[{"url":"https://github.com/o/r/pull/42","state":"OPEN"}]';
+const URL_HTTPS_GITHUB_COM_OWNER_REPO_PULL =
+	'[{"url":"https://github.com/owner/repo/pull/42","state":"OPEN"}]';
+const HTTPS_GITHUB_COM_OWNER_REPO_PULL_42 =
+	"https://github.com/owner/repo/pull/42";
 const MALFORMED_PR_ROW = '[{"url":42,"state":"OPEN"}]';
 const HTTPS_GITHUB_COM_O_R_PULL_42 = "https://github.com/o/r/pull/42";
 const OPEN = "OPEN";
@@ -136,11 +138,11 @@ describe("findOpenPr", () => {
 	it(PARSES_THE_FIRST_OPEN_PULL_REQUEST, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1": ok(
-				URL_HTTPS_GITHUB_COM_O_R_PULL,
+				URL_HTTPS_GITHUB_COM_OWNER_REPO_PULL,
 			),
 		});
 		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
-			url: HTTPS_GITHUB_COM_O_R_PULL_42,
+			url: HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
 			state: OPEN,
 		});
 	});
