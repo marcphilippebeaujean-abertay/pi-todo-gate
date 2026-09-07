@@ -111,6 +111,12 @@ module.exports = {
 			to: { path: "^src/pr/" },
 		},
 		{
+			name: "no-pr-test-to-feature-modules",
+			severity: "error",
+			from: { path: "^test/pr/" },
+			to: { path: "^src/(?!pr/|shared/)" },
+		},
+		{
 			name: "no-pr-test-to-todoist",
 			severity: "error",
 			from: { path: "^test/pr/" },
