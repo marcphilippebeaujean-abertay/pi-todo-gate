@@ -66,6 +66,8 @@ describe("startClaimWorker", () => {
 			"bash",
 			"--append-system-prompt",
 			"Claim tab",
+			"--thinking",
+			"high",
 			"Fix dialog",
 		]);
 		expect(setupState.spawned?.options.shell).toBe(false);

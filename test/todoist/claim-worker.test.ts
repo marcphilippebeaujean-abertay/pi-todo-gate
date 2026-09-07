@@ -50,7 +50,7 @@ describe("Todoist task claim worker", () => {
 						"--tools",
 						"bash",
 						"--thinking",
-						"low",
+						"high",
 					]),
 				);
 				const prompt = args.at(-1) ?? "";

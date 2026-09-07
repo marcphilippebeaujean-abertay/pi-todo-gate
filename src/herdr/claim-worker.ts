@@ -47,6 +47,7 @@ export interface WorkerProcess {
 }
 
 const DEFAULT_COMMAND = "pi";
+const HIGH_THINKING = "high";
 const MISSING_CLAIM_EVIDENCE = "completed without claim evidence";
 const STDIO_IGNORE = "ignore";
 const STDIO_PIPE = "pipe";
@@ -71,7 +72,10 @@ function spawnWorkerProcess(
 	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
 	return spawnWorker(
 		options.command ?? DEFAULT_COMMAND,
-		buildPiWorkerArgs(request.prompt, { instructions: request.instructions }),
+		buildPiWorkerArgs(request.prompt, {
+			instructions: request.instructions,
+			thinking: HIGH_THINKING,
+		}),
 		{
 			cwd: options.cwd ?? process.cwd(),
 			env: withWorkerMarker(),

@@ -18,7 +18,7 @@ const OUTPUT_INSTRUCTIONS =
 	"Output exactly one JSON object matching the schema and no explanation. The sessionId must exactly match the supplied session ID. Do not modify files or git.";
 const OUTPUT_SCHEMA = "Output schema:";
 const PI_COMMAND = "pi";
-const LOW_THINKING = "low";
+const HIGH_THINKING = "high";
 const TIMED_OUT = "timed out";
 
 import { Type } from "typebox";
@@ -104,7 +104,7 @@ export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
 	return async (input) => {
 		const result = await exec(
 			PI_COMMAND,
-			buildPiWorkerArgs(workerPrompt(input), { thinking: LOW_THINKING }),
+			buildPiWorkerArgs(workerPrompt(input), { thinking: HIGH_THINKING }),
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
 		const workerFailed = result.code !== 0;
