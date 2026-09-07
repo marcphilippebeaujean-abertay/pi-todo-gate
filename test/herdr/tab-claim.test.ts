@@ -1,11 +1,23 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+
 import type { ClaimWorkerRequest } from "../../src/herdr/claim-worker.ts";
 import {
 	type CommandRunner,
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
 } from "../../src/herdr/tab-claim.ts";
+
+const CUSTOM = "custom";
+const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
+const RAN = "ran";
+const WORKER_FAILED = "worker failed";
+const RETRIES_TAB_NAMING_AFTER_A_WORKER_FAILURE =
+	"retries tab naming after a worker failure in the same session";
+const PERSISTS_SUCCESSFUL_TAB_NAMING_IN_SESSION_STATE =
+	"persists successful tab naming in session state";
+const SKIPS_TAB_NAMING_WHEN_SESSION_STATE_RECORDS_SUCCESS =
+	"skips tab naming when session state records success";
 
 interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
@@ -29,10 +41,11 @@ function fakePi(): FakePi {
 	};
 }
 
-function context(cwd = "/repo") {
+function context(cwd = "/repo", branch: unknown[] = []) {
 	return {
 		cwd,
 		ui: { notify: vi.fn() },
+		sessionManager: { getBranch: () => branch },
 	};
 }
 
@@ -136,6 +149,118 @@ describe("background Herdr tab claim", () => {
 			});
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "retry dialog editor" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledTimes(2);
+		} finally {
+			restore();
+		}
+	});
+
+	it(RETRIES_TAB_NAMING_AFTER_A_WORKER_FAILURE, async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner(),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "fix dialog editor" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.onFailure(WORKER_FAILED);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "retry dialog editor" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledTimes(2);
+		} finally {
+			restore();
+		}
+	});
+
+	it(PERSISTS_SUCCESSFUL_TAB_NAMING_IN_SESSION_STATE, async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("dialog-editor"),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "fix dialog editor" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.onClaimComplete({
+				tabId: "w1:t1",
+				label: "dialog-editor",
+			});
+
+			expect(pi.entries).toContainEqual({
+				type: HERDR_STATE_TYPE,
+				data: { [RAN]: true },
+			});
+		} finally {
+			restore();
+		}
+	});
+
+	it(SKIPS_TAB_NAMING_WHEN_SESSION_STATE_RECORDS_SUCCESS, async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner(),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			const branch = [
+				{
+					type: CUSTOM,
+					customType: HERDR_STATE_TYPE,
+					data: { [RAN]: true },
+				},
+			];
+			await pi.handlers.get("session_start")?.[0]?.(
+				{},
+				context("/repo", branch),
+			);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "fix dialog editor" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
+
+	it("allows tab naming again when a new session starts", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner(),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "first task" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.onFailure(WORKER_FAILED);
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "second task" },
 				context(),
 			);
 
