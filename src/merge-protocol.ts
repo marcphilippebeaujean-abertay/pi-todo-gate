@@ -44,42 +44,35 @@ async function mergeNow(
 	ctx: ExtensionCommandContext,
 	prUrl: string,
 	generation: number,
-): Promise<void> {
+): Promise<boolean> {
 	const isCurrentBeforeCommand = currentSession(runtime, session, generation);
-	if (!isCurrentBeforeCommand) return;
+	if (!isCurrentBeforeCommand) return false;
 	const exec = runtime.dependencies.exec ?? spawnExec;
 	let result: CommandResult;
 	try {
 		result = await mergePinnedPr(exec, session.context.cwd, prUrl);
 	} catch (error) {
 		const isCurrentAfterFailure = currentSession(runtime, session, generation);
-		if (!isCurrentAfterFailure) return;
+		if (!isCurrentAfterFailure) return false;
 		const detail = failureDetail(
 			error instanceof Error ? error.message : String(error),
 		);
 		const hasDetail = detail !== "";
 		const suffix = hasDetail ? `: ${detail}` : "";
 		ctx.ui.notify(`${MERGE_FAILED_PREFIX}${suffix}`, C.value.warning);
-		return;
+		return false;
 	}
 	const isCurrentAfterCommand = currentSession(runtime, session, generation);
-	if (!isCurrentAfterCommand) return;
+	if (!isCurrentAfterCommand) return false;
 	const commandFailed = result.code !== 0;
 	if (commandFailed) {
 		const detail = failureDetail(result.stderr);
 		const hasDetail = detail !== "";
 		const suffix = hasDetail ? `: ${detail}` : "";
 		ctx.ui.notify(`${MERGE_FAILED_PREFIX}${suffix}`, C.value.warning);
-		return;
+		return false;
 	}
-	await runtime.events.emit(C.event.prMerged, {
-		prUrl,
-		taskMarkedAsCompleted: false,
-	});
-	const isCurrentAfterEvent = currentSession(runtime, session, generation);
-	if (isCurrentAfterEvent) {
-		ctx.ui.notify(MERGE_SUCCEEDED, C.value.info);
-	}
+	return true;
 }
 
 async function confirmAndMerge(
@@ -88,19 +81,19 @@ async function confirmAndMerge(
 	ctx: ExtensionCommandContext,
 	prUrl: string,
 	generation: number,
-): Promise<void> {
+): Promise<boolean> {
 	const confirmed = await ctx.ui.confirm(
 		`${CONFIRM_TITLE_PREFIX}${prUrl}?`,
 		CONFIRM_MESSAGE,
 	);
-	if (!confirmed) return;
+	if (!confirmed) return false;
 	const isCurrentAfterConfirmation = currentSession(
 		runtime,
 		session,
 		generation,
 	);
-	if (!isCurrentAfterConfirmation) return;
-	await mergeNow(runtime, session, ctx, prUrl, generation);
+	if (!isCurrentAfterConfirmation) return false;
+	return mergeNow(runtime, session, ctx, prUrl, generation);
 }
 
 export async function runMergeProtocol(
@@ -124,10 +117,19 @@ export async function runMergeProtocol(
 		return;
 	}
 	const generation = session.operationGeneration;
-	await enqueueSessionOperation(
+	const merged = await enqueueSessionOperation(
 		session,
 		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
 	);
+	if (!merged) return;
+	const isCurrentAfterMerge = currentSession(runtime, session, generation);
+	if (!isCurrentAfterMerge) return;
+	await runtime.events.emit(C.event.prMerged, {
+		prUrl,
+		taskMarkedAsCompleted: false,
+	});
+	const isCurrentAfterEvent = currentSession(runtime, session, generation);
+	if (isCurrentAfterEvent) ctx.ui.notify(MERGE_SUCCEEDED, C.value.info);
 }
 
 export function registerMergeProtocol(

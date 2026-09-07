@@ -1,6 +1,8 @@
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { EXTENSION_CONSTANTS as C } from "../../src/constants.ts";
 import type { ExtensionRuntime } from "../../src/extension-types.ts";
+import { runMergeProtocol } from "../../src/merge-protocol.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/merge-consumer.ts";
 
@@ -12,7 +14,15 @@ function setup(overrides: Record<string, unknown> = {}) {
 	const completeTask = vi.fn(async () => undefined);
 	const session = {
 		sessionId: "session",
-		context: { hasUI: true, cwd: "/repo", ui: { confirm, notify } },
+		context: {
+			hasUI: true,
+			cwd: "/repo",
+			ui: {
+				confirm,
+				notify,
+				theme: { fg: (_color: string, text: string) => text },
+			},
+		},
 		state: { prUrl: PR_URL, taskRef: "task-1", taskName: "Implement feature" },
 		workRevision: 0,
 		operationGeneration: 0,
@@ -116,5 +126,52 @@ describe("Todoist merge consumer", () => {
 
 		expect(setupResult.completeTask).not.toHaveBeenCalled();
 		expect(payload.taskMarkedAsCompleted).toBe(false);
+	});
+
+	it("resolves the direct merge command when completion is confirmed", async () => {
+		const confirm = vi.fn(async () => true);
+		const completeTask = vi.fn(async () => undefined);
+		const exec = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
+		const context = {
+			cwd: "/repo",
+			hasUI: true,
+			ui: {
+				confirm,
+				notify: vi.fn(),
+				theme: { fg: (_color: string, text: string) => text },
+			},
+		} as unknown as ExtensionCommandContext;
+		const session = {
+			sessionId: "session",
+			context,
+			state: {
+				prUrl: PR_URL,
+				taskRef: "task-1",
+				taskName: "Implement feature",
+			},
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		};
+		const runtime = {
+			active: session,
+			dependencies: {
+				exec,
+				createTodoistClient: () => ({ completeTask }),
+			},
+			events: createSharedEvents(),
+			pi: { appendEntry: vi.fn() },
+			footer: { update: vi.fn() },
+		} as unknown as ExtensionRuntime;
+		registerTodoistMergeConsumer(runtime);
+
+		await runMergeProtocol(runtime, context);
+
+		expect(exec).toHaveBeenCalledWith(
+			"gh",
+			["pr", "merge", PR_URL, "--merge"],
+			{ cwd: "/repo" },
+		);
+		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
 	});
 });
