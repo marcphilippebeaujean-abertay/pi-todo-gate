@@ -19,10 +19,11 @@ import {
 	findOpenPr,
 	hasUncommittedChanges,
 	inspectWorktree,
+	isGithubPrAvailable,
 	matchesPinnedPr,
 	spawnExec,
 } from "./git.ts";
-import { githubPrUrl } from "./pr-detection.ts";
+import { githubPrUrls } from "./pr-detection.ts";
 import { applyStatePatch } from "./session-state.ts";
 import { isCurrentMerge } from "./shared/work-state.ts";
 import { maybeAnalyzeTaskClaim } from "./todoist/module.ts";
@@ -32,30 +33,56 @@ const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 const BASH_COMMAND = "command";
 
-export function persistPrIfAvailable(
+async function firstAvailablePrUrl(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+	text: string,
+): Promise<string | null> {
+	const exec = runtime.dependencies.exec ?? spawnExec;
+	for (const url of githubPrUrls(text)) {
+		const hasTestedUrl = session.prDiscoveryTestedUrls.has(url);
+		if (hasTestedUrl) continue;
+		session.prDiscoveryTestedUrls.add(url);
+		const isAvailable = await isGithubPrAvailable(
+			exec,
+			session.context.cwd,
+			url,
+		);
+		if (isAvailable) return url;
+	}
+	return null;
+}
+
+export async function persistPrIfAvailable(
 	runtime: ExtensionRuntime,
 	text: string,
-): void {
+): Promise<void> {
 	const session = runtime.active;
 	const hasSession = session !== null;
 	if (!hasSession) return;
 	const hasPrUrl = Boolean(session.state.prUrl);
 	const shouldSkipPrPersistence = !session.allowPrDiscovery || hasPrUrl;
 	if (shouldSkipPrPersistence) return;
-	const url = githubPrUrl(text);
+	const url = await firstAvailablePrUrl(runtime, session, text);
 	const hasUrl = url !== null;
 	if (!hasUrl) return;
+	const isCurrentSession = runtime.active === session;
+	if (!isCurrentSession) return;
+	const canDiscoverPr = session.allowPrDiscovery;
+	if (!canDiscoverPr) return;
+	const hasCurrentPr = session.state.prUrl !== undefined;
+	if (hasCurrentPr) return;
 	replaceSessionState(session, applyStatePatch(session.state, { prUrl: url }));
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
 	refreshFooterStatuses(runtime, session);
 }
 
-export function handleMessageEnd(
+export async function handleMessageEnd(
 	runtime: ExtensionRuntime,
 	event: MessageEndEvent,
-): void {
-	persistPrIfAvailable(runtime, textOf(event.message));
+): Promise<void> {
+	await persistPrIfAvailable(runtime, textOf(event.message));
 }
 
 async function appendWorktreePrompt(

@@ -19,7 +19,6 @@ import type {
 	SessionReader,
 } from "./extension-types.ts";
 import { hasUncommittedChanges, spawnExec } from "./git.ts";
-import { firstGithubPrUrl } from "./pr-detection.ts";
 import { extractInheritedState, latestState } from "./session-state.ts";
 import type { TodoistProjectMapping } from "./todoist/config.ts";
 
@@ -89,6 +88,7 @@ function activateSession(
 		project,
 		state,
 		allowPrDiscovery,
+		prDiscoveryTestedUrls: new Set<string>(),
 		handoffContext,
 		workChanged: false,
 		hasUncommittedChanges: false,
@@ -192,19 +192,19 @@ export async function handleSessionStart(
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
-	persistInitialPr(runtime, branch);
+	await persistInitialPr(runtime, branch);
 	refreshFooterStatuses(runtime, session);
 	void initializeWorkingTreeStatus(runtime, session, ctx.cwd);
 }
 
-export function persistInitialPr(
+export async function persistInitialPr(
 	runtime: ExtensionRuntime,
 	branch: readonly unknown[],
-): void {
+): Promise<void> {
 	const session = runtime.active;
 	const canDiscoverPr = session?.allowPrDiscovery === true;
 	if (!canDiscoverPr) return;
-	persistPrIfAvailable(runtime, firstGithubPrUrl(branchTexts(branch)) ?? "");
+	await persistPrIfAvailable(runtime, branchTexts(branch).join("\n"));
 }
 
 export async function handleSessionShutdown(

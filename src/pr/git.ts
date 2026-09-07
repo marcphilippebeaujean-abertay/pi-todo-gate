@@ -26,7 +26,11 @@ function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
 
 import type { CommandResult, Exec } from "../shared/command.ts";
 import { githubPrUrl } from "./detection.ts";
-import { mergedPrDataSchema, openPrRowsSchema } from "./schemas.ts";
+import {
+	mergedPrDataSchema,
+	openPrRowSchema,
+	openPrRowsSchema,
+} from "./schemas.ts";
 
 export interface OpenPrInfo {
 	url: string | null;
@@ -63,6 +67,29 @@ export async function findPrState(
 		return stateFromMergedData(JSON.parse(result.stdout));
 	} catch {
 		return UNKNOWN_STATE;
+	}
+}
+
+export async function isGithubPrAvailable(
+	exec: Exec,
+	cwd: string,
+	prUrl: string,
+): Promise<boolean> {
+	const result = await runGhView(exec, cwd, prUrl, "url");
+	if (result === null) return false;
+	const commandFailed = result.code !== 0;
+	if (commandFailed) return false;
+	try {
+		const parsed = openPrRowSchema.safeParse(JSON.parse(result.stdout));
+		const hasInvalidPayload = !parsed.success;
+		if (hasInvalidPayload) return false;
+		const url = parsed.data.url;
+		const hasNoUrl = url === undefined;
+		if (hasNoUrl) return false;
+		const normalizedUrl = githubPrUrl(url);
+		return normalizedUrl === prUrl;
+	} catch {
+		return false;
 	}
 }
 
