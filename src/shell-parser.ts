@@ -25,11 +25,14 @@ function isEscapeCharacter(
 }
 
 function isCommandSeparator(character: string): boolean {
-	const isSemicolon = character === ";";
-	if (isSemicolon) return true;
-	const isPipe = character === "|";
-	if (isPipe) return true;
-	return character === "&";
+	switch (character) {
+		case ";":
+		case "|":
+		case "&":
+			return true;
+		default:
+			return false;
+	}
 }
 
 function isShellWhitespace(character: string): boolean {

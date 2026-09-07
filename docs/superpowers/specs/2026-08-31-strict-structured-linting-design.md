@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add repository lint rules for explicit string constants, readable boolean conditions, and maintainable function structure. Integrate these rules into `npm run lint` while keeping existing Biome checks.
+Add repository lint rules for explicit string constants, readable boolean conditions, maintainable function structure, and clear equality dispatch. Integrate these rules into `npm run lint` while keeping existing Biome checks.
 
 ## Scope
 
@@ -60,6 +60,10 @@ if (hasAccountBalance) {
 ```
 
 The TypeScript type checker determines whether identifier conditions are boolean-like or object guards. The rule does not enforce a naming prefix because intent naming is semantic and cannot be reliably inferred; its diagnostic instructs the author to choose a descriptive boolean name.
+
+### `prefer-switch-dispatch`
+
+When multiple `if` statements dispatch mutually exclusive cases from one discriminant, prefer a `switch`. Direct equality checks may be separated by assignments that bind other equality checks to named boolean variables; unrelated statements break the detected dispatch run. This rule reports repeated strict-equality cases and does not require `switch` for independent predicates or existing `else` chains.
 
 ### `cyclomatic-complexity`
 

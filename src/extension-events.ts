@@ -73,13 +73,13 @@ async function appendWorktreePrompt(
 		branch,
 		runtime.dependencies.exec ?? spawnExec,
 	);
-	const lookupUnavailable = pr === C.value.unknown;
-	if (lookupUnavailable) {
-		messages.push(C.message.lookupUnavailable);
-		return;
+	switch (pr) {
+		case C.value.unknown:
+			messages.push(C.message.lookupUnavailable);
+			return;
+		case null:
+			messages.push(C.message.createPr);
 	}
-	const noOpenPr = pr === null;
-	if (noOpenPr) messages.push(C.message.createPr);
 }
 
 async function buildBeforeAgentMessages(

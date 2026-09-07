@@ -8,6 +8,7 @@ const FUNCTION_LENGTH = "function-length";
 const NESTED_FUNCTION_DEPTH = "nested-function-depth";
 const NO_COMPLICATED_EXPRESSIONS = "no-complicated-expressions";
 const REPEATED_FIELD_CHECKS = "repeated-field-checks";
+const PREFER_SWITCH_DISPATCH = "prefer-switch-dispatch";
 
 import ts from "typescript";
 import { DEFAULT_LINT_CONFIG, type LintConfig } from "./lint-config.ts";
@@ -23,7 +24,8 @@ export type LintRuleId =
 	| "function-length"
 	| "functions-per-file"
 	| "nested-function-depth"
-	| "repeated-field-checks";
+	| "repeated-field-checks"
+	| "prefer-switch-dispatch";
 
 export interface LintDiagnostic {
 	filePath: string;
@@ -48,6 +50,9 @@ const COMPLICATED_EXPRESSION_MESSAGE = "Boolean expression has too many checks";
 const REPEATED_FIELD_CHECK_MESSAGE =
 	"Repeated field checks should use a local variable";
 const REPEATED_FIELD_CHECK_LIMIT = 1;
+const PREFER_SWITCH_MESSAGE =
+	"Prefer switch for repeated equality dispatch on one value";
+const PREFER_SWITCH_LIMIT = 1;
 const NAMED_IF_MESSAGE =
 	"Extract condition into a descriptive boolean variable";
 const NAMED_IF_LIMIT = 0;
@@ -289,6 +294,8 @@ function isLogicalExpression(node: ts.Node): node is ts.BinaryExpression {
 	);
 }
 
+function unparenthesized(node: ts.Expression): ts.Expression;
+function unparenthesized(node: ts.Node): ts.Node;
 function unparenthesized(node: ts.Node): ts.Node {
 	let current = node;
 	while (ts.isParenthesizedExpression(current)) current = current.expression;
@@ -595,6 +602,173 @@ function collectRepeatedFieldChecks(
 	visit(sourceFile);
 }
 
+function isDispatchLiteral(expression: ts.Expression): boolean {
+	expression = unparenthesized(expression);
+	return (
+		isStringLiteralLike(expression) ||
+		ts.isNumericLiteral(expression) ||
+		expression.kind === ts.SyntaxKind.TrueKeyword ||
+		expression.kind === ts.SyntaxKind.FalseKeyword ||
+		expression.kind === ts.SyntaxKind.NullKeyword
+	);
+}
+
+interface EqualityDispatch {
+	subject: string;
+	caseValue: string;
+}
+
+function isDispatchSubject(expression: ts.Expression): boolean {
+	expression = unparenthesized(expression);
+	return (
+		ts.isIdentifier(expression) || ts.isPropertyAccessExpression(expression)
+	);
+}
+
+function equalityDispatch(
+	expression: ts.Expression,
+	sourceFile: ts.SourceFile,
+): EqualityDispatch | null {
+	expression = unparenthesized(expression);
+	if (!ts.isBinaryExpression(expression)) return null;
+	if (expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken)
+		return null;
+	const left = unparenthesized(expression.left);
+	const right = unparenthesized(expression.right);
+	const leftIsLiteral = isDispatchLiteral(left);
+	const rightIsLiteral = isDispatchLiteral(right);
+	if (!leftIsLiteral && !rightIsLiteral && !isDispatchSubject(left))
+		return null;
+	if (leftIsLiteral && rightIsLiteral) return null;
+	const subject = leftIsLiteral ? right : left;
+	const caseValue = leftIsLiteral ? left : right;
+	if (!isDispatchSubject(subject)) return null;
+	return {
+		subject: subject.getText(sourceFile),
+		caseValue: caseValue.getText(sourceFile),
+	};
+}
+
+interface ConditionAssignment {
+	name: string;
+	dispatch: EqualityDispatch | null;
+}
+
+function conditionAssignments(
+	statement: ts.Statement,
+	sourceFile: ts.SourceFile,
+): ConditionAssignment[] {
+	if (ts.isVariableStatement(statement)) {
+		return statement.declarationList.declarations.flatMap((declaration) => {
+			if (!ts.isIdentifier(declaration.name)) return [];
+			return [
+				{
+					name: declaration.name.text,
+					dispatch: declaration.initializer
+						? equalityDispatch(declaration.initializer, sourceFile)
+						: null,
+				},
+			];
+		});
+	}
+	if (!ts.isExpressionStatement(statement)) return [];
+	const expression = statement.expression;
+	if (
+		!ts.isBinaryExpression(expression) ||
+		expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+		!ts.isIdentifier(expression.left)
+	)
+		return [];
+	return [
+		{
+			name: expression.left.text,
+			dispatch: equalityDispatch(expression.right, sourceFile),
+		},
+	];
+}
+
+function collectPreferSwitchDispatch(
+	sourceFile: ts.SourceFile,
+	diagnostics: LintDiagnostic[],
+): void {
+	function visit(node: ts.Node): void {
+		if (ts.isBlock(node) || ts.isSourceFile(node)) {
+			const statements = node.statements;
+			const assignments = new Map<string, EqualityDispatch>();
+			const applyAssignments = (
+				statement: ts.Statement,
+			): ConditionAssignment[] => {
+				const entries = conditionAssignments(statement, sourceFile);
+				for (const entry of entries) {
+					if (entry.dispatch) assignments.set(entry.name, entry.dispatch);
+					else assignments.delete(entry.name);
+				}
+				return entries;
+			};
+			const dispatchFor = (
+				expression: ts.Expression,
+			): EqualityDispatch | null => {
+				const direct = equalityDispatch(expression, sourceFile);
+				if (direct) return direct;
+				const unwrapped = unparenthesized(expression);
+				return ts.isIdentifier(unwrapped)
+					? (assignments.get(unwrapped.text) ?? null)
+					: null;
+			};
+			for (let index = 0; index < statements.length; index += 1) {
+				const statement = statements[index];
+				if (!statement) continue;
+				const entries = applyAssignments(statement);
+				if (entries.length > 0) continue;
+				if (!ts.isIfStatement(statement) || statement.elseStatement) continue;
+				const firstDispatch = dispatchFor(statement.expression);
+				if (!firstDispatch) continue;
+				const dispatches = [firstDispatch];
+				let nextIndex = index + 1;
+				while (nextIndex < statements.length) {
+					const next = statements[nextIndex];
+					if (!next) break;
+					const nextEntries = conditionAssignments(next, sourceFile);
+					const hasMatchingAssignment = nextEntries.some(
+						(entry) => entry.dispatch?.subject === firstDispatch.subject,
+					);
+					if (hasMatchingAssignment) {
+						applyAssignments(next);
+						nextIndex += 1;
+						continue;
+					}
+					if (!ts.isIfStatement(next) || next.elseStatement) break;
+					const dispatch = dispatchFor(next.expression);
+					if (!dispatch || dispatch.subject !== firstDispatch.subject) break;
+					dispatches.push(dispatch);
+					nextIndex += 1;
+				}
+				const caseValues = new Set(
+					dispatches.map((dispatch) => dispatch.caseValue),
+				);
+				if (
+					dispatches.length > PREFER_SWITCH_LIMIT &&
+					caseValues.size === dispatches.length
+				) {
+					diagnostics.push(
+						diagnostic(
+							sourceFile,
+							statement,
+							PREFER_SWITCH_DISPATCH,
+							PREFER_SWITCH_MESSAGE,
+							dispatches.length,
+							PREFER_SWITCH_LIMIT,
+						),
+					);
+				}
+				index = nextIndex - 1;
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(sourceFile);
+}
+
 function collectNamedIfConditions(
 	sourceFile: ts.SourceFile,
 	diagnostics: LintDiagnostic[],
@@ -785,6 +959,7 @@ export function lintProgram(
 		collectSimilarStringLiterals(sourceFile, diagnostics);
 		collectNamedIfConditions(sourceFile, diagnostics, checker);
 		collectRepeatedFieldChecks(sourceFile, diagnostics);
+		collectPreferSwitchDispatch(sourceFile, diagnostics);
 		collectComplicatedExpressions(
 			sourceFile,
 			diagnostics,

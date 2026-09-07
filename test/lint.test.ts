@@ -113,6 +113,7 @@ const NO_SHORT_STRING_CONSTANTS_RULE = "no-short-string-constants";
 const NO_EXPRESSION_RULE = "no-complicated-expressions";
 const NAMED_IF_RULE = "named-if-condition";
 const REPEATED_FIELD_CHECKS_RULE = "repeated-field-checks";
+const PREFER_SWITCH_RULE = "prefer-switch-dispatch";
 const NAMED_IF_TEST = "requires named boolean conditions";
 const NAMED_CONTROL_FLOW_TEST =
 	"requires named conditions across control-flow expressions";
@@ -153,6 +154,35 @@ const DIFFERENT_FIELD_CHECKS_SOURCE = `function stateOf(row: { state: string; st
 }`;
 const REPEATED_FIELD_READS_SOURCE = `function stateOf(row: { state: string }) {
 	return row.state + row.state;
+}`;
+const REPEATED_DISPATCH_SOURCE = `function dispatch(action: string) {
+	if (action === "status") return 1;
+	if (action === "set_pr") return 2;
+	return 0;
+}`;
+const PROPERTY_DISPATCH_SOURCE = `function dispatch(action: string) {
+	if (action === C.action.status) return 1;
+	if (action === C.action.setPr) return 2;
+	return 0;
+}`;
+const DISPATCH_WITH_CONDITION_ASSIGNMENTS_SOURCE = `function dispatch(action: string) {
+	if (action === "status") return 1;
+	const isSetPr = action === "set_pr";
+	if (action === "set_pr") return 2;
+	return 0;
+}`;
+const NAMED_DISPATCH_SOURCE = `function dispatch(action: string) {
+	const isStatus = action === "status";
+	if (isStatus) return 1;
+	const isSetPr = action === "set_pr";
+	if (isSetPr) return 2;
+	return 0;
+}`;
+const DISPATCH_WITH_UNRELATED_ASSIGNMENT_SOURCE = `function dispatch(action: string) {
+	if (action === "status") return 1;
+	const isReady = true;
+	if (action === "set_pr") return 2;
+	return isReady ? 0 : 3;
 }`;
 const COMPUTED_CONTROL_FLOW_SOURCE = `function check(value: number, ready: boolean) {
 	while (value > 0) value--;
@@ -338,6 +368,26 @@ describe("lint diagnostics", () => {
 		expect(ruleIds(await lintFixture(TWO_CHECKS_SOURCE))).not.toContain(
 			NO_EXPRESSION_RULE,
 		);
+	});
+
+	it("prefers switch for adjacent equality dispatch", async () => {
+		const diagnostics = (await lintFixture(REPEATED_DISPATCH_SOURCE)).filter(
+			({ ruleId }) => ruleId === PREFER_SWITCH_RULE,
+		);
+		expect(diagnostics).toHaveLength(1);
+		expect(diagnostics[0]?.value).toBe(2);
+		expect(ruleIds(await lintFixture(PROPERTY_DISPATCH_SOURCE))).toContain(
+			PREFER_SWITCH_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(DISPATCH_WITH_CONDITION_ASSIGNMENTS_SOURCE)),
+		).toContain(PREFER_SWITCH_RULE);
+		expect(ruleIds(await lintFixture(NAMED_DISPATCH_SOURCE))).toContain(
+			PREFER_SWITCH_RULE,
+		);
+		expect(
+			ruleIds(await lintFixture(DISPATCH_WITH_UNRELATED_ASSIGNMENT_SOURCE)),
+		).not.toContain(PREFER_SWITCH_RULE);
 	});
 
 	it("flags repeated field checks and ignores unrelated reads", async () => {
