@@ -10,6 +10,7 @@ const TEST_DIRECTORY = "test";
 const LINT_INFRASTRUCTURE_PATHS = new Set([
 	"src/lint.ts",
 	"src/lint-config.ts",
+	"src/lint/",
 	"src/lint-cli.ts",
 ]);
 const TS_EXTENSION = ".ts";
@@ -28,7 +29,14 @@ function isExcludedPath(relativePath: string): boolean {
 	const isTestPath =
 		normalizedPath === TEST_DIRECTORY ||
 		normalizedPath.startsWith(`${TEST_DIRECTORY}/`);
-	return isTestPath || LINT_INFRASTRUCTURE_PATHS.has(normalizedPath);
+	return (
+		isTestPath ||
+		[...LINT_INFRASTRUCTURE_PATHS].some((path) =>
+			path.endsWith("/")
+				? normalizedPath.startsWith(path)
+				: normalizedPath === path,
+		)
+	);
 }
 
 function collectDirectoryFiles(
