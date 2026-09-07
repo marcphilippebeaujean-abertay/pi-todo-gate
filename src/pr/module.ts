@@ -13,3 +13,4 @@ export {
 	matchesPinnedPr,
 	mergeCommand,
 } from "./git.ts";
+export { mergePinnedPr } from "./protocol.ts";
