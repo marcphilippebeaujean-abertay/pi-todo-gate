@@ -16,14 +16,19 @@ function isCurrentCompletion(
 	session: ActiveSession,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): boolean {
 	const isCurrentSession = runtime.active === session;
+	const isCurrentGeneration =
+		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
 	const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
 	const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
 	const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
+	const isCurrentSessionRevisionAndGeneration =
+		isCurrentSessionAndRevision && isCurrentGeneration;
 	const isCurrentIdentity = isCurrentTask && isCurrentPr;
-	return isCurrentSessionAndRevision && isCurrentIdentity;
+	return isCurrentSessionRevisionAndGeneration && isCurrentIdentity;
 }
 
 function recordSuccessfulCompletion(
@@ -54,6 +59,7 @@ async function completeMergedTaskNow(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): Promise<ExitActionResult> {
 	const isCurrent = isCurrentCompletion.bind(
 		null,
@@ -61,6 +67,7 @@ async function completeMergedTaskNow(
 		session,
 		stateSnapshot,
 		workRevision,
+		operationGeneration,
 	);
 	const isStaleCompletion = !isCurrent();
 	const shouldSkipCompletion = isStaleCompletion;
@@ -89,6 +96,7 @@ export async function completeMergedTask(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): Promise<ExitActionResult> {
 	return enqueueSessionOperation(
 		session,
@@ -100,6 +108,7 @@ export async function completeMergedTask(
 			taskRef,
 			stateSnapshot,
 			workRevision,
+			operationGeneration,
 		),
 	);
 }

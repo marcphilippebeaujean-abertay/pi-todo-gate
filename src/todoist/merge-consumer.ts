@@ -24,6 +24,7 @@ async function consumeMergedEvent(
 	const taskName = session.state.taskName ?? taskRef;
 	const stateSnapshot = structuredClone(session.state);
 	const workRevision = session.workRevision;
+	const operationGeneration = session.operationGeneration;
 	const confirmed = await session.context.ui.confirm(
 		taskPrompt(taskName),
 		`Todoist task ${taskRef}`,
@@ -36,6 +37,7 @@ async function consumeMergedEvent(
 		taskRef,
 		stateSnapshot,
 		workRevision,
+		operationGeneration,
 	);
 	const completed = result === C.exit.completed;
 	if (!completed) return;

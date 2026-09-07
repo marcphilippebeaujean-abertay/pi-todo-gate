@@ -15,6 +15,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 		context: { hasUI: true, cwd: "/repo", ui: { confirm, notify } },
 		state: { prUrl: PR_URL, taskRef: "task-1", taskName: "Implement feature" },
 		workRevision: 0,
+		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 		...overrides,
 	};
@@ -93,6 +94,20 @@ describe("Todoist merge consumer", () => {
 		const setupResult = setup();
 		setupResult.confirm.mockImplementation(async () => {
 			setupResult.runtime.active = null;
+			return true;
+		});
+		registerTodoistMergeConsumer(setupResult.runtime);
+
+		const payload = await emit(setupResult.runtime);
+
+		expect(setupResult.completeTask).not.toHaveBeenCalled();
+		expect(payload.taskMarkedAsCompleted).toBe(false);
+	});
+
+	it("does not complete a task after operation invalidation", async () => {
+		const setupResult = setup();
+		setupResult.confirm.mockImplementation(async () => {
+			setupResult.session.operationGeneration += 1;
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
