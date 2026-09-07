@@ -167,8 +167,25 @@ describe("merge protocol skill", () => {
 	it("declares the safe merge workflow", async () => {
 		const skill = await readFile(`${mergeProtocolSkillPath}/SKILL.md`, "utf8");
 		expect(skill).toContain("name: merge-protocol");
+		expect(skill).toContain(
+			"description: Guides safe, user-confirmed pull request merging",
+		);
 		expect(skill).toContain("gh pr merge <url> --merge");
 		expect(skill).toContain("Do not complete Todoist directly");
+		expect(skill).toContain("pinned PR URL");
+		expect(skill).toContain("explicit confirmation");
+		expect(skill).toContain("prMerged");
+	});
+
+	it("packages the skill without an input pattern trigger", async () => {
+		const packageManifest = JSON.parse(
+			await readFile("package.json", "utf8"),
+		) as { pi?: { skills?: string[] } };
+		expect(packageManifest.pi?.skills).toEqual(["./skills"]);
+
+		const extension = await readFile("src/merge-protocol.ts", "utf8");
+		expect(extension).not.toContain('pi.on("input"');
+		expect(extension).not.toContain("shouldTriggerMergeProtocol");
 	});
 });
 
