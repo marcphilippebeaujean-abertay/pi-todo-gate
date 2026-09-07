@@ -58,6 +58,15 @@ elif [ "$#" -eq 1 ]; then
   exit 2
 fi
 
+if ! command -v npm >/dev/null 2>&1; then
+  printf 'npm is required to install pi-todo-gate dependencies\n' >&2
+  exit 1
+fi
+if [ ! -d "$repo_dir/node_modules" ] || ! (cd -- "$repo_dir" && npm ls --depth=0 >/dev/null 2>&1); then
+  printf 'installing pi-todo-gate dependencies from package-lock.json\n'
+  (cd -- "$repo_dir" && npm ci --ignore-scripts --no-audit --no-fund)
+fi
+
 source_dir="$repo_dir/extensions"
 source_path="$source_dir/index.ts"
 target_path="$agent_dir/extensions/pi-todo-gate"
