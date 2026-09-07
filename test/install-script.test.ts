@@ -4,7 +4,10 @@ const DERIVES_THE_TARGET_FROM_PI_CODING_AGENT =
 const TMP = "/tmp";
 const PI_TODO_GATE_AGENT = "pi-todo-gate-agent-";
 const EXTENSIONS = "extensions";
+const SKILLS = "skills";
 const PI_TODO_GATE = "pi-todo-gate";
+const MERGE_PROTOCOL = "merge-protocol";
+const SKILL_MD = "SKILL.md";
 const INDEX_TS = "index.ts";
 const UTF8_ENCODING = "utf8";
 const EXPORT_DEFAULT = "export { default }";
@@ -58,6 +61,21 @@ describe("install.sh", () => {
 		const target = join(agentDir, EXTENSIONS, PI_TODO_GATE, INDEX_TS);
 		await expect(readFile(target, UTF8_ENCODING)).resolves.toContain(
 			EXPORT_DEFAULT,
+		);
+	});
+
+	it("installs the merge protocol skill beside the extension", async () => {
+		const agentDir = await mkdtemp(join(TMP, PI_TODO_GATE_AGENT));
+		await execute([], { PI_CODING_AGENT_DIR: agentDir });
+		const skill = join(
+			agentDir,
+			SKILLS,
+			PI_TODO_GATE,
+			MERGE_PROTOCOL,
+			SKILL_MD,
+		);
+		await expect(readFile(skill, UTF8_ENCODING)).resolves.toContain(
+			"name: merge-protocol",
 		);
 	});
 
