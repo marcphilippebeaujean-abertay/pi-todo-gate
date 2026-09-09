@@ -323,7 +323,6 @@ export function childList(value: unknown): unknown[] {
 	if (Array.isArray(data.results)) return data.results;
 	throw new TodoistError(RESPONSE_ERROR_FAMILY, EXPECTED_LIST_PAYLOAD_MESSAGE);
 }
-export const TODOIST_STATE_TYPE = "pi-todoist-gate-state";
 
 export interface TodoistState {
 	taskRef?: string;

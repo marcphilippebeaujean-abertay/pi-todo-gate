@@ -1,5 +1,4 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import type {
 	EventRequest,
@@ -9,6 +8,16 @@ import type {
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
 import { cleanupWorktree, currentWorktreeState } from "./commands.ts";
+import {
+	CLEANUP_SCHEDULED,
+	CLEANUP_SUCCESS,
+	COMPLETED,
+	DEFERRED,
+	EMPTY,
+	FAILED,
+	NO_CHANGES,
+	QUIT,
+} from "./constants.ts";
 import type {
 	WorktreeBaseline,
 	WorktreeModule,
@@ -33,8 +42,8 @@ class Worktree implements WorktreeModule {
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.on(C.event.prMerged, this.onPrMerged.bind(this));
-		events.on(C.event.sessionWillClose, this.onSessionWillClose.bind(this));
+		events.on("prMerged", this.onPrMerged.bind(this));
+		events.on("sessionWillClose", this.onSessionWillClose.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -88,7 +97,7 @@ class Worktree implements WorktreeModule {
 	private async onSessionWillClose(request: CloseRequest): Promise<void> {
 		const context = this.context;
 		const worktree = this.baseline;
-		const isQuit = request.payload.reason === C.value.quit;
+		const isQuit = request.payload.reason === QUIT;
 		if (!isQuit) return;
 		const hasNoContext = context === null;
 		if (hasNoContext) return;
@@ -121,9 +130,9 @@ class Worktree implements WorktreeModule {
 				worktree,
 				generation,
 				false,
-				C.worktree.noChanges,
+				NO_CHANGES,
 			);
-			const cleanupCompleted = result === C.exit.completed;
+			const cleanupCompleted = result === COMPLETED;
 			if (cleanupCompleted) return;
 		}
 		request.addAction(
@@ -144,10 +153,10 @@ class Worktree implements WorktreeModule {
 			generation,
 			this.operationGeneration,
 		);
-		if (!isCurrent) return Promise.resolve(C.exit.failed);
+		if (!isCurrent) return Promise.resolve(FAILED);
 		this.pendingCleanup = true;
-		notifyWorktree(this.context, C.worktree.cleanupScheduled);
-		return Promise.resolve(C.exit.deferred);
+		notifyWorktree(this.context, CLEANUP_SCHEDULED);
+		return Promise.resolve(DEFERRED);
 	}
 
 	private async executeCleanup(
@@ -155,9 +164,9 @@ class Worktree implements WorktreeModule {
 		generation: number,
 	): Promise<ExitActionResult> {
 		const context = this.context;
-		if (context === null) return C.exit.failed;
+		if (context === null) return FAILED;
 		const hasNoUi = !context.hasUI;
-		if (hasNoUi) return C.exit.failed;
+		if (hasNoUi) return FAILED;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
 		const isCurrent = isCurrentWorktree(
 			this.baseline,
@@ -165,21 +174,16 @@ class Worktree implements WorktreeModule {
 			generation,
 			this.operationGeneration,
 		);
-		if (!isCurrent) return C.exit.failed;
+		if (!isCurrent) return FAILED;
 		const hasNoState = state === null;
-		if (hasNoState) return C.exit.failed;
+		if (hasNoState) return FAILED;
 		let force = false;
-		const hasChanges = state.currentStatus !== C.worktree.empty;
+		const hasChanges = state.currentStatus !== EMPTY;
 		if (hasChanges) {
 			force = await confirmDirtyRemoval(context, worktree);
-			if (!force) return C.exit.failed;
+			if (!force) return FAILED;
 		}
-		return this.cleanupNow(
-			worktree,
-			generation,
-			force,
-			C.worktree.cleanupSuccess,
-		);
+		return this.cleanupNow(worktree, generation, force, CLEANUP_SUCCESS);
 	}
 
 	private async cleanupNow(
@@ -200,7 +204,7 @@ class Worktree implements WorktreeModule {
 					this.operationGeneration,
 				),
 		});
-		const cleanupCompleted = result === C.exit.completed;
+		const cleanupCompleted = result === COMPLETED;
 		if (cleanupCompleted) {
 			this.baseline = null;
 			this.pendingCleanup = false;

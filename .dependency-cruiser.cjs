@@ -1,208 +1,68 @@
-const SCOPED_DOMAINS = ["pr", "todoist", "herdr", "worktree", "exit-protocol", "footer"];
-
-const scopedDomainRules = SCOPED_DOMAINS.flatMap((fromDomain) =>
-	SCOPED_DOMAINS
-		.filter((toDomain) => toDomain !== fromDomain)
-		.map((toDomain) => ({
-			name: `no-${fromDomain}-to-${toDomain}-explicit`,
-			severity: "error",
-			from: { path: `^src/${fromDomain}/` },
-			to: { path: `^src/${toDomain}/` },
-		})),
-);
-
-const scopedTestRules = SCOPED_DOMAINS.flatMap((fromDomain) =>
-	SCOPED_DOMAINS
-		.filter((toDomain) => toDomain !== fromDomain)
-		.map((toDomain) => ({
-			name: `no-${fromDomain}-test-to-${toDomain}-explicit`,
-			severity: "error",
-			from: {
-				path: fromDomain === "pr" && toDomain === "todoist"
-					? "^test/pr/(?!merge-consumer\\.test\\.ts$)"
-					: fromDomain === "todoist" && toDomain === "footer"
-						? "^test/todoist/(?!footer\\.test\\.ts$)"
-						: `^test/${fromDomain}/`,
-			},
-			to: { path: `^src/${toDomain}/` },
-		})),
-);
-
 module.exports = {
 	forbidden: [
-		...scopedDomainRules,
-		...scopedTestRules,
-		{
-			name: "no-shared-to-scoped-domain-explicit",
-			severity: "error",
-			from: { path: "^src/shared/" },
-			to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/" },
-		},
-		{
-			name: "no-scoped-domain-cycles",
-			severity: "error",
-			from: { path: "^src/" },
-			to: { circular: true },
-		},
-
-		{
-			name: "no-pr-to-todoist",
-			severity: "error",
-			from: { path: "^src/pr/" },
-			to: { path: "^src/todoist/" },
-		},
-		{
-			name: "no-pr-to-herdr",
-			severity: "error",
-			from: { path: "^src/pr/" },
-			to: { path: "^src/herdr/" },
-		},
-		{
-			name: "no-pr-to-feature-modules",
-			severity: "error",
-			from: { path: "^src/pr/" },
-			to: { path: "^src/(?!pr/|shared/|constants\.ts$|extension-types\.ts$|session-operations\.ts$)" },
-		},
-		{
-			name: "no-non-composition-to-pr",
-			severity: "error",
-			from: {
-				path: "^src/(?!pr/|extension-events\\.ts$|extension-session\\.ts$|extension-tool\\.ts$|merge-protocol\\.ts$)",
-			},
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-todoist-to-pr",
-			severity: "error",
-			from: { path: "^src/todoist/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-todoist-to-herdr",
-			severity: "error",
-			from: { path: "^src/todoist/" },
-			to: { path: "^src/herdr/" },
-		},
-		{
-			name: "no-herdr-to-pr",
-			severity: "error",
-			from: { path: "^src/herdr/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-herdr-to-todoist",
-			severity: "error",
-			from: { path: "^src/herdr/" },
-			to: { path: "^src/todoist/" },
-		},
-		{
-			name: "no-shared-to-pr",
-			severity: "error",
-			from: { path: "^src/shared/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-footer-to-pr",
-			severity: "error",
-			from: { path: "^src/footer" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-worktree-to-pr",
-			severity: "error",
-			from: { path: "^src/worktree/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-exit-protocol-to-pr",
-			severity: "error",
-			from: { path: "^src/exit-protocol/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-shared-to-todoist",
-			severity: "error",
-			from: { path: "^src/shared/" },
-			to: { path: "^src/todoist/" },
-		},
-		{
-			name: "no-shared-to-herdr",
-			severity: "error",
-			from: { path: "^src/shared/" },
-			to: { path: "^src/herdr/" },
-		},
-		{
-			name: "no-footer-test-to-pr",
-			severity: "error",
-			from: { path: "^test/footer" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-worktree-test-to-pr",
-			severity: "error",
-			from: { path: "^test/worktree" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-exit-protocol-test-to-pr",
-			severity: "error",
-			from: { path: "^test/exit-protocol" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-non-pr-test-to-pr",
-			severity: "error",
-			from: { path: "^test/(?!pr/)" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-pr-test-to-feature-modules",
-			severity: "error",
-			from: { path: "^test/pr/(?!merge-consumer\.test\.ts$)" },
-			to: { path: "^src/(?!pr/|shared/|constants\.ts$|extension-types\.ts$|session-operations\.ts$)" },
-		},
-		{
-			name: "no-pr-test-to-todoist",
-			severity: "error",
-			from: { path: "^test/pr/(?!merge-consumer\.test\.ts$)" },
-			to: { path: "^src/todoist/" },
-		},
-		{
-			name: "no-pr-test-to-herdr",
-			severity: "error",
-			from: { path: "^test/pr/" },
-			to: { path: "^src/herdr/" },
-		},
-		{
-			name: "no-todoist-test-to-pr",
-			severity: "error",
-			from: { path: "^test/todoist/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-todoist-test-to-herdr",
-			severity: "error",
-			from: { path: "^test/todoist/" },
-			to: { path: "^src/herdr/" },
-		},
-		{
-			name: "no-herdr-test-to-pr",
-			severity: "error",
-			from: { path: "^test/herdr/" },
-			to: { path: "^src/pr/" },
-		},
-		{
-			name: "no-herdr-test-to-todoist",
-			severity: "error",
-			from: { path: "^test/herdr/" },
-			to: { path: "^src/todoist/" },
-		},
-		{
-			name: "no-orphans",
-			severity: "error",
-			from: { orphan: true, path: "^src/" },
-			to: {},
-		},
+		{ name: "no-pr-to-todoist", severity: "error", from: { path: "^src/pr/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-pr-to-herdr", severity: "error", from: { path: "^src/pr/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-pr-to-worktree", severity: "error", from: { path: "^src/pr/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-pr-to-exit-protocol", severity: "error", from: { path: "^src/pr/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-pr-to-footer", severity: "error", from: { path: "^src/pr/" }, to: { path: "^src/footer/" } },
+		{ name: "no-todoist-to-pr", severity: "error", from: { path: "^src/todoist/" }, to: { path: "^src/pr/" } },
+		{ name: "no-todoist-to-herdr", severity: "error", from: { path: "^src/todoist/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-todoist-to-worktree", severity: "error", from: { path: "^src/todoist/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-todoist-to-exit-protocol", severity: "error", from: { path: "^src/todoist/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-todoist-to-footer", severity: "error", from: { path: "^src/todoist/" }, to: { path: "^src/footer/" } },
+		{ name: "no-herdr-to-pr", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/pr/" } },
+		{ name: "no-herdr-to-todoist", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-herdr-to-worktree", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-herdr-to-exit-protocol", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-herdr-to-footer", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/footer/" } },
+		{ name: "no-worktree-to-pr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/pr/" } },
+		{ name: "no-worktree-to-todoist", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-worktree-to-herdr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-worktree-to-exit-protocol", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-worktree-to-footer", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/footer/" } },
+		{ name: "no-exit-protocol-to-pr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/pr/" } },
+		{ name: "no-exit-protocol-to-todoist", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-exit-protocol-to-herdr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-exit-protocol-to-worktree", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-exit-protocol-to-footer", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/footer/" } },
+		{ name: "no-footer-to-pr", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/pr/" } },
+		{ name: "no-footer-to-todoist", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-footer-to-herdr", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-footer-to-worktree", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-footer-to-exit-protocol", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-pr-test-to-todoist", severity: "error", from: { path: "^test/pr/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-pr-test-to-herdr", severity: "error", from: { path: "^test/pr/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-pr-test-to-worktree", severity: "error", from: { path: "^test/pr/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-pr-test-to-exit-protocol", severity: "error", from: { path: "^test/pr/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-pr-test-to-footer", severity: "error", from: { path: "^test/pr/" }, to: { path: "^src/footer/" } },
+		{ name: "no-todoist-test-to-pr", severity: "error", from: { path: "^test/todoist/" }, to: { path: "^src/pr/" } },
+		{ name: "no-todoist-test-to-herdr", severity: "error", from: { path: "^test/todoist/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-todoist-test-to-worktree", severity: "error", from: { path: "^test/todoist/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-todoist-test-to-exit-protocol", severity: "error", from: { path: "^test/todoist/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-todoist-test-to-footer", severity: "error", from: { path: "^test/todoist/" }, to: { path: "^src/footer/" } },
+		{ name: "no-herdr-test-to-pr", severity: "error", from: { path: "^test/herdr/" }, to: { path: "^src/pr/" } },
+		{ name: "no-herdr-test-to-todoist", severity: "error", from: { path: "^test/herdr/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-herdr-test-to-worktree", severity: "error", from: { path: "^test/herdr/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-herdr-test-to-exit-protocol", severity: "error", from: { path: "^test/herdr/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-herdr-test-to-footer", severity: "error", from: { path: "^test/herdr/" }, to: { path: "^src/footer/" } },
+		{ name: "no-worktree-test-to-pr", severity: "error", from: { path: "^test/worktree/" }, to: { path: "^src/pr/" } },
+		{ name: "no-worktree-test-to-todoist", severity: "error", from: { path: "^test/worktree/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-worktree-test-to-herdr", severity: "error", from: { path: "^test/worktree/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-worktree-test-to-exit-protocol", severity: "error", from: { path: "^test/worktree/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-worktree-test-to-footer", severity: "error", from: { path: "^test/worktree/" }, to: { path: "^src/footer/" } },
+		{ name: "no-exit-protocol-test-to-pr", severity: "error", from: { path: "^test/exit-protocol/" }, to: { path: "^src/pr/" } },
+		{ name: "no-exit-protocol-test-to-todoist", severity: "error", from: { path: "^test/exit-protocol/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-exit-protocol-test-to-herdr", severity: "error", from: { path: "^test/exit-protocol/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-exit-protocol-test-to-worktree", severity: "error", from: { path: "^test/exit-protocol/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-exit-protocol-test-to-footer", severity: "error", from: { path: "^test/exit-protocol/" }, to: { path: "^src/footer/" } },
+		{ name: "no-footer-test-to-pr", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/pr/" } },
+		{ name: "no-footer-test-to-todoist", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/todoist/" } },
+		{ name: "no-footer-test-to-herdr", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/herdr/" } },
+		{ name: "no-footer-test-to-worktree", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/worktree/" } },
+		{ name: "no-footer-test-to-exit-protocol", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/exit-protocol/" } },
+		{ name: "no-shared-to-scoped-domains", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/" } },
+		{ name: "no-scoped-domain-cycles", severity: "error", from: { path: "^src/" }, to: { circular: true } },
+		{ name: "no-orphans", severity: "error", from: { orphan: true, path: "^src/" }, to: {} },
 	],
 	required: [
 		{

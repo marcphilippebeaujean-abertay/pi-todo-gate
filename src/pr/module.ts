@@ -12,3 +12,4 @@ export * from "./data.ts";
 export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
 export * from "./notifications.ts";
+export * from "./user-prompts.ts";

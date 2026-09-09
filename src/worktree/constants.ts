@@ -1,3 +1,5 @@
+const WORKTREE_TEXT = { empty: "" } as const;
+export const EMPTY = WORKTREE_TEXT.empty;
 export const GIT = "git";
 export const HEAD_ARGS = ["rev-parse", "HEAD"] as const;
 export const STATUS_ARGS = [
@@ -26,3 +28,4 @@ export const WARNING = "warning";
 export const COMPLETED = "completed";
 export const FAILED = "failed";
 export const DEFERRED = "deferred";
+export const QUIT = "quit";

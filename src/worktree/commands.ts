@@ -1,7 +1,26 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type { Exec } from "../shared/command.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
-import type { WorktreeBaseline, WorktreeCurrentState } from "./data.ts";
+import {
+	BRANCH_ARGS,
+	BRANCH_FAILED,
+	CLEANUP_FAILED,
+	COMPLETED,
+	EMPTY,
+	FAILED,
+	FORCE_ARG,
+	GIT,
+	HEAD_ARGS,
+	REMOVAL_FAILED,
+	REMOVE_ARGS,
+	REMOVED_BRANCH_FAILED,
+	STATUS_ARGS,
+	WARNING,
+} from "./constants.ts";
+import type {
+	CleanupOptions,
+	WorktreeBaseline,
+	WorktreeCurrentState,
+} from "./data.ts";
 
 export function commandOutput(result: {
 	stdout: string;
@@ -17,7 +36,7 @@ export function commandFailure(result: {
 }): string {
 	const commandSucceeded = result.code === 0;
 	return commandSucceeded
-		? C.worktree.empty
+		? EMPTY
 		: result.stderr.trim().replace(/\s+/g, " ").slice(0, 200);
 }
 
@@ -27,12 +46,12 @@ export async function currentWorktreeState(
 ): Promise<WorktreeCurrentState | null> {
 	try {
 		const [headResult, statusResult] = await Promise.all([
-			exec(C.worktree.git, [...C.worktree.headArgs], { cwd }),
-			exec(C.worktree.git, [...C.worktree.statusArgs], { cwd }),
+			exec(GIT, [...HEAD_ARGS], { cwd }),
+			exec(GIT, [...STATUS_ARGS], { cwd }),
 		]);
 		const currentHead = commandOutput(headResult);
 		const currentStatus = commandOutput(statusResult);
-		const hasHead = currentHead !== null && currentHead !== C.worktree.empty;
+		const hasHead = currentHead !== null && currentHead !== EMPTY;
 		const hasStatus = currentStatus !== null;
 		const missingState = !hasHead || !hasStatus;
 		if (missingState) return null;
@@ -43,13 +62,6 @@ export async function currentWorktreeState(
 	} catch {
 		return null;
 	}
-}
-
-export interface CleanupOptions {
-	exec: Exec;
-	changeDirectory: (path: string) => void;
-	notify: (message: string, level?: "info" | "warning") => void;
-	isCurrent: () => boolean;
 }
 
 function errorDetail(error: unknown): string {
@@ -67,8 +79,8 @@ function cleanupFailure(
 	options: CleanupOptions,
 	message: string,
 ): ExitActionResult {
-	options.notify(`${C.worktree.cleanupFailed}${message}`, C.value.warning);
-	return C.exit.failed;
+	options.notify(`${CLEANUP_FAILED}${message}`, WARNING);
+	return FAILED;
 }
 
 export async function cleanupWorktree(
@@ -77,42 +89,42 @@ export async function cleanupWorktree(
 	options: CleanupOptions,
 ): Promise<ExitActionResult> {
 	const isCurrent = options.isCurrent();
-	if (!isCurrent) return C.exit.failed;
+	if (!isCurrent) return FAILED;
 	try {
 		options.changeDirectory(worktree.mainRoot);
 	} catch (error) {
 		return cleanupFailure(options, errorDetail(error));
 	}
-	const removeArgs: string[] = [...C.worktree.removeArgs];
+	const removeArgs: string[] = [...REMOVE_ARGS];
 	const shouldForce = force;
-	if (shouldForce) removeArgs.push(C.worktree.forceArg);
+	if (shouldForce) removeArgs.push(FORCE_ARG);
 	removeArgs.push(worktree.worktreePath);
-	const removeResult = await options.exec(C.worktree.git, removeArgs, {
+	const removeResult = await options.exec(GIT, removeArgs, {
 		cwd: worktree.mainRoot,
 	});
 	const isCurrentAfterRemove = options.isCurrent();
-	if (!isCurrentAfterRemove) return C.exit.failed;
+	if (!isCurrentAfterRemove) return FAILED;
 	const removeFailed = removeResult.code !== 0;
 	if (removeFailed)
 		return cleanupFailure(
 			options,
-			failureMessage(removeResult, C.worktree.removalFailed),
+			failureMessage(removeResult, REMOVAL_FAILED),
 		);
 
 	const branchResult = await options.exec(
-		C.worktree.git,
-		[...C.worktree.branchArgs, worktree.branch],
+		GIT,
+		[...BRANCH_ARGS, worktree.branch],
 		{ cwd: worktree.mainRoot },
 	);
 	const isCurrentAfterBranch = options.isCurrent();
-	if (!isCurrentAfterBranch) return C.exit.failed;
+	if (!isCurrentAfterBranch) return FAILED;
 	const branchFailed = branchResult.code !== 0;
 	if (branchFailed) {
 		options.notify(
-			`${C.worktree.removedBranchFailed}${failureMessage(branchResult, C.worktree.branchFailed)}`,
-			C.value.warning,
+			`${REMOVED_BRANCH_FAILED}${failureMessage(branchResult, BRANCH_FAILED)}`,
+			WARNING,
 		);
-		return C.exit.failed;
+		return FAILED;
 	}
-	return C.exit.completed;
+	return COMPLETED;
 }

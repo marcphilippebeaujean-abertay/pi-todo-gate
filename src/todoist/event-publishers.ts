@@ -4,6 +4,7 @@ import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 import {
 	AUTHORIZATION_REPLACEMENT,
 	CLAIM_INSTRUCTIONS,
+	CLAIM_WORKER_TIMEOUT_MS,
 	CREATE_INSTRUCTIONS,
 	ERROR_INSTRUCTIONS,
 	HIGH_THINKING,
@@ -23,8 +24,6 @@ import {
 	type TaskClaimWorkerInput,
 	TaskClaimWorkerResultSchema,
 } from "./data.ts";
-
-export const CLAIM_WORKER_TIMEOUT_MS = 120_000;
 
 function workerPrompt(input: TaskClaimWorkerInput): string {
 	return [

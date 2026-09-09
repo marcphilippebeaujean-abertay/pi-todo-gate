@@ -1,4 +1,5 @@
 import type { ExitAction, ExitActionResult } from "../shared/exit-actions.ts";
+import { CLEANUP_ID } from "./constants.ts";
 import type { WorktreeBaseline } from "./data.ts";
 
 export function createCleanupAction(
@@ -6,7 +7,7 @@ export function createCleanupAction(
 	execute: () => Promise<ExitActionResult>,
 ): ExitAction {
 	return {
-		id: "remove-worktree",
+		id: CLEANUP_ID,
 		label: `Delete worktree "${worktree.worktreePath}" and local branch "${worktree.branch}"`,
 		execute,
 	};

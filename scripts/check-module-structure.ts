@@ -95,7 +95,13 @@ export async function checkModuleStructure(
 			});
 		}
 	}
-	return issues.sort((a, b) => a.domain.localeCompare(b.domain) || a.path.localeCompare(b.path));
+	return issues.sort((a, b) =>
+		a.domain < b.domain || (a.domain === b.domain && a.path < b.path)
+			? -1
+			: a.domain === b.domain && a.path === b.path
+				? 0
+				: 1,
+	);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

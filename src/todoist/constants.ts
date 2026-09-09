@@ -55,3 +55,14 @@ export const IN_PROGRESS_VALUE = "in progress";
 export const IN_PROGRESS_LABEL = "In Progress";
 export const MOVE = "move";
 export const TODOIST_STATE_TYPE = "pi-todoist-gate-state";
+export const CLAIM_WORKER_TIMEOUT_MS = 120_000;
+export const TODOIST_TASK_ASSIGNED = "Todoist task assigned";
+export const COMPLETION_SUCCESS = "Merged PR detected; Todoist task completed";
+export const COMPLETION_FAILURE =
+	"Merged PR detected, but Todoist task completion failed";
+export const INFO = "info";
+export const WARNING = "warning";
+export const TODOIST = "Todoist";
+export const COMPLETE_LABEL_PREFIX = 'Mark Todoist task "';
+export const COMPLETE_LABEL_SUFFIX = '" complete?';
+export const COMPLETED = "completed";

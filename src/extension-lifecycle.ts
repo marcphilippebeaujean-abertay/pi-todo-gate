@@ -5,7 +5,7 @@ import type {
 	ExtensionDependencies,
 	ExtensionRuntime,
 } from "./extension-types.ts";
-import { renderPrStatus, renderTaskStatus } from "./footer/module.ts";
+import { renderPrStatus, renderTodoistTaskStatus } from "./footer/module.ts";
 import { invalidateOperations } from "./session-operations.ts";
 import { spawnExec } from "./shared/command.ts";
 import { TodoistClient } from "./todoist/commands.ts";
@@ -62,7 +62,7 @@ export function refreshFooterStatuses(
 	runtime.footer.update({
 		footerType: C.status.task,
 		isLoading: false,
-		text: renderTaskStatus(
+		text: renderTodoistTaskStatus(
 			session.state.taskUrl,
 			session.context.ui.theme,
 			session.state.taskName,

@@ -1,4 +1,5 @@
-import type { CommandResult, Exec } from "../shared/command.ts";
+import type { Exec } from "../shared/command.ts";
+import { queryCurrentPr, queryPinnedHead } from "./commands.ts";
 import {
 	END_OF_OPTIONS,
 	GH_COMMAND,
@@ -7,14 +8,16 @@ import {
 	GH_MERGE_VALUE_OPTIONS,
 	GIT_COMMAND,
 	GIT_MERGE_VALUE_OPTIONS,
-	JSON_FLAG,
 	MERGE_COMMAND,
 	NON_COMPLETING_GH_MERGE_OPTIONS,
 	NON_COMPLETING_GIT_MERGE_OPTIONS,
 	PR_COMMAND,
-	VIEW_COMMAND,
 } from "./constants.ts";
 import { executableName, shellSegments, shellWords } from "./data.ts";
+
+export interface MergeEvent {
+	prUrl: string;
+}
 
 export interface MergeEvent {
 	prUrl: string;
@@ -137,72 +140,6 @@ export function normalizedUrl(value: string): string | null {
 		return hasMatch
 			? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`
 			: null;
-	} catch {
-		return null;
-	}
-}
-
-export async function queryPinnedHead(
-	exec: Exec,
-	cwd: string,
-	prUrl: string,
-): Promise<string | null> {
-	let result: CommandResult;
-	try {
-		result = await exec(
-			GH_COMMAND,
-			[PR_COMMAND, VIEW_COMMAND, prUrl, JSON_FLAG, "headRefName"],
-			{
-				cwd,
-			},
-		);
-	} catch {
-		return null;
-	}
-	const commandFailed = result.code !== 0;
-	if (commandFailed) return null;
-	try {
-		const data: unknown = JSON.parse(result.stdout);
-		if (typeof data !== "object") return null;
-		if (data === null) return null;
-		const headRefName = (data as { headRefName?: unknown }).headRefName;
-		if (typeof headRefName !== "string") return null;
-		return headRefName;
-	} catch {
-		return null;
-	}
-}
-
-export async function queryCurrentPr(
-	exec: Exec,
-	cwd: string,
-	target: string,
-): Promise<{ url: string; headRefName: string } | null> {
-	let result: CommandResult;
-	try {
-		result = await exec(
-			GH_COMMAND,
-			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, "url,headRefName"],
-			{ cwd },
-		);
-	} catch {
-		return null;
-	}
-	const commandFailed = result.code !== 0;
-	if (commandFailed) return null;
-	try {
-		const data: unknown = JSON.parse(result.stdout);
-		if (typeof data !== "object") return null;
-		if (data === null) return null;
-		const row = data as { url?: unknown; headRefName?: unknown };
-		const hasUrl = typeof row.url === "string";
-		if (!hasUrl) return null;
-		const hasHeadRefName = typeof row.headRefName === "string";
-		if (!hasHeadRefName) return null;
-		return {
-			url: row.url as string,
-			headRefName: row.headRefName as string,
-		};
 	} catch {
 		return null;
 	}

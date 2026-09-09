@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import { EMPTY } from "./constants.ts";
 
 export interface WorktreeBaseline {
 	worktreePath: string;
@@ -17,6 +17,13 @@ export interface WorktreeCurrentState {
 export interface WorktreeModuleDependencies {
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
+}
+
+export interface CleanupOptions {
+	exec: import("../shared/command.ts").Exec;
+	changeDirectory: (path: string) => void;
+	notify: (message: string, level?: "info" | "warning") => void;
+	isCurrent: () => boolean;
 }
 
 export interface WorktreeModule {
@@ -38,8 +45,8 @@ export function hasNoSessionWork(
 	current: WorktreeCurrentState,
 ): boolean {
 	const headUnchanged = baseline.initialHead === current.currentHead;
-	const baselineClean = baseline.initialStatus === C.worktree.empty;
-	const currentClean = current.currentStatus === C.worktree.empty;
+	const baselineClean = baseline.initialStatus === EMPTY;
+	const currentClean = current.currentStatus === EMPTY;
 	const isUnchangedAndClean = headUnchanged && baselineClean;
 	return isUnchangedAndClean && currentClean;
 }

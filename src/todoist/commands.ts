@@ -7,6 +7,7 @@ import {
 	IN_PROGRESS_LABEL,
 	IN_PROGRESS_VALUE,
 	JSON_OUTPUT_FLAG,
+	LIST,
 	MOVE,
 	PROJECT,
 	PROJECT_FLAG,
@@ -29,8 +30,6 @@ import {
 	type TodoistTask,
 	taskFromPayload,
 } from "./data.ts";
-
-const LIST = "list";
 
 export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;

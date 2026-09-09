@@ -1,8 +1,8 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import { COMPLETE_LABEL_PREFIX, COMPLETE_LABEL_SUFFIX } from "./constants.ts";
 
 export function taskPrompt(taskName: string): string {
-	return `${C.todoist.completeLabelPrefix}${taskName}${C.todoist.completeLabelSuffix}?`;
+	return `${COMPLETE_LABEL_PREFIX}${taskName}${COMPLETE_LABEL_SUFFIX}`;
 }
 
 export function confirmTaskCompletion(

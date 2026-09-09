@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import { EXIT_ACTION_FAILED } from "./constants.ts";
 import type { ExitAction } from "./data.ts";
 
 export async function executeExitAction(
@@ -11,7 +11,7 @@ export async function executeExitAction(
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		try {
-			context.ui.notify(`${C.exit.exitActionFailed}${detail}`, C.value.warning);
+			context.ui.notify(`${EXIT_ACTION_FAILED}${detail}`, "warning");
 		} catch {
 			// Headless or torn-down UI.
 		}

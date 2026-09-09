@@ -401,7 +401,7 @@ export function renderTaskStatus(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	return renderTaskStatusValue(url, theme, taskName, false);
+	return renderTaskStatusValue(url, theme, taskName, true);
 }
 
 export function renderTaskStatusCompact(
@@ -409,5 +409,5 @@ export function renderTaskStatusCompact(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	return renderTaskStatusValue(url, theme, taskName, true);
+	return renderTaskStatusValue(url, theme, taskName, false);
 }

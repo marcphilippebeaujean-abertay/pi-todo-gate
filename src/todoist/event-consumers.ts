@@ -12,6 +12,7 @@ import { inspectProject } from "../shared/project.ts";
 import { completeMergedTask } from "../task-completion.ts";
 import {
 	CLAIM,
+	COMPLETED,
 	ERROR,
 	INVALID_RESULT,
 	STARTED,
@@ -188,7 +189,7 @@ async function consumeMergedEvent(
 		workRevision,
 		operationGeneration,
 	);
-	const completed = result === C.exit.completed;
+	const completed = result === COMPLETED;
 	if (!completed) return;
 	request.payload.taskMarkedAsCompleted = true;
 }

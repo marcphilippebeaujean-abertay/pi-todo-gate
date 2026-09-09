@@ -1,63 +1,37 @@
 import { execFileSync, spawn } from "node:child_process";
 import { withWorkerMarker } from "../session.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
-import { HERDR_COMMAND, HERDR_ENVIRONMENT } from "./constants.ts";
-import type { CommandRunner, StartBackgroundWorker } from "./data.ts";
 import {
-	appendBounded,
-	type ClaimWorkerResult,
-	parseClaimResult,
+	CLOSE_EVENT,
+	DATA_EVENT,
+	ERROR_EVENT,
+	HERDR_COMMAND,
+	HERDR_ENVIRONMENT,
+	HIGH_THINKING,
+	MISSING_CLAIM_EVIDENCE,
+	PI_COMMAND,
+	SIGTERM,
+	STDIO_IGNORE,
+	STDIO_PIPE,
+	TAB_GET_COMMAND,
+	UNKNOWN_ERROR,
+	UTF8_ENCODING,
+} from "./constants.ts";
+import type {
+	ClaimWorkerHandle,
+	ClaimWorkerRequest,
+	CommandRunner,
+	StartBackgroundWorker,
+	WorkerProcess,
+	WorkerSpawner,
 } from "./data.ts";
-
-interface ClaimWorkerRequest {
-	prompt: string;
-	instructions: string;
-	onClaimComplete: (result?: ClaimWorkerResult) => void;
-	onFailure: (message: string) => void;
-}
-
-interface ClaimWorkerHandle {
-	cancel(): void;
-}
+import { appendBounded, parseClaimResult } from "./data.ts";
 
 export interface ClaimWorkerOptions {
 	command?: string;
 	cwd?: string;
 	spawnWorker?: WorkerSpawner;
 }
-
-type WorkerSpawner = (
-	command: string,
-	args: readonly string[],
-	options: {
-		cwd: string;
-		env: NodeJS.ProcessEnv;
-		shell: false;
-		stdio: ["ignore", "pipe", "pipe"];
-	},
-) => WorkerProcess;
-
-interface WorkerOutputStream {
-	on(event: "data", listener: (chunk: Buffer | string) => void): void;
-}
-
-interface WorkerProcess {
-	stdout: WorkerOutputStream;
-	stderr: WorkerOutputStream;
-	on(event: "close" | "error", listener: (...args: unknown[]) => void): void;
-	kill(signal?: NodeJS.Signals): boolean;
-}
-
-const DEFAULT_COMMAND = "pi";
-const HIGH_THINKING = "high";
-const MISSING_CLAIM_EVIDENCE = "completed without claim evidence";
-const STDIO_IGNORE = "ignore";
-const STDIO_PIPE = "pipe";
-const DATA_EVENT = "data";
-const ERROR_EVENT = "error";
-const CLOSE_EVENT = "close";
-const UNKNOWN_ERROR = "unknown error";
-const SIGTERM = "SIGTERM";
 
 const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 	spawn(command, [...args], {
@@ -73,7 +47,7 @@ function spawnWorkerProcess(
 ): WorkerProcess {
 	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
 	return spawnWorker(
-		options.command ?? DEFAULT_COMMAND,
+		options.command ?? PI_COMMAND,
 		buildPiWorkerArgs(request.prompt, {
 			instructions: request.instructions,
 			thinking: HIGH_THINKING,
@@ -168,10 +142,6 @@ export function startClaimWorker(
 	};
 }
 
-const UTF8_ENCODING = "utf8";
-const ENV_STDIO_IGNORE = "ignore";
-const ENV_STDIO_PIPE = "pipe";
-const TAB_GET_COMMAND = ["tab", "get"];
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";
 }
@@ -184,7 +154,7 @@ export function runCommand(
 	return execFileSync(command, args, {
 		cwd,
 		encoding: UTF8_ENCODING,
-		stdio: [ENV_STDIO_IGNORE, ENV_STDIO_PIPE, ENV_STDIO_IGNORE],
+		stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_IGNORE],
 	});
 }
 

@@ -1,6 +1,20 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import {
+	EXIT_ACTION_KEY,
+	EXIT_CANCEL_KEY,
+	EXIT_CANCEL_LABEL,
+	EXIT_EMPTY,
+	EXIT_FOCUSED,
+	EXIT_SELECTED,
+	EXIT_SUBMIT_KEY,
+	EXIT_SUBMIT_LABEL,
+	EXIT_TAB_KEY,
+	EXIT_TITLE,
+	EXIT_TUI_MODE,
+	EXIT_UNFOCUSED,
+	EXIT_UNSELECTED,
+} from "./constants.ts";
 import type { ExitAction } from "./data.ts";
 import {
 	type ExitPickerResult,
@@ -64,26 +78,26 @@ export class ExitActionPicker {
 	}
 
 	render(width: number): string[] {
-		const rows: string[] = [C.exit.title, C.exit.empty];
+		const rows: string[] = [EXIT_TITLE, EXIT_EMPTY];
 		for (const action of this.actions) {
 			const isFocused =
 				typeof this.state.focused === "object" &&
 				this.state.focused.id === action.id;
-			const marker = isFocused ? C.exit.focused : C.exit.unfocused;
+			const marker = isFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED;
 			const isSelected = this.state.selectedIds.has(action.id);
-			const checkmark = isSelected ? C.exit.selected : C.exit.unselected;
+			const checkmark = isSelected ? EXIT_SELECTED : EXIT_UNSELECTED;
 			rows.push(`${marker} [${checkmark}] ${action.label}`);
 		}
-		rows.push(C.exit.empty);
+		rows.push(EXIT_EMPTY);
 		const focused = this.state.focused;
-		const isSubmitFocused = focused === C.exit.submitKey;
-		const submitMarker = isSubmitFocused ? C.exit.focused : C.exit.unfocused;
-		const isCancelFocused = focused === C.exit.cancelKey;
-		const cancelMarker = isCancelFocused ? C.exit.focused : C.exit.unfocused;
+		const isSubmitFocused = focused === EXIT_SUBMIT_KEY;
+		const submitMarker = isSubmitFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED;
+		const isCancelFocused = focused === EXIT_CANCEL_KEY;
+		const cancelMarker = isCancelFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED;
 		rows.push(
-			`${submitMarker} ${C.exit.submit}    ${cancelMarker} ${C.exit.cancel}`,
+			`${submitMarker} ${EXIT_SUBMIT_LABEL}    ${cancelMarker} ${EXIT_CANCEL_LABEL}`,
 		);
-		return rows.map((row) => truncateToWidth(row, width, C.exit.empty));
+		return rows.map((row) => truncateToWidth(row, width, EXIT_EMPTY));
 	}
 
 	handleInput(data: string): void {
@@ -94,7 +108,7 @@ export class ExitActionPicker {
 			return;
 		}
 		const movesBackward =
-			matchesKey(data, Key.shift(C.exit.tabKey)) || matchesKey(data, Key.up);
+			matchesKey(data, Key.shift(EXIT_TAB_KEY)) || matchesKey(data, Key.up);
 		if (movesBackward) {
 			this.moveFocus(-1);
 			return;
@@ -122,10 +136,10 @@ export class ExitActionPicker {
 
 	private submitFocusedTarget(): void {
 		switch (this.state.focused) {
-			case C.exit.submitKey:
+			case EXIT_SUBMIT_KEY:
 				this.done([...this.state.selectedIds]);
 				return;
-			case C.exit.cancelKey:
+			case EXIT_CANCEL_KEY:
 				this.done(null);
 				return;
 			default:
@@ -135,12 +149,15 @@ export class ExitActionPicker {
 
 	private moveFocus(direction: 1 | -1): void {
 		const targets: PickerFocus[] = [
-			...this.actions.map((action) => ({
-				type: C.exit.actionKey,
-				id: action.id,
-			})),
-			C.exit.submitKey,
-			C.exit.cancelKey,
+			...this.actions.map(
+				(action) =>
+					({
+						type: EXIT_ACTION_KEY,
+						id: action.id,
+					}) as const,
+			),
+			EXIT_SUBMIT_KEY,
+			EXIT_CANCEL_KEY,
 		];
 		const index = targets.findIndex(this.isSameFocus.bind(this));
 		const next = targets[(index + direction + targets.length) % targets.length];
@@ -170,13 +187,13 @@ async function pickActions(
 	actions: readonly ExitAction[],
 ): Promise<ExitPickerResult> {
 	const custom = context.ui.custom;
-	const isTuiMode = context.mode === C.value.tui;
+	const isTuiMode = context.mode === EXIT_TUI_MODE;
 	const hasCustomPicker = typeof custom === "function";
 	const canUseCustomPicker = isTuiMode && hasCustomPicker;
 	if (canUseCustomPicker) return pickWithCustomUI(custom, actions);
 	const selectedIds: string[] = [];
 	for (const action of actions) {
-		const confirmed = await context.ui.confirm(C.exit.title, action.label);
+		const confirmed = await context.ui.confirm(EXIT_TITLE, action.label);
 		if (confirmed) selectedIds.push(action.id);
 	}
 	return selectedIds;
