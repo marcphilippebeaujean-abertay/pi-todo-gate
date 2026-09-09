@@ -10,3 +10,4 @@ export * from "./commands.ts";
 export * from "./data.ts";
 export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
+export * from "./notifications.ts";

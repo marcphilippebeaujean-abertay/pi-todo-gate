@@ -13,7 +13,7 @@ import type { ExitActionResult } from "./shared/exit-actions.ts";
 import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
-} from "./todoist/notifications.ts";
+} from "./todoist/module.ts";
 
 function isCurrentCompletion(
 	runtime: ExtensionRuntime,

@@ -1,8 +1,18 @@
 import { z } from "zod";
 import {
 	CLOSED_STATE,
+	END_OF_OPTIONS,
+	GH_COMMAND,
+	GH_MERGE_FLAG_OPTIONS,
+	GH_MERGE_VALUE_OPTIONS,
+	GIT_COMMAND,
+	GIT_MERGE_VALUE_OPTIONS,
+	MERGE_COMMAND,
 	MERGED_STATE,
+	NON_COMPLETING_GH_MERGE_OPTIONS,
+	NON_COMPLETING_GIT_MERGE_OPTIONS,
 	OPEN_STATE,
+	PR_COMMAND,
 	UNKNOWN_STATE,
 } from "./constants.ts";
 
@@ -425,4 +435,107 @@ export function normalizedUrl(value: string): string | null {
 
 export interface MergeEvent {
 	prUrl: string;
+}
+
+export interface ParsedMerge {
+	kind: "git" | "gh";
+	args: string[];
+}
+
+function parseMergeWords(words: string[]): ParsedMerge | null {
+	const hasTooFewWords = words.length < 2;
+	if (hasTooFewWords) return null;
+	const executable = executableName(words[0] ?? "");
+	const isGit = executable === GIT_COMMAND;
+	const isGitMerge = isGit && words[1] === MERGE_COMMAND;
+	if (isGitMerge) return { kind: GIT_COMMAND, args: words.slice(2) };
+	const hasTooFewGhWords = words.length < 3;
+	if (hasTooFewGhWords) return null;
+	const isGh = executable === GH_COMMAND;
+	const hasPrCommand = words[1] === PR_COMMAND;
+	const hasMergeCommand = words[2] === MERGE_COMMAND;
+	if (!isGh) return null;
+	if (!hasPrCommand) return null;
+	if (!hasMergeCommand) return null;
+	return { kind: GH_COMMAND, args: words.slice(3) };
+}
+
+export function mergeCommand(command: string): ParsedMerge | null {
+	const segments = shellSegments(command);
+	const hasSingleSegment = segments.length === 1;
+	if (!hasSingleSegment) return null;
+	const words = shellWords(segments[0] ?? "");
+	return parseMergeWords(words);
+}
+
+export function hasNonCompletingMergeOption(
+	kind: "git" | "gh",
+	args: readonly string[],
+): boolean {
+	const isGitKind = kind === GIT_COMMAND;
+	const options = isGitKind
+		? NON_COMPLETING_GIT_MERGE_OPTIONS
+		: NON_COMPLETING_GH_MERGE_OPTIONS;
+	for (const arg of args) {
+		const isEndOfOptions = arg === END_OF_OPTIONS;
+		if (isEndOfOptions) break;
+		const isGhKind = kind === GH_COMMAND;
+		const hasAutoPrefix = isGhKind && arg.startsWith("--auto=");
+		const isNonCompletingOption = options.has(arg) || hasAutoPrefix;
+		if (isNonCompletingOption) return true;
+	}
+	return false;
+}
+
+export function gitMergeTargets(args: string[]): string[] {
+	const targets: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		const isEndOfOptions = arg === END_OF_OPTIONS;
+		if (isEndOfOptions) {
+			targets.push(...args.slice(index + 1));
+			break;
+		}
+		const isValueOption = GIT_MERGE_VALUE_OPTIONS.has(arg);
+		if (isValueOption) {
+			index += 1;
+			continue;
+		}
+		const isInlineValueOption =
+			/^(--message=|--strategy=|--strategy-option=|--into-name=|-m)/.test(arg);
+		if (isInlineValueOption) continue;
+		const isPositionalArgument = !arg.startsWith("-");
+		if (isPositionalArgument) targets.push(arg);
+	}
+	return targets;
+}
+
+export function ghMergeTargets(args: string[]): string[] | null {
+	const targets: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		const isEndOfOptions = arg === END_OF_OPTIONS;
+		if (isEndOfOptions) {
+			targets.push(...args.slice(index + 1));
+			break;
+		}
+		const isRepoOption = /^(--repo|-R|--repo=)/.test(arg);
+		if (isRepoOption) return null;
+		const isValueOption = GH_MERGE_VALUE_OPTIONS.has(arg);
+		if (isValueOption) {
+			index += 1;
+			continue;
+		}
+		const isFlag = arg.startsWith("-");
+		if (isFlag) {
+			const isKnownFlag = GH_MERGE_FLAG_OPTIONS.has(arg);
+			if (isKnownFlag) continue;
+			const hasFollowingValue =
+				index + 1 < args.length && !args[index + 1].startsWith("-");
+			if (hasFollowingValue) return null;
+			continue;
+		}
+		targets.push(arg);
+	}
+	return targets;
 }

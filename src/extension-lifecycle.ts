@@ -8,7 +8,7 @@ import type {
 import { renderPrStatus, renderTodoistTaskStatus } from "./footer/module.ts";
 import { invalidateOperations } from "./session-operations.ts";
 import { spawnExec } from "./shared/command.ts";
-import { TodoistClient } from "./todoist/commands.ts";
+import { TodoistClient } from "./todoist/module.ts";
 
 export function createClient(
 	ctx: ExtensionContext,

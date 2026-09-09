@@ -2,22 +2,23 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import type { ExitProtocolModule } from "./exit-protocol/data.ts";
-import type { FooterModule } from "./footer/data.ts";
+import type { ExitProtocolModule } from "./exit-protocol/module.ts";
+import type { FooterModule } from "./footer/module.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
-} from "./herdr/data.ts";
+} from "./herdr/module.ts";
 import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
-import type { TodoistClient } from "./todoist/commands.ts";
+import type { ExitActionResult } from "./shared/exit-actions.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
+	TodoistClient,
 	TodoistProjectMapping,
-} from "./todoist/data.ts";
+} from "./todoist/module.ts";
 import type { WorkState } from "./types.ts";
-import type { WorktreeModule } from "./worktree/data.ts";
+import type { WorktreeModule } from "./worktree/module.ts";
 
 export type WorkStateAction =
 	| { action: "status" }
@@ -72,6 +73,22 @@ export interface ExtensionRuntime {
 	footer: FooterModule;
 	worktree: WorktreeModule;
 	active: ActiveSession | null;
+	appendState(
+		state: ActiveSession["state"],
+		prDiscoveryDisabled?: boolean,
+	): void;
+	refreshFooterStatuses(session: ActiveSession): void;
+	replaceSessionState(
+		session: ActiveSession,
+		nextState: ActiveSession["state"],
+	): void;
+	completeMergedTask(
+		session: ActiveSession,
+		taskRef: string,
+		stateSnapshot: ActiveSession["state"],
+		workRevision: number,
+		operationGeneration: number,
+	): Promise<ExitActionResult>;
 	isCurrentOperation(session: ActiveSession, generation: number): boolean;
 	enqueueSessionOperation<T>(
 		session: ActiveSession,

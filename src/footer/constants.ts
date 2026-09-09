@@ -21,7 +21,6 @@ export const FOOTER_SPINNER_FRAMES = [
 	"⠇",
 	"⠏",
 ] as const;
-export const HERDR_FOOTER_TYPE = "pi-todo-gate-herdr";
 export const FOOTER_DIM = "dim";
 export const FOOTER_STATUS_SEPARATOR = " | ";
 export const FOOTER_NONE_TEXT = "none";

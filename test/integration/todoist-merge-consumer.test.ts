@@ -11,7 +11,9 @@ const PR_URL = "https://github.com/o/r/pull/42";
 function setup(overrides: Record<string, unknown> = {}) {
 	const confirm = vi.fn(async () => true);
 	const notify = vi.fn();
-	const completeTask = vi.fn(async () => undefined);
+	const completeTask = vi.fn(
+		async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
+	);
 	const session = {
 		sessionId: "session",
 		context: {
@@ -37,6 +39,25 @@ function setup(overrides: Record<string, unknown> = {}) {
 		},
 		pi: { appendEntry: vi.fn() },
 		footer: { update: vi.fn() },
+		completeMergedTask: async (
+			targetSession: typeof session,
+			taskRef: string,
+			_stateSnapshot: typeof session.state,
+			_workRevision: number,
+			generation: number,
+		) => {
+			const isCurrent = () =>
+				(runtime.active as unknown) === targetSession &&
+				targetSession.operationGeneration === generation;
+			if (!isCurrent()) return "failed" as const;
+			try {
+				await completeTask(taskRef, isCurrent);
+			} catch {
+				notify(C.message.mergedFailed, C.value.warning);
+				return "failed" as const;
+			}
+			return isCurrent() ? ("completed" as const) : ("failed" as const);
+		},
 	} as unknown as ExtensionRuntime;
 	return { runtime, session, confirm, notify, completeTask };
 }
@@ -130,7 +151,9 @@ describe("Todoist merge consumer", () => {
 
 	it("resolves the direct merge command when completion is confirmed", async () => {
 		const confirm = vi.fn(async () => true);
-		const completeTask = vi.fn(async () => undefined);
+		const completeTask = vi.fn(
+			async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
+		);
 		const exec = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 		const context = {
 			cwd: "/repo",
@@ -162,6 +185,20 @@ describe("Todoist merge consumer", () => {
 			events: createSharedEvents(),
 			pi: { appendEntry: vi.fn() },
 			footer: { update: vi.fn() },
+			completeMergedTask: async (
+				targetSession: typeof session,
+				taskRef: string,
+				_stateSnapshot: typeof session.state,
+				_workRevision: number,
+				generation: number,
+			) => {
+				const isCurrent = () =>
+					(runtime.active as unknown) === targetSession &&
+					targetSession.operationGeneration === generation;
+				if (!isCurrent()) return "failed" as const;
+				await completeTask(taskRef, isCurrent);
+				return isCurrent() ? ("completed" as const) : ("failed" as const);
+			},
 		} as unknown as ExtensionRuntime;
 		registerTodoistMergeConsumer(runtime);
 

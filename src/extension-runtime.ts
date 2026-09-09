@@ -1,5 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
+import {
+	appendState,
+	refreshFooterStatuses,
+	replaceSessionState,
+} from "./extension-lifecycle.ts";
 import type {
 	ExtensionDependencies,
 	ExtensionRuntime,
@@ -10,6 +15,7 @@ import {
 	isCurrentOperation,
 } from "./session-operations.ts";
 import { createSharedEvents } from "./shared/events.ts";
+import { completeMergedTask } from "./task-completion.ts";
 import { registerTodoistMergeConsumer } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 
@@ -28,6 +34,26 @@ export function createExtensionRuntime(
 		}),
 		worktree: createWorktreeModule(events, { exec: dependencies.exec }),
 		active: null,
+		appendState: (state, prDiscoveryDisabled) =>
+			appendState(runtime, state, prDiscoveryDisabled),
+		refreshFooterStatuses: (session) => refreshFooterStatuses(runtime, session),
+		replaceSessionState,
+		completeMergedTask: (
+			session,
+			taskRef,
+			stateSnapshot,
+			workRevision,
+			generation,
+		) =>
+			completeMergedTask(
+				runtime,
+				session,
+				session.context,
+				taskRef,
+				stateSnapshot,
+				workRevision,
+				generation,
+			),
 		isCurrentOperation,
 		enqueueSessionOperation,
 		registered: false,
