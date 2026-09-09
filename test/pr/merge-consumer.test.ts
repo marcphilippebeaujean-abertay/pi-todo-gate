@@ -2,7 +2,7 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { EXTENSION_CONSTANTS as C } from "../../src/constants.ts";
 import type { ExtensionRuntime } from "../../src/extension-types.ts";
-import { runMergeProtocol } from "../../src/merge-protocol.ts";
+import { runMergeProtocol } from "../../src/pr/module.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 

@@ -60,4 +60,19 @@ describe("module structure checker", () => {
 			]),
 		);
 	});
+
+	it("returns deterministic sorted diagnostics for multiple missing facets", async () => {
+		const root = await validFixture();
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "pr", "commands.ts"),
+		);
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "footer", "data.ts"),
+		);
+		const issues = await checkModuleStructure(root);
+		expect(issues.map((issue) => issue.path)).toEqual([
+			"src/footer/data.ts",
+			"src/pr/commands.ts",
+		]);
+	});
 });

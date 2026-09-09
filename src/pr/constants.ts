@@ -1,1 +1,1 @@
-export * from "./legacy/schemas.ts";
+export {};

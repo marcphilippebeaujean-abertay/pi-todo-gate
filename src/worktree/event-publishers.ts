@@ -1,1 +1,1 @@
-export * from "./legacy/action.ts";
+export {};

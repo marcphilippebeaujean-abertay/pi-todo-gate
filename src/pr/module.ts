@@ -9,5 +9,6 @@ import "./notifications.ts";
 export * from "./commands.ts";
 export * from "./constants.ts";
 export * from "./data.ts";
+export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
-export * from "./legacy/footer.ts";
+export * from "./notifications.ts";

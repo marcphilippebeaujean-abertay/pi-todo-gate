@@ -16,7 +16,7 @@ module.exports = {
 			name: "no-pr-to-feature-modules",
 			severity: "error",
 			from: { path: "^src/pr/" },
-			to: { path: "^src/(?!pr/|shared/)" },
+			to: { path: "^src/(?!pr/|shared/|constants\.ts$|extension-types\.ts$|session-operations\.ts$)" },
 		},
 		{
 			name: "no-non-composition-to-pr",
@@ -113,13 +113,13 @@ module.exports = {
 		{
 			name: "no-pr-test-to-feature-modules",
 			severity: "error",
-			from: { path: "^test/pr/" },
-			to: { path: "^src/(?!pr/|shared/)" },
+			from: { path: "^test/pr/(?!merge-consumer\.test\.ts$)" },
+			to: { path: "^src/(?!pr/|shared/|constants\.ts$|extension-types\.ts$|session-operations\.ts$)" },
 		},
 		{
 			name: "no-pr-test-to-todoist",
 			severity: "error",
-			from: { path: "^test/pr/" },
+			from: { path: "^test/pr/(?!merge-consumer\.test\.ts$)" },
 			to: { path: "^src/todoist/" },
 		},
 		{

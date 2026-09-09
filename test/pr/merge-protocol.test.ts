@@ -4,12 +4,12 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import type { ExtensionRuntime } from "../src/extension-types.ts";
+import type { ExtensionRuntime } from "../../src/extension-types.ts";
 import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
-} from "../src/merge-protocol.ts";
-import type { CommandResult } from "../src/shared/command.ts";
+} from "../../src/pr/module.ts";
+import type { CommandResult } from "../../src/shared/command.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 const cwd = "/repo";
@@ -183,7 +183,7 @@ describe("merge protocol skill", () => {
 		) as { pi?: { skills?: string[] } };
 		expect(packageManifest.pi?.skills).toBeUndefined();
 
-		const extension = await readFile("src/merge-protocol.ts", "utf8");
+		const extension = await readFile("src/pr/event-consumers.ts", "utf8");
 		expect(extension).not.toContain('pi.on("input"');
 		expect(extension).not.toContain("shouldTriggerMergeProtocol");
 	});

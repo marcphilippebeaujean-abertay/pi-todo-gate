@@ -12,7 +12,7 @@ import {
 } from "../src/extension-session.ts";
 import type { ExtensionDependencies } from "../src/extension-types.ts";
 import { installHerdrTabClaim } from "../src/herdr/module.ts";
-import { registerMergeProtocol } from "../src/merge-protocol.ts";
+import { registerMergeProtocol } from "../src/pr/module.ts";
 import { isSubagent } from "../src/session.ts";
 
 export type {
