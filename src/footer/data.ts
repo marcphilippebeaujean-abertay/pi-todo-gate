@@ -1,3 +1,7 @@
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import {
 	FOOTER_EVENT_LABEL,
 	FOOTER_FOOTERS_LABEL,
@@ -170,3 +174,22 @@ export interface PersistedFooterState {
 }
 
 export type FooterEventSink = (event: FooterUpdate) => void;
+export interface FooterSessionReader {
+	getBranch(): unknown[];
+}
+export interface FooterModuleDependencies {
+	openSession?: (path: string) => FooterSessionReader;
+}
+export interface FooterModule {
+	sessionStart(
+		event: { previousSessionFile?: string },
+		ctx: ExtensionContext,
+	): Promise<void>;
+	update(event: FooterUpdate): void;
+	getState(): FooterState;
+	deactivate(): void;
+}
+export type FooterModuleFactory = (
+	pi: ExtensionAPI,
+	dependencies?: FooterModuleDependencies,
+) => FooterModule;

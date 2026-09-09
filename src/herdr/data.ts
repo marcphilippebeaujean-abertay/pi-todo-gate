@@ -1,5 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { FooterEventSink } from "../footer/data.ts";
+export type FooterEventSink = (event: {
+	footerType: string;
+	isLoading: boolean;
+	text: string;
+	isVisible: boolean;
+}) => void;
+
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
 
 export interface ClaimWorkerResult {
@@ -36,9 +42,19 @@ export type WorkerSpawner = (
 	},
 ) => WorkerProcess;
 
-const MAX_DIAGNOSTIC_BYTES = 500;
-const HERDR_OBJECT_TYPE = "object";
-const CLAIMED_STATUS = "claimed";
+import {
+	CLAIMED_STATUS,
+	CUSTOM_ENTRY,
+	HERDR_COMMAND,
+	HERDR_OBJECT_TYPE,
+	HERDR_STATE_TYPE,
+	MAX_DIAGNOSTIC_BYTES,
+	NUMERIC_LABEL,
+	PANE_GET_ARGS,
+	RAN,
+	STRING_TYPE,
+	TAB_GET_ARGS,
+} from "./constants.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;
@@ -88,9 +104,6 @@ export function parseClaimResult(
 	}
 	return undefined;
 }
-const CUSTOM_ENTRY = "custom";
-const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
-const RAN = "ran";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	const isObject = typeof value === HERDR_OBJECT_TYPE;
@@ -116,12 +129,6 @@ export function hasHerdrClaimRun(entries: readonly unknown[]): boolean {
 	}
 	return false;
 }
-
-const HERDR_COMMAND = "herdr";
-const TAB_GET_ARGS = ["tab", "get"];
-const PANE_GET_ARGS = ["pane", "get"];
-const STRING_TYPE = "string";
-const NUMERIC_LABEL = /^\d+$/;
 
 function labelIsDescriptive(label: string | undefined | null): boolean {
 	const hasNoLabel = !label;

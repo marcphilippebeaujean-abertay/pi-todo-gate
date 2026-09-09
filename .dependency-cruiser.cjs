@@ -1,5 +1,50 @@
+const SCOPED_DOMAINS = ["pr", "todoist", "herdr", "worktree", "exit-protocol", "footer"];
+
+const scopedDomainRules = SCOPED_DOMAINS.flatMap((fromDomain) =>
+	SCOPED_DOMAINS
+		.filter((toDomain) => toDomain !== fromDomain)
+		.map((toDomain) => ({
+			name: `no-${fromDomain}-to-${toDomain}-explicit`,
+			severity: "error",
+			from: { path: `^src/${fromDomain}/` },
+			to: { path: `^src/${toDomain}/` },
+		})),
+);
+
+const scopedTestRules = SCOPED_DOMAINS.flatMap((fromDomain) =>
+	SCOPED_DOMAINS
+		.filter((toDomain) => toDomain !== fromDomain)
+		.map((toDomain) => ({
+			name: `no-${fromDomain}-test-to-${toDomain}-explicit`,
+			severity: "error",
+			from: {
+				path: fromDomain === "pr" && toDomain === "todoist"
+					? "^test/pr/(?!merge-consumer\\.test\\.ts$)"
+					: fromDomain === "todoist" && toDomain === "footer"
+						? "^test/todoist/(?!footer\\.test\\.ts$)"
+						: `^test/${fromDomain}/`,
+			},
+			to: { path: `^src/${toDomain}/` },
+		})),
+);
+
 module.exports = {
 	forbidden: [
+		...scopedDomainRules,
+		...scopedTestRules,
+		{
+			name: "no-shared-to-scoped-domain-explicit",
+			severity: "error",
+			from: { path: "^src/shared/" },
+			to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/" },
+		},
+		{
+			name: "no-scoped-domain-cycles",
+			severity: "error",
+			from: { path: "^src/" },
+			to: { circular: true },
+		},
+
 		{
 			name: "no-pr-to-todoist",
 			severity: "error",

@@ -4,8 +4,23 @@ import {
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import {
+	FOOTER_ACCENT_COLOR,
+	FOOTER_DIM,
+	FOOTER_HTTP_PROTOCOL,
+	FOOTER_HTTPS_PROTOCOL,
+	FOOTER_MUTED_COLOR,
+	FOOTER_NO_PR_LABEL,
+	FOOTER_NONE_TEXT,
+	FOOTER_OPEN_TASK_LABEL,
+	FOOTER_PR_LINK_LABEL,
+	FOOTER_PR_SEPARATOR,
 	FOOTER_SPINNER_FRAMES,
 	FOOTER_SPINNER_INTERVAL_MS,
+	FOOTER_STATUS_SEPARATOR,
+	FOOTER_TASK_NONE_LABEL,
+	FOOTER_TASK_SEPARATOR,
+	FOOTER_TEXT_COLOR,
+	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
 import type {
 	FooterUpdate,
@@ -144,9 +159,6 @@ export class FooterDisplay {
 	}
 }
 
-const DIM = "dim";
-const STATUS_SEPARATOR = " | ";
-
 export interface FooterRenderState {
 	prUrl?: string;
 	taskUrl?: string;
@@ -198,7 +210,7 @@ export function renderFooterLine(
 		const hasStatus: boolean = !!status;
 		if (hasStatus) parts.push(status);
 	}
-	const line = theme.fg(DIM, parts.join(STATUS_SEPARATOR));
+	const line = theme.fg(FOOTER_DIM, parts.join(FOOTER_STATUS_SEPARATOR));
 	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
 	if (fitsWidth) return line;
 	return truncateToWidth(line, width, "", false);
@@ -241,15 +253,6 @@ export function createFooterFactory(
 	};
 }
 
-const NONE_TEXT = "none";
-const ACCENT_COLOR = "accent";
-const MUTED_COLOR = "muted";
-const TEXT_COLOR = "text";
-const PR_LINK_LABEL = "| PR Link: ";
-const NO_PR_LABEL = "PR: none";
-const PR_FOOTER_SEPARATOR = " |";
-const HTTPS_PROTOCOL = "https:";
-
 interface PrFooterTheme {
 	fg(color: string, text: string): string;
 }
@@ -259,7 +262,7 @@ function normalizedPrUrl(value: string | undefined): string | null {
 	if (!hasValue) return null;
 	try {
 		const url = new URL(value);
-		const isHttps = url.protocol === HTTPS_PROTOCOL;
+		const isHttps = url.protocol === FOOTER_HTTPS_PROTOCOL;
 		if (!isHttps) return null;
 		const isGithub = url.hostname.toLowerCase() === "github.com";
 		if (!isGithub) return null;
@@ -275,7 +278,7 @@ function normalizedPrUrl(value: string | undefined): string | null {
 
 function linkText(text: string, theme?: PrFooterTheme): string {
 	const colored =
-		theme?.fg(ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
+		theme?.fg(FOOTER_ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
@@ -296,7 +299,7 @@ export function renderPrLabel(
 	const normalized = normalizedPrUrl(url);
 	const number = prNumber(url);
 	const hasNoPr = normalized === null || number === null;
-	if (hasNoPr) return NO_PR_LABEL;
+	if (hasNoPr) return FOOTER_NO_PR_LABEL;
 	return hyperlink(
 		linkText(`PR #${boundedPrNumber(number)}`, theme),
 		normalized,
@@ -310,21 +313,14 @@ export function renderPrStatus(
 ): string {
 	const normalized = normalizedPrUrl(url);
 	const number = prNumber(url);
-	const muted = (text: string) => theme?.fg(MUTED_COLOR, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
+	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
+	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
 	const hasNoPr = normalized === null || number === null;
 	if (hasNoPr)
-		return `${muted(PR_LINK_LABEL)}${value(NONE_TEXT)}${muted(PR_FOOTER_SEPARATOR)}`;
+		return `${muted(FOOTER_PR_LINK_LABEL)}${value(FOOTER_NONE_TEXT)}${muted(FOOTER_PR_SEPARATOR)}`;
 	const dirtyMarker = hasUncommittedChanges ? "*" : "";
-	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(PR_FOOTER_SEPARATOR)}`;
+	return `${muted(FOOTER_PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_PR_SEPARATOR)}`;
 }
-
-const OPEN_TASK_LABEL = "open";
-const TODOIST_TASK_LABEL = "Todoist Task: ";
-const TASK_NONE_LABEL = "Todoist Task: none";
-const TASK_FOOTER_SEPARATOR = " |";
-const HTTP_PROTOCOL = "http:";
-const TASK_HTTPS_PROTOCOL = "https:";
 
 export interface TodoistFooterTheme {
 	fg(color: string, text: string): string;
@@ -332,7 +328,7 @@ export interface TodoistFooterTheme {
 
 function taskLinkText(text: string, theme?: TodoistFooterTheme): string {
 	const colored =
-		theme?.fg(ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
+		theme?.fg(FOOTER_ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
 	return `\u001b[4m${colored}\u001b[24m`;
 }
 
@@ -342,11 +338,11 @@ function displayTaskName(
 ): string {
 	const name = taskName?.replace(/\s+/g, " ").trim();
 	const hasId = id !== undefined;
-	if (name === undefined) return hasId ? `#${id}` : OPEN_TASK_LABEL;
+	if (name === undefined) return hasId ? `#${id}` : FOOTER_OPEN_TASK_LABEL;
 	const hasName = name !== "";
 	const exceedsNameLimit = name.length > 15;
 	if (hasName) return exceedsNameLimit ? `${name.slice(0, 15)}...` : name;
-	return hasId ? `#${id}` : OPEN_TASK_LABEL;
+	return hasId ? `#${id}` : FOOTER_OPEN_TASK_LABEL;
 }
 
 export function renderTaskLabel(
@@ -355,18 +351,18 @@ export function renderTaskLabel(
 	taskName?: string,
 ): string {
 	const hasUrl = Boolean(url);
-	if (!hasUrl) return TASK_NONE_LABEL;
+	if (!hasUrl) return FOOTER_TASK_NONE_LABEL;
 	const inputUrl = url ?? "";
 	try {
 		const parsed = new URL(inputUrl);
 		const protocol = parsed.protocol;
 		const isSupportedProtocol =
-			protocol === HTTP_PROTOCOL || protocol === TASK_HTTPS_PROTOCOL;
-		if (!isSupportedProtocol) return TASK_NONE_LABEL;
+			protocol === FOOTER_HTTP_PROTOCOL || protocol === FOOTER_HTTPS_PROTOCOL;
+		if (!isSupportedProtocol) return FOOTER_TASK_NONE_LABEL;
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return `${TODOIST_TASK_LABEL}${hyperlink(taskLinkText(displayTaskName(taskName, id), theme), inputUrl)}`;
+		return `${FOOTER_TODOIST_TASK_LABEL}${hyperlink(taskLinkText(displayTaskName(taskName, id), theme), inputUrl)}`;
 	} catch {
-		return TASK_NONE_LABEL;
+		return FOOTER_TASK_NONE_LABEL;
 	}
 }
 
@@ -376,27 +372,27 @@ function renderTaskStatusValue(
 	taskName: string | undefined,
 	includeSeparator: boolean,
 ): string {
-	const muted = (text: string) => theme?.fg(MUTED_COLOR, text) ?? text;
-	const value = (text: string) => theme?.fg(TEXT_COLOR, text) ?? text;
+	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
+	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
 	const createTaskLabel = (taskValue: string): string => {
-		const suffix = includeSeparator ? muted(TASK_FOOTER_SEPARATOR) : "";
-		return `${muted(TODOIST_TASK_LABEL)}${taskValue}${suffix}`;
+		const suffix = includeSeparator ? muted(FOOTER_TASK_SEPARATOR) : "";
+		return `${muted(FOOTER_TODOIST_TASK_LABEL)}${taskValue}${suffix}`;
 	};
 	const hasUrl = Boolean(url);
-	if (!hasUrl) return createTaskLabel(value(NONE_TEXT));
+	if (!hasUrl) return createTaskLabel(value(FOOTER_NONE_TEXT));
 	const inputUrl = url ?? "";
 	try {
 		const parsed = new URL(inputUrl);
 		const protocol = parsed.protocol;
 		const isSupportedProtocol =
-			protocol === HTTP_PROTOCOL || protocol === TASK_HTTPS_PROTOCOL;
-		if (!isSupportedProtocol) return createTaskLabel(value(NONE_TEXT));
+			protocol === FOOTER_HTTP_PROTOCOL || protocol === FOOTER_HTTPS_PROTOCOL;
+		if (!isSupportedProtocol) return createTaskLabel(value(FOOTER_NONE_TEXT));
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
 		return createTaskLabel(
 			hyperlink(taskLinkText(displayTaskName(taskName, id), theme), inputUrl),
 		);
 	} catch {
-		return createTaskLabel(value(NONE_TEXT));
+		return createTaskLabel(value(FOOTER_NONE_TEXT));
 	}
 }
 

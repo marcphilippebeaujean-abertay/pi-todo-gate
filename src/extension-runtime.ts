@@ -5,6 +5,10 @@ import type {
 	ExtensionRuntime,
 } from "./extension-types.ts";
 import { createFooterModule } from "./footer/module.ts";
+import {
+	enqueueSessionOperation,
+	isCurrentOperation,
+} from "./session-operations.ts";
 import { createSharedEvents } from "./shared/events.ts";
 import { registerTodoistMergeConsumer } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
@@ -24,6 +28,8 @@ export function createExtensionRuntime(
 		}),
 		worktree: createWorktreeModule(events, { exec: dependencies.exec }),
 		active: null,
+		isCurrentOperation,
+		enqueueSessionOperation,
 		registered: false,
 	};
 	registerTodoistMergeConsumer(runtime);

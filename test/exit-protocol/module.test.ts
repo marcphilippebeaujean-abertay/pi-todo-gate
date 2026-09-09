@@ -5,10 +5,10 @@ import {
 	focusSubmit,
 	initialPickerState,
 	toggleAction,
-} from "../src/exit-protocol/data.ts";
-import { createExitProtocolModule } from "../src/exit-protocol/module.ts";
-import { createSharedEvents } from "../src/shared/events.ts";
-import type { ExitAction } from "../src/shared/exit-actions.ts";
+} from "../../src/exit-protocol/data.ts";
+import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
+import type { ExitAction } from "../../src/shared/exit-actions.ts";
 
 const actions: ExitAction[] = [
 	{

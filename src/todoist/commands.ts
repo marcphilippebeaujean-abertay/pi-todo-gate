@@ -1,5 +1,24 @@
 import type { CommandResult } from "../shared/command.ts";
 import {
+	ADD,
+	COMPLETE,
+	DESCRIPTION_FLAG,
+	ID,
+	IN_PROGRESS_LABEL,
+	IN_PROGRESS_VALUE,
+	JSON_OUTPUT_FLAG,
+	MOVE,
+	PROJECT,
+	PROJECT_FLAG,
+	PROJECT_LIST,
+	SECTION,
+	SECTION_FLAG,
+	TASK,
+	TASK_CLAIM,
+	TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
+	VIEW,
+} from "./constants.ts";
+import {
 	childList,
 	parsePayload,
 	record,
@@ -11,25 +30,7 @@ import {
 	taskFromPayload,
 } from "./data.ts";
 
-const PROJECT = "project";
 const LIST = "list";
-const JSON_OUTPUT_FLAG = "--json";
-const ID = "id:";
-const PROJECT_LIST = "project list";
-const TASK = "task";
-const VIEW = "view";
-const ADD = "add";
-const COMPLETE = "complete";
-const TASK_CLAIM = "task claim";
-const TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT =
-	"task is outside the configured project";
-const SECTION = "section";
-const PROJECT_FLAG = "--project";
-const SECTION_FLAG = "--section";
-const DESCRIPTION_FLAG = "--description";
-const IN_PROGRESS_VALUE = "in progress";
-const IN_PROGRESS_LABEL = "In Progress";
-const MOVE = "move";
 
 export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;

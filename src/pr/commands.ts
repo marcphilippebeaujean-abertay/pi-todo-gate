@@ -1,18 +1,21 @@
 import type { CommandResult, Exec } from "../shared/command.ts";
 import {
+	CLOSED_STATE,
+	GH_COMMAND,
+	JSON_FLAG,
+	MERGE_PR_MODE,
+	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
+	MERGED_STATE,
+	OPEN_STATE,
+	PR_COMMAND,
+	UNKNOWN_STATE,
+} from "./constants.ts";
+import {
 	githubPrUrl,
 	mergedPrDataSchema,
 	openPrRowSchema,
 	openPrRowsSchema,
 } from "./data.ts";
-
-const GH_COMMAND = "gh";
-const PR_COMMAND = "pr";
-const JSON_FLAG = "--json";
-const UNKNOWN_STATE = "UNKNOWN";
-const MERGED_STATE = "MERGED";
-const OPEN_STATE = "OPEN";
-const CLOSED_STATE = "CLOSED";
 
 function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
 	const parsed = mergedPrDataSchema.safeParse(data);
@@ -163,19 +166,14 @@ export async function findOpenPr(
 	return parseOpenPrResult(result.stdout);
 }
 
-const MERGE_GH_COMMAND = "gh";
-const MERGE_PR_COMMAND = "pr";
-const MERGE_PR_COMMAND_NAME = "merge";
-const MERGE_PR_MODE = "--merge";
-
 export function mergePinnedPr(
 	exec: Exec,
 	cwd: string,
 	prUrl: string,
 ): Promise<CommandResult> {
 	return exec(
-		MERGE_GH_COMMAND,
-		[MERGE_PR_COMMAND, MERGE_PR_COMMAND_NAME, prUrl, MERGE_PR_MODE],
+		GH_COMMAND,
+		[PR_COMMAND, MERGE_PROTOCOL_COMMAND, prUrl, MERGE_PR_MODE],
 		{
 			cwd,
 		},

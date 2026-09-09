@@ -1,4 +1,3 @@
-import { handleClaimError } from "../claim-error.ts";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import {
 	appendState,
@@ -11,16 +10,18 @@ import { spawnExec } from "../shared/command.ts";
 import type { EventRequest, SharedEventPayloads } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
 import { completeMergedTask } from "../task-completion.ts";
+import {
+	CLAIM,
+	ERROR,
+	INVALID_RESULT,
+	STARTED,
+	TASK_URL,
+	UNKNOWN_ERROR,
+} from "./constants.ts";
 import type { TaskClaimWorkerResult } from "./data.ts";
 import { createTaskClaimWorker } from "./event-publishers.ts";
-
-const TODOIST = "Todoist";
-const CLAIM = "claim";
-const ERROR = "error";
-const INFO = "info";
-const TASK_URL = "https://app.todoist.com/app/task/";
-const INVALID_RESULT = "Invalid claim worker result.";
-const UNKNOWN_ERROR = "Unknown claim error.";
+import { notifyClaimFailure, notifyTaskAssigned } from "./notifications.ts";
+import { confirmTaskCompletion } from "./user-prompts.ts";
 
 type ClaimTaskData = {
 	title: string;
@@ -79,7 +80,7 @@ function persistClaim(
 	);
 	appendState(runtime, session.state, session.allowPrDiscovery === false);
 	refreshFooterStatuses(runtime, session);
-	session.context.ui.notify("Todoist task assigned", INFO);
+	notifyTaskAssigned(session.context);
 }
 
 export function handleTaskClaimResult(
@@ -97,7 +98,7 @@ export function handleTaskClaimResult(
 		return;
 	}
 	const error = event.result.error ?? INVALID_RESULT;
-	handleClaimError(session.context, { jobType: TODOIST, error });
+	notifyClaimFailure(session.context, error);
 }
 
 function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
@@ -138,8 +139,6 @@ export async function runTaskClaim(
 	}
 }
 
-const STARTED = true;
-
 export function maybeAnalyzeTaskClaim(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
@@ -154,10 +153,6 @@ export function maybeAnalyzeTaskClaim(
 	session.taskClaimAnalysisStarted = STARTED;
 	const generation = ++session.taskClaimGeneration;
 	void runTaskClaim(runtime, session, prompt, generation);
-}
-
-function taskPrompt(taskName: string): string {
-	return `${C.todoist.completeLabelPrefix}${taskName}${C.todoist.completeLabelSuffix}?`;
 }
 
 type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
@@ -178,9 +173,10 @@ async function consumeMergedEvent(
 	const stateSnapshot = structuredClone(session.state);
 	const workRevision = session.workRevision;
 	const operationGeneration = session.operationGeneration;
-	const confirmed = await session.context.ui.confirm(
-		taskPrompt(taskName),
-		`Todoist task ${taskRef}`,
+	const confirmed = await confirmTaskCompletion(
+		session.context,
+		taskName,
+		taskRef,
 	);
 	if (!confirmed) return;
 	const result = await completeMergedTask(

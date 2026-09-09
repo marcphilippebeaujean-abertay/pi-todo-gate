@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { withWorkerMarker } from "../session.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
+import { HERDR_COMMAND, HERDR_ENVIRONMENT } from "./constants.ts";
 import type { CommandRunner, StartBackgroundWorker } from "./data.ts";
 import {
 	appendBounded,
@@ -167,8 +168,6 @@ export function startClaimWorker(
 	};
 }
 
-const HERDR_COMMAND = "herdr";
-const HERDR_ENVIRONMENT = "HERDR_ENV";
 const UTF8_ENCODING = "utf8";
 const ENV_STDIO_IGNORE = "ignore";
 const ENV_STDIO_PIPE = "pipe";

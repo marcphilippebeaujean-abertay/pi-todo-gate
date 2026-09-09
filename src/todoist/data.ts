@@ -6,6 +6,20 @@ import { Value } from "typebox/value";
 import { isPathAtOrBelow, normalizedPath } from "../shared/path.ts";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
 import { isRecord } from "../shared/records.ts";
+import {
+	CLAIM,
+	CONFIG_FILE_NAME,
+	ERROR,
+	EXPECTED_LIST_PAYLOAD_MESSAGE,
+	INVALID_JSON_RESPONSE_MESSAGE,
+	INVALID_RESULT,
+	MISSING_TASK_FIELDS_MESSAGE,
+	OPERATION_CANCELLED,
+	REDACTED_VALUE_REPLACEMENT,
+	RESPONSE_ERROR_FAMILY,
+	TODOIST_ERROR_NAME,
+	UNEXPECTED_JSON_SHAPE_MESSAGE,
+} from "./constants.ts";
 
 export interface TodoistTask {
 	id: string;
@@ -55,7 +69,6 @@ export const TaskClaimWorkerResultSchema = Type.Object({
 export type TaskClaimWorkerResult = Type.Static<
 	typeof TaskClaimWorkerResultSchema
 >;
-const CONFIG_FILE_NAME = "pi-todo-gate.json";
 
 export interface TodoistProjectSettings {
 	todoistProjectRef: string;
@@ -189,8 +202,6 @@ export function parseProjectEntry(
 		},
 	];
 }
-const TODOIST_ERROR_NAME = "TodoistError";
-const OPERATION_CANCELLED = "Todoist operation cancelled";
 
 export class TodoistOperationCancelled extends Error {
 	constructor() {
@@ -209,12 +220,6 @@ export class TodoistError extends Error {
 		this.commandFamily = commandFamily;
 	}
 }
-const REDACTED_VALUE_REPLACEMENT = "$1=[redacted]";
-const INVALID_JSON_RESPONSE_MESSAGE = "invalid JSON response";
-const RESPONSE_ERROR_FAMILY = "response";
-const UNEXPECTED_JSON_SHAPE_MESSAGE = "unexpected JSON shape";
-const MISSING_TASK_FIELDS_MESSAGE = "task has missing required fields";
-const EXPECTED_LIST_PAYLOAD_MESSAGE = "expected a list payload";
 
 export function sanitizeError(stderr: string): string {
 	return stderr
@@ -361,10 +366,7 @@ export function applyTodoistStatePatch(
 	return next;
 }
 
-const INVALID_RESULT = "Invalid claim worker result.";
 const EMPTY = String();
-const CLAIM = "claim";
-const ERROR = "error";
 
 function invalidResult(sessionId: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error: INVALID_RESULT };

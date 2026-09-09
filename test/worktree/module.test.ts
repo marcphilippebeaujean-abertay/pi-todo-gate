@@ -1,12 +1,12 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import type { CommandResult, Exec } from "../src/shared/command.ts";
-import { createSharedEvents } from "../src/shared/events.ts";
-import type { ExitAction } from "../src/shared/exit-actions.ts";
+import type { CommandResult, Exec } from "../../src/shared/command.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
+import type { ExitAction } from "../../src/shared/exit-actions.ts";
 import {
 	createWorktreeModule,
 	hasNoSessionWork,
-} from "../src/worktree/module.ts";
+} from "../../src/worktree/module.ts";
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };

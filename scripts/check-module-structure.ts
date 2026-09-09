@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 export const SCOPED_DOMAINS = [
@@ -28,10 +28,17 @@ export interface StructureIssue {
 	correction: string;
 }
 
-async function exists(path: string): Promise<boolean> {
+async function isDirectory(path: string): Promise<boolean> {
 	try {
-		await stat(path);
-		return true;
+		return (await lstat(path)).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+async function isFile(path: string): Promise<boolean> {
+	try {
+		return (await lstat(path)).isFile();
 	} catch {
 		return false;
 	}
@@ -43,7 +50,7 @@ export async function checkModuleStructure(
 	const issues: StructureIssue[] = [];
 	for (const domain of SCOPED_DOMAINS) {
 		const domainPath = join(root, "src", domain);
-		const hasDomain = await exists(domainPath);
+		const hasDomain = await isDirectory(domainPath);
 		if (!hasDomain) {
 			issues.push({
 				domain,
@@ -55,7 +62,7 @@ export async function checkModuleStructure(
 		}
 		for (const facet of CANONICAL_FACETS) {
 			const facetPath = join(domainPath, facet);
-			if (await exists(facetPath)) continue;
+			if (await isFile(facetPath)) continue;
 			issues.push({
 				domain,
 				path: relative(root, facetPath),
@@ -65,7 +72,7 @@ export async function checkModuleStructure(
 		}
 		if (domain === "footer") {
 			const renderingPath = join(domainPath, "footer-rendering.ts");
-			if (!(await exists(renderingPath))) {
+			if (!(await isFile(renderingPath))) {
 				issues.push({
 					domain,
 					path: relative(root, renderingPath),

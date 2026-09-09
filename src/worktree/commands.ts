@@ -1,12 +1,7 @@
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type { Exec } from "../shared/command.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
-import type { WorktreeBaseline } from "./data.ts";
-
-export interface WorktreeCurrentState {
-	currentHead: string;
-	currentStatus: string;
-}
+import type { WorktreeBaseline, WorktreeCurrentState } from "./data.ts";
 
 export function commandOutput(result: {
 	stdout: string;

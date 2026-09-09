@@ -1,9 +1,15 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { SharedEvents } from "../shared/events.ts";
+import {
+	EXIT_ACTION_KEY,
+	type EXIT_CANCEL_KEY,
+	EXIT_SUBMIT_KEY,
+} from "./constants.ts";
 
 export type PickerFocus =
-	| typeof C.exit.submitKey
-	| typeof C.exit.cancelKey
-	| { type: typeof C.exit.actionKey; id: string };
+	| typeof EXIT_SUBMIT_KEY
+	| typeof EXIT_CANCEL_KEY
+	| { type: typeof EXIT_ACTION_KEY; id: string };
 
 export interface PickerState {
 	readonly actionIds: readonly string[];
@@ -17,7 +23,7 @@ export function initialPickerState(actionIds: readonly string[]): PickerState {
 	return {
 		actionIds: [...actionIds],
 		selectedIds: new Set(actionIds),
-		focused: C.exit.submitKey,
+		focused: EXIT_SUBMIT_KEY,
 	};
 }
 
@@ -34,19 +40,20 @@ export function toggleAction(state: PickerState, id: string): PickerState {
 export function focusAction(state: PickerState, id: string): PickerState {
 	const isAction = state.actionIds.includes(id);
 	if (!isAction) return state;
-	return { ...state, focused: { type: C.exit.actionKey, id } };
+	return { ...state, focused: { type: EXIT_ACTION_KEY, id } };
 }
 
 export function focusSubmit(state: PickerState): PickerState {
-	return { ...state, focused: C.exit.submitKey };
+	return { ...state, focused: EXIT_SUBMIT_KEY };
 }
 
-export type ExitActionId = "remove-worktree";
-
-export type ExitActionResult = "completed" | "deferred" | "failed";
-
-export interface ExitAction {
-	id: ExitActionId;
-	label: string;
-	execute(): Promise<ExitActionResult>;
+export type {
+	ExitAction,
+	ExitActionId,
+	ExitActionResult,
+} from "../shared/exit-actions.ts";
+export interface ExitProtocolModule {
+	sessionStart(ctx: ExtensionContext): void;
+	deactivate(): void;
 }
+export type ExitProtocolFactory = (events: SharedEvents) => ExitProtocolModule;

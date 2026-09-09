@@ -10,12 +10,12 @@ import type {
 } from "./herdr/module.ts";
 import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
+import type { TodoistClient } from "./todoist/commands.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
-	TodoistClient,
 	TodoistProjectMapping,
-} from "./todoist/module.ts";
+} from "./todoist/data.ts";
 import type { WorkState } from "./types.ts";
 import type { WorktreeModule } from "./worktree/module.ts";
 
@@ -72,5 +72,10 @@ export interface ExtensionRuntime {
 	footer: FooterModule;
 	worktree: WorktreeModule;
 	active: ActiveSession | null;
+	isCurrentOperation(session: ActiveSession, generation: number): boolean;
+	enqueueSessionOperation<T>(
+		session: ActiveSession,
+		operation: () => Promise<T>,
+	): Promise<T>;
 	registered: boolean;
 }

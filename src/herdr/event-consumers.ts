@@ -2,8 +2,6 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { handleClaimError } from "../claim-error.ts";
-import type { FooterEventSink } from "../footer/data.ts";
 import { isSubagent } from "../session.ts";
 import {
 	boundCommandRunner,
@@ -11,6 +9,17 @@ import {
 	isInsideHerdr,
 	tabLabel,
 } from "./commands.ts";
+import {
+	BEFORE_AGENT_START_EVENT,
+	HERDR_STATE_TYPE,
+	RAN,
+	SESSION_SHUTDOWN_EVENT,
+	SESSION_START_EVENT,
+	TAB_CLAIM_FAILED,
+	TAB_CLAIM_INSTRUCTIONS,
+	TAB_CLAIM_START_FAILED,
+} from "./constants.ts";
+import type { FooterEventSink } from "./data.ts";
 import {
 	type ClaimWorkerHandle,
 	type ClaimWorkerRequest,
@@ -20,24 +29,11 @@ import {
 	hasValidatedTabClaim,
 	type StartBackgroundWorker,
 } from "./data.ts";
-import { hideHerdrFooter, showHerdrFooter } from "./notifications.ts";
-
-const SESSION_START_EVENT = "session_start";
-const BEFORE_AGENT_START_EVENT = "before_agent_start";
-const SESSION_SHUTDOWN_EVENT = "session_shutdown";
-const HERDR = "Herdr";
-const TAB_CLAIM_FAILED = "completed without claim evidence";
-const TAB_CLAIM_START_FAILED = "failed to start";
-const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
-const RAN = "ran";
-const TAB_CLAIM_INSTRUCTIONS = `Rename current Herdr tab for task in parent prompt.
-Use bash. First run \`herdr pane current\`, then \`herdr tab get <tab-id>\`.
-If current label clearly describes task, leave tab unchanged. Otherwise inspect current tab panes and
-\`herdr agent list\`; rename current tab when no other agent shares it, or move current pane to a new
-labeled tab when another agent shares it. Derive short lowercase concrete label from task prompt.
-After success or valid unchanged label, output only JSON:
-\`{"status":"claimed","tabId":"<current-tab-id>","label":"<current-tab-label>"}\`.
-Exit nonzero if claim cannot complete.`;
+import {
+	hideHerdrFooter,
+	notifyHerdrFailure,
+	showHerdrFooter,
+} from "./notifications.ts";
 
 interface TabClaimAttempt {
 	generation: number;
@@ -157,7 +153,7 @@ class HerdrTabClaim {
 			this.pi.appendEntry(HERDR_STATE_TYPE, { [RAN]: true });
 			return;
 		}
-		handleClaimError(ctx, { jobType: HERDR, error: TAB_CLAIM_FAILED });
+		notifyHerdrFailure(ctx, TAB_CLAIM_FAILED);
 	}
 
 	private failClaim(
@@ -169,7 +165,7 @@ class HerdrTabClaim {
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
-		handleClaimError(ctx, { jobType: HERDR, error: message });
+		notifyHerdrFailure(ctx, message);
 	}
 
 	private sessionShutdown(): void {

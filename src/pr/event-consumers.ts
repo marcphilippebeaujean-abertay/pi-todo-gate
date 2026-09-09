@@ -4,34 +4,68 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ActiveSession, ExtensionRuntime } from "../extension-types.ts";
-import {
-	enqueueSessionOperation,
-	isCurrentOperation,
-} from "../session-operations.ts";
-import { type CommandResult, spawnExec } from "../shared/command.ts";
+import type { CommandResult, Exec } from "../shared/command.ts";
+import { spawnExec } from "../shared/command.ts";
 import { mergePinnedPr } from "./commands.ts";
-
-const MERGE_COMMAND = "merge";
-const CONFIRM_TITLE_PREFIX = "Merge PR ";
-const CONFIRM_MESSAGE = "Confirm merge of pinned pull request.";
-const NO_PR_MESSAGE = "No pinned pull request is available to merge";
-const INACTIVE_MESSAGE = "Merge protocol is inactive for this project";
-const NO_UI_MESSAGE = "Merge protocol requires an interactive UI";
-const MERGE_FAILED_PREFIX = "Pull request merge failed";
-const MERGE_SUCCEEDED = "Pull request merged";
-const MAX_ERROR_LENGTH = 200;
+import {
+	MAX_ERROR_LENGTH,
+	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
+} from "./constants.ts";
+import {
+	notifyInactive,
+	notifyMergeFailure,
+	notifyMergeSucceeded,
+	notifyNoPr,
+	notifyNoUi,
+} from "./notifications.ts";
+import { confirmMerge } from "./user-prompts.ts";
 
 export const mergeProtocolSkillPath = fileURLToPath(
 	new URL("../../skills/merge-protocol", import.meta.url),
 );
 
+interface PrSession {
+	context: { cwd: string; hasUI: boolean };
+	state: { prUrl?: string };
+	operationGeneration: number;
+	operationQueue?: Promise<void>;
+}
+
+type PrRuntime = {
+	active: PrSession | null;
+	dependencies: { exec?: Exec };
+	events: {
+		emit(
+			event: string,
+			payload: { prUrl: string; taskMarkedAsCompleted: boolean },
+		): Promise<void>;
+	};
+	isCurrentOperation?(session: PrSession, generation: number): boolean;
+	enqueueSessionOperation?<T>(
+		session: PrSession,
+		operation: () => Promise<T>,
+	): Promise<T>;
+};
+
 function currentSession(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: PrRuntime,
+	session: PrSession,
 	generation: number,
 ): boolean {
-	return runtime.active === session && isCurrentOperation(session, generation);
+	const current =
+		runtime.isCurrentOperation?.(session, generation) ??
+		session.operationGeneration === generation;
+	return runtime.active === session && current;
+}
+
+function enqueueOperation<T>(
+	session: PrSession,
+	operation: () => Promise<T>,
+): Promise<T> {
+	const previous = session.operationQueue ?? Promise.resolve();
+	const result = previous.then(operation);
+	session.operationQueue = result.then(() => undefined);
+	return result;
 }
 
 function failureDetail(stderr: string): string {
@@ -39,8 +73,8 @@ function failureDetail(stderr: string): string {
 }
 
 async function mergeNow(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: PrRuntime,
+	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
 	generation: number,
@@ -57,9 +91,7 @@ async function mergeNow(
 		const detail = failureDetail(
 			error instanceof Error ? error.message : String(error),
 		);
-		const hasDetail = detail !== "";
-		const suffix = hasDetail ? `: ${detail}` : "";
-		ctx.ui.notify(`${MERGE_FAILED_PREFIX}${suffix}`, C.value.warning);
+		notifyMergeFailure(ctx, detail);
 		return false;
 	}
 	const isCurrentAfterCommand = currentSession(runtime, session, generation);
@@ -67,25 +99,20 @@ async function mergeNow(
 	const commandFailed = result.code !== 0;
 	if (commandFailed) {
 		const detail = failureDetail(result.stderr);
-		const hasDetail = detail !== "";
-		const suffix = hasDetail ? `: ${detail}` : "";
-		ctx.ui.notify(`${MERGE_FAILED_PREFIX}${suffix}`, C.value.warning);
+		notifyMergeFailure(ctx, detail);
 		return false;
 	}
 	return true;
 }
 
 async function confirmAndMerge(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: PrRuntime,
+	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
 	generation: number,
 ): Promise<boolean> {
-	const confirmed = await ctx.ui.confirm(
-		`${CONFIRM_TITLE_PREFIX}${prUrl}?`,
-		CONFIRM_MESSAGE,
-	);
+	const confirmed = await confirmMerge(ctx, prUrl);
 	if (!confirmed) return false;
 	const isCurrentAfterConfirmation = currentSession(
 		runtime,
@@ -97,27 +124,27 @@ async function confirmAndMerge(
 }
 
 export async function runMergeProtocol(
-	runtime: ExtensionRuntime,
+	runtime: PrRuntime,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
 	const session = runtime.active;
 	if (session === null) {
-		ctx.ui.notify(INACTIVE_MESSAGE, C.value.warning);
+		notifyInactive(ctx);
 		return;
 	}
 	const hasInteractiveUi = ctx.hasUI && session.context.hasUI;
 	if (!hasInteractiveUi) {
-		ctx.ui.notify(NO_UI_MESSAGE, C.value.warning);
+		notifyNoUi(ctx);
 		return;
 	}
 	const prUrl = session.state.prUrl;
 	const hasPinnedPr = typeof prUrl === "string" && prUrl.trim() !== "";
 	if (!hasPinnedPr) {
-		ctx.ui.notify(NO_PR_MESSAGE, C.value.warning);
+		notifyNoPr(ctx);
 		return;
 	}
 	const generation = session.operationGeneration;
-	const merged = await enqueueSessionOperation(
+	const merged = await (runtime.enqueueSessionOperation ?? enqueueOperation)(
 		session,
 		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
 	);
@@ -129,18 +156,18 @@ export async function runMergeProtocol(
 		taskMarkedAsCompleted: false,
 	});
 	const isCurrentAfterEvent = currentSession(runtime, session, generation);
-	if (isCurrentAfterEvent) ctx.ui.notify(MERGE_SUCCEEDED, C.value.info);
+	if (isCurrentAfterEvent) notifyMergeSucceeded(ctx);
 }
 
 export function registerMergeProtocol(
 	pi: ExtensionAPI,
-	runtime: ExtensionRuntime,
+	runtime: PrRuntime,
 ): void {
 	pi.on("resources_discover", () => ({
 		skillPaths: [mergeProtocolSkillPath],
 	}));
 	if (typeof pi.registerCommand !== "function") return;
-	pi.registerCommand(MERGE_COMMAND, {
+	pi.registerCommand(MERGE_PROTOCOL_COMMAND, {
 		description: "Merge the active session's pinned pull request",
 		handler: (_args, ctx) => runMergeProtocol(runtime, ctx),
 	});

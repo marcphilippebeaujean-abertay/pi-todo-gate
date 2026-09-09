@@ -1,59 +1,30 @@
-const NO_PR_LABEL = "PR: none";
-const PR_LINK_LABEL = "| PR Link: ";
-const FOOTER_SEPARATOR = " |";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import {
+	INACTIVE_MESSAGE,
+	MERGE_FAILED_PREFIX,
+	MERGE_SUCCEEDED,
+	NO_PR_MESSAGE,
+	NO_UI_MESSAGE,
+} from "./constants.ts";
 
-import { hyperlink } from "@earendil-works/pi-tui";
-import { githubPrUrl } from "./data.ts";
-
-export interface PrFooterTheme {
-	fg(color: string, text: string): string;
+export function notifyInactive(context: ExtensionCommandContext): void {
+	context.ui.notify(INACTIVE_MESSAGE, C.value.warning);
 }
-
-function linkText(text: string, theme?: PrFooterTheme): string {
-	const colored = theme?.fg("accent", text) ?? `\u001b[34m${text}\u001b[39m`;
-	return `\u001b[4m${colored}\u001b[24m`;
+export function notifyNoUi(context: ExtensionCommandContext): void {
+	context.ui.notify(NO_UI_MESSAGE, C.value.warning);
 }
-
-function prNumber(url: string | undefined): string | null {
-	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
-	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
-	return number ?? null;
+export function notifyNoPr(context: ExtensionCommandContext): void {
+	context.ui.notify(NO_PR_MESSAGE, C.value.warning);
 }
-
-function boundedPrNumber(number: string): string {
-	const exceedsNumberLimit = number.length > 6;
-	return exceedsNumberLimit ? `${number.slice(0, 5)}…` : number;
+export function notifyMergeFailure(
+	context: ExtensionCommandContext,
+	detail: string,
+): void {
+	const hasDetail = detail !== "";
+	const suffix = hasDetail ? `: ${detail}` : "";
+	context.ui.notify(`${MERGE_FAILED_PREFIX}${suffix}`, C.value.warning);
 }
-
-export function renderPrLabel(
-	url: string | undefined,
-	theme?: PrFooterTheme,
-): string {
-	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
-	const number = prNumber(url);
-	const hasNoPr = number === null || normalized === null;
-	if (hasNoPr) return NO_PR_LABEL;
-	return hyperlink(
-		linkText(`PR #${boundedPrNumber(number)}`, theme),
-		normalized,
-	);
-}
-
-export function renderPrStatus(
-	url: string | undefined,
-	theme?: PrFooterTheme,
-	hasUncommittedChanges = false,
-): string {
-	const muted = (text: string) => theme?.fg("muted", text) ?? text;
-	const value = (text: string) => theme?.fg("text", text) ?? text;
-	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
-	const number = prNumber(url);
-	const hasNoPr = number === null || normalized === null;
-	if (hasNoPr)
-		return `${muted(PR_LINK_LABEL)}${value("none")}${muted(FOOTER_SEPARATOR)}`;
-	const dirtyMarker = hasUncommittedChanges ? "*" : "";
-	return `${muted(PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_SEPARATOR)}`;
+export function notifyMergeSucceeded(context: ExtensionCommandContext): void {
+	context.ui.notify(MERGE_SUCCEEDED, C.value.info);
 }

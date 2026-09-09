@@ -1,13 +1,20 @@
 import type { CommandResult, Exec } from "../shared/command.ts";
+import {
+	END_OF_OPTIONS,
+	GH_COMMAND,
+	GH_KIND,
+	GH_MERGE_FLAG_OPTIONS,
+	GH_MERGE_VALUE_OPTIONS,
+	GIT_COMMAND,
+	GIT_MERGE_VALUE_OPTIONS,
+	JSON_FLAG,
+	MERGE_COMMAND,
+	NON_COMPLETING_GH_MERGE_OPTIONS,
+	NON_COMPLETING_GIT_MERGE_OPTIONS,
+	PR_COMMAND,
+	VIEW_COMMAND,
+} from "./constants.ts";
 import { executableName, shellSegments, shellWords } from "./data.ts";
-
-const GIT_COMMAND = "git";
-const GH_COMMAND = "gh";
-const END_OF_OPTIONS = "--";
-const PR_COMMAND = "pr";
-const VIEW_COMMAND = "view";
-const JSON_FLAG = "--json";
-const MERGE_COMMAND = "merge";
 
 export interface MergeEvent {
 	prUrl: string;
@@ -42,18 +49,6 @@ export function mergeCommand(
 	const words = shellWords(segments[0] ?? "");
 	return parseMergeWords(words);
 }
-
-const GIT_MERGE_VALUE_OPTIONS = new Set([
-	"-m",
-	"--message",
-	"-s",
-	"--strategy",
-	"-X",
-	"--strategy-option",
-	"--into-name",
-]);
-const NON_COMPLETING_GIT_MERGE_OPTIONS = new Set(["--no-commit", "--squash"]);
-const NON_COMPLETING_GH_MERGE_OPTIONS = new Set(["--auto", "--dry-run"]);
 
 export function hasNonCompletingMergeOption(
 	kind: "git" | "gh",
@@ -96,26 +91,6 @@ export function gitMergeTargets(args: string[]): string[] {
 	}
 	return targets;
 }
-
-const GH_MERGE_FLAG_OPTIONS = new Set([
-	"--admin",
-	"--auto",
-	"--delete-branch",
-	"--disable-auto",
-	"--dry-run",
-	"--merge",
-	"--rebase",
-	"--squash",
-]);
-const GH_MERGE_VALUE_OPTIONS = new Set([
-	"--author-email",
-	"--body",
-	"--body-file",
-	"--match-head-commit",
-	"--subject",
-	"--repo",
-	"-R",
-]);
 
 export function ghMergeTargets(args: string[]): string[] | null {
 	const targets: string[] = [];
@@ -242,8 +217,6 @@ export async function detectMerge(
 	const isPinnedMatch = await matchesPinnedPr(exec, cwd, command, prUrl);
 	return isPinnedMatch ? { prUrl: normalizedUrl(prUrl) ?? prUrl } : null;
 }
-
-const GH_KIND = "gh";
 
 interface ParsedMerge {
 	kind: "git" | "gh";

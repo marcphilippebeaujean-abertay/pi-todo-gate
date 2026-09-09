@@ -1,8 +1,5 @@
 import { z } from "zod";
-
-const OPEN_STATE = "OPEN";
-const CLOSED_STATE = "CLOSED";
-const MERGED_STATE = "MERGED";
+import { CLOSED_STATE, MERGED_STATE, OPEN_STATE } from "./constants.ts";
 
 const prStateSchema = z.enum([OPEN_STATE, CLOSED_STATE, MERGED_STATE]);
 
@@ -45,8 +42,7 @@ export const prStateDataSchema = z
 	})
 	.loose();
 
-const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
-const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
+import { PR_CANDIDATE, TRAILING_PUNCTUATION } from "./constants.ts";
 
 function normalizedGithubPrUrl(candidate: string): string | null {
 	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
@@ -102,8 +98,6 @@ export function firstUnmergedGithubPrUrl(
 	}
 	return null;
 }
-
-export const PR_STATE_TYPE = "pi-pr-gate-state";
 
 export interface MergedPr {
 	prUrl: string;
