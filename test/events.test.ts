@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ExitAction } from "../src/exit-protocol/types.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
+import type { ExitAction } from "../src/shared/exit-actions.ts";
 
 const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
 	id,

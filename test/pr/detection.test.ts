@@ -30,7 +30,7 @@ import {
 	firstGithubPrUrl,
 	githubPrUrl,
 	githubPrUrls,
-} from "../../src/pr/detection.ts";
+} from "../../src/pr/module.ts";
 
 describe("githubPrUrl", () => {
 	it(ACCEPTS_A_VALID_GITHUB_PULL_REQUEST_URL, () => {

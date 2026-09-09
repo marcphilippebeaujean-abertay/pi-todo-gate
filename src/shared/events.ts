@@ -1,5 +1,5 @@
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitAction } from "../exit-protocol/types.ts";
+import type { ExitAction } from "../shared/exit-actions.ts";
 
 export type ShutdownReason = "quit" | "new" | "resume" | "fork" | "reload";
 

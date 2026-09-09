@@ -53,7 +53,7 @@ import {
 	renderFooterLine,
 	renderPrStatus,
 	renderTaskStatus,
-} from "../../src/footer.ts";
+} from "../../src/footer/module.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);

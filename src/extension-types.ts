@@ -10,12 +10,12 @@ import type {
 } from "./herdr/module.ts";
 import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
-import type { TaskClaimWorker } from "./todoist/claim-worker.ts";
-import type { TodoistClient } from "./todoist/client.ts";
 import type {
 	ResolvedProject,
+	TaskClaimWorker,
+	TodoistClient,
 	TodoistProjectMapping,
-} from "./todoist/config.ts";
+} from "./todoist/module.ts";
 import type { WorkState } from "./types.ts";
 import type { WorktreeModule } from "./worktree/module.ts";
 

@@ -1,6 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitActionResult } from "../exit-protocol/types.ts";
+import type { ExitActionResult } from "../shared/exit-actions.ts";
+import "./constants.ts";
+import "./event-consumers.ts";
+import "./event-publishers.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import type {
 	EventRequest,
@@ -8,11 +11,14 @@ import type {
 	SharedEvents,
 } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
-import { confirmDirtyRemoval, createCleanupAction } from "./action.ts";
-import { cleanupWorktree } from "./cleanup.ts";
-import { currentWorktreeState, type WorktreeCurrentState } from "./commands.ts";
-import { notifyWorktree } from "./notify.ts";
-import { hasNoSessionWork, isCurrentWorktree } from "./state.ts";
+import {
+	cleanupWorktree,
+	currentWorktreeState,
+	type WorktreeCurrentState,
+} from "./commands.ts";
+import { hasNoSessionWork, isCurrentWorktree } from "./data.ts";
+import { notifyWorktree } from "./notifications.ts";
+import { confirmDirtyRemoval, createCleanupAction } from "./user-prompts.ts";
 
 export interface WorktreeModuleDependencies {
 	exec?: Exec;
@@ -32,7 +38,7 @@ export interface WorktreeBaseline {
 	initialStatus: string;
 }
 
-export { hasNoSessionWork } from "./state.ts";
+export { hasNoSessionWork } from "./data.ts";
 export type { WorktreeCurrentState };
 
 type CloseRequest = EventRequest<SharedEventPayloads["sessionWillClose"]>;

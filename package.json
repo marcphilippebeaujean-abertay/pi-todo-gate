@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "npm run architecture && vitest run",
-    "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test",
+    "architecture": "depcruise --config .dependency-cruiser.cjs src extensions test && tsx scripts/check-module-structure.ts",
     "typecheck": "tsc --noEmit",
     "lint:biome": "biome check extensions src test",
     "lint:strict": "tsx src/lint/cli.ts",

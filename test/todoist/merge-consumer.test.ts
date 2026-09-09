@@ -4,7 +4,7 @@ import { EXTENSION_CONSTANTS as C } from "../../src/constants.ts";
 import type { ExtensionRuntime } from "../../src/extension-types.ts";
 import { runMergeProtocol } from "../../src/merge-protocol.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
-import { registerTodoistMergeConsumer } from "../../src/todoist/merge-consumer.ts";
+import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 

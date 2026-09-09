@@ -85,7 +85,7 @@ import {
 	findPrState,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../../src/pr/git.ts";
+} from "../../src/pr/module.ts";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { inspectProject } from "../../src/shared/project.ts";
 

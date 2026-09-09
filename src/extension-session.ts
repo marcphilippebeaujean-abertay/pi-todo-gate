@@ -21,7 +21,7 @@ import type {
 import { extractInheritedState, latestState } from "./session-state.ts";
 import { spawnExec } from "./shared/command.ts";
 import { hasUncommittedChanges } from "./shared/project.ts";
-import type { TodoistProjectMapping } from "./todoist/config.ts";
+import type { TodoistProjectMapping } from "./todoist/module.ts";
 
 const FUNCTION_TYPE = "function";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderTaskStatus } from "../../src/todoist/footer.ts";
+import { renderTodoistTaskStatus as renderTaskStatus } from "../../src/footer/module.ts";
 
 const styledTheme = {
 	fg: (color: string, text: string) => `<${color}>${text}</${color}>`,

@@ -1,11 +1,18 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import "./commands.ts";
+import "./constants.ts";
+import "./data.ts";
+import "./event-consumers.ts";
+import "./event-publishers.ts";
+import "./notifications.ts";
+import "./user-prompts.ts";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type {
 	EventRequest,
 	SharedEventPayloads,
 	SharedEvents,
 } from "../shared/events.ts";
-import { presentExitActions } from "./presenter.ts";
+import { presentExitActions } from "./user-prompts.ts";
 
 export interface ExitProtocolModule {
 	sessionStart(ctx: ExtensionContext): void;

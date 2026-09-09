@@ -1,6 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import type { ExitActionResult } from "./exit-protocol/types.ts";
 import {
 	appendState,
 	createClient,
@@ -10,6 +9,7 @@ import {
 import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
 import { enqueueSessionOperation } from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
+import type { ExitActionResult } from "./shared/exit-actions.ts";
 
 function isCurrentCompletion(
 	runtime: ExtensionRuntime,
