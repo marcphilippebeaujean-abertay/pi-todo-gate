@@ -13,15 +13,13 @@ import {
 	NON_COMPLETING_GIT_MERGE_OPTIONS,
 	PR_COMMAND,
 } from "./constants.ts";
-import { executableName, shellSegments, shellWords } from "./data.ts";
-
-export interface MergeEvent {
-	prUrl: string;
-}
-
-export interface MergeEvent {
-	prUrl: string;
-}
+import {
+	executableName,
+	type MergeEvent,
+	normalizedUrl,
+	shellSegments,
+	shellWords,
+} from "./data.ts";
 
 function parseMergeWords(
 	words: string[],
@@ -123,26 +121,6 @@ export function ghMergeTargets(args: string[]): string[] | null {
 		targets.push(arg);
 	}
 	return targets;
-}
-
-export function normalizedUrl(value: string): string | null {
-	const candidate = value.match(/https?:\/\/github\.com\/[^\s<>"']+/i)?.[0];
-	const hasNoCandidate = candidate === undefined;
-	if (hasNoCandidate) return null;
-	try {
-		const url = new URL(candidate.replace(/[.,;:!?)}\]]+$/g, ""));
-		const hasGithubHostname = url.hostname.toLowerCase() === "github.com";
-		if (!hasGithubHostname) return null;
-		const match = url.pathname.match(
-			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
-		);
-		const hasMatch = match !== null;
-		return hasMatch
-			? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`
-			: null;
-	} catch {
-		return null;
-	}
 }
 
 export async function detectMerge(

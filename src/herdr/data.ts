@@ -22,6 +22,11 @@ export interface ClaimWorkerRequest {
 export interface ClaimWorkerHandle {
 	cancel(): void;
 }
+export interface ClaimWorkerOptions {
+	command?: string;
+	cwd?: string;
+	spawnWorker?: WorkerSpawner;
+}
 export interface WorkerOutputStream {
 	on(event: "data", listener: (chunk: Buffer | string) => void): void;
 }

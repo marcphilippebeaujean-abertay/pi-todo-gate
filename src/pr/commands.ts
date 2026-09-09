@@ -7,22 +7,20 @@ import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type { CommandResult, Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
 import {
-	CLOSED_STATE,
 	GH_COMMAND,
 	JSON_FLAG,
 	MERGE_PR_MODE,
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
-	MERGED_STATE,
-	OPEN_STATE,
 	PR_COMMAND,
 	UNKNOWN_STATE,
 	VIEW_COMMAND,
 } from "./constants.ts";
 import {
 	githubPrUrl,
-	mergedPrDataSchema,
+	type OpenPrInfo,
 	openPrRowSchema,
-	openPrRowsSchema,
+	parseOpenPrResult,
+	stateFromMergedData,
 } from "./data.ts";
 import {
 	notifyInactive,
@@ -32,29 +30,6 @@ import {
 	notifyNoUi,
 } from "./notifications.ts";
 import { confirmMerge } from "./user-prompts.ts";
-
-function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
-	const parsed = mergedPrDataSchema.safeParse(data);
-	const isInvalidData = !parsed.success;
-	if (isInvalidData) return UNKNOWN_STATE;
-	const row = parsed.data;
-	const hasMergedAt = row.mergedAt !== undefined && row.mergedAt.trim() !== "";
-	switch (row.state) {
-		case MERGED_STATE:
-			return hasMergedAt ? MERGED_STATE : UNKNOWN_STATE;
-		case OPEN_STATE:
-			return OPEN_STATE;
-		case CLOSED_STATE:
-			return CLOSED_STATE;
-		default:
-			return UNKNOWN_STATE;
-	}
-}
-
-export interface OpenPrInfo {
-	url: string | null;
-	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
-}
 
 async function runGhView(
 	exec: Exec,
@@ -136,37 +111,6 @@ async function runGhList(
 		);
 	} catch {
 		return null;
-	}
-}
-
-function parseOpenPrResult(stdout: string): OpenPrInfo {
-	try {
-		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
-		const isInvalidRows = !parsed.success;
-		if (isInvalidRows) return { url: null, state: UNKNOWN_STATE };
-		const hasNoRows = parsed.data.length === 0;
-		if (hasNoRows) return { url: null, state: OPEN_STATE };
-		const row = parsed.data[0];
-		const hasNoRow = row === undefined;
-		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
-		const url = row.url === undefined ? null : githubPrUrl(row.url);
-		let state: OpenPrInfo["state"];
-		switch (row.state) {
-			case OPEN_STATE:
-				state = OPEN_STATE;
-				break;
-			case CLOSED_STATE:
-				state = CLOSED_STATE;
-				break;
-			case MERGED_STATE:
-				state = MERGED_STATE;
-				break;
-			default:
-				state = UNKNOWN_STATE;
-		}
-		return { url, state };
-	} catch {
-		return { url: null, state: UNKNOWN_STATE };
 	}
 }
 

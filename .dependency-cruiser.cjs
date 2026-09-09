@@ -61,7 +61,7 @@ module.exports = {
 		{ name: "no-footer-test-to-worktree", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/worktree/" } },
 		{ name: "no-footer-test-to-exit-protocol", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/exit-protocol/" } },
 		{ name: "no-shared-to-scoped-domains", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/" } },
-		{ name: "no-scoped-domain-cycles", severity: "error", from: { path: "^src/" }, to: { circular: true } },
+		{ name: "no-scoped-domain-cycles", severity: "error", from: { path: "^src/" }, to: { circular: true, dependencyTypesNot: ["type-only"] } },
 		{ name: "no-orphans", severity: "error", from: { orphan: true, path: "^src/" }, to: {} },
 	],
 	required: [

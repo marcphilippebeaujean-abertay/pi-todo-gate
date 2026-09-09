@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { CLOSED_STATE, MERGED_STATE, OPEN_STATE } from "./constants.ts";
+import {
+	CLOSED_STATE,
+	MERGED_STATE,
+	OPEN_STATE,
+	UNKNOWN_STATE,
+} from "./constants.ts";
 
 const prStateSchema = z.enum([OPEN_STATE, CLOSED_STATE, MERGED_STATE]);
 
@@ -42,20 +47,79 @@ export const prStateDataSchema = z
 	})
 	.loose();
 
-import { PR_CANDIDATE, TRAILING_PUNCTUATION } from "./constants.ts";
+export interface OpenPrInfo {
+	url: string | null;
+	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
+}
+
+export function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
+	const parsed = mergedPrDataSchema.safeParse(data);
+	const isInvalidData = !parsed.success;
+	if (isInvalidData) return UNKNOWN_STATE;
+	const row = parsed.data;
+	const hasMergedAt = row.mergedAt !== undefined && row.mergedAt.trim() !== "";
+	switch (row.state) {
+		case MERGED_STATE:
+			return hasMergedAt ? MERGED_STATE : UNKNOWN_STATE;
+		case OPEN_STATE:
+			return OPEN_STATE;
+		case CLOSED_STATE:
+			return CLOSED_STATE;
+		default:
+			return UNKNOWN_STATE;
+	}
+}
+
+export function parseOpenPrResult(stdout: string): OpenPrInfo {
+	try {
+		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
+		const isInvalidRows = !parsed.success;
+		if (isInvalidRows) return { url: null, state: UNKNOWN_STATE };
+		const hasNoRows = parsed.data.length === 0;
+		if (hasNoRows) return { url: null, state: OPEN_STATE };
+		const row = parsed.data[0];
+		const hasNoRow = row === undefined;
+		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
+		const url = row.url === undefined ? null : githubPrUrl(row.url);
+		let state: OpenPrInfo["state"];
+		switch (row.state) {
+			case OPEN_STATE:
+				state = OPEN_STATE;
+				break;
+			case CLOSED_STATE:
+				state = CLOSED_STATE;
+				break;
+			case MERGED_STATE:
+				state = MERGED_STATE;
+				break;
+			default:
+				state = UNKNOWN_STATE;
+		}
+		return { url, state };
+	} catch {
+		return { url: null, state: UNKNOWN_STATE };
+	}
+}
+
+import {
+	GITHUB_HOSTNAME,
+	GITHUB_URL_PREFIX,
+	PR_CANDIDATE,
+	TRAILING_PUNCTUATION,
+} from "./constants.ts";
 
 function normalizedGithubPrUrl(candidate: string): string | null {
 	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
 	try {
 		const url = new URL(trimmed);
-		const hasGithubHostname = url.hostname.toLowerCase() === "github.com";
+		const hasGithubHostname = url.hostname.toLowerCase() === GITHUB_HOSTNAME;
 		if (!hasGithubHostname) return null;
 		const match = url.pathname.match(
 			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
 		);
 		const hasMatch = Array.isArray(match);
 		if (!hasMatch) return null;
-		return `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`;
+		return `${GITHUB_URL_PREFIX}/${match[1]}/${match[2]}/pull/${match[3]}`;
 	} catch {
 		return null;
 	}
@@ -337,4 +401,28 @@ export function shellWords(segment: string): string[] {
 
 export function executableName(value: string): string {
 	return value.split("/").at(-1) ?? value;
+}
+
+export function normalizedUrl(value: string): string | null {
+	const candidate = value.match(PR_CANDIDATE)?.[0];
+	const hasNoCandidate = candidate === undefined;
+	if (hasNoCandidate) return null;
+	try {
+		const url = new URL(candidate.replace(TRAILING_PUNCTUATION, ""));
+		const hasGithubHostname = url.hostname.toLowerCase() === GITHUB_HOSTNAME;
+		if (!hasGithubHostname) return null;
+		const match = url.pathname.match(
+			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
+		);
+		const hasMatch = match !== null;
+		return hasMatch
+			? `${GITHUB_URL_PREFIX}/${match[1]}/${match[2]}/pull/${match[3]}`
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+export interface MergeEvent {
+	prUrl: string;
 }

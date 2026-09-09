@@ -19,6 +19,7 @@ import {
 } from "./constants.ts";
 import type {
 	ClaimWorkerHandle,
+	ClaimWorkerOptions,
 	ClaimWorkerRequest,
 	CommandRunner,
 	StartBackgroundWorker,
@@ -26,12 +27,6 @@ import type {
 	WorkerSpawner,
 } from "./data.ts";
 import { appendBounded, parseClaimResult } from "./data.ts";
-
-export interface ClaimWorkerOptions {
-	command?: string;
-	cwd?: string;
-	spawnWorker?: WorkerSpawner;
-}
 
 const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 	spawn(command, [...args], {

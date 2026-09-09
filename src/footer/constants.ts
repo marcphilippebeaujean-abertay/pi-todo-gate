@@ -21,8 +21,6 @@ export const FOOTER_SPINNER_FRAMES = [
 	"⠇",
 	"⠏",
 ] as const;
-export const PR_FOOTER_TYPE = "pi-todo-gate-pr";
-export const TODOIST_FOOTER_TYPE = "pi-todo-gate-task";
 export const HERDR_FOOTER_TYPE = "pi-todo-gate-herdr";
 export const FOOTER_DIM = "dim";
 export const FOOTER_STATUS_SEPARATOR = " | ";
