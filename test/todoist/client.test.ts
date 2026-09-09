@@ -56,7 +56,7 @@ const SUPER_SECRET = "super-secret";
 const TASK_COMPLETE = "task complete";
 
 import { describe, expect, it } from "vitest";
-import type { CommandResult } from "../../src/git.ts";
+import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	TodoistClient,
 	TodoistError,

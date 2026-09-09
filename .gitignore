@@ -22,6 +22,12 @@ coverage/
 # SDD scratch workspace
 .superpowers/
 
+# Superpowers specs
+docs/superpowers/specs/
+
+# Superpowers plans
+docs/superpowers/plans/
+
 # Git worktrees
 .worktrees/
 

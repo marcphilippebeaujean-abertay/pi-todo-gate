@@ -1,5 +1,8 @@
 const WORKTREE_PREFIX = "worktree ";
 const GIT_COMMAND = "git";
+const STATUS_COMMAND = "status";
+const PORCELAIN_FLAG = "--porcelain=v1";
+const UNTRACKED_FILES_FLAG = "--untracked-files=all";
 
 import { resolve } from "node:path";
 import type { CommandResult, Exec } from "./command.ts";
@@ -57,6 +60,24 @@ function projectInfo(
 	const missingPath = !hasRoot || !hasMainRoot;
 	if (missingPath) return { isWorktree: false, root, branch, mainRoot };
 	return { isWorktree: root !== resolve(mainRoot), root, branch, mainRoot };
+}
+
+export async function hasUncommittedChanges(
+	exec: Exec,
+	cwd: string,
+): Promise<boolean | null> {
+	try {
+		const result = await exec(
+			GIT_COMMAND,
+			[STATUS_COMMAND, PORCELAIN_FLAG, UNTRACKED_FILES_FLAG],
+			{ cwd },
+		);
+		const commandFailed = result.code !== 0;
+		if (commandFailed) return null;
+		return result.stdout.trim() !== "";
+	} catch {
+		return null;
+	}
 }
 
 export async function inspectProject(

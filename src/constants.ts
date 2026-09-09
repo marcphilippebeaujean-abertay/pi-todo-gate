@@ -11,7 +11,6 @@ export const EXTENSION_CONSTANTS = {
 		todoist: "td",
 	},
 	todoist: {
-		exitActionId: "complete-todoist-task",
 		completeLabelPrefix: 'Mark Todoist task "',
 		completeLabelSuffix: '" complete',
 	},

@@ -4,12 +4,12 @@ import type { ExitAction } from "../exit-protocol/types.ts";
 export type ShutdownReason = "quit" | "new" | "resume" | "fork" | "reload";
 
 export interface SharedEventPayloads {
-	prMerged: { prUrl: string };
+	prMerged: { prUrl: string; taskMarkedAsCompleted: boolean };
 	sessionWillClose: { reason: ShutdownReason };
 }
 
 export interface EventRequest<T> {
-	readonly payload: T;
+	payload: T;
 	readonly actions: readonly ExitAction[];
 	addAction(action: ExitAction): void;
 }

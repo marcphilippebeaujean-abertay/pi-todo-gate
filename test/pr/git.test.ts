@@ -29,6 +29,12 @@ const RETURNS_OPEN_WITH_NO_URL_WHEN_THERE =
 const EMPTY_LIST_JSON = "[]";
 const RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE =
 	"returns unknown rather than throwing on unavailable gh";
+const PARSES_MERGED_PR_WITH_A_COMPLETION_TIMESTAMP =
+	"parses merged PR with a completion timestamp";
+const GH_PR_VIEW_PR_42_STATE_MERGED =
+	"gh pr view https://github.com/o/r/pull/42 --json state,mergedAt";
+const MERGED_PAYLOAD = '{"state":"MERGED","mergedAt":"2026-09-07T00:00:00Z"}';
+const MERGED = "MERGED";
 const UNKNOWN_VALUE = "UNKNOWN";
 const PARSES_GIT_AND_GH_MERGE_COMMANDS = "parses git and gh merge commands";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
@@ -75,13 +81,13 @@ const GIT_MERGE_FEATURE_AUTH_OTHER = "git merge feature/auth other";
 
 import { describe, expect, it } from "vitest";
 import {
-	type CommandResult,
-	type Exec,
 	findOpenPr,
-	inspectWorktree,
+	findPrState,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../../src/git.ts";
+} from "../../src/pr/git.ts";
+import type { CommandResult, Exec } from "../../src/shared/command.ts";
+import { inspectProject } from "../../src/shared/project.ts";
 
 const ok = (stdout: string): CommandResult => ({
 	stdout,
@@ -110,11 +116,12 @@ describe("inspectWorktree", () => {
 			),
 		});
 		await expect(
-			inspectWorktree(exec, REPO_WORKTREES_FEATURE_2),
+			inspectProject(exec, REPO_WORKTREES_FEATURE_2),
 		).resolves.toEqual({
 			isWorktree: true,
 			root: REPO_WORKTREES_FEATURE_2,
 			branch: FEATURE_2,
+			mainRoot: REPO_2,
 		});
 	});
 
@@ -126,10 +133,11 @@ describe("inspectWorktree", () => {
 				WORKTREE_REPO_HEAD_ABC_BRANCH_REFS_HEADS_2,
 			),
 		});
-		await expect(inspectWorktree(exec, REPO_2)).resolves.toEqual({
+		await expect(inspectProject(exec, REPO_2)).resolves.toEqual({
 			isWorktree: false,
 			root: REPO_2,
 			branch: MAIN_2,
+			mainRoot: REPO_2,
 		});
 	});
 });
@@ -174,6 +182,17 @@ describe("findOpenPr", () => {
 			url: null,
 			state: UNKNOWN_VALUE,
 		});
+	});
+});
+
+describe("findPrState", () => {
+	it(PARSES_MERGED_PR_WITH_A_COMPLETION_TIMESTAMP, async () => {
+		const exec = fakeExec({
+			[GH_PR_VIEW_PR_42_STATE_MERGED]: ok(MERGED_PAYLOAD),
+		});
+		await expect(
+			findPrState(exec, REPO_2, HTTPS_GITHUB_COM_O_R_PULL_42),
+		).resolves.toBe(MERGED);
 	});
 });
 

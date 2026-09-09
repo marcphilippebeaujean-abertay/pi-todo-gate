@@ -2,15 +2,30 @@ import { describe, expect, it } from "vitest";
 import type { ExitAction } from "../src/exit-protocol/types.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
 
-const action = (
-	id: ExitAction["id"] = "complete-todoist-task",
-): ExitAction => ({
+const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
 	id,
 	label: id,
 	execute: async () => "completed",
 });
 
 describe("shared events", () => {
+	it("shares mutable merge completion state between listeners", async () => {
+		const events = createSharedEvents();
+		let observed = false;
+		events.on("prMerged", (request) => {
+			request.payload.taskMarkedAsCompleted = true;
+		});
+		events.on("prMerged", (request) => {
+			observed = request.payload.taskMarkedAsCompleted === true;
+		});
+
+		await events.emit("prMerged", {
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+		});
+
+		expect(observed).toBe(true);
+	});
 	it("collects actions before present listeners run", async () => {
 		const events = createSharedEvents();
 		const order: string[] = [];
@@ -29,6 +44,7 @@ describe("shared events", () => {
 
 		await events.emit("prMerged", {
 			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
 		});
 
 		expect(order).toEqual(["todoist", "present:1"]);
@@ -46,7 +62,10 @@ describe("shared events", () => {
 			order.push("second");
 		});
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 
 		expect(order).toEqual(["first", "second"]);
 	});
@@ -71,7 +90,10 @@ describe("shared events", () => {
 			"present",
 		);
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 
 		expect(order).toEqual(["failed", "continued", "present:1"]);
 	});
@@ -84,9 +106,15 @@ describe("shared events", () => {
 			request.addAction(action());
 		});
 
-		await events.emit("prMerged", { prUrl: "one" });
+		await events.emit("prMerged", {
+			prUrl: "one",
+			taskMarkedAsCompleted: false,
+		});
 		unsubscribe();
-		await events.emit("prMerged", { prUrl: "two" });
+		await events.emit("prMerged", {
+			prUrl: "two",
+			taskMarkedAsCompleted: false,
+		});
 
 		expect(calls).toBe(1);
 	});

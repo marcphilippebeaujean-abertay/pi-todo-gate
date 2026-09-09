@@ -6,9 +6,9 @@ const VIEW_COMMAND = "view";
 const JSON_FLAG = "--json";
 const MERGE_COMMAND = "merge";
 
-import { executableName, shellSegments, shellWords } from "../shell-parser.ts";
-import type { CommandResult, Exec } from "./command.ts";
+import type { CommandResult, Exec } from "../shared/command.ts";
 import { matchesPinnedPr } from "./merge-matching.ts";
+import { executableName, shellSegments, shellWords } from "./shell-parser.ts";
 
 export interface MergeEvent {
 	prUrl: string;

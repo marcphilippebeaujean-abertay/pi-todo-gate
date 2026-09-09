@@ -22,9 +22,15 @@ const HTTPS_GITHUB_COM_NEW_REPO_PULL_8 = "https://github.com/new/repo/pull/8";
 const ACCEPTS_A_PLACEHOLDER_SHAPED_PR_URL =
 	"accepts a placeholder-shaped PR URL for later verification";
 const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/o/r/pull/2";
+const FILTERS_INVALID_AND_NON_GITHUB_PR_LINKS =
+	"filters invalid and non-GitHub PR links";
 
 import { describe, expect, it } from "vitest";
-import { firstGithubPrUrl, githubPrUrl } from "../../src/pr-detection.ts";
+import {
+	firstGithubPrUrl,
+	githubPrUrl,
+	githubPrUrls,
+} from "../../src/pr/detection.ts";
 
 describe("githubPrUrl", () => {
 	it(ACCEPTS_A_VALID_GITHUB_PULL_REQUEST_URL, () => {
@@ -43,6 +49,20 @@ describe("githubPrUrl", () => {
 		expect(githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_ISSUES_42)).toBeNull();
 		expect(githubPrUrl(HTTPS_GITLAB_COM_OWNER_REPO_PULL_42)).toBeNull();
 		expect(githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_0)).toBeNull();
+	});
+});
+
+describe("githubPrUrls", () => {
+	it(FILTERS_INVALID_AND_NON_GITHUB_PR_LINKS, () => {
+		expect(
+			githubPrUrls(
+				[
+					HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
+					HTTPS_GITHUB_COM_OWNER_REPO_ISSUES_42,
+					HTTPS_GITLAB_COM_OWNER_REPO_PULL_42,
+				].join(" "),
+			),
+		).toEqual([HTTPS_GITHUB_COM_OWNER_REPO_PULL_42]);
 	});
 });
 

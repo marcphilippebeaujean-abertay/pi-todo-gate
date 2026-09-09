@@ -4,11 +4,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import type { FooterModule } from "./footer/module.ts";
-import type { Exec } from "./git.ts";
 import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
 } from "./herdr/module.ts";
+import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
 import type { TaskClaimWorker } from "./todoist/claim-worker.ts";
 import type { TodoistClient } from "./todoist/client.ts";

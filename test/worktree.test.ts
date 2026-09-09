@@ -116,9 +116,11 @@ describe("worktree event actions", () => {
 			"present",
 		);
 
-		await events.emit("prMerged", { prUrl: "pr" });
+		const payload = { prUrl: "pr", taskMarkedAsCompleted: false };
+		await events.emit("prMerged", payload);
 
 		expect(mergeAction?.id).toBe("remove-worktree");
+		expect(payload.taskMarkedAsCompleted).toBe(false);
 		await expect(mergeAction?.execute()).resolves.toBe("deferred");
 		expect(
 			commands.filter(

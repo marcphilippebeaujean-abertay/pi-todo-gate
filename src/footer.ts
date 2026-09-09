@@ -2,12 +2,13 @@ const DIM = "dim";
 const STATUS_SEPARATOR = " | ";
 
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { renderPrLabel } from "./pr/footer.ts";
 import { renderTaskLabel } from "./todoist/footer.ts";
 
-export { renderPrStatus } from "./pr/footer.ts";
 export { renderTaskStatusCompact as renderTaskStatus } from "./todoist/footer.ts";
 
+import { renderPrLabel, renderPrStatus } from "./footer-pr.ts";
+
+export { renderPrStatus };
 export interface FooterState {
 	prUrl?: string;
 	taskUrl?: string;

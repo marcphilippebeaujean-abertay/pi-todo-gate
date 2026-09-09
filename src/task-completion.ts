@@ -16,14 +16,19 @@ function isCurrentCompletion(
 	session: ActiveSession,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): boolean {
 	const isCurrentSession = runtime.active === session;
+	const isCurrentGeneration =
+		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
 	const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
 	const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
 	const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
+	const isCurrentSessionRevisionAndGeneration =
+		isCurrentSessionAndRevision && isCurrentGeneration;
 	const isCurrentIdentity = isCurrentTask && isCurrentPr;
-	return isCurrentSessionAndRevision && isCurrentIdentity;
+	return isCurrentSessionRevisionAndGeneration && isCurrentIdentity;
 }
 
 function recordSuccessfulCompletion(
@@ -43,20 +48,8 @@ function recordSuccessfulCompletion(
 	ctx.ui.notify(C.message.merged, C.value.info);
 }
 
-function recordFailedCompletion(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	ctx: ExtensionContext,
-): void {
-	replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			todoistCompletionAttemptedAt: new Date().toISOString(),
-		}),
-	);
-	appendState(runtime, session.state);
-	refreshFooterStatuses(runtime, session);
-	ctx.ui.notify(C.message.mergedFailed, C.value.warning);
+function recordFailedCompletion(_ctx: ExtensionContext): void {
+	_ctx.ui.notify(C.message.mergedFailed, C.value.warning);
 }
 
 async function completeMergedTaskNow(
@@ -66,6 +59,7 @@ async function completeMergedTaskNow(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): Promise<ExitActionResult> {
 	const isCurrent = isCurrentCompletion.bind(
 		null,
@@ -73,11 +67,10 @@ async function completeMergedTaskNow(
 		session,
 		stateSnapshot,
 		workRevision,
+		operationGeneration,
 	);
-	const hasCompletionAttempt =
-		session.state.todoistCompletionAttemptedAt !== undefined;
 	const isStaleCompletion = !isCurrent();
-	const shouldSkipCompletion = isStaleCompletion || hasCompletionAttempt;
+	const shouldSkipCompletion = isStaleCompletion;
 	if (shouldSkipCompletion) return C.exit.failed;
 	try {
 		await createClient(ctx, runtime.dependencies).completeTask(
@@ -91,7 +84,7 @@ async function completeMergedTaskNow(
 	} catch {
 		const isStaleFailure = !isCurrent();
 		if (isStaleFailure) return C.exit.failed;
-		recordFailedCompletion(runtime, session, ctx);
+		recordFailedCompletion(ctx);
 		return C.exit.failed;
 	}
 }
@@ -103,6 +96,7 @@ export async function completeMergedTask(
 	taskRef: string,
 	stateSnapshot: ActiveSession["state"],
 	workRevision: number,
+	operationGeneration: number,
 ): Promise<ExitActionResult> {
 	return enqueueSessionOperation(
 		session,
@@ -114,6 +108,7 @@ export async function completeMergedTask(
 			taskRef,
 			stateSnapshot,
 			workRevision,
+			operationGeneration,
 		),
 	);
 }

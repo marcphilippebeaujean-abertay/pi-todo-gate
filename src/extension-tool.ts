@@ -17,7 +17,7 @@ import type {
 	ExtensionRuntime,
 	StateToolParams,
 } from "./extension-types.ts";
-import { githubPrUrl } from "./pr-detection.ts";
+import { githubPrUrl } from "./pr/module.ts";
 import { applyStatePatch } from "./session-state.ts";
 
 export const stateParameters = Type.Object({

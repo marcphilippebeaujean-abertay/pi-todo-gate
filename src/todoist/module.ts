@@ -4,3 +4,4 @@ export {
 	handleTaskClaimResult,
 	runTaskClaim,
 } from "./claiming-flow.ts";
+export { registerTodoistMergeConsumer } from "./merge-consumer.ts";

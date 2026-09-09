@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import type { CommandResult } from "./shared/command.ts";
+import type { CommandResult } from "./command.ts";
 
 const SIGTERM = "SIGTERM";
 const ABORT_EVENT = "abort";

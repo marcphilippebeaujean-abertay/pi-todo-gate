@@ -167,4 +167,4 @@ export {
 	detectMerge,
 	matchesPinnedPr,
 	mergeCommand,
-} from "../shared/merge-detection.ts";
+} from "./merge-detection.ts";

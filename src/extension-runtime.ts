@@ -1,12 +1,12 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
-import { registerTodoistExitAction } from "./exit-protocol/todoist-action.ts";
 import type {
 	ExtensionDependencies,
 	ExtensionRuntime,
 } from "./extension-types.ts";
 import { createFooterModule } from "./footer/module.ts";
 import { createSharedEvents } from "./shared/events.ts";
+import { registerTodoistMergeConsumer } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 
 export function createExtensionRuntime(
@@ -26,6 +26,6 @@ export function createExtensionRuntime(
 		active: null,
 		registered: false,
 	};
-	registerTodoistExitAction(runtime);
+	registerTodoistMergeConsumer(runtime);
 	return runtime;
 }
