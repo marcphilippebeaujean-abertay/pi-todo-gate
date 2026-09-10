@@ -7,12 +7,18 @@ const PANE_GET_ARGS = ["pane", "get"];
 const STRING_TYPE = "string";
 const NUMERIC_LABEL = /^\d+$/;
 
+export function tabNameIsParseableAsInt(label: string | undefined): boolean {
+	if (label === undefined) return false;
+	const value = label.trim();
+	return value.length > 0 && NUMERIC_LABEL.test(value);
+}
+
 function labelIsDescriptive(label: string | undefined | null): boolean {
 	const hasNoLabel = !label;
 	if (hasNoLabel) return false;
 	const value = label.trim();
 	const hasValue = Boolean(value);
-	const isNotNumeric = !NUMERIC_LABEL.test(value);
+	const isNotNumeric = !tabNameIsParseableAsInt(value);
 	return hasValue && isNotNumeric;
 }
 
