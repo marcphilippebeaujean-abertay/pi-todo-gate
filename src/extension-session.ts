@@ -10,6 +10,7 @@ import {
 	appendState,
 	deactivateSession,
 	refreshFooterStatuses,
+	resetTemporarySessionState,
 } from "./extension-lifecycle.ts";
 import { branchTexts, latestStateData } from "./extension-message.ts";
 import { installStateTool } from "./extension-tool.ts";
@@ -96,8 +97,6 @@ function activateSession(
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
-		taskClaimAnalysisStarted: false,
-		taskClaimGeneration: 0,
 	};
 	runtime.active = session;
 	return session;
@@ -154,6 +153,7 @@ export async function handleSessionStart(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
+	resetTemporarySessionState(runtime);
 	runtime.exitProtocol.sessionStart(ctx);
 	void runtime.worktree.sessionStart(ctx);
 	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
@@ -213,6 +213,9 @@ export async function handleSessionShutdown(
 	event: { reason: "quit" | "new" | "resume" | "fork" | "reload" },
 ): Promise<void> {
 	await runtime.events.emit(C.event.sessionWillClose, { reason: event.reason });
+	const isQuit = event.reason === "quit";
+	if (isQuit) await runtime.promptQueue.drain();
+	resetTemporarySessionState(runtime);
 	const session = runtime.active;
 	if (session !== null) {
 		deactivateSession(runtime, session);

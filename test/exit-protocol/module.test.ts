@@ -9,6 +9,7 @@ import {
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
+import { PromptQueue } from "../../src/shared/prompt-queue.ts";
 
 const actions: ExitAction[] = [
 	{
@@ -99,8 +100,9 @@ describe("exit protocol picker state", () => {
 describe("exit protocol presenter", () => {
 	it("presents one combined prompt and submits all actions by default", async () => {
 		const events = createSharedEvents();
+		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(events);
+		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 		events.on("prMerged", (request) => {
 			for (const action of actions) request.addAction(action);
@@ -110,6 +112,7 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 		});
+		await queue.drain();
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
 		expect(actions[0].execute).toHaveBeenCalledOnce();
@@ -117,35 +120,68 @@ describe("exit protocol presenter", () => {
 
 	it("does not prompt when no actions are available", async () => {
 		const events = createSharedEvents();
+		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(events);
+		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 
 		await events.emit("prMerged", {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 		});
+		await queue.drain();
 
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
 
 	it("ignores non-quit close events", async () => {
 		const events = createSharedEvents();
+		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(events);
+		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 		events.on("sessionWillClose", (request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
 		await events.emit("sessionWillClose", { reason: "new" });
+		await queue.drain();
 
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
 		expect(actions[0].execute).not.toHaveBeenCalled();
 	});
 
+	it("ignores a visible prompt that becomes stale after reset", async () => {
+		const events = createSharedEvents();
+		const queue = new PromptQueue();
+		let resolvePrompt!: (value: string[]) => void;
+		const prompt = new Promise<string[]>((resolve) => {
+			resolvePrompt = resolve;
+		});
+		const ctx = context();
+		const custom = vi.fn(() => prompt);
+		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
+		const module = createExitProtocolModule(events, queue);
+		module.sessionStart(ctx);
+		events.on("prMerged", (request) => {
+			for (const action of actions) request.addAction(action);
+		});
+
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+		await Promise.resolve();
+		queue.reset();
+		resolvePrompt(["remove-worktree"]);
+		await queue.drain();
+
+		expect(actions[0].execute).not.toHaveBeenCalled();
+	});
+
 	it("uses sequential confirmations in RPC mode", async () => {
 		const events = createSharedEvents();
+		const queue = new PromptQueue();
 		const confirm = vi.fn(async () => true);
 		const ctx = context({
 			mode: "rpc",
@@ -154,7 +190,7 @@ describe("exit protocol presenter", () => {
 				notify: vi.fn(),
 			},
 		});
-		const module = createExitProtocolModule(events);
+		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 		events.on("prMerged", (request) => {
 			for (const action of actions) request.addAction(action);
@@ -164,6 +200,7 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 		});
+		await queue.drain();
 
 		expect(confirm).toHaveBeenCalledOnce();
 	});

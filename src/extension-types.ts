@@ -11,6 +11,7 @@ import type {
 import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
 import type { ExitActionResult } from "./shared/exit-actions.ts";
+import type { PromptQueue } from "./shared/prompt-queue.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
@@ -61,8 +62,12 @@ export interface ActiveSession {
 	workRevision: number;
 	operationGeneration: number;
 	operationQueue: Promise<void>;
-	taskClaimAnalysisStarted: boolean;
-	taskClaimGeneration: number;
+}
+
+export interface TaskClaimOperation {
+	pending: boolean;
+	completed: boolean;
+	session?: ActiveSession;
 }
 
 export interface ExtensionRuntime {
@@ -72,6 +77,8 @@ export interface ExtensionRuntime {
 	exitProtocol: ExitProtocolModule;
 	footer: FooterModule;
 	worktree: WorktreeModule;
+	taskClaim: TaskClaimOperation;
+	promptQueue: PromptQueue;
 	active: ActiveSession | null;
 	appendState(
 		state: ActiveSession["state"],

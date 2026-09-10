@@ -10,13 +10,13 @@ import type {
 } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
+import type { PromptQueue } from "../shared/prompt-queue.ts";
 import type { WorkState } from "../types.ts";
 import {
 	CLAIM,
 	COMPLETED,
 	ERROR,
 	INVALID_RESULT,
-	STARTED,
 	TASK_URL,
 	UNKNOWN_ERROR,
 } from "./constants.ts";
@@ -31,14 +31,18 @@ type TodoistSession = {
 	project: { todoistProjectRef: string };
 	state: WorkState;
 	allowPrDiscovery: boolean;
-	taskClaimAnalysisStarted: boolean;
-	taskClaimGeneration: number;
 	workRevision: number;
 	operationGeneration: number;
 };
 
 type TodoistRuntime = {
 	active: TodoistSession | null;
+	taskClaim: {
+		pending: boolean;
+		completed: boolean;
+		session?: TodoistSession;
+	};
+	promptQueue: PromptQueue;
 	dependencies: { exec?: Exec; taskClaimWorker?: TaskClaimWorker };
 	events: SharedEvents;
 	appendState(state: WorkState, prDiscoveryDisabled?: boolean): void;
@@ -61,20 +65,29 @@ type ClaimTaskData = {
 
 export interface TaskClaimResultEvent {
 	sessionId: string;
-	generation: number;
 	result: TaskClaimWorkerResult;
+}
+
+function isActiveSession(
+	runtime: TodoistRuntime,
+	session: TodoistSession,
+): boolean {
+	return runtime.active === session;
 }
 
 function isCurrentEvent(
 	runtime: TodoistRuntime,
+	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): boolean {
-	const session = runtime.active;
-	const hasSession = session !== null;
-	if (!hasSession) return false;
-	const isCurrentSession = session.sessionId === event.sessionId;
-	const isCurrentGeneration = session.taskClaimGeneration === event.generation;
-	return isCurrentSession && isCurrentGeneration;
+	const operation = runtime.taskClaim;
+	const isCurrentSession = isActiveSession(runtime, session);
+	if (!isCurrentSession) return false;
+	const isPending = operation.pending;
+	if (!isPending) return false;
+	const isExpectedWorker = operation.session === session;
+	if (!isExpectedWorker) return false;
+	return event.sessionId === session.sessionId;
 }
 
 function claimTaskData(
@@ -115,18 +128,24 @@ function persistClaim(
 
 export function handleTaskClaimResult(
 	runtime: TodoistRuntime,
+	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): void {
-	const isStale = !isCurrentEvent(runtime, event);
+	const isStale = !isCurrentEvent(runtime, session, event);
 	if (isStale) return;
-	const session = runtime.active;
-	if (session === null) return;
+	runtime.taskClaim.pending = false;
+	runtime.taskClaim.session = undefined;
 	const taskData = claimTaskData(event.result);
 	const hasClaim = taskData !== undefined;
 	if (hasClaim) {
-		persistClaim(runtime, session, taskData);
+		runtime.taskClaim.completed = true;
+		const canPersist = session.state.taskRef === undefined;
+		if (canPersist) persistClaim(runtime, session, taskData);
 		return;
 	}
+	runtime.taskClaim.completed = false;
+	const isCurrentSession = isActiveSession(runtime, session);
+	if (!isCurrentSession) return;
 	const error = event.result.error ?? INVALID_RESULT;
 	notifyClaimFailure(session.context, error);
 }
@@ -139,7 +158,6 @@ export async function runTaskClaim(
 	runtime: TodoistRuntime,
 	session: TodoistSession,
 	prompt: string,
-	generation: number,
 ): Promise<void> {
 	try {
 		const exec = runtime.dependencies.exec ?? spawnExec;
@@ -154,16 +172,14 @@ export async function runTaskClaim(
 			prRef: session.state.prUrl ?? null,
 			worktree,
 		});
-		handleTaskClaimResult(runtime, {
+		handleTaskClaimResult(runtime, session, {
 			sessionId: result.sessionId,
-			generation,
 			result,
 		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		handleTaskClaimResult(runtime, {
+		handleTaskClaimResult(runtime, session, {
 			sessionId: session.sessionId,
-			generation,
 			result: errorResult(session.sessionId, message || UNKNOWN_ERROR),
 		});
 	}
@@ -176,13 +192,14 @@ export function maybeAnalyzeTaskClaim(
 ): void {
 	const canStart =
 		runtime.active === session && session.state.taskRef === undefined;
-	const alreadyStarted = session.taskClaimAnalysisStarted;
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
-	if (alreadyStarted) return;
-	session.taskClaimAnalysisStarted = STARTED;
-	const generation = ++session.taskClaimGeneration;
-	void runTaskClaim(runtime, session, prompt, generation);
+	const operation = runtime.taskClaim;
+	const isAlreadyHandled = operation.pending || operation.completed;
+	if (isAlreadyHandled) return;
+	operation.pending = true;
+	operation.session = session;
+	void runTaskClaim(runtime, session, prompt);
 }
 
 type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
@@ -203,22 +220,31 @@ async function consumeMergedEvent(
 	const stateSnapshot = structuredClone(session.state);
 	const workRevision = session.workRevision;
 	const operationGeneration = session.operationGeneration;
-	const confirmed = await confirmTaskCompletion(
-		session.context,
-		taskName,
-		taskRef,
-	);
-	if (!confirmed) return;
-	const result = await runtime.completeMergedTask(
-		session,
-		taskRef,
-		stateSnapshot,
-		workRevision,
-		operationGeneration,
-	);
-	const completed = result === COMPLETED;
-	if (!completed) return;
-	request.payload.taskMarkedAsCompleted = true;
+	void runtime.promptQueue.enqueue(async (isCurrent) => {
+		const isCurrentBeforePrompt = isActiveSession(runtime, session);
+		const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
+		if (isPromptStale) return;
+		const confirmed = await confirmTaskCompletion(
+			session.context,
+			taskName,
+			taskRef,
+		);
+		const isConfirmed = confirmed === true;
+		if (!isConfirmed) return;
+		const isCurrentAfterPromptEpoch = isCurrent();
+		if (!isCurrentAfterPromptEpoch) return;
+		const isCurrentSessionAfterPrompt = isActiveSession(runtime, session);
+		if (!isCurrentSessionAfterPrompt) return;
+		const result = await runtime.completeMergedTask(
+			session,
+			taskRef,
+			stateSnapshot,
+			workRevision,
+			operationGeneration,
+		);
+		const completed = result === COMPLETED;
+		if (completed) request.payload.taskMarkedAsCompleted = true;
+	});
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {

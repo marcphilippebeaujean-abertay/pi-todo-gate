@@ -99,6 +99,62 @@ describe("worktree session baseline", () => {
 });
 
 describe("worktree event actions", () => {
+	it("ignores a late initializer from a previous session", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		let releaseOld!: () => void;
+		const oldInspection = new Promise<void>((resolve) => {
+			releaseOld = resolve;
+		});
+		const statusCalls = new Map<string, number>();
+		const exec: Exec = async (command, args, options) => {
+			const cwd = options?.cwd ?? "";
+			commands.push({ command, args, cwd });
+			const key = [command, ...args].join(" ");
+			if (cwd === "/old" && key === "git rev-parse --show-toplevel")
+				await oldInspection;
+			if (key === "git rev-parse --show-toplevel") return ok(`${cwd}\n`);
+			if (key === "git branch --show-current") return ok("feature\n");
+			if (key === "git worktree list --porcelain")
+				return ok(
+					`worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree ${cwd}\nHEAD def\nbranch refs/heads/feature\n`,
+				);
+			if (key === "git rev-parse HEAD") return ok("head\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all") {
+				const count = statusCalls.get(cwd) ?? 0;
+				statusCalls.set(cwd, count + 1);
+				return ok(count === 0 ? "" : " M changed.ts");
+			}
+			return ok("");
+		};
+		const module = createWorktreeModule(events, { exec });
+		const oldStart = module.sessionStart(context("/old"));
+		await Promise.resolve();
+		await module.sessionStart(context("/new"));
+		releaseOld();
+		await oldStart;
+		let action: ExitAction | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				action = request.actions[0];
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+
+		expect(action?.id).toBe("remove-worktree");
+		const statusCommand = commands
+			.filter(
+				({ args }) =>
+					args.join(" ") === "status --porcelain=v1 --untracked-files=all",
+			)
+			.at(-1);
+		expect(statusCommand?.cwd).toBe("/new");
+	});
+
 	it("defers cleanup after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =

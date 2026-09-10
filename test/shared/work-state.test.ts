@@ -22,8 +22,6 @@ function session(): ActiveSession {
 		workRevision: 3,
 		operationGeneration: 7,
 		operationQueue: Promise.resolve(),
-		taskClaimAnalysisStarted: false,
-		taskClaimGeneration: 0,
 	};
 }
 

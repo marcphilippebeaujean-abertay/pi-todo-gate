@@ -34,10 +34,8 @@ export interface WorktreeModule {
 export function isCurrentWorktree(
 	baseline: WorktreeBaseline | null,
 	worktree: WorktreeBaseline,
-	generation: number,
-	currentGeneration: number,
 ): boolean {
-	return generation === currentGeneration && baseline === worktree;
+	return baseline === worktree;
 }
 
 export function hasNoSessionWork(

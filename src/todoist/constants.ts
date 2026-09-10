@@ -3,7 +3,6 @@ export const CLAIM = "claim";
 export const ERROR = "error";
 export const INVALID_RESULT = "Invalid claim worker result.";
 export const UNKNOWN_ERROR = "Unknown claim error.";
-export const STARTED = true;
 export const CONFIG_FILE_NAME = "pi-todo-gate.json";
 export const TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT =
 	"task is outside the configured project";

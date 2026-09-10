@@ -37,7 +37,6 @@ class Worktree implements WorktreeModule {
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private pendingCleanup = false;
-	private operationGeneration = 0;
 
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
 		this.exec = dependencies.exec ?? spawnExec;
@@ -47,22 +46,29 @@ class Worktree implements WorktreeModule {
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
-		const generation = ++this.operationGeneration;
 		this.context = nextContext;
 		this.baseline = null;
 		this.pendingCleanup = false;
-		const project = await inspectProject(this.exec, nextContext.cwd);
-		const isStale = generation !== this.operationGeneration;
-		if (isStale) return;
+		await this.initializeSession(nextContext);
+	}
+
+	private isCurrentContext(ctx: ExtensionContext): boolean {
+		return this.context === ctx;
+	}
+
+	private async initializeSession(ctx: ExtensionContext): Promise<void> {
+		const project = await inspectProject(this.exec, ctx.cwd);
+		const isCurrentContextAfterProject = this.isCurrentContext(ctx);
+		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
 		if (isNotWorktree) return;
 		if (project.root === null) return;
 		if (project.branch === null) return;
 		if (project.mainRoot === null) return;
-		const state = await currentWorktreeState(this.exec, nextContext.cwd);
-		const stateIsStale = generation !== this.operationGeneration;
-		if (stateIsStale) return;
+		const state = await currentWorktreeState(this.exec, ctx.cwd);
 		if (state === null) return;
+		const isCurrentContextAfterState = this.isCurrentContext(ctx);
+		if (!isCurrentContextAfterState) return;
 		this.baseline = {
 			worktreePath: project.root,
 			branch: project.branch,
@@ -73,7 +79,6 @@ class Worktree implements WorktreeModule {
 	}
 
 	deactivate(): void {
-		this.operationGeneration += 1;
 		this.context = null;
 		this.baseline = null;
 		this.pendingCleanup = false;
@@ -85,12 +90,8 @@ class Worktree implements WorktreeModule {
 		const hasPendingCleanup = this.pendingCleanup;
 		if (hasPendingCleanup) return;
 		const worktree = this.baseline;
-		const generation = this.operationGeneration;
 		request.addAction(
-			createCleanupAction(
-				worktree,
-				this.scheduleCleanup.bind(this, worktree, generation),
-			),
+			createCleanupAction(worktree, this.scheduleCleanup.bind(this, worktree)),
 		);
 	}
 
@@ -105,14 +106,8 @@ class Worktree implements WorktreeModule {
 		if (hasNoWorktree) return;
 		const hasNoUi = !context.hasUI;
 		if (hasNoUi) return;
-		const generation = this.operationGeneration;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrent = isCurrentWorktree(
-			this.baseline,
-			worktree,
-			generation,
-			this.operationGeneration,
-		);
+		const isCurrent = isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrent) return;
 		const hasState = state !== null;
 		if (hasState) {
@@ -121,38 +116,24 @@ class Worktree implements WorktreeModule {
 				request.addAction(
 					createCleanupAction(
 						worktree,
-						this.executeCleanup.bind(this, worktree, generation),
+						this.executeCleanup.bind(this, worktree),
 					),
 				);
 				return;
 			}
-			const result = await this.cleanupNow(
-				worktree,
-				generation,
-				false,
-				NO_CHANGES,
-			);
+			const result = await this.cleanupNow(worktree, false, NO_CHANGES);
 			const cleanupCompleted = result === COMPLETED;
 			if (cleanupCompleted) return;
 		}
 		request.addAction(
-			createCleanupAction(
-				worktree,
-				this.executeCleanup.bind(this, worktree, generation),
-			),
+			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
 		);
 	}
 
 	private scheduleCleanup(
 		worktree: WorktreeBaseline,
-		generation: number,
 	): Promise<ExitActionResult> {
-		const isCurrent = isCurrentWorktree(
-			this.baseline,
-			worktree,
-			generation,
-			this.operationGeneration,
-		);
+		const isCurrent = isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrent) return Promise.resolve(FAILED);
 		this.pendingCleanup = true;
 		notifyWorktree(this.context, CLEANUP_SCHEDULED);
@@ -161,19 +142,13 @@ class Worktree implements WorktreeModule {
 
 	private async executeCleanup(
 		worktree: WorktreeBaseline,
-		generation: number,
 	): Promise<ExitActionResult> {
 		const context = this.context;
 		if (context === null) return FAILED;
 		const hasNoUi = !context.hasUI;
 		if (hasNoUi) return FAILED;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrent = isCurrentWorktree(
-			this.baseline,
-			worktree,
-			generation,
-			this.operationGeneration,
-		);
+		const isCurrent = isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrent) return FAILED;
 		const hasNoState = state === null;
 		if (hasNoState) return FAILED;
@@ -183,12 +158,11 @@ class Worktree implements WorktreeModule {
 			force = await confirmDirtyRemoval(context, worktree);
 			if (!force) return FAILED;
 		}
-		return this.cleanupNow(worktree, generation, force, CLEANUP_SUCCESS);
+		return this.cleanupNow(worktree, force, CLEANUP_SUCCESS);
 	}
 
 	private async cleanupNow(
 		worktree: WorktreeBaseline,
-		generation: number,
 		force: boolean,
 		successMessage: string,
 	): Promise<ExitActionResult> {
@@ -196,13 +170,7 @@ class Worktree implements WorktreeModule {
 			exec: this.exec,
 			changeDirectory: this.changeDirectory,
 			notify: notifyWorktree.bind(null, this.context),
-			isCurrent: () =>
-				isCurrentWorktree(
-					this.baseline,
-					worktree,
-					generation,
-					this.operationGeneration,
-				),
+			isCurrent: () => isCurrentWorktree(this.baseline, worktree),
 		});
 		const cleanupCompleted = result === COMPLETED;
 		if (cleanupCompleted) {

@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SharedEvents } from "../shared/events.ts";
+import type { PromptQueue } from "../shared/prompt-queue.ts";
 import {
 	EXIT_ACTION_KEY,
 	type EXIT_CANCEL_KEY,
@@ -56,4 +57,7 @@ export interface ExitProtocolModule {
 	sessionStart(ctx: ExtensionContext): void;
 	deactivate(): void;
 }
-export type ExitProtocolFactory = (events: SharedEvents) => ExitProtocolModule;
+export type ExitProtocolFactory = (
+	events: SharedEvents,
+	promptQueue: PromptQueue,
+) => ExitProtocolModule;

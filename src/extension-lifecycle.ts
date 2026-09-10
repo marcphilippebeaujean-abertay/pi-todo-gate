@@ -10,6 +10,13 @@ import { invalidateOperations } from "./session-operations.ts";
 import { spawnExec } from "./shared/command.ts";
 import { TodoistClient } from "./todoist/module.ts";
 
+export function resetTemporarySessionState(runtime: ExtensionRuntime): void {
+	runtime.promptQueue.reset();
+	runtime.taskClaim.pending = false;
+	runtime.taskClaim.completed = false;
+	runtime.taskClaim.session = undefined;
+}
+
 export function createClient(
 	ctx: ExtensionContext,
 	dependencies: ExtensionDependencies,

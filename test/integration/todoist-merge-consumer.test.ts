@@ -1,15 +1,20 @@
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionCommandContext,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { EXTENSION_CONSTANTS as C } from "../../src/constants.ts";
+import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import type { ExtensionRuntime } from "../../src/extension-types.ts";
 import { runMergeProtocol } from "../../src/pr/module.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
+import { PromptQueue } from "../../src/shared/prompt-queue.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 
 function setup(overrides: Record<string, unknown> = {}) {
-	const confirm = vi.fn(async () => true);
+	const confirm = vi.fn(async (_title: string) => true);
 	const notify = vi.fn();
 	const completeTask = vi.fn(
 		async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
@@ -34,6 +39,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 	const runtime = {
 		active: session,
 		events: createSharedEvents(),
+		promptQueue: new PromptQueue(),
 		dependencies: {
 			createTodoistClient: () => ({ completeTask }),
 		},
@@ -65,6 +71,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 async function emit(runtime: ExtensionRuntime) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
 	await runtime.events.emit(C.event.prMerged, payload);
+	await runtime.promptQueue.drain();
 	return payload;
 }
 
@@ -84,6 +91,37 @@ describe("Todoist merge consumer", () => {
 			expect.any(Function),
 		);
 		expect(payload.taskMarkedAsCompleted).toBe(true);
+	});
+
+	it("runs before Exit Protocol prompts in shared queue order", async () => {
+		const setupResult = setup();
+		const order: string[] = [];
+		setupResult.confirm.mockImplementation(async (title) => {
+			order.push(title.startsWith("Mark Todoist") ? "todoist" : "exit-prompt");
+			return true;
+		});
+		registerTodoistMergeConsumer(setupResult.runtime);
+		const exitModule = createExitProtocolModule(
+			setupResult.runtime.events,
+			setupResult.runtime.promptQueue,
+		);
+		exitModule.sessionStart(
+			setupResult.session.context as unknown as ExtensionContext,
+		);
+		setupResult.runtime.events.on("prMerged", (request) => {
+			request.addAction({
+				id: "remove-worktree",
+				label: "Run exit action",
+				execute: async () => {
+					order.push("exit");
+					return "completed";
+				},
+			});
+		});
+
+		await emit(setupResult.runtime);
+
+		expect(order).toEqual(["todoist", "exit-prompt", "exit"]);
 	});
 
 	it("leaves the merge event and task unchanged when declined", async () => {
@@ -178,6 +216,7 @@ describe("Todoist merge consumer", () => {
 		};
 		const runtime = {
 			active: session,
+			promptQueue: new PromptQueue(),
 			dependencies: {
 				exec,
 				createTodoistClient: () => ({ completeTask }),
@@ -203,6 +242,7 @@ describe("Todoist merge consumer", () => {
 		registerTodoistMergeConsumer(runtime);
 
 		await runMergeProtocol(runtime, context);
+		await runtime.promptQueue.drain();
 
 		expect(exec).toHaveBeenCalledWith(
 			"gh",

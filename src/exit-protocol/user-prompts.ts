@@ -212,13 +212,19 @@ function selectedActions(
 export async function presentExitActions(
 	context: ExtensionContext | null,
 	actions: readonly ExitAction[],
+	isCurrent: () => boolean = () => true,
 ): Promise<void> {
 	const hasContext = canPresent(context);
 	const hasActions = actions.length > 0;
 	const shouldPresent = hasContext && hasActions;
 	if (!shouldPresent) return;
 	const selected = await pickActions(context, actions);
+	const isCurrentAfterPick = isCurrent();
+	if (!isCurrentAfterPick) return;
 	const actionsToExecute = selectedActions(actions, selected);
-	for (const action of actionsToExecute)
+	for (const action of actionsToExecute) {
+		const isCurrentBeforeAction = isCurrent();
+		if (!isCurrentBeforeAction) return;
 		await executeExitAction(context, action);
+	}
 }

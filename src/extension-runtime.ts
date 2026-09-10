@@ -15,6 +15,7 @@ import {
 	isCurrentOperation,
 } from "./session-operations.ts";
 import { createSharedEvents } from "./shared/events.ts";
+import { PromptQueue } from "./shared/prompt-queue.ts";
 import { completeMergedTask } from "./task-completion.ts";
 import { registerTodoistMergeConsumer } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
@@ -24,15 +25,18 @@ export function createExtensionRuntime(
 	dependencies: ExtensionDependencies,
 ): ExtensionRuntime {
 	const events = createSharedEvents();
+	const promptQueue = new PromptQueue();
 	const runtime: ExtensionRuntime = {
 		pi,
 		dependencies,
 		events,
-		exitProtocol: createExitProtocolModule(events),
+		exitProtocol: createExitProtocolModule(events, promptQueue),
 		footer: createFooterModule(pi, {
 			openSession: dependencies.openSession,
 		}),
 		worktree: createWorktreeModule(events, { exec: dependencies.exec }),
+		taskClaim: { pending: false, completed: false },
+		promptQueue,
 		active: null,
 		appendState: (state, prDiscoveryDisabled) =>
 			appendState(runtime, state, prDiscoveryDisabled),

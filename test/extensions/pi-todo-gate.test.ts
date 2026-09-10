@@ -335,6 +335,75 @@ describe("lazy activation", () => {
 });
 
 describe("automatic Todoist task claiming", () => {
+	it("does not restart a pending claim after a new-session shutdown", async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const resolveClaims: Array<
+			(value: {
+				sessionId: string;
+				action: "claim";
+				taskData: { title: string; description: string; id: string };
+				error: null;
+			}) => void
+		> = [];
+		const worker = vi.fn(
+			() =>
+				new Promise<{
+					sessionId: string;
+					action: "claim";
+					taskData: { title: string; description: string; id: string };
+					error: null;
+				}>((resolve) => {
+					resolveClaims.push(resolve);
+				}),
+		);
+		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: "work" },
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await h.handlers.get("session_shutdown")?.(
+			{ type: "session_shutdown", reason: "new" },
+			h.ctx,
+		);
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: "new" },
+			h.ctx,
+		);
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: "work again" },
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(worker).toHaveBeenCalledTimes(2);
+		resolveClaims[0]?.({
+			sessionId: SESSION_CURRENT,
+			action: "claim",
+			taskData: { title: "Stale work", description: "Details", id: "41" },
+			error: null,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(h.appended.at(-1)).not.toMatchObject({
+			data: { taskRef: "41" },
+		});
+		resolveClaims[1]?.({
+			sessionId: SESSION_CURRENT,
+			action: "claim",
+			taskData: { title: "Work", description: "Details", id: "42" },
+			error: null,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(h.appended.at(-1)).toMatchObject({
+			data: { taskRef: "42", taskName: "Work" },
+		});
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: "work after completion" },
+			h.ctx,
+		);
+
+		expect(worker).toHaveBeenCalledTimes(2);
+	});
 	it("applies an existing-task proposal without confirmation", async () => {
 		const root = await mkdtemp(join(tmpdir(), "claim-confirm"));
 		const h = harness(root);
@@ -469,12 +538,24 @@ describe("automatic Todoist task claiming", () => {
 		const root = await mkdtemp(join(tmpdir(), "retry-confirm"));
 		const h = harness(root);
 		h.ctx.hasUI = true;
-		const worker = vi.fn(async () => ({
-			sessionId: SESSION_CURRENT,
-			action: "error" as const,
-			taskData: null,
-			error: "Unavailable",
-		}));
+		const worker = vi
+			.fn()
+			.mockResolvedValueOnce({
+				sessionId: SESSION_CURRENT,
+				action: "error" as const,
+				taskData: null,
+				error: "Unavailable",
+			})
+			.mockResolvedValueOnce({
+				sessionId: SESSION_CURRENT,
+				action: "claim" as const,
+				taskData: {
+					title: "Retry task",
+					description: "Details",
+					id: "44",
+				},
+				error: null,
+			});
 		const client = {
 			resolveProject: async () => ({ id: PROJECT_1, name: MERGE_TD }),
 			createTask: async () => ({
@@ -496,12 +577,20 @@ describe("automatic Todoist task claiming", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 50));
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: "try the task claim again" },
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
 
 		expect(h.selections).toHaveLength(0);
-		expect(worker).toHaveBeenCalledTimes(1);
+		expect(worker).toHaveBeenCalledTimes(2);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
+		expect(h.appended.at(-1)).toMatchObject({
+			data: { taskRef: "44", taskName: "Retry task" },
+		});
 	});
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
