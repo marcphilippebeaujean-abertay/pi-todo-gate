@@ -7,6 +7,10 @@ const SESSION_START = "session_start";
 const STARTUP = "startup";
 const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
 	"does not register tools or perform external work for an unmatched project";
+const DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT =
+	"does not start worktree tracking for an unmatched project";
+const INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION =
+	"invalidates the old session before awaiting new configuration";
 const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 	"does not activate for dispatched subagent";
 const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
@@ -124,7 +128,10 @@ import extension, {
 	type ExtensionDependencies,
 } from "../../extensions/pi-todo-gate.ts";
 import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
-import type { TodoistClient } from "../../src/todoist/module.ts";
+import type {
+	TodoistClient,
+	TodoistProjectMapping,
+} from "../../src/todoist/module.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 type TestTool = {
@@ -315,6 +322,17 @@ describe("lazy activation", () => {
 		expect(h.appended).toHaveLength(0);
 	});
 
+	it(DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT, async () => {
+		const h = harness(UNCONFIGURED_PROJECT);
+		const exec = vi.fn(async () => ({
+			stdout: "worktree",
+			stderr: EMPTY_STRING,
+			code: 0,
+		}));
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		expect(exec).not.toHaveBeenCalled();
+	});
+
 	it(REGISTERS_THE_STATE_TOOL_ONLY_FOR_A, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
@@ -335,6 +353,48 @@ describe("lazy activation", () => {
 });
 
 describe("automatic Todoist task claiming", () => {
+	it(
+		INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION,
+		async () => {
+			const h = harness(CONFIGURED_PROJECT);
+			let releaseConfiguration: (value: TodoistProjectMapping) => void =
+				() => {};
+			const loadConfig = vi
+				.fn()
+				.mockResolvedValueOnce(config({ "/configured": MERGE_TD }))
+				.mockImplementationOnce(
+					() =>
+						new Promise((resolve) => {
+							releaseConfiguration = resolve;
+						}),
+				);
+			const worker = vi.fn(async () => ({
+				sessionId: SESSION_CURRENT,
+				action: "error" as const,
+				taskData: null,
+				error: TODOIST_UNAVAILABLE,
+			}));
+			extension(h.pi, { loadConfig, taskClaimWorker: worker });
+			await h.handlers.get(SESSION_START)?.(
+				{ type: SESSION_START, reason: STARTUP },
+				h.ctx,
+			);
+
+			const nextStart = h.handlers.get(SESSION_START)?.(
+				{ type: SESSION_START, reason: RESUME },
+				h.ctx,
+			);
+			await Promise.resolve();
+			await h.handlers.get(BEFORE_AGENT_START)?.(
+				{ type: BEFORE_AGENT_START, prompt: WORK },
+				h.ctx,
+			);
+			expect(worker).not.toHaveBeenCalled();
+			releaseConfiguration(config({ "/configured": MERGE_TD }));
+			await nextStart;
+		},
+	);
+
 	it("does not restart a pending claim after a new-session shutdown", async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const resolveClaims: Array<

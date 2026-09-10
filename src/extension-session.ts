@@ -43,6 +43,8 @@ function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
 		}
 	}
 	if (!hasSession) runtime.footer.deactivate();
+	runtime.worktree.deactivate();
+	runtime.exitProtocol.deactivate();
 	runtime.active = null;
 }
 
@@ -154,8 +156,7 @@ export async function handleSessionStart(
 	ctx: ExtensionContext,
 ): Promise<void> {
 	resetTemporarySessionState(runtime);
-	runtime.exitProtocol.sessionStart(ctx);
-	void runtime.worktree.sessionStart(ctx);
+	deactivateUnconfiguredSession(runtime);
 	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	const hasProject = project !== null;
@@ -163,7 +164,8 @@ export async function handleSessionStart(
 		deactivateUnconfiguredSession(runtime);
 		return;
 	}
-	if (runtime.active !== null) deactivateSession(runtime, runtime.active);
+	runtime.exitProtocol.sessionStart(ctx);
+	void runtime.worktree.sessionStart(ctx);
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
