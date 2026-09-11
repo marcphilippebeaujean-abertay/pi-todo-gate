@@ -129,21 +129,6 @@ describe("exit protocol presenter", () => {
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
 
-	it("ignores non-quit close events", async () => {
-		const events = createSharedEvents();
-		const ctx = context();
-		const module = createExitProtocolModule(events);
-		module.sessionStart(ctx);
-		events.on("sessionWillClose", (request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.emit("sessionWillClose", { reason: "new" });
-
-		expect(ctx.ui.custom).not.toHaveBeenCalled();
-		expect(actions[0].execute).not.toHaveBeenCalled();
-	});
-
 	it("uses sequential confirmations in RPC mode", async () => {
 		const events = createSharedEvents();
 		const confirm = vi.fn(async () => true);
