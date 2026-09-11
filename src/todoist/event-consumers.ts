@@ -202,7 +202,7 @@ export function maybeAnalyzeTaskClaim(
 	void runTaskClaim(runtime, session, prompt);
 }
 
-type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
+type MergeRequest = EventRequest<SharedEventPayloads[typeof C.event.prMerged]>;
 
 async function consumeMergedEvent(
 	runtime: TodoistRuntime,

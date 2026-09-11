@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import type {
 	EventRequest,
@@ -28,8 +29,10 @@ import { createCleanupAction } from "./event-publishers.ts";
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
-type CloseRequest = EventRequest<SharedEventPayloads["sessionWillClose"]>;
-type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
+type CloseRequest = EventRequest<
+	SharedEventPayloads[typeof C.event.sessionWillClose]
+>;
+type MergeRequest = EventRequest<SharedEventPayloads[typeof C.event.prMerged]>;
 
 class Worktree implements WorktreeModule {
 	private readonly exec: Exec;
@@ -41,8 +44,8 @@ class Worktree implements WorktreeModule {
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.on("prMerged", this.onPrMerged.bind(this));
-		events.on("sessionWillClose", this.onSessionWillClose.bind(this));
+		events.on(C.event.prMerged, this.onPrMerged.bind(this));
+		events.on(C.event.sessionWillClose, this.onSessionWillClose.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {

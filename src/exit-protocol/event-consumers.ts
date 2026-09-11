@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type {
 	EventRequest,
 	SharedEventPayloads,
@@ -20,9 +21,9 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		promptQueue: PromptQueue = new PromptQueue(),
 	) {
 		this.promptQueue = promptQueue;
-		events.on("prMerged", this.onPrMerged.bind(this), EXIT_PRESENT_PHASE);
+		events.on(C.event.prMerged, this.onPrMerged.bind(this), EXIT_PRESENT_PHASE);
 		events.on(
-			"sessionWillClose",
+			C.event.sessionWillClose,
 			this.enqueueOnQuit.bind(this),
 			EXIT_PRESENT_PHASE,
 		);
@@ -37,7 +38,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	}
 
 	private enqueueOnQuit(
-		request: EventRequest<SharedEventPayloads["sessionWillClose"]>,
+		request: EventRequest<SharedEventPayloads[typeof C.event.sessionWillClose]>,
 	): void {
 		const isQuit = request.payload.reason === EXIT_QUIT;
 		if (!isQuit) return;
