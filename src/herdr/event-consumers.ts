@@ -41,7 +41,7 @@ interface TabClaimAttempt {
 	paneId: string | undefined;
 }
 
-class HerdrTabClaim {
+class HerdrTabClaimConsumer {
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
@@ -188,5 +188,5 @@ export function installHerdrTabClaim(
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
-	new HerdrTabClaim(pi, options ?? {});
+	new HerdrTabClaimConsumer(pi, options ?? {});
 }
