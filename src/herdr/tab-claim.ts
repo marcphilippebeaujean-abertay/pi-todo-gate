@@ -136,7 +136,6 @@ class HerdrTabClaim {
 				ctx,
 				attempt.generation,
 				`${TAB_CLAIM_START_FAILED}${detail}`,
-				false,
 			);
 		}
 	}
@@ -168,14 +167,13 @@ class HerdrTabClaim {
 		ctx: ExtensionContext,
 		generation: number,
 		message: string,
-		workerFailed = true,
 	): void {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
 		const tabNameIsParseableAsInt = isTabNameParseableAsInt(this.initialLabel);
-		const shouldTriggerRetry = workerFailed && tabNameIsParseableAsInt;
+		const shouldTriggerRetry = tabNameIsParseableAsInt;
 		this.herdrGateClaimProcessed = !shouldTriggerRetry;
 		handleClaimError(ctx, { jobType: HERDR, error: message });
 	}
