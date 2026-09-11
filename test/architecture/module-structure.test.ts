@@ -35,6 +35,17 @@ describe("module structure checker", () => {
 			"^src/herdr/(commands|event-publishers|events)\\\\.ts$",
 		);
 	});
+	it("protects event publishers from consumers and state imports", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		expect(config).toContain("no-event-publisher-to-consumer");
+		expect(config).toContain("^src/[^/]+/event-publishers\\\\.ts$");
+		expect(config).toContain("no-event-publisher-to-state");
+		expect(config).toContain("^src/[^/]+/state\\\\.ts$");
+	});
+
 	it("accepts all canonical files, including empty facets", async () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
 	});

@@ -16,6 +16,8 @@ module.exports = {
 		{ name: "no-herdr-to-exit-protocol", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/exit-protocol/" } },
 		{ name: "no-herdr-to-footer", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/footer/" } },
 		{ name: "no-herdr-worker-to-consumer", severity: "error", from: { path: "^src/herdr/(commands|event-publishers|events)\\.ts$" }, to: { path: "^src/herdr/event-consumers\\.ts$" } },
+		{ name: "no-event-publisher-to-consumer", severity: "error", from: { path: "^src/[^/]+/event-publishers\\.ts$" }, to: { path: "^src/[^/]+/event-consumers\\.ts$" } },
+		{ name: "no-event-publisher-to-state", severity: "error", from: { path: "^src/[^/]+/event-publishers\\.ts$" }, to: { path: "^src/[^/]+/state\\.ts$" } },
 		{ name: "no-worktree-to-pr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/pr/" } },
 		{ name: "no-worktree-to-todoist", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/todoist/" } },
 		{ name: "no-worktree-to-herdr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/herdr/" } },
