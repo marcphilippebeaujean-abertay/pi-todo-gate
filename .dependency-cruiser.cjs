@@ -15,7 +15,7 @@ module.exports = {
 		{ name: "no-herdr-to-worktree", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/worktree/" } },
 		{ name: "no-herdr-to-exit-protocol", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/exit-protocol/" } },
 		{ name: "no-herdr-to-footer", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/footer/" } },
-		{ name: "no-herdr-worker-to-consumer", severity: "error", from: { path: "^src/herdr/(commands|claim-worker-result|tab-validation|event-publishers)/" }, to: { path: "^src/herdr/event-consumers\\.ts$" } },
+		{ name: "no-herdr-worker-to-consumer", severity: "error", from: { path: "^src/herdr/(commands|event-publishers|events)\\.ts$" }, to: { path: "^src/herdr/event-consumers\\.ts$" } },
 		{ name: "no-worktree-to-pr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/pr/" } },
 		{ name: "no-worktree-to-todoist", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/todoist/" } },
 		{ name: "no-worktree-to-herdr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/herdr/" } },

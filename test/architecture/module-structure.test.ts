@@ -32,7 +32,7 @@ describe("module structure checker", () => {
 		);
 		expect(config).toContain("no-herdr-worker-to-consumer");
 		expect(config).toContain(
-			"^src/herdr/(commands|claim-worker-result|tab-validation|event-publishers)/",
+			"^src/herdr/(commands|event-publishers|events)\\\\.ts$",
 		);
 	});
 	it("accepts all canonical files, including empty facets", async () => {
