@@ -37,7 +37,14 @@ const MERGED_PAYLOAD = '{"state":"MERGED","mergedAt":"2026-09-07T00:00:00Z"}';
 const MERGED = "MERGED";
 const UNKNOWN_VALUE = "UNKNOWN";
 const PARSES_GIT_AND_GH_MERGE_COMMANDS = "parses git and gh merge commands";
+const PARSES_GIT_GLOBAL_OPTIONS_BEFORE_MERGE =
+	"parses git global options before merge";
+const REJECTS_TRAILING_BACKGROUND_COMMANDS =
+	"rejects trailing background commands";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
+const GIT_MERGE_FEATURE_AUTH_BACKGROUND = "git merge feature/auth &";
+const GIT_C_MERGE_FEATURE_AUTH = "git -C /repo merge feature/auth";
+const GIT_MERGE_ORIGIN_FEATURE_AUTH = "git merge origin/feature/auth";
 const GIT_MERGE_NO_COMMIT_FEATURE_AUTH = "git merge --no-commit feature/auth";
 const GIT = "git";
 const FEATURE_AUTH = "feature/auth";
@@ -64,6 +71,7 @@ const GH_PR_MERGE_HTTPS_GITHUB_COM_O =
 const MATCHES_A_GIT_MERGE_BY_THE_PINNED =
 	"matches a git merge by the pinned PR head branch";
 const HEADREFNAME_FEATURE_AUTH = '{"headRefName":"feature/auth"}';
+const HEADREFNAME_AUTH = '{"headRefName":"auth"}';
 const REJECTS_AMBIGUOUS_OR_REPOSITORY_SELECTED_GH_MERGE =
 	"rejects ambiguous or repository-selected gh merge targets";
 const URL_HTTPS_GITHUB_COM_O_R_PULL_2 =
@@ -208,6 +216,17 @@ describe("mergeCommand", () => {
 		});
 	});
 
+	it(PARSES_GIT_GLOBAL_OPTIONS_BEFORE_MERGE, () => {
+		expect(mergeCommand(GIT_C_MERGE_FEATURE_AUTH)).toEqual({
+			kind: GIT,
+			args: [FEATURE_AUTH],
+		});
+	});
+
+	it(REJECTS_TRAILING_BACKGROUND_COMMANDS, () => {
+		expect(mergeCommand(GIT_MERGE_FEATURE_AUTH_BACKGROUND)).toBeNull();
+	});
+
 	it(REJECTS_COMPOUND_COMMANDS_SO_FAILED_MERGES_CANNOT, () => {
 		expect(mergeCommand(ECHO_GIT_MERGE_IGNORED_GIT_MERGE_FEATURE)).toBeNull();
 		expect(mergeCommand(PRINTF_S_GH_PR_MERGE_42_GH)).toBeNull();
@@ -249,6 +268,40 @@ describe("matchesPinnedPr", () => {
 				HTTPS_GITHUB_COM_O_R_PULL_42,
 			),
 		).resolves.toBe(true);
+	});
+
+	it("matches a remote-tracking branch for the pinned PR", async () => {
+		const exec = fakeExec({
+			"gh pr view https://github.com/o/r/pull/42 --json headRefName": ok(
+				HEADREFNAME_FEATURE_AUTH,
+			),
+			"git rev-parse --verify --quiet refs/remotes/origin/feature/auth":
+				ok("abc\n"),
+		});
+		await expect(
+			matchesPinnedPr(
+				exec,
+				REPO_2,
+				GIT_MERGE_ORIGIN_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
+			),
+		).resolves.toBe(true);
+	});
+
+	it("rejects a local branch that shadows a remote-shaped target", async () => {
+		const exec = fakeExec({
+			"gh pr view https://github.com/o/r/pull/42 --json headRefName":
+				ok(HEADREFNAME_AUTH),
+			"git rev-parse --verify --quiet refs/heads/feature/auth": ok("abc\n"),
+		});
+		await expect(
+			matchesPinnedPr(
+				exec,
+				REPO_2,
+				GIT_MERGE_FEATURE_AUTH,
+				HTTPS_GITHUB_COM_O_R_PULL_42,
+			),
+		).resolves.toBe(false);
 	});
 
 	it("rejects a non-completing git merge", async () => {
