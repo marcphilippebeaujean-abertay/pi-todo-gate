@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { withWorkerMarker } from "../session.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
+import { appendBounded, parseClaimResult } from "./claim-worker-result.ts";
 import {
 	CLOSE_EVENT,
 	DATA_EVENT,
@@ -26,7 +27,6 @@ import type {
 	WorkerProcess,
 	WorkerSpawner,
 } from "./data.ts";
-import { appendBounded, parseClaimResult } from "./data.ts";
 
 const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
 	spawn(command, [...args], {
@@ -69,7 +69,6 @@ function registerWorkerLifecycle(
 	state: WorkerState,
 ): void {
 	child.stdout.on(DATA_EVENT, (chunk) => {
-		// Worker output is intentionally private and never forwarded to the parent session.
 		state.stdout = appendBounded(state.stdout, chunk);
 	});
 	child.stderr.on(DATA_EVENT, (chunk) => {
@@ -126,7 +125,6 @@ export function startClaimWorker(
 		stderr: "",
 	};
 	registerWorkerLifecycle(child, request, state);
-
 	return {
 		cancel(): void {
 			const isFinished = state.settled || state.cancelled;
@@ -182,8 +180,13 @@ export function tabLabel(commandRunner: CommandRunner): string | undefined {
 	const tabId = process.env.HERDR_TAB_ID;
 	const hasTabId = Boolean(tabId);
 	if (!hasTabId) return undefined;
+	const resolvedTabId = tabId ?? "";
 	const response = jsonResult<{ result?: { tab?: { label?: string } } }>(
-		commandRunner(HERDR_COMMAND, [...TAB_GET_COMMAND, tabId ?? ""]),
+		commandRunner(HERDR_COMMAND, [
+			TAB_GET_COMMAND[0],
+			TAB_GET_COMMAND[1],
+			resolvedTabId,
+		]),
 	);
 	const label = response?.result?.tab?.label?.trim();
 	return label || undefined;

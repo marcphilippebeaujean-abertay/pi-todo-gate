@@ -21,6 +21,22 @@ export const CANONICAL_FACETS = [
 	"module.ts",
 ] as const;
 
+const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
+	"exit-protocol": ["state.ts"],
+	footer: ["state.ts"],
+	herdr: ["claim-worker-result.ts", "tab-validation.ts"],
+	pr: ["parsing.ts"],
+	todoist: ["parsing.ts"],
+	worktree: ["state.ts"],
+};
+
+function isAllowedFacet(domain: string, name: string): boolean {
+	return (
+		(CANONICAL_FACETS as readonly string[]).includes(name) ||
+		(ADDITIONAL_FACETS[domain] ?? []).includes(name)
+	);
+}
+
 export interface StructureIssue {
 	domain: string;
 	path: string;
@@ -83,8 +99,10 @@ export async function checkModuleStructure(
 		}
 		const entries = await readdir(domainPath, { withFileTypes: true });
 		for (const entry of entries) {
-			const isUnclassified = entry.isFile() && entry.name.endsWith(".ts") &&
-				!(CANONICAL_FACETS as readonly string[]).includes(entry.name) &&
+			const isUnclassified =
+				entry.isFile() &&
+				entry.name.endsWith(".ts") &&
+				!isAllowedFacet(domain, entry.name) &&
 				!(domain === "footer" && entry.name === "footer-rendering.ts");
 			if (!isUnclassified) continue;
 			issues.push({
@@ -107,7 +125,9 @@ export async function checkModuleStructure(
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const issues = await checkModuleStructure();
 	for (const issue of issues) {
-		console.error(`${issue.domain}: ${issue.path}: ${issue.message}; expected ${issue.correction}`);
+		console.error(
+			`${issue.domain}: ${issue.path}: ${issue.message}; expected ${issue.correction}`,
+		);
 	}
 	process.exitCode = issues.length === 0 ? 0 : 1;
 }

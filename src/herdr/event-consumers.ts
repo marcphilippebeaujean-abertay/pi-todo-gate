@@ -17,21 +17,23 @@ import {
 	TAB_CLAIM_INSTRUCTIONS,
 	TAB_CLAIM_START_FAILED,
 } from "./constants.ts";
-import type { FooterEventSink } from "./data.ts";
-import {
-	type ClaimWorkerHandle,
-	type ClaimWorkerRequest,
-	type CommandRunner,
-	type HerdrTabOptions,
-	hasValidatedTabClaim,
-	type StartBackgroundWorker,
-	tabNameIsParseableAsInt,
+import type {
+	ClaimWorkerHandle,
+	ClaimWorkerRequest,
+	CommandRunner,
+	FooterEventSink,
+	HerdrTabOptions,
+	StartBackgroundWorker,
 } from "./data.ts";
 import {
 	hideHerdrFooter,
 	notifyHerdrFailure,
 	showHerdrFooter,
 } from "./notifications.ts";
+import {
+	hasValidatedTabClaim,
+	tabNameIsParseableAsInt,
+} from "./tab-validation.ts";
 
 interface TabClaimAttempt {
 	generation: number;
@@ -49,7 +51,7 @@ class HerdrTabClaim {
 	private worker: ClaimWorkerHandle | undefined;
 	private sessionGeneration = 0;
 	private herdrAvailable = false;
-	private hasClaim = false;
+	private hasValidatedClaim = false;
 	private herdrGateClaimProcessed = false;
 	private initialLabel: string | undefined;
 	private paneId: string | undefined;
@@ -77,7 +79,7 @@ class HerdrTabClaim {
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
-		this.hasClaim = false;
+		this.hasValidatedClaim = false;
 		this.initialLabel = undefined;
 		this.paneId = undefined;
 		hideHerdrFooter(this.emitFooter);
@@ -97,7 +99,7 @@ class HerdrTabClaim {
 		ctx: ExtensionContext,
 	): void {
 		const isUnavailable = !this.herdrAvailable;
-		const isClaimed = this.hasClaim;
+		const isClaimed = this.hasValidatedClaim;
 		const hasWorker = this.worker !== undefined;
 		const hasProcessedGate = this.herdrGateClaimProcessed;
 		const isUnavailableOrClaimed = isUnavailable || isClaimed;
@@ -145,7 +147,7 @@ class HerdrTabClaim {
 			claim,
 		);
 		if (isValidated) {
-			this.hasClaim = true;
+			this.hasValidatedClaim = true;
 			return;
 		}
 		this.herdrGateClaimProcessed = true;
@@ -174,7 +176,7 @@ class HerdrTabClaim {
 		this.worker?.cancel();
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
-		this.hasClaim = false;
+		this.hasValidatedClaim = false;
 		this.herdrGateClaimProcessed = false;
 		this.herdrAvailable = false;
 	}

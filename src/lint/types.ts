@@ -12,7 +12,8 @@ export type LintRuleId =
 	| "functions-per-file"
 	| "nested-function-depth"
 	| "repeated-field-checks"
-	| "prefer-switch-dispatch";
+	| "prefer-switch-dispatch"
+	| "no-functions-in-data";
 export interface LintDiagnostic {
 	filePath: string;
 	line: number;
