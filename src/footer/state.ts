@@ -1,7 +1,3 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
 import {
 	requireBoolean,
 	requireNonEmptyString,
@@ -18,6 +14,12 @@ import {
 	FOOTER_TYPE_FIELD,
 	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
+import type {
+	FooterState,
+	FooterUpdate,
+	PersistedFooterState,
+	PersistedFooterUpdate,
+} from "./data.ts";
 
 export function parseFooterEvent(value: unknown): FooterUpdate {
 	const event = requireRecord(value, FOOTER_EVENT_LABEL);
@@ -128,44 +130,3 @@ export function applyFooterUpdate(
 		},
 	};
 }
-export interface FooterUpdate {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}
-
-export interface FooterState {
-	footers: Record<string, FooterUpdate>;
-}
-
-export interface PersistedFooterUpdate {
-	footerType: string;
-	isLoading?: boolean;
-	text: string | null;
-}
-
-export interface PersistedFooterState {
-	footers: Record<string, PersistedFooterUpdate>;
-}
-
-export type FooterEventSink = (event: FooterUpdate) => void;
-export interface FooterSessionReader {
-	getBranch(): unknown[];
-}
-export interface FooterModuleDependencies {
-	openSession?: (path: string) => FooterSessionReader;
-}
-export interface FooterModule {
-	sessionStart(
-		event: { previousSessionFile?: string },
-		ctx: ExtensionContext,
-	): Promise<void>;
-	update(event: FooterUpdate): void;
-	getState(): FooterState;
-	deactivate(): void;
-}
-export type FooterModuleFactory = (
-	pi: ExtensionAPI,
-	dependencies?: FooterModuleDependencies,
-) => FooterModule;

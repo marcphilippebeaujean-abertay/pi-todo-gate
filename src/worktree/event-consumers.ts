@@ -8,14 +8,17 @@ import type {
 } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
-import { cleanupWorktree, currentWorktreeState } from "./commands.ts";
+import {
+	cleanupWorktree,
+	currentWorktreeState,
+	isCurrentWorktree,
+} from "./commands.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import type {
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,
 } from "./data.ts";
-import { isCurrentWorktree } from "./data.ts";
 import { createCleanupAction } from "./event-publishers.ts";
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";

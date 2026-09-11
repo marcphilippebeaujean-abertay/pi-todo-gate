@@ -1,3 +1,5 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { handleClaimError } from "../claim-error.ts";
 import type { Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
@@ -5,25 +7,31 @@ import {
 	AUTHORIZATION_REPLACEMENT,
 	CLAIM_INSTRUCTIONS,
 	CLAIM_WORKER_TIMEOUT_MS,
+	COMPLETION_FAILURE,
+	COMPLETION_SUCCESS,
 	CREATE_INSTRUCTIONS,
 	ERROR_INSTRUCTIONS,
 	HIGH_THINKING,
 	IGNORE_PROGRESS,
+	INFO,
 	MATCH_TASK,
 	OUTPUT_INSTRUCTIONS,
 	OUTPUT_SCHEMA,
 	PI_COMMAND,
 	SECRET_REPLACEMENT,
 	TIMED_OUT,
+	TODOIST,
+	TODOIST_TASK_ASSIGNED,
 	UNTRUSTED_INPUT,
+	WARNING,
 	WORKER_ROLE,
 } from "./constants.ts";
 import {
-	parseResult,
 	type TaskClaimWorker,
 	type TaskClaimWorkerInput,
 	TaskClaimWorkerResultSchema,
 } from "./data.ts";
+import { parseResult } from "./parsing.ts";
 
 function workerPrompt(input: TaskClaimWorkerInput): string {
 	return [
@@ -56,6 +64,25 @@ function sanitizeWorkerError(stderr: string): string {
 		.replace(/\s+/g, " ")
 		.trim()
 		.slice(0, 300);
+}
+
+export function notifyTaskAssigned(context: ExtensionContext): void {
+	context.ui.notify(TODOIST_TASK_ASSIGNED, INFO);
+}
+
+export function notifyClaimFailure(
+	context: ExtensionContext,
+	error: string,
+): void {
+	handleClaimError(context, { jobType: TODOIST, error });
+}
+
+export function notifyCompletionSuccess(context: ExtensionContext): void {
+	context.ui.notify(COMPLETION_SUCCESS, INFO);
+}
+
+export function notifyCompletionFailure(context: ExtensionContext): void {
+	context.ui.notify(COMPLETION_FAILURE, WARNING);
 }
 
 export function createTaskClaimWorker(exec?: Exec): TaskClaimWorker {

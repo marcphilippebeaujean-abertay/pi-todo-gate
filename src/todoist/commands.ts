@@ -19,6 +19,7 @@ import {
 	TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 	VIEW,
 } from "./constants.ts";
+import type { TodoistTask } from "./data.ts";
 import {
 	childList,
 	parsePayload,
@@ -27,9 +28,8 @@ import {
 	stringValue,
 	TodoistError,
 	TodoistOperationCancelled,
-	type TodoistTask,
 	taskFromPayload,
-} from "./data.ts";
+} from "./parsing.ts";
 
 export interface TodoistExec {
 	run(args: readonly string[]): Promise<CommandResult>;

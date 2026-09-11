@@ -1,17 +1,7 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { applyStatePatch } from "../session-state.ts";
-import type { Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
-import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
-import type { PromptQueue } from "../shared/prompt-queue.ts";
-import type { WorkState } from "../types.ts";
 import {
 	CLAIM,
 	COMPLETED,
@@ -20,53 +10,19 @@ import {
 	TASK_URL,
 	UNKNOWN_ERROR,
 } from "./constants.ts";
-import type { TaskClaimWorker, TaskClaimWorkerResult } from "./data.ts";
-import { createTaskClaimWorker } from "./event-publishers.ts";
-import { notifyClaimFailure, notifyTaskAssigned } from "./notifications.ts";
+import type {
+	ClaimTaskData,
+	TaskClaimResultEvent,
+	TaskClaimWorkerResult,
+	TodoistRuntime,
+	TodoistSession,
+} from "./data.ts";
+import {
+	createTaskClaimWorker,
+	notifyClaimFailure,
+	notifyTaskAssigned,
+} from "./event-publishers.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
-
-type TodoistSession = {
-	sessionId: string;
-	context: ExtensionContext;
-	project: { todoistProjectRef: string };
-	state: WorkState;
-	allowPrDiscovery: boolean;
-	workRevision: number;
-	operationGeneration: number;
-};
-
-type TodoistRuntime = {
-	active: TodoistSession | null;
-	taskClaim: {
-		pending: boolean;
-		completed: boolean;
-		session?: TodoistSession;
-	};
-	promptQueue: PromptQueue;
-	dependencies: { exec?: Exec; taskClaimWorker?: TaskClaimWorker };
-	events: SharedEvents;
-	appendState(state: WorkState, prDiscoveryDisabled?: boolean): void;
-	refreshFooterStatuses(session: TodoistSession): void;
-	replaceSessionState(session: TodoistSession, nextState: WorkState): void;
-	completeMergedTask(
-		session: TodoistSession,
-		taskRef: string,
-		stateSnapshot: WorkState,
-		workRevision: number,
-		operationGeneration: number,
-	): Promise<ExitActionResult>;
-};
-
-type ClaimTaskData = {
-	title: string;
-	description: string;
-	id: string;
-};
-
-export interface TaskClaimResultEvent {
-	sessionId: string;
-	result: TaskClaimWorkerResult;
-}
 
 function isActiveSession(
 	runtime: TodoistRuntime,
@@ -202,7 +158,7 @@ export function maybeAnalyzeTaskClaim(
 	void runTaskClaim(runtime, session, prompt);
 }
 
-type MergeRequest = EventRequest<SharedEventPayloads[typeof C.event.prMerged]>;
+type MergeRequest = import("./data.ts").MergeRequest;
 
 async function consumeMergedEvent(
 	runtime: TodoistRuntime,

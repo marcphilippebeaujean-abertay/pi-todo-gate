@@ -52,7 +52,9 @@ import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import {
 	createFooterFactory,
+	Footer,
 	type FooterTheme,
+	renderFooter,
 	renderFooterLine,
 	renderPrLabel,
 	renderPrStatus,
@@ -64,6 +66,29 @@ const statuses = new Map([["caveman", "Caveman: ready"]]);
 const styledTheme: FooterTheme = {
 	fg: (color, text) => `<${color}>${text}</${color}>`,
 };
+
+describe("Footer entries", () => {
+	it("updates only its own value and renders visible entries with separators", () => {
+		const task = new Footer("task", "Task: ");
+		const pr = new Footer("pr", "PR: ");
+		task.update({
+			footerType: "task",
+			isLoading: false,
+			text: "work",
+			isVisible: true,
+		});
+		pr.update({
+			footerType: "pr",
+			isLoading: false,
+			text: "42",
+			isVisible: false,
+		});
+
+		expect(task.isVisible).toBe(true);
+		expect(pr.isVisible).toBe(false);
+		expect(renderFooter([task, pr])).toBe("|Task: work");
+	});
+});
 
 describe("renderFooterLine", () => {
 	it(STYLES_FOOTER_LABELS_SEPARATELY_FROM_CLICKABLE_VALUES, () => {

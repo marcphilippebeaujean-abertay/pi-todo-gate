@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { isPathAtOrBelow, normalizedPath } from "../shared/path.ts";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
@@ -21,70 +20,27 @@ import {
 	UNEXPECTED_JSON_SHAPE_MESSAGE,
 } from "./constants.ts";
 
-export interface TodoistTask {
-	id: string;
-	content: string;
-	description: string;
-	projectId: string;
-	sectionId?: string | null;
-	sectionName?: string | null;
-	url?: string;
-	webUrl?: string;
-}
+import type {
+	ProjectEntry,
+	ResolvedProject,
+	TaskClaimWorkerResult,
+	TodoistProjectMapping,
+	TodoistProjectSettings,
+	TodoistState,
+	TodoistTask,
+} from "./data.ts";
+import { TaskClaimWorkerResultSchema } from "./data.ts";
 
-export type TaskClaimWorker = (
-	input: TaskClaimWorkerInput,
-) => Promise<TaskClaimWorkerResult>;
-
-export const TaskClaimWorkerInputSchema = Type.Object({
-	sessionId: Type.String({ minLength: 1 }),
-	prompt: Type.String(),
-	cwd: Type.String(),
-	projectRef: Type.String(),
-	prRef: Type.Union([Type.String(), Type.Null()]),
-	worktree: Type.Object({
-		isWorktree: Type.Boolean(),
-		root: Type.Union([Type.String(), Type.Null()]),
-		branch: Type.Union([Type.String(), Type.Null()]),
-	}),
-});
-
-export type TaskClaimWorkerInput = Type.Static<
-	typeof TaskClaimWorkerInputSchema
->;
-
-export const TaskDataSchema = Type.Object({
-	title: Type.String({ minLength: 1 }),
-	description: Type.String(),
-	id: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-});
-
-export const TaskClaimWorkerResultSchema = Type.Object({
-	sessionId: Type.String({ minLength: 1 }),
-	action: Type.Union([Type.Literal("error"), Type.Literal("claim")]),
-	taskData: Type.Union([TaskDataSchema, Type.Null()]),
-	error: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-});
-
-export type TaskClaimWorkerResult = Type.Static<
-	typeof TaskClaimWorkerResultSchema
->;
-
-export interface TodoistProjectSettings {
-	todoistProjectRef: string;
-	triggersOnlyOnWorktree?: boolean;
-}
-
-export interface TodoistProjectMapping {
-	projects: Record<string, string | TodoistProjectSettings>;
-}
-
-export interface ResolvedProject {
-	codingRoot: string;
-	todoistProjectRef: string;
-	triggersOnlyOnWorktree?: boolean;
-}
-
+export type {
+	ProjectEntry,
+	ResolvedProject,
+	TaskClaimWorkerInput,
+	TaskClaimWorkerResult,
+	TodoistProjectMapping,
+	TodoistProjectSettings,
+	TodoistState,
+	TodoistTask,
+} from "./data.ts";
 export function defaultConfigPath(): string {
 	const agentDir =
 		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
@@ -165,8 +121,6 @@ export function configPathForAgentDir(agentDir: string): string {
 export function parentDirectory(path: string): string {
 	return dirname(normalizedPath(path));
 }
-
-export type ProjectEntry = string | TodoistProjectSettings;
 
 export function parseProjectEntry(
 	path: string,
@@ -324,13 +278,6 @@ export function childList(value: unknown): unknown[] {
 	if (Array.isArray(data.tasks)) return data.tasks;
 	if (Array.isArray(data.results)) return data.results;
 	throw new TodoistError(RESPONSE_ERROR_FAMILY, EXPECTED_LIST_PAYLOAD_MESSAGE);
-}
-
-export interface TodoistState {
-	taskRef?: string;
-	taskName?: string;
-	taskUrl?: string;
-	mergePromptedPrUrl?: string;
 }
 
 const STATE_KEYS = new Set<keyof TodoistState>([

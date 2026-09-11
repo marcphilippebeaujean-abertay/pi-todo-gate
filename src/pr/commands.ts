@@ -15,13 +15,7 @@ import {
 	UNKNOWN_STATE,
 	VIEW_COMMAND,
 } from "./constants.ts";
-import {
-	githubPrUrl,
-	type OpenPrInfo,
-	openPrRowSchema,
-	parseOpenPrResult,
-	stateFromMergedData,
-} from "./data.ts";
+import type { OpenPrInfo, PrRuntime, PrSession } from "./data.ts";
 import {
 	notifyInactive,
 	notifyMergeFailure,
@@ -29,6 +23,12 @@ import {
 	notifyNoPr,
 	notifyNoUi,
 } from "./notifications.ts";
+import {
+	githubPrUrl,
+	openPrRowSchema,
+	parseOpenPrResult,
+	stateFromMergedData,
+} from "./parsing.ts";
 import { confirmMerge } from "./user-prompts.ts";
 
 async function runGhView(
@@ -202,28 +202,7 @@ export const mergeProtocolSkillPath = fileURLToPath(
 	new URL("../../skills/merge-protocol", import.meta.url),
 );
 
-interface PrSession {
-	context: { cwd: string; hasUI: boolean };
-	state: { prUrl?: string };
-	operationGeneration: number;
-	operationQueue?: Promise<void>;
-}
-
-export type PrRuntime = {
-	active: PrSession | null;
-	dependencies: { exec?: Exec };
-	events: {
-		emit(
-			event: string,
-			payload: { prUrl: string; taskMarkedAsCompleted: boolean },
-		): Promise<void>;
-	};
-	isCurrentOperation?(session: PrSession, generation: number): boolean;
-	enqueueSessionOperation?<T>(
-		session: PrSession,
-		operation: () => Promise<T>,
-	): Promise<T>;
-};
+export type { PrRuntime, PrSession } from "./data.ts";
 
 function currentSession(
 	runtime: PrRuntime,

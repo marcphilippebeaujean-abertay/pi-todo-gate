@@ -7,6 +7,7 @@ import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
 import "./footer-rendering.ts";
+import "./state.ts";
 import type { FooterModule, FooterModuleDependencies } from "./data.ts";
 import { FooterEventConsumer } from "./event-consumers.ts";
 
@@ -20,6 +21,7 @@ export type {
 export * from "./data.ts";
 export * from "./footer-rendering.ts";
 export { renderTaskStatusCompact as renderTodoistTaskStatus } from "./footer-rendering.ts";
+export * from "./state.ts";
 
 export function createFooterModule(
 	pi: ExtensionAPI,

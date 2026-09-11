@@ -4,7 +4,7 @@ import {
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
-} from "../../src/footer/data.ts";
+} from "../../src/footer/state.ts";
 
 const visible: FooterUpdate = {
 	footerType: "task",

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import type { MergedPr, OpenPrInfo, ParsedMerge, PrState } from "./data.ts";
+
+type QuoteCharacter = "'" | '"';
+
 import {
 	CLOSED_STATE,
 	END_OF_OPTIONS,
@@ -59,11 +63,6 @@ export const prStateDataSchema = z
 		discoveryDisabled: z.boolean().optional(),
 	})
 	.loose();
-
-export interface OpenPrInfo {
-	url: string | null;
-	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
-}
 
 export function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
 	const parsed = mergedPrDataSchema.safeParse(data);
@@ -177,18 +176,6 @@ export function firstUnmergedGithubPrUrl(
 	return null;
 }
 
-export interface MergedPr {
-	prUrl: string;
-	detectedAt: string;
-	reminderPending: boolean;
-}
-
-export interface PrState {
-	prUrl?: string;
-	mergedPrs?: MergedPr[];
-	discoveryDisabled?: boolean;
-}
-
 function withoutPrUrl(entries: MergedPr[], prUrl: string): MergedPr[] {
 	const result: MergedPr[] = [];
 	for (const entry of entries) {
@@ -259,8 +246,6 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 export function mergedUrls(state: PrState): string[] {
 	return state.mergedPrs?.map(prUrlOf) ?? [];
 }
-
-type QuoteCharacter = "'" | '"';
 
 export function hasUnclosedQuote(command: string): boolean {
 	let quote = "";
@@ -435,15 +420,6 @@ export function normalizedUrl(value: string): string | null {
 	} catch {
 		return null;
 	}
-}
-
-export interface MergeEvent {
-	prUrl: string;
-}
-
-export interface ParsedMerge {
-	kind: "git" | "gh";
-	args: string[];
 }
 
 function gitMergeIndex(words: readonly string[]): number | null {

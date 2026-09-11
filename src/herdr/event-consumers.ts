@@ -3,16 +3,12 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { isSubagent } from "../session.ts";
-import {
-	boundCommandRunner,
-	defaultStartWorker,
-	isInsideHerdr,
-	tabLabel,
-} from "./commands.ts";
+import { boundCommandRunner, isInsideHerdr, tabLabel } from "./commands.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
 	CLAIM_COMPLETED_EVENT,
 	CLAIM_FAILED_EVENT,
+	HERDR_MAX_CLAIM_ATTEMPTS,
 	SESSION_SHUTDOWN_EVENT,
 	SESSION_START_EVENT,
 	TAB_CLAIM_FAILED,
@@ -28,7 +24,9 @@ import type {
 	HerdrEvents,
 	HerdrTabOptions,
 	StartBackgroundWorker,
+	TabClaimAttempt,
 } from "./data.ts";
+import { defaultStartWorker } from "./event-publishers.ts";
 import { createHerdrEvents } from "./events.ts";
 import {
 	hideHerdrFooter,
@@ -40,14 +38,6 @@ import {
 	tabNameIsParseableAsInt,
 } from "./tab-validation.ts";
 
-interface TabClaimAttempt {
-	attemptId: number;
-	generation: number;
-	initialLabel: string | undefined;
-	paneId: string | undefined;
-	context: ExtensionContext;
-}
-
 class HerdrTabClaimConsumer {
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
@@ -57,7 +47,6 @@ class HerdrTabClaimConsumer {
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
-	private sessionGeneration = 0;
 	private nextAttemptId = 0;
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
@@ -89,7 +78,6 @@ class HerdrTabClaimConsumer {
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.activeAttempt = undefined;
-		this.sessionGeneration += 1;
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
@@ -120,9 +108,10 @@ class HerdrTabClaimConsumer {
 		const isProcessedOrWorking = hasProcessedGate || hasWorker;
 		const shouldSkip = isUnavailableOrClaimed || isProcessedOrWorking;
 		if (shouldSkip) return;
+		const hasAttemptsRemaining = this.nextAttemptId < HERDR_MAX_CLAIM_ATTEMPTS;
+		if (!hasAttemptsRemaining) return;
 		const attempt: TabClaimAttempt = {
 			attemptId: ++this.nextAttemptId,
-			generation: this.sessionGeneration,
 			initialLabel: this.initialLabel,
 			paneId: this.paneId,
 			context: ctx,
@@ -155,8 +144,6 @@ class HerdrTabClaimConsumer {
 		const attempt = this.activeAttempt;
 		const hasAttempt = attempt !== undefined;
 		if (!hasAttempt) return;
-		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
-		if (!isCurrentGeneration) return;
 		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
@@ -170,6 +157,7 @@ class HerdrTabClaimConsumer {
 		);
 		if (isValidated) {
 			this.hasValidatedClaim = true;
+			this.nextAttemptId = 0;
 			return;
 		}
 		this.herdrGateClaimProcessed = true;
@@ -180,21 +168,21 @@ class HerdrTabClaimConsumer {
 		const attempt = this.activeAttempt;
 		const hasAttempt = attempt !== undefined;
 		if (!hasAttempt) return;
-		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
-		if (!isCurrentGeneration) return;
 		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
 		hideHerdrFooter(this.emitFooter);
-		const shouldTriggerRetry =
-			event.workerFailed && tabNameIsParseableAsInt(this.initialLabel);
+		const isWorkerFailure = event.workerFailed;
+		const isNumericTab = tabNameIsParseableAsInt(this.initialLabel);
+		const hasAttemptsRemaining = this.nextAttemptId < HERDR_MAX_CLAIM_ATTEMPTS;
+		const canRetry = isNumericTab && hasAttemptsRemaining;
+		const shouldTriggerRetry = isWorkerFailure && canRetry;
 		this.herdrGateClaimProcessed = !shouldTriggerRetry;
 		notifyHerdrFailure(attempt.context, event.message);
 	}
 
 	private sessionShutdown(): void {
-		this.sessionGeneration += 1;
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.activeAttempt = undefined;
@@ -202,6 +190,7 @@ class HerdrTabClaimConsumer {
 		this.hasValidatedClaim = false;
 		this.herdrGateClaimProcessed = false;
 		this.herdrAvailable = false;
+		this.nextAttemptId = 0;
 	}
 }
 

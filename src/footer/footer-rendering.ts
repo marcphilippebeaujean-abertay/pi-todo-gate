@@ -3,41 +3,65 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { renderPrLabel, renderPrStatus } from "../shared/pr-rendering.ts";
 import {
 	FOOTER_ACCENT_COLOR,
 	FOOTER_DIM,
 	FOOTER_HTTP_PROTOCOL,
 	FOOTER_HTTPS_PROTOCOL,
 	FOOTER_MUTED_COLOR,
+	FOOTER_NO_PR_LABEL,
 	FOOTER_NONE_TEXT,
 	FOOTER_OPEN_TASK_LABEL,
+	FOOTER_PR_LINK_LABEL,
+	FOOTER_PR_SEPARATOR,
 	FOOTER_SPINNER_FRAMES,
 	FOOTER_SPINNER_INTERVAL_MS,
-	FOOTER_STATUS_SEPARATOR,
 	FOOTER_TASK_NONE_LABEL,
 	FOOTER_TASK_SEPARATOR,
 	FOOTER_TEXT_COLOR,
 	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
 import type {
+	FooterAnimation as Animation,
+	FooterData,
+	FooterEntry,
+	FooterFactory,
+	FooterRenderState,
+	FooterState,
+	FooterTheme,
+	FooterTui,
 	FooterUpdate,
-	FooterState as PersistedFooterState,
+	FooterSessionContext as SessionContext,
+	TodoistFooterTheme,
 } from "./data.ts";
 
-export { renderPrLabel, renderPrStatus };
+export class Footer implements FooterEntry {
+	private value = "";
+	isVisible = false;
 
-type SessionContext = {
-	ui: {
-		setStatus(key: string, text: string | undefined): void;
-	};
-};
-type AnimationTimer = ReturnType<typeof setInterval>;
-type Animation = {
-	timer: AnimationTimer | null;
-	event: FooterUpdate;
-	frameIndex: number;
-};
+	constructor(
+		public readonly footerType: string,
+		private readonly prefix: string,
+	) {}
+
+	update(event: FooterUpdate): void {
+		const isMatchingFooter = event.footerType === this.footerType;
+		if (!isMatchingFooter) return;
+		this.value = event.text;
+		this.isVisible = event.isVisible;
+	}
+
+	render(): string {
+		return `${this.prefix}${this.value}`;
+	}
+}
+
+export function renderFooter(footers: readonly FooterEntry[]): string {
+	return `|${footers
+		.filter((footer) => footer.isVisible)
+		.map((footer) => footer.render())
+		.join("|")}`;
+}
 
 function loadingText(text: string, frame: string): string {
 	for (const spinner of FOOTER_SPINNER_FRAMES) {
@@ -47,19 +71,14 @@ function loadingText(text: string, frame: string): string {
 	return text;
 }
 
-function eventText(event: FooterUpdate): string | undefined {
-	const isVisible = event.isVisible;
-	if (!isVisible) return undefined;
-	return event.text;
-}
-
 export class FooterDisplay {
 	private context: SessionContext | null = null;
-	private state: PersistedFooterState = { footers: {} };
+	private state: FooterState = { footers: {} };
 	private renderedFooterTypes = new Set<string>();
 	private animations = new Map<string, Animation>();
+	private readonly footers = new Map<string, Footer>();
 
-	start(context: SessionContext, state: PersistedFooterState): void {
+	start(context: SessionContext, state: FooterState): void {
 		this.clear();
 		this.context = context;
 		this.state = state;
@@ -67,7 +86,7 @@ export class FooterDisplay {
 			this.syncEvent(context, event);
 	}
 
-	update(state: PersistedFooterState, event: FooterUpdate): void {
+	update(state: FooterState, event: FooterUpdate): void {
 		this.state = state;
 		if (this.context === null) return;
 		this.syncEvent(this.context, event);
@@ -81,12 +100,21 @@ export class FooterDisplay {
 		for (const footerType of this.renderedFooterTypes)
 			this.setStatus(footerType, undefined);
 		this.renderedFooterTypes = new Set<string>();
+		this.footers.clear();
 	}
 
 	deactivate(): void {
 		this.clear();
 		this.context = null;
 		this.state = { footers: {} };
+	}
+
+	private footer(footerType: string): Footer {
+		const existing = this.footers.get(footerType);
+		if (existing !== undefined) return existing;
+		const created = new Footer(footerType, "");
+		this.footers.set(footerType, created);
+		return created;
 	}
 
 	private stopAnimation(footerType: string): void {
@@ -111,7 +139,10 @@ export class FooterDisplay {
 	private syncEvent(context: SessionContext, event: FooterUpdate): void {
 		this.stopAnimation(event.footerType);
 		this.renderedFooterTypes.add(event.footerType);
-		const visibleText = eventText(event);
+		const footer = this.footer(event.footerType);
+		footer.update(event);
+		const isHidden = !footer.isVisible;
+		const visibleText = isHidden ? undefined : footer.render();
 		this.setStatus(event.footerType, visibleText);
 		const shouldAnimate = event.isLoading && event.isVisible;
 		if (!shouldAnimate) return;
@@ -133,24 +164,21 @@ export class FooterDisplay {
 	): void {
 		const current = this.state.footers[animation.event.footerType];
 		const isCurrent = current === animation.event;
-		if (!isCurrent) {
-			this.stopAnimation(animation.event.footerType);
-			return;
-		}
 		const isLoading = current.isLoading;
-		if (!isLoading) {
-			this.stopAnimation(animation.event.footerType);
-			return;
-		}
 		const isVisible = current.isVisible;
-		if (!isVisible) {
-			this.stopAnimation(animation.event.footerType);
-			return;
+		switch (true) {
+			case !isCurrent:
+			case !isLoading:
+			case !isVisible:
+				this.stopAnimation(animation.event.footerType);
+				return;
+			default:
+				break;
 		}
 		animation.frameIndex =
 			(animation.frameIndex + 1) % FOOTER_SPINNER_FRAMES.length;
 		const frame = FOOTER_SPINNER_FRAMES[animation.frameIndex];
-		const text = loadingText(current.text, frame);
+		const text = loadingText(this.footer(current.footerType).render(), frame);
 		try {
 			context.ui.setStatus(current.footerType, text);
 		} catch {
@@ -159,102 +187,70 @@ export class FooterDisplay {
 	}
 }
 
-export interface FooterRenderState {
-	prUrl?: string;
-	taskUrl?: string;
-	taskName?: string;
-	branch?: string | null;
-}
-
-export interface FooterTheme {
-	fg(color: string, text: string): string;
-}
-
-export interface FooterData {
-	getExtensionStatuses(): ReadonlyMap<string, string>;
-	getGitBranch?(): string | null | undefined;
-	onBranchChange(listener: () => void): () => void;
-}
-
-export interface FooterTui {
-	requestRender(): void;
-}
-
-export interface FooterComponent {
-	dispose(): void;
-	invalidate(): void;
-	render(width: number): string[];
-}
-
-export type FooterFactory = (
-	tui: FooterTui,
-	theme: FooterTheme,
-	footerData: FooterData,
-) => FooterComponent;
-
-export function renderFooterLine(
-	state: FooterRenderState,
-	width: number,
-	theme: FooterTheme,
-	statuses: ReadonlyMap<string, string>,
-): string {
-	const hasNoWidth: boolean = !!(width <= 0);
-	if (hasNoWidth) return "";
-	const parts = [
-		renderPrLabel(state.prUrl, theme),
-		renderTaskLabel(state.taskUrl, theme, state.taskName),
-	];
-	const hasBranch: boolean = !!state.branch;
-	if (hasBranch) parts.push(`branch: ${state.branch}`);
-	for (const status of statuses.values()) {
-		const hasStatus: boolean = !!status;
-		if (hasStatus) parts.push(status);
+function normalizedPrUrl(value: string | undefined): string | null {
+	const hasValue = value !== undefined;
+	if (!hasValue) return null;
+	try {
+		const url = new URL(value);
+		const isHttps = url.protocol === FOOTER_HTTPS_PROTOCOL;
+		if (!isHttps) return null;
+		const isGithub = url.hostname.toLowerCase() === "github.com";
+		if (!isGithub) return null;
+		const match = url.pathname.match(/^\/[^/]+\/[^/]+\/pull\/([1-9]\d*)\/?$/);
+		const hasMatch = match !== null;
+		return hasMatch
+			? `https://github.com${url.pathname.replace(/\/$/, "")}`
+			: null;
+	} catch {
+		return null;
 	}
-	const line = theme.fg(FOOTER_DIM, parts.join(FOOTER_STATUS_SEPARATOR));
-	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
-	if (fitsWidth) return line;
-	return truncateToWidth(line, width, "", false);
 }
 
-function noop(): void {}
-
-function requestRender(tui: FooterTui): () => void {
-	return () => tui.requestRender();
+function linkText(text: string, theme?: FooterTheme): string {
+	const colored =
+		theme?.fg(FOOTER_ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
+	return `\u001b[4m${colored}\u001b[24m`;
 }
 
-function renderFooterComponent(
-	state: () => FooterRenderState,
-	footerData: FooterData,
-	theme: FooterTheme,
-	width: number,
-): string[] {
-	const currentState = state();
-	const branch = currentState.branch ?? footerData.getGitBranch?.();
-	return [
-		renderFooterLine(
-			{ ...currentState, branch },
-			width,
-			theme,
-			footerData.getExtensionStatuses(),
-		),
-	];
+function prNumber(url: string | undefined): string | null {
+	const normalized = normalizedPrUrl(url);
+	return normalized?.match(/\/pull\/(\d+)$/)?.[1] ?? null;
 }
 
-export function createFooterFactory(
-	state: () => FooterRenderState,
-): FooterFactory {
-	return (tui, theme, footerData) => {
-		const unsubscribe = footerData.onBranchChange(requestRender(tui));
-		return {
-			dispose: unsubscribe,
-			invalidate: noop,
-			render: renderFooterComponent.bind(null, state, footerData, theme),
-		};
-	};
+function boundedPrNumber(number: string): string {
+	const exceedsNumberLimit = number.length > 6;
+	return exceedsNumberLimit ? `${number.slice(0, 5)}…` : number;
 }
 
-export interface TodoistFooterTheme {
-	fg(color: string, text: string): string;
+export function renderPrLabel(
+	url: string | undefined,
+	theme?: FooterTheme,
+): string {
+	const normalized = normalizedPrUrl(url);
+	const number = prNumber(url);
+	const hasNoPr = normalized === null || number === null;
+	if (hasNoPr) return FOOTER_NO_PR_LABEL;
+	return hyperlink(
+		linkText(`PR #${boundedPrNumber(number)}`, theme),
+		normalized,
+	);
+}
+
+export function renderPrStatus(
+	url: string | undefined,
+	theme?: FooterTheme,
+	hasUncommittedChanges?: boolean,
+): string {
+	const isUncommitted = hasUncommittedChanges ?? false;
+	const normalized = normalizedPrUrl(url);
+	const number = prNumber(url);
+	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
+	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
+	const hasNoPr = normalized === null || number === null;
+	if (hasNoPr)
+		return `${muted(FOOTER_PR_LINK_LABEL)}${value("none")}${muted(FOOTER_PR_SEPARATOR)}`;
+	const dirtyMarker = isUncommitted ? "*" : "";
+	return `${muted(FOOTER_PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_PR_SEPARATOR)}`;
 }
 
 function taskLinkText(text: string, theme?: TodoistFooterTheme): string {
@@ -341,4 +337,75 @@ export function renderTaskStatusCompact(
 	taskName?: string,
 ): string {
 	return renderTaskStatusValue(url, theme, taskName, false);
+}
+
+export function renderFooterLine(
+	state: FooterRenderState,
+	width: number,
+	theme: FooterTheme,
+	statuses: ReadonlyMap<string, string>,
+): string {
+	const hasNoWidth: boolean = !!(width <= 0);
+	if (hasNoWidth) return "";
+	const parts = [
+		renderPrLabel(state.prUrl, theme),
+		renderTaskLabel(state.taskUrl, theme, state.taskName),
+	];
+	const hasBranch: boolean = !!state.branch;
+	if (hasBranch) parts.push(`branch: ${state.branch}`);
+	for (const status of statuses.values()) {
+		const hasStatus: boolean = !!status;
+		if (hasStatus) parts.push(status);
+	}
+	const footers = parts.map((text, index) => {
+		const footer = new Footer(String(index), "");
+		footer.update({
+			footerType: String(index),
+			isLoading: false,
+			text,
+			isVisible: true,
+		});
+		return footer;
+	});
+	const line = theme.fg(FOOTER_DIM, renderFooter(footers));
+	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
+	if (fitsWidth) return line;
+	return truncateToWidth(line, width, "", false);
+}
+
+function noop(): void {}
+
+function requestRender(tui: FooterTui): () => void {
+	return () => tui.requestRender();
+}
+
+function renderFooterComponent(
+	state: () => FooterRenderState,
+	footerData: FooterData,
+	theme: FooterTheme,
+	width: number,
+): string[] {
+	const currentState = state();
+	const branch = currentState.branch ?? footerData.getGitBranch?.();
+	return [
+		renderFooterLine(
+			{ ...currentState, branch },
+			width,
+			theme,
+			footerData.getExtensionStatuses(),
+		),
+	];
+}
+
+export function createFooterFactory(
+	state: () => FooterRenderState,
+): FooterFactory {
+	return (tui, theme, footerData) => {
+		const unsubscribe = footerData.onBranchChange(requestRender(tui));
+		return {
+			dispose: unsubscribe,
+			invalidate: noop,
+			render: renderFooterComponent.bind(null, state, footerData, theme),
+		};
+	};
 }

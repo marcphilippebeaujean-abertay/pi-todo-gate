@@ -130,3 +130,10 @@ export async function cleanupWorktree(
 	}
 	return COMPLETED;
 }
+
+export function isCurrentWorktree(
+	baseline: WorktreeBaseline | null,
+	worktree: WorktreeBaseline,
+): boolean {
+	return baseline === worktree;
+}

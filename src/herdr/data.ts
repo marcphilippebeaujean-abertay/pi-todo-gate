@@ -1,4 +1,8 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+	PiWorkerProcess,
+	PiWorkerSpawner,
+} from "../shared/pi-worker-data.ts";
 
 export type FooterEventSink = (event: {
 	footerType: string;
@@ -39,6 +43,17 @@ export interface HerdrEvents {
 	): void;
 }
 
+export interface CwdReference {
+	current: string;
+}
+
+export interface TabClaimAttempt {
+	attemptId: number;
+	initialLabel: string | undefined;
+	paneId: string | undefined;
+	context: ExtensionContext;
+}
+
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
@@ -56,27 +71,8 @@ export interface ClaimWorkerOptions {
 	spawnWorker?: WorkerSpawner;
 }
 
-export interface WorkerOutputStream {
-	on(event: "data", listener: (chunk: Buffer | string) => void): void;
-}
-
-export interface WorkerProcess {
-	stdout: WorkerOutputStream;
-	stderr: WorkerOutputStream;
-	on(event: "close" | "error", listener: (...args: unknown[]) => void): void;
-	kill(signal?: NodeJS.Signals): boolean;
-}
-
-export type WorkerSpawner = (
-	command: string,
-	args: readonly string[],
-	options: {
-		cwd: string;
-		env: NodeJS.ProcessEnv;
-		shell: false;
-		stdio: ["ignore", "pipe", "pipe"];
-	},
-) => WorkerProcess;
+export type WorkerProcess = PiWorkerProcess;
+export type WorkerSpawner = PiWorkerSpawner;
 
 export type CommandRunner = (command: string, args: string[]) => string;
 export type StartBackgroundWorker = (

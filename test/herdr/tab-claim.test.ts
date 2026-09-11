@@ -392,4 +392,52 @@ describe("background Herdr tab claim", () => {
 			restore();
 		}
 	});
+
+	it("stops numeric-tab retries at the maximum and resets attempt ids after success", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			for (let attempt = 0; attempt < 3; attempt += 1) {
+				await pi.handlers.get("before_agent_start")?.[0]?.(
+					{ prompt: `retry ${attempt}` },
+					context(),
+				);
+				emitFailure(backgroundWorker.requests[attempt] as ClaimWorkerRequest);
+			}
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "retry after limit" },
+				context(),
+			);
+			expect(backgroundWorker.start).toHaveBeenCalledTimes(3);
+
+			const successWorker = worker();
+			const successPi = fakePi();
+			installHerdrTabClaim(successPi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: successWorker.start,
+			});
+			await successPi.handlers.get("session_start")?.[0]?.({}, context());
+			await successPi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "successful claim" },
+				context(),
+			);
+			emitClaim(successWorker.requests[0] as ClaimWorkerRequest);
+			expect(successWorker.requests[0]?.attemptId).toBe(1);
+			await successPi.handlers.get("session_shutdown")?.[0]?.({}, context());
+			await successPi.handlers.get("session_start")?.[0]?.({}, context());
+			await successPi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "new session" },
+				context(),
+			);
+			expect(successWorker.requests[1]?.attemptId).toBe(1);
+		} finally {
+			restore();
+		}
+	});
 });

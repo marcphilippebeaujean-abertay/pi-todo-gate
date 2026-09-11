@@ -1,10 +1,13 @@
 export const MAX_DIAGNOSTIC_BYTES = 500;
+export const HERDR_MAX_CLAIM_ATTEMPTS = 3;
 export const HERDR_OBJECT_TYPE = "object";
 export const CLAIMED_STATUS = "claimed";
 export const HERDR_COMMAND = "herdr";
 export const PI_COMMAND = "pi";
 export const HIGH_THINKING = "high";
 export const MISSING_CLAIM_EVIDENCE = "completed without claim evidence";
+export const EXPECTED_RESULT_FAILURE = "completed without expected result";
+export const HERDR_CLAIM_FAILURE_PREFIX = "Herdr claim ";
 export const STDIO_IGNORE = "ignore";
 export const STDIO_PIPE = "pipe";
 export const DATA_EVENT = "data";

@@ -22,3 +22,5 @@ export function createWorktreeModule(
 ): WorktreeModule {
 	return createWorktreeConsumer(events, dependencies ?? {});
 }
+
+export { isCurrentWorktree } from "./commands.ts";

@@ -10,14 +10,14 @@ import type {
 	FooterState,
 	FooterUpdate,
 } from "./data.ts";
+import { FooterDisplay } from "./footer-rendering.ts";
 import {
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
-} from "./data.ts";
-import { FooterDisplay } from "./footer-rendering.ts";
+} from "./state.ts";
 
 function customEntryData(entry: unknown, customType: string): unknown {
 	if (typeof entry !== "object") return undefined;

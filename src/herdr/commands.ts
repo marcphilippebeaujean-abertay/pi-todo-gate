@@ -1,157 +1,13 @@
-import { execFileSync, spawn } from "node:child_process";
-import { withWorkerMarker } from "../session.ts";
-import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
-import { appendBounded, parseClaimResult } from "./claim-worker-result.ts";
+import { execFileSync } from "node:child_process";
 import {
-	CLAIM_COMPLETED_EVENT,
-	CLAIM_FAILED_EVENT,
-	CLOSE_EVENT,
-	DATA_EVENT,
-	ERROR_EVENT,
 	HERDR_COMMAND,
 	HERDR_ENVIRONMENT,
-	HIGH_THINKING,
-	MISSING_CLAIM_EVIDENCE,
-	PI_COMMAND,
-	SIGTERM,
 	STDIO_IGNORE,
 	STDIO_PIPE,
 	TAB_GET_COMMAND,
-	UNKNOWN_ERROR,
 	UTF8_ENCODING,
 } from "./constants.ts";
-import type {
-	ClaimWorkerHandle,
-	ClaimWorkerOptions,
-	ClaimWorkerRequest,
-	CommandRunner,
-	StartBackgroundWorker,
-	WorkerProcess,
-	WorkerSpawner,
-} from "./data.ts";
-
-const defaultSpawnWorker: WorkerSpawner = (command, args, options) =>
-	spawn(command, [...args], {
-		cwd: options.cwd,
-		env: options.env,
-		shell: options.shell,
-		stdio: options.stdio,
-	}) as unknown as WorkerProcess;
-
-function spawnWorkerProcess(
-	request: ClaimWorkerRequest,
-	options: ClaimWorkerOptions,
-): WorkerProcess {
-	const spawnWorker = options.spawnWorker ?? defaultSpawnWorker;
-	return spawnWorker(
-		options.command ?? PI_COMMAND,
-		buildPiWorkerArgs(request.prompt, {
-			instructions: request.instructions,
-			thinking: HIGH_THINKING,
-		}),
-		{
-			cwd: options.cwd ?? process.cwd(),
-			env: withWorkerMarker(),
-			shell: false,
-			stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_PIPE],
-		},
-	);
-}
-
-interface WorkerState {
-	settled: boolean;
-	cancelled: boolean;
-	stdout: string;
-	stderr: string;
-}
-
-function emitClaimFailure(request: ClaimWorkerRequest, message: string): void {
-	request.events.emit(CLAIM_FAILED_EVENT, {
-		attemptId: request.attemptId,
-		message,
-		workerFailed: true,
-	});
-}
-
-function handleWorkerClose(
-	request: ClaimWorkerRequest,
-	state: WorkerState,
-	...args: unknown[]
-): void {
-	const isFinished = state.settled || state.cancelled;
-	if (isFinished) return;
-	const code = args[0];
-	state.settled = true;
-	const didSucceed = code === 0;
-	if (didSucceed) {
-		const result = parseClaimResult(state.stdout);
-		const hasNoClaimResult = result === undefined;
-		if (hasNoClaimResult) {
-			emitClaimFailure(request, MISSING_CLAIM_EVIDENCE);
-			return;
-		}
-		request.events.emit(CLAIM_COMPLETED_EVENT, {
-			attemptId: request.attemptId,
-			result,
-		});
-		return;
-	}
-	const detail = state.stderr.trim();
-	const hasDetail = detail !== "";
-	const detailSuffix = hasDetail ? `: ${detail}` : "";
-	emitClaimFailure(
-		request,
-		`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detailSuffix}`,
-	);
-}
-
-function registerWorkerLifecycle(
-	child: WorkerProcess,
-	request: ClaimWorkerRequest,
-	state: WorkerState,
-): void {
-	child.stdout.on(DATA_EVENT, (chunk) => {
-		state.stdout = appendBounded(state.stdout, chunk);
-	});
-	child.stderr.on(DATA_EVENT, (chunk) => {
-		state.stderr = appendBounded(state.stderr, chunk);
-	});
-	const fail = (message: string): void => {
-		const isFinished = state.settled || state.cancelled;
-		if (isFinished) return;
-		state.settled = true;
-		emitClaimFailure(request, message);
-	};
-	child.on(ERROR_EVENT, (...args) => {
-		const error = args[0];
-		const detail =
-			error instanceof Error ? error.message : String(error ?? UNKNOWN_ERROR);
-		fail(`Herdr claim worker failed: ${detail}`);
-	});
-	child.on(CLOSE_EVENT, handleWorkerClose.bind(null, request, state));
-}
-
-export function startClaimWorker(
-	request: ClaimWorkerRequest,
-	options?: ClaimWorkerOptions,
-): ClaimWorkerHandle {
-	const child = spawnWorkerProcess(request, options ?? {});
-	const state: WorkerState = {
-		settled: false,
-		cancelled: false,
-		stdout: "",
-		stderr: "",
-	};
-	registerWorkerLifecycle(child, request, state);
-	return {
-		cancel(): void {
-			const isFinished = state.settled || state.cancelled;
-			if (isFinished) return;
-			state.cancelled = true;
-			child.kill(SIGTERM);
-		},
-	};
-}
+import type { CommandRunner, CwdReference } from "./data.ts";
 
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";
@@ -167,10 +23,6 @@ export function runCommand(
 		encoding: UTF8_ENCODING,
 		stdio: [STDIO_IGNORE, STDIO_PIPE, STDIO_IGNORE],
 	});
-}
-
-interface CwdReference {
-	current: string;
 }
 
 export function boundCommandRunner(
@@ -208,12 +60,4 @@ export function tabLabel(commandRunner: CommandRunner): string | undefined {
 	);
 	const label = response?.result?.tab?.label?.trim();
 	return label || undefined;
-}
-
-export function defaultStartWorker(
-	cwd: string,
-	spawnWorker: WorkerSpawner | undefined,
-	request: ClaimWorkerRequest,
-): ReturnType<StartBackgroundWorker> {
-	return startClaimWorker(request, { cwd, spawnWorker });
 }
