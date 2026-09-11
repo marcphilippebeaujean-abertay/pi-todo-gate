@@ -5,7 +5,7 @@ import type {
 	SharedEventPayloads,
 	SharedEvents,
 } from "../shared/events.ts";
-import { PromptQueue } from "../shared/prompt-queue.ts";
+import type { PromptQueue } from "../shared/prompt-queue.ts";
 import { EXIT_PRESENT_PHASE, EXIT_QUIT } from "./constants.ts";
 import type { ExitProtocolModule } from "./data.ts";
 import { presentExitActions } from "./user-prompts.ts";
