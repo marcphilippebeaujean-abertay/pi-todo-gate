@@ -1,6 +1,12 @@
 const GH_KIND = "gh";
+const GIT_COMMAND = "git";
+const REV_PARSE_COMMAND = "rev-parse";
+const VERIFY_OPTION = "--verify";
+const QUIET_OPTION = "--quiet";
+const HEAD_REF_PREFIX = "refs/heads/";
+const REMOTE_HEAD_REF_PREFIX = "refs/remotes/";
 
-import type { Exec } from "../shared/command.ts";
+import type { CommandResult, Exec } from "../shared/command.ts";
 import {
 	ghMergeTargets,
 	gitMergeTargets,
@@ -37,6 +43,53 @@ async function matchesGhMerge(
 	return /^\d+$/.test(target) || currentPr.headRefName === target;
 }
 
+async function gitRefExists(
+	exec: Exec,
+	cwd: string,
+	ref: string,
+): Promise<boolean> {
+	let result: CommandResult;
+	try {
+		result = await exec(
+			GIT_COMMAND,
+			[REV_PARSE_COMMAND, VERIFY_OPTION, QUIET_OPTION, ref],
+			{ cwd },
+		);
+	} catch {
+		return false;
+	}
+	return result.code === 0;
+}
+
+async function matchesGitHead(
+	exec: Exec,
+	cwd: string,
+	target: string,
+	head: string,
+): Promise<boolean> {
+	const isDirectHead =
+		target === head || target === `${HEAD_REF_PREFIX}${head}`;
+	if (isDirectHead) return true;
+	const hasFullRemoteRef = target.startsWith(REMOTE_HEAD_REF_PREFIX);
+	const remoteTarget = hasFullRemoteRef
+		? target.slice(REMOTE_HEAD_REF_PREFIX.length)
+		: target;
+	const separator = remoteTarget.indexOf("/");
+	const hasRemote = separator > 0;
+	if (!hasRemote) return false;
+	const remoteHead = remoteTarget.slice(separator + 1);
+	const hasMatchingRemoteHead = remoteHead === head;
+	if (!hasMatchingRemoteHead) return false;
+	if (hasFullRemoteRef) return true;
+	const localRef = `${HEAD_REF_PREFIX}${target}`;
+	const remoteRef = `${REMOTE_HEAD_REF_PREFIX}${target}`;
+	const [hasLocalRef, hasRemoteRef] = await Promise.all([
+		gitRefExists(exec, cwd, localRef),
+		gitRefExists(exec, cwd, remoteRef),
+	]);
+	return !hasLocalRef && hasRemoteRef;
+}
+
 async function matchesGitMerge(
 	exec: Exec,
 	cwd: string,
@@ -50,7 +103,7 @@ async function matchesGitMerge(
 	if (target === undefined) return false;
 	const head = await queryPinnedHead(exec, cwd, pinned);
 	if (head === null) return false;
-	return target === head || target === `refs/heads/${head}`;
+	return matchesGitHead(exec, cwd, target, head);
 }
 
 export async function matchesPinnedPr(
