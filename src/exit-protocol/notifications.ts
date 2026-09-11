@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXIT_ACTION_FAILED } from "./constants.ts";
-import type { ExitAction } from "./data.ts";
+import type { ExitAction } from "./state.ts";
 
 export async function executeExitAction(
 	context: ExtensionContext,

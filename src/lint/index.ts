@@ -8,6 +8,7 @@ import { namedIfCondition } from "./rules/named-if-condition.ts";
 import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
 import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts";
 import { noDefaultParameters } from "./rules/no-default-parameters.ts";
+import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
@@ -27,6 +28,7 @@ const RULES: readonly LintRule[] = [
 	noMagicStrings,
 	similarStringLiterals,
 	namedIfCondition,
+	noDomainTypesOutsideState,
 	noFunctionsInData,
 	repeatedFieldChecks,
 	preferSwitchDispatch,

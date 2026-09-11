@@ -35,15 +35,20 @@ describe("module structure checker", () => {
 			"^src/herdr/(commands|event-publishers|events)\\\\.ts$",
 		);
 	});
-	it("protects event publishers from consumers and state imports", async () => {
+	it("protects event publishers from consumers", async () => {
 		const config = await readFile(
 			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
 			"utf8",
 		);
 		expect(config).toContain("no-event-publisher-to-consumer");
 		expect(config).toContain("^src/[^/]+/event-publishers\\\\.ts$");
-		expect(config).toContain("no-event-publisher-to-state");
-		expect(config).toContain("^src/[^/]+/state\\\\.ts$");
+	});
+
+	it("requires every scoped module to define state.ts", async () => {
+		for (const domain of SCOPED_DOMAINS)
+			await expect(
+				readFile(join(PROJECT_ROOT, "src", domain, "state.ts")),
+			).resolves.toBeDefined();
 	});
 
 	it("accepts all canonical files, including empty facets", async () => {
@@ -108,11 +113,11 @@ describe("module structure checker", () => {
 			join(root, "src", "pr", "commands.ts"),
 		);
 		await (await import("node:fs/promises")).rm(
-			join(root, "src", "footer", "data.ts"),
+			join(root, "src", "footer", "state.ts"),
 		);
 		const issues = await checkModuleStructure(root);
 		expect(issues.map((issue) => issue.path)).toEqual([
-			"src/footer/data.ts",
+			"src/footer/state.ts",
 			"src/pr/commands.ts",
 		]);
 	});

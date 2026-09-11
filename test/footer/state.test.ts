@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FooterState, FooterUpdate } from "../../src/footer/data.ts";
+import type { FooterState, FooterUpdate } from "../../src/footer/state.ts";
 import {
 	parseFooterEvent,
 	restoreFooterState,

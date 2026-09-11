@@ -1,11 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
+import type { SharedEvents } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
@@ -14,16 +10,15 @@ import {
 	isCurrentWorktree,
 } from "./commands.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
+import { createCleanupAction } from "./event-publishers.ts";
+import { notifyWorktree } from "./notifications.ts";
 import type {
+	MergeRequest,
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,
-} from "./data.ts";
-import { createCleanupAction } from "./event-publishers.ts";
-import { notifyWorktree } from "./notifications.ts";
+} from "./state.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
-
-type MergeRequest = EventRequest<SharedEventPayloads[typeof C.event.prMerged]>;
 
 class Worktree implements WorktreeModule {
 	private readonly exec: Exec;

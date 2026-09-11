@@ -26,12 +26,12 @@ import {
 	WARNING,
 	WORKER_ROLE,
 } from "./constants.ts";
+import { parseResult } from "./parsing.ts";
 import {
 	type TaskClaimWorker,
 	type TaskClaimWorkerInput,
 	TaskClaimWorkerResultSchema,
-} from "./data.ts";
-import { parseResult } from "./parsing.ts";
+} from "./state.ts";
 
 function workerPrompt(input: TaskClaimWorkerInput): string {
 	return [

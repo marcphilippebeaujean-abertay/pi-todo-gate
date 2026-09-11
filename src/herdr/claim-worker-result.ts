@@ -5,10 +5,7 @@ import {
 	MAX_DIAGNOSTIC_BYTES,
 } from "./constants.ts";
 
-export interface ClaimWorkerResult {
-	tabId: string;
-	label: string;
-}
+import type { ClaimWorkerResult } from "./state.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;

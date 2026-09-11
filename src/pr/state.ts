@@ -44,3 +44,10 @@ export interface ParsedMerge {
 	kind: "git" | "gh";
 	args: string[];
 }
+
+export type QuoteCharacter = "'" | '"';
+export interface ShellState {
+	current: string;
+	quote: QuoteCharacter | null;
+	escaped: boolean;
+}

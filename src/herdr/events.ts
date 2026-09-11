@@ -1,11 +1,10 @@
 import type {
+	AnyListener,
 	HerdrEventListener,
 	HerdrEventName,
 	HerdrEvents,
-} from "./data.ts";
-
-type AnyListener = HerdrEventListener<HerdrEventName>;
-type ListenerSet = Set<AnyListener>;
+	ListenerSet,
+} from "./state.ts";
 
 function removeListener(entries: ListenerSet, listener: AnyListener): void {
 	entries.delete(listener);

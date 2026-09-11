@@ -4,6 +4,11 @@ import type {
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
 
+export interface ClaimWorkerResult {
+	tabId: string;
+	label: string;
+}
+
 export type FooterEventSink = (event: {
 	footerType: string;
 	isLoading: boolean;
@@ -13,7 +18,7 @@ export type FooterEventSink = (event: {
 
 export interface ClaimCompletedEvent {
 	attemptId: number;
-	result?: import("./claim-worker-result.ts").ClaimWorkerResult;
+	result?: ClaimWorkerResult;
 }
 
 export interface ClaimFailedEvent {
@@ -28,6 +33,8 @@ export interface HerdrEventPayloads {
 }
 
 export type HerdrEventName = keyof HerdrEventPayloads;
+export type AnyListener = HerdrEventListener<HerdrEventName>;
+export type ListenerSet = Set<AnyListener>;
 export type HerdrEventListener<K extends HerdrEventName> = (
 	payload: HerdrEventPayloads[K],
 ) => void;
@@ -87,10 +94,3 @@ export interface HerdrTabOptions {
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
 	onFooterUpdate?: FooterEventSink;
 }
-
-export type { ClaimWorkerResult } from "./claim-worker-result.ts";
-export { appendBounded, parseClaimResult } from "./claim-worker-result.ts";
-export {
-	hasValidatedTabClaim,
-	tabNameIsParseableAsInt,
-} from "./tab-validation.ts";

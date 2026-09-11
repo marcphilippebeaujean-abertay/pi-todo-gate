@@ -15,7 +15,6 @@ import {
 	UNKNOWN_STATE,
 	VIEW_COMMAND,
 } from "./constants.ts";
-import type { OpenPrInfo, PrRuntime, PrSession } from "./data.ts";
 import {
 	notifyInactive,
 	notifyMergeFailure,
@@ -29,6 +28,7 @@ import {
 	parseOpenPrResult,
 	stateFromMergedData,
 } from "./parsing.ts";
+import type { OpenPrInfo, PrRuntime, PrSession } from "./state.ts";
 import { confirmMerge } from "./user-prompts.ts";
 
 async function runGhView(
@@ -202,7 +202,7 @@ export const mergeProtocolSkillPath = fileURLToPath(
 	new URL("../../skills/merge-protocol", import.meta.url),
 );
 
-export type { PrRuntime, PrSession } from "./data.ts";
+export type { PrRuntime, PrSession } from "./state.ts";
 
 function currentSession(
 	runtime: PrRuntime,

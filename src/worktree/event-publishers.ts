@@ -1,6 +1,6 @@
 import type { ExitAction, ExitActionResult } from "../shared/exit-actions.ts";
 import { CLEANUP_ID } from "./constants.ts";
-import type { WorktreeBaseline } from "./data.ts";
+import type { WorktreeBaseline } from "./state.ts";
 
 export function createCleanupAction(
 	worktree: WorktreeBaseline,

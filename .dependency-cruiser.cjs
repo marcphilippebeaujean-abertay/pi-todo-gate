@@ -17,7 +17,6 @@ module.exports = {
 		{ name: "no-herdr-to-footer", severity: "error", from: { path: "^src/herdr/" }, to: { path: "^src/footer/" } },
 		{ name: "no-herdr-worker-to-consumer", severity: "error", from: { path: "^src/herdr/(commands|event-publishers|events)\\.ts$" }, to: { path: "^src/herdr/event-consumers\\.ts$" } },
 		{ name: "no-event-publisher-to-consumer", severity: "error", from: { path: "^src/[^/]+/event-publishers\\.ts$" }, to: { path: "^src/[^/]+/event-consumers\\.ts$" } },
-		{ name: "no-event-publisher-to-state", severity: "error", from: { path: "^src/[^/]+/event-publishers\\.ts$" }, to: { path: "^src/[^/]+/state\\.ts$" } },
 		{ name: "no-worktree-to-pr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/pr/" } },
 		{ name: "no-worktree-to-todoist", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/todoist/" } },
 		{ name: "no-worktree-to-herdr", severity: "error", from: { path: "^src/worktree/" }, to: { path: "^src/herdr/" } },
@@ -81,10 +80,10 @@ module.exports = {
 			to: { path: "^src/pr/constants\\.ts$" },
 		},
 		{
-			name: "pr-module-requires-data",
+			name: "pr-module-requires-state",
 			severity: "error",
 			module: { path: "^src/pr/module\\.ts$" },
-			to: { path: "^src/pr/data\\.ts$" },
+			to: { path: "^src/pr/state\\.ts$" },
 		},
 		{
 			name: "pr-module-requires-event-consumers",
@@ -123,10 +122,10 @@ module.exports = {
 			to: { path: "^src/todoist/constants\\.ts$" },
 		},
 		{
-			name: "todoist-module-requires-data",
+			name: "todoist-module-requires-state",
 			severity: "error",
 			module: { path: "^src/todoist/module\\.ts$" },
-			to: { path: "^src/todoist/data\\.ts$" },
+			to: { path: "^src/todoist/state\\.ts$" },
 		},
 		{
 			name: "todoist-module-requires-event-consumers",
@@ -165,10 +164,10 @@ module.exports = {
 			to: { path: "^src/herdr/constants\\.ts$" },
 		},
 		{
-			name: "herdr-module-requires-data",
+			name: "herdr-module-requires-state",
 			severity: "error",
 			module: { path: "^src/herdr/module\\.ts$" },
-			to: { path: "^src/herdr/data\\.ts$" },
+			to: { path: "^src/herdr/state\\.ts$" },
 		},
 		{
 			name: "herdr-module-requires-event-consumers",
@@ -207,10 +206,10 @@ module.exports = {
 			to: { path: "^src/worktree/constants\\.ts$" },
 		},
 		{
-			name: "worktree-module-requires-data",
+			name: "worktree-module-requires-state",
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/data\\.ts$" },
+			to: { path: "^src/worktree/state\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-event-consumers",
@@ -249,10 +248,10 @@ module.exports = {
 			to: { path: "^src/exit-protocol/constants\\.ts$" },
 		},
 		{
-			name: "exit-protocol-module-requires-data",
+			name: "exit-protocol-module-requires-state",
 			severity: "error",
 			module: { path: "^src/exit-protocol/module\\.ts$" },
-			to: { path: "^src/exit-protocol/data\\.ts$" },
+			to: { path: "^src/exit-protocol/state\\.ts$" },
 		},
 		{
 			name: "exit-protocol-module-requires-event-consumers",
@@ -291,10 +290,10 @@ module.exports = {
 			to: { path: "^src/footer/constants\\.ts$" },
 		},
 		{
-			name: "footer-module-requires-data",
+			name: "footer-module-requires-state",
 			severity: "error",
 			module: { path: "^src/footer/module\\.ts$" },
-			to: { path: "^src/footer/data\\.ts$" },
+			to: { path: "^src/footer/state\\.ts$" },
 		},
 		{
 			name: "footer-module-requires-event-consumers",

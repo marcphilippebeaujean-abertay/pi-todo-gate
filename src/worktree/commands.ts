@@ -20,7 +20,7 @@ import type {
 	CleanupOptions,
 	WorktreeBaseline,
 	WorktreeCurrentState,
-} from "./data.ts";
+} from "./state.ts";
 
 export function commandOutput(result: {
 	stdout: string;

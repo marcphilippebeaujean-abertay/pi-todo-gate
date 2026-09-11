@@ -1,4 +1,3 @@
-import type { CommandResult } from "../shared/command.ts";
 import {
 	ADD,
 	COMPLETE,
@@ -19,7 +18,6 @@ import {
 	TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 	VIEW,
 } from "./constants.ts";
-import type { TodoistTask } from "./data.ts";
 import {
 	childList,
 	parsePayload,
@@ -30,12 +28,7 @@ import {
 	TodoistOperationCancelled,
 	taskFromPayload,
 } from "./parsing.ts";
-
-export interface TodoistExec {
-	run(args: readonly string[]): Promise<CommandResult>;
-}
-
-export type IsCurrentOperation = () => boolean;
+import type { IsCurrentOperation, TodoistExec, TodoistTask } from "./state.ts";
 
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}

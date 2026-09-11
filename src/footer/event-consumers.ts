@@ -4,13 +4,13 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
+import { FooterDisplay } from "./footer-rendering.ts";
 import type {
 	FooterModule,
 	FooterModuleDependencies,
 	FooterState,
 	FooterUpdate,
-} from "./data.ts";
-import { FooterDisplay } from "./footer-rendering.ts";
+} from "./state.ts";
 import {
 	applyFooterUpdate,
 	emptyFooterState,

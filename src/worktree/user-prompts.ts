@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { CONFIRM_PREFIX, CONFIRM_SUFFIX, CONFIRM_TITLE } from "./constants.ts";
-import type { WorktreeBaseline } from "./data.ts";
+import type { WorktreeBaseline } from "./state.ts";
 
 export async function confirmDirtyRemoval(
 	context: ExtensionContext,

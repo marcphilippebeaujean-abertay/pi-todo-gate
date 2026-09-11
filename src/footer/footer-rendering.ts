@@ -33,7 +33,7 @@ import type {
 	FooterUpdate,
 	FooterSessionContext as SessionContext,
 	TodoistFooterTheme,
-} from "./data.ts";
+} from "./state.ts";
 
 export class Footer implements FooterEntry {
 	private value = "";

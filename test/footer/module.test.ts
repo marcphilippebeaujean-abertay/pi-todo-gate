@@ -7,8 +7,8 @@ import {
 	FOOTER_SPINNER_INTERVAL_MS,
 	FOOTER_STATE_TYPE,
 } from "../../src/footer/constants.ts";
-import type { FooterUpdate } from "../../src/footer/data.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
+import type { FooterUpdate } from "../../src/footer/state.ts";
 import { restoreFooterState } from "../../src/footer/state.ts";
 
 function harness(branch: unknown[] = []) {

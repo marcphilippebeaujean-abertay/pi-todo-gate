@@ -13,7 +13,7 @@ export const SCOPED_DOMAINS = [
 export const CANONICAL_FACETS = [
 	"commands.ts",
 	"constants.ts",
-	"data.ts",
+	"state.ts",
 	"event-consumers.ts",
 	"event-publishers.ts",
 	"user-prompts.ts",
@@ -22,12 +22,9 @@ export const CANONICAL_FACETS = [
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
-	"exit-protocol": ["state.ts"],
-	footer: ["state.ts"],
 	herdr: ["claim-worker-result.ts", "events.ts", "tab-validation.ts"],
 	pr: ["parsing.ts"],
 	todoist: ["parsing.ts"],
-	worktree: ["state.ts"],
 };
 
 function isAllowedFacet(domain: string, name: string): boolean {

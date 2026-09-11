@@ -1,8 +1,4 @@
 import { z } from "zod";
-import type { MergedPr, OpenPrInfo, ParsedMerge, PrState } from "./data.ts";
-
-type QuoteCharacter = "'" | '"';
-
 import {
 	CLOSED_STATE,
 	END_OF_OPTIONS,
@@ -22,6 +18,14 @@ import {
 	PR_COMMAND,
 	UNKNOWN_STATE,
 } from "./constants.ts";
+import type {
+	MergedPr,
+	OpenPrInfo,
+	ParsedMerge,
+	PrState,
+	QuoteCharacter,
+	ShellState,
+} from "./state.ts";
 
 const prStateSchema = z.enum([OPEN_STATE, CLOSED_STATE, MERGED_STATE]);
 
@@ -284,12 +288,6 @@ function isCommandSeparator(character: string): boolean {
 
 function isShellWhitespace(character: string): boolean {
 	return /\s/.test(character);
-}
-
-interface ShellState {
-	current: string;
-	quote: QuoteCharacter | null;
-	escaped: boolean;
 }
 
 function consumeSegmentCharacter(

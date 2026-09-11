@@ -14,6 +14,7 @@ export type LintRuleId =
 	| "nested-function-depth"
 	| "repeated-field-checks"
 	| "prefer-switch-dispatch"
+	| "domain-types-outside-state"
 	| "no-functions-in-data";
 export interface LintDiagnostic {
 	filePath: string;

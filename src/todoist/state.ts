@@ -10,6 +10,14 @@ import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import type { WorkState } from "../types.ts";
 
+export interface TodoistExec {
+	run(
+		args: readonly string[],
+	): Promise<import("../shared/command.ts").CommandResult>;
+}
+
+export type IsCurrentOperation = () => boolean;
+
 export interface TodoistTask {
 	id: string;
 	content: string;

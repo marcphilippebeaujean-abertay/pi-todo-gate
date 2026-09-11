@@ -1,8 +1,31 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+	EventRequest,
+	SharedEventPayloads,
+	SharedEvents,
+} from "../shared/events.ts";
+import type { PromptQueue } from "../shared/prompt-queue.ts";
 import {
 	EXIT_ACTION_KEY,
 	type EXIT_CANCEL_KEY,
 	EXIT_SUBMIT_KEY,
 } from "./constants.ts";
+
+export type {
+	ExitAction,
+	ExitActionId,
+	ExitActionResult,
+} from "../shared/exit-actions.ts";
+
+export interface ExitProtocolModule {
+	sessionStart(ctx: ExtensionContext): void;
+	deactivate(): void;
+}
+
+export type ExitProtocolFactory = (
+	events: SharedEvents,
+	promptQueue: PromptQueue,
+) => ExitProtocolModule;
 
 export type PickerFocus =
 	| typeof EXIT_SUBMIT_KEY
@@ -16,6 +39,10 @@ export interface PickerState {
 }
 
 export type ExitPickerResult = readonly string[] | null;
+
+export type CustomUI = NonNullable<ExtensionContext["ui"]["custom"]>;
+export type CustomFactory = Parameters<CustomUI>[0];
+export type PickerTUI = Parameters<CustomFactory>[0];
 
 export function initialPickerState(actionIds: readonly string[]): PickerState {
 	return {
@@ -44,3 +71,7 @@ export function focusAction(state: PickerState, id: string): PickerState {
 export function focusSubmit(state: PickerState): PickerState {
 	return { ...state, focused: EXIT_SUBMIT_KEY };
 }
+
+export type ExitRequest = EventRequest<
+	SharedEventPayloads[keyof SharedEventPayloads]
+>;

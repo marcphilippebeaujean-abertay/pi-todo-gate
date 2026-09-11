@@ -15,6 +15,13 @@ import {
 	TAB_CLAIM_INSTRUCTIONS,
 	TAB_CLAIM_START_FAILED,
 } from "./constants.ts";
+import { defaultStartWorker } from "./event-publishers.ts";
+import { createHerdrEvents } from "./events.ts";
+import {
+	hideHerdrFooter,
+	notifyHerdrFailure,
+	showHerdrFooter,
+} from "./notifications.ts";
 import type {
 	ClaimCompletedEvent,
 	ClaimFailedEvent,
@@ -25,14 +32,7 @@ import type {
 	HerdrTabOptions,
 	StartBackgroundWorker,
 	TabClaimAttempt,
-} from "./data.ts";
-import { defaultStartWorker } from "./event-publishers.ts";
-import { createHerdrEvents } from "./events.ts";
-import {
-	hideHerdrFooter,
-	notifyHerdrFailure,
-	showHerdrFooter,
-} from "./notifications.ts";
+} from "./state.ts";
 import {
 	hasValidatedTabClaim,
 	tabNameIsParseableAsInt,

@@ -15,19 +15,17 @@ import {
 	EXIT_UNFOCUSED,
 	EXIT_UNSELECTED,
 } from "./constants.ts";
-import type { ExitAction } from "./data.ts";
+import { executeExitAction } from "./notifications.ts";
+import type { ExitAction } from "./state.ts";
 import {
+	type CustomUI,
 	type ExitPickerResult,
 	initialPickerState,
 	type PickerFocus,
 	type PickerState,
+	type PickerTUI,
 	toggleAction,
-} from "./data.ts";
-import { executeExitAction } from "./notifications.ts";
-
-type CustomUI = NonNullable<ExtensionContext["ui"]["custom"]>;
-type CustomFactory = Parameters<CustomUI>[0];
-type PickerTUI = Parameters<CustomFactory>[0];
+} from "./state.ts";
 
 class PickerWidget {
 	private readonly picker: ExitActionPicker;

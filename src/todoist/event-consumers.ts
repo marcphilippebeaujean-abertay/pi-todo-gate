@@ -10,18 +10,19 @@ import {
 	TASK_URL,
 	UNKNOWN_ERROR,
 } from "./constants.ts";
-import type {
-	ClaimTaskData,
-	TaskClaimResultEvent,
-	TaskClaimWorkerResult,
-	TodoistRuntime,
-	TodoistSession,
-} from "./data.ts";
 import {
 	createTaskClaimWorker,
 	notifyClaimFailure,
 	notifyTaskAssigned,
 } from "./event-publishers.ts";
+import type {
+	ClaimTaskData,
+	MergeRequest,
+	TaskClaimResultEvent,
+	TaskClaimWorkerResult,
+	TodoistRuntime,
+	TodoistSession,
+} from "./state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
 function isActiveSession(
@@ -157,8 +158,6 @@ export function maybeAnalyzeTaskClaim(
 	operation.session = session;
 	void runTaskClaim(runtime, session, prompt);
 }
-
-type MergeRequest = import("./data.ts").MergeRequest;
 
 async function consumeMergedEvent(
 	runtime: TodoistRuntime,
