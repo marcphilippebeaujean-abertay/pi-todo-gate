@@ -104,6 +104,8 @@ const TASK_URL = "https://app.todoist.com/app/task/task-1";
 const TODOIST_UNAVAILABLE = "Todoist unavailable";
 const FEATURE_AUTH = "feature/auth";
 const GIT_MERGE_FEATURE_AUTH = "git merge feature/auth";
+const GH_PR_MERGE_PINNED =
+	"gh pr merge https://github.com/owner/repo/pull/42 --merge";
 const REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM =
 	"rejects invalid PR URLs without persisting them";
 const REMOVES_TODOIST_TASK_ACTIONS =
@@ -278,6 +280,72 @@ describe("working tree status", () => {
 			expect(h.statusCalls.at(-2)?.text).not.toContain("#42*");
 		},
 	);
+
+	it("starts exit protocol after an external gh pull request merge", async () => {
+		const root = CONFIGURED_PROJECT;
+		const h = harness(root, [
+			{
+				type: CUSTOM,
+				customType: PI_TODO_GATE_STATE_ENTRY,
+				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+			},
+		]);
+		h.ctx.hasUI = true;
+		const exec = vi.fn(async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			switch (key) {
+				case "git rev-parse --show-toplevel":
+					return {
+						stdout: `${root}\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				case "git branch --show-current":
+					return { stdout: "feature\n", stderr: EMPTY_STRING, code: 0 };
+				case "git worktree list --porcelain":
+					return {
+						stdout: `worktree /configured\nHEAD abc\nbranch refs/heads/main\n\nworktree ${root}\nHEAD def\nbranch refs/heads/feature\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				case "git rev-parse HEAD":
+					return { stdout: "def\n", stderr: EMPTY_STRING, code: 0 };
+				case "git status --porcelain=v1 --untracked-files=all":
+					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+				case "gh pr view https://github.com/owner/repo/pull/42 --json headRefName":
+					return {
+						stdout: '{"headRefName":"feature"}',
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				default:
+					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+			}
+		});
+
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		await h.handlers.get(TOOL_RESULT)?.(
+			{
+				type: TOOL_RESULT,
+				toolName: BASH,
+				input: { command: GH_PR_MERGE_PINNED },
+				isError: false,
+			},
+			h.ctx,
+		);
+
+		expect(h.confirmations).toContainEqual({
+			title: "Exit protocol",
+			message:
+				'Delete worktree "/configured/project" and local branch "feature"',
+		});
+		expect(exec).not.toHaveBeenCalledWith(
+			"gh",
+			["pr", "merge", HTTPS_GITHUB_COM_O_R_PULL_42_2, "--merge"],
+			{ cwd: root },
+		);
+	});
 });
 
 describe("lazy activation", () => {

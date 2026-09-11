@@ -10,10 +10,8 @@ import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
 import { cleanupWorktree, currentWorktreeState } from "./commands.ts";
 import {
-	CLEANUP_SCHEDULED,
 	CLEANUP_SUCCESS,
 	COMPLETED,
-	DEFERRED,
 	EMPTY,
 	FAILED,
 	NO_CHANGES,
@@ -39,7 +37,6 @@ class Worktree implements WorktreeModule {
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
-	private pendingCleanup = false;
 
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
 		this.exec = dependencies.exec ?? spawnExec;
@@ -51,7 +48,6 @@ class Worktree implements WorktreeModule {
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
 		this.context = nextContext;
 		this.baseline = null;
-		this.pendingCleanup = false;
 		await this.initializeSession(nextContext);
 	}
 
@@ -84,17 +80,14 @@ class Worktree implements WorktreeModule {
 	deactivate(): void {
 		this.context = null;
 		this.baseline = null;
-		this.pendingCleanup = false;
 	}
 
 	private onPrMerged(request: MergeRequest): void {
 		if (this.context === null) return;
 		if (this.baseline === null) return;
-		const hasPendingCleanup = this.pendingCleanup;
-		if (hasPendingCleanup) return;
 		const worktree = this.baseline;
 		request.addAction(
-			createCleanupAction(worktree, this.scheduleCleanup.bind(this, worktree)),
+			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
 		);
 	}
 
@@ -126,21 +119,13 @@ class Worktree implements WorktreeModule {
 			}
 			const result = await this.cleanupNow(worktree, false, NO_CHANGES);
 			const cleanupCompleted = result === COMPLETED;
-			if (cleanupCompleted) return;
+			const cleanupConsumedWorktree = this.baseline !== worktree;
+			const cleanupShouldStop = cleanupCompleted || cleanupConsumedWorktree;
+			if (cleanupShouldStop) return;
 		}
 		request.addAction(
 			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
 		);
-	}
-
-	private scheduleCleanup(
-		worktree: WorktreeBaseline,
-	): Promise<ExitActionResult> {
-		const isCurrent = isCurrentWorktree(this.baseline, worktree);
-		if (!isCurrent) return Promise.resolve(FAILED);
-		this.pendingCleanup = true;
-		notifyWorktree(this.context, CLEANUP_SCHEDULED);
-		return Promise.resolve(DEFERRED);
 	}
 
 	private async executeCleanup(
@@ -154,7 +139,10 @@ class Worktree implements WorktreeModule {
 		const isCurrent = isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrent) return FAILED;
 		const hasNoState = state === null;
-		if (hasNoState) return FAILED;
+		if (hasNoState) {
+			notifyWorktree(this.context, C.worktree.statusUnavailable, "warning");
+			return FAILED;
+		}
 		let force = false;
 		const hasChanges = state.currentStatus !== EMPTY;
 		if (hasChanges) {
@@ -169,18 +157,18 @@ class Worktree implements WorktreeModule {
 		force: boolean,
 		successMessage: string,
 	): Promise<ExitActionResult> {
+		const cleanupState = { value: false };
 		const result = await cleanupWorktree(worktree, force, {
 			exec: this.exec,
 			changeDirectory: this.changeDirectory,
 			notify: notifyWorktree.bind(null, this.context),
+			worktreeRemoved: cleanupState,
 			isCurrent: () => isCurrentWorktree(this.baseline, worktree),
 		});
+		const worktreeWasRemoved = cleanupState.value;
+		if (worktreeWasRemoved) this.baseline = null;
 		const cleanupCompleted = result === COMPLETED;
-		if (cleanupCompleted) {
-			this.baseline = null;
-			this.pendingCleanup = false;
-			notifyWorktree(this.context, successMessage);
-		}
+		if (cleanupCompleted) notifyWorktree(this.context, successMessage);
 		return result;
 	}
 }

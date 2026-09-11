@@ -10,6 +10,28 @@ export const CLOSED_STATE = "CLOSED";
 export const END_OF_OPTIONS = "--";
 export const GIT_COMMAND = "git";
 export const GH_KIND = "gh";
+export const GIT_GLOBAL_VALUE_OPTIONS = new Set([
+	"-C",
+	"-c",
+	"--config-env",
+	"--exec-path",
+	"--git-dir",
+	"--namespace",
+	"--work-tree",
+]);
+export const GIT_GLOBAL_FLAG_OPTIONS = new Set([
+	"--glob-pathspecs",
+	"--icase-pathspecs",
+	"--literal-pathspecs",
+	"--no-optional-locks",
+	"--no-pager",
+	"--no-replace-objects",
+	"--noglob-pathspecs",
+	"--paginate",
+]);
+export const GIT_INLINE_GLOBAL_OPTION_RE =
+	/^(--config-env=|--exec-path=|--git-dir=|--namespace=|--work-tree=|-C.+|-c.+)/;
+export const TRAILING_COMMAND_SEPARATOR_RE = /[;&|]\s*$/;
 export const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 export const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 export const GITHUB_HOSTNAME = "github.com";

@@ -155,12 +155,14 @@ describe("worktree event actions", () => {
 		expect(statusCommand?.cwd).toBe("/new");
 	});
 
-	it("defers cleanup after a merge", async () => {
+	it("executes cleanup immediately after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
+		const changeDirectory = vi.fn();
 		const module = createWorktreeModule(events, {
 			exec: projectResult("abc", "abc", "", "", commands),
+			changeDirectory,
 		});
 		await module.sessionStart(context());
 		let mergeAction: ExitAction | undefined;
@@ -177,12 +179,18 @@ describe("worktree event actions", () => {
 
 		expect(mergeAction?.id).toBe("remove-worktree");
 		expect(payload.taskMarkedAsCompleted).toBe(false);
-		await expect(mergeAction?.execute()).resolves.toBe("deferred");
-		expect(
-			commands.filter(
-				({ args }) => args[0] === "worktree" && args[1] === "remove",
-			),
-		).toEqual([]);
+		await expect(mergeAction?.execute()).resolves.toBe("completed");
+		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(commands.at(-2)).toEqual({
+			command: "git",
+			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			cwd: "/repo",
+		});
+		expect(commands.at(-1)).toEqual({
+			command: "git",
+			args: ["branch", "-D", "feature"],
+			cwd: "/repo",
+		});
 	});
 
 	it("does not add cleanup action for non-quit shutdown", async () => {

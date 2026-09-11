@@ -142,7 +142,7 @@ class HerdrTabClaimConsumer {
 			this.failClaim({
 				attemptId: attempt.attemptId,
 				message: `${TAB_CLAIM_START_FAILED}${detail}`,
-				workerFailed: false,
+				workerFailed: true,
 			});
 		}
 	}

@@ -24,6 +24,7 @@ export interface CleanupOptions {
 	changeDirectory: (path: string) => void;
 	notify: (message: string, level?: "info" | "warning") => void;
 	isCurrent: () => boolean;
+	worktreeRemoved?: { value: boolean };
 }
 
 export interface WorktreeModule {

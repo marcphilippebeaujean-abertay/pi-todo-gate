@@ -196,6 +196,36 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
+	it("retries after worker start failure for a numeric tab", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			const start = vi.fn<StartBackgroundWorker>((request) => {
+				if (start.mock.calls.length === 1)
+					throw new Error("worker unavailable");
+				return backgroundWorker.start(request);
+			});
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "fix dialog editor" },
+				context(),
+			);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "retry dialog editor" },
+				context(),
+			);
+
+			expect(start).toHaveBeenCalledTimes(2);
+		} finally {
+			restore();
+		}
+	});
+
 	it(BLOCKS_TAB_NAMING_RETRY_FOR_DESCRIPTIVE_TAB, async () => {
 		const restore = herdrEnvironment();
 		try {

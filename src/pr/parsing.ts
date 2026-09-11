@@ -6,6 +6,9 @@ import {
 	GH_MERGE_FLAG_OPTIONS,
 	GH_MERGE_VALUE_OPTIONS,
 	GIT_COMMAND,
+	GIT_GLOBAL_FLAG_OPTIONS,
+	GIT_GLOBAL_VALUE_OPTIONS,
+	GIT_INLINE_GLOBAL_OPTION_RE,
 	GIT_MERGE_VALUE_OPTIONS,
 	MERGE_COMMAND,
 	MERGED_STATE,
@@ -115,6 +118,7 @@ import {
 	GITHUB_HOSTNAME,
 	GITHUB_URL_PREFIX,
 	PR_CANDIDATE,
+	TRAILING_COMMAND_SEPARATOR_RE,
 	TRAILING_PUNCTUATION,
 } from "./constants.ts";
 
@@ -442,13 +446,37 @@ export interface ParsedMerge {
 	args: string[];
 }
 
+function gitMergeIndex(words: readonly string[]): number | null {
+	for (let index = 1; index < words.length; index += 1) {
+		const arg = words[index];
+		const isMergeCommand = arg === MERGE_COMMAND;
+		if (isMergeCommand) return index;
+		const isValueOption = GIT_GLOBAL_VALUE_OPTIONS.has(arg ?? "");
+		if (isValueOption) {
+			index += 1;
+			continue;
+		}
+		const hasInlineOption = GIT_INLINE_GLOBAL_OPTION_RE.test(arg ?? "");
+		if (hasInlineOption) continue;
+		const isFlagOption = GIT_GLOBAL_FLAG_OPTIONS.has(arg ?? "");
+		if (isFlagOption) continue;
+		return null;
+	}
+	return null;
+}
+
 function parseMergeWords(words: string[]): ParsedMerge | null {
 	const hasTooFewWords = words.length < 2;
 	if (hasTooFewWords) return null;
 	const executable = executableName(words[0] ?? "");
 	const isGit = executable === GIT_COMMAND;
-	const isGitMerge = isGit && words[1] === MERGE_COMMAND;
-	if (isGitMerge) return { kind: GIT_COMMAND, args: words.slice(2) };
+	if (isGit) {
+		const mergeIndex = gitMergeIndex(words);
+		const hasMerge = mergeIndex !== null;
+		if (hasMerge)
+			return { kind: GIT_COMMAND, args: words.slice(mergeIndex + 1) };
+		return null;
+	}
 	const hasTooFewGhWords = words.length < 3;
 	if (hasTooFewGhWords) return null;
 	const isGh = executable === GH_COMMAND;
@@ -461,6 +489,8 @@ function parseMergeWords(words: string[]): ParsedMerge | null {
 }
 
 export function mergeCommand(command: string): ParsedMerge | null {
+	const hasTrailingSeparator = TRAILING_COMMAND_SEPARATOR_RE.test(command);
+	if (hasTrailingSeparator) return null;
 	const segments = shellSegments(command);
 	const hasSingleSegment = segments.length === 1;
 	if (!hasSingleSegment) return null;

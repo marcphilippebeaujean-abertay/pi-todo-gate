@@ -16,7 +16,7 @@ const actions: ExitAction[] = [
 		id: "remove-worktree",
 		label:
 			'Delete worktree "/repo/.worktrees/feature" and local branch "feature"',
-		execute: vi.fn(async () => "deferred" as const),
+		execute: vi.fn(async () => "completed" as const),
 	},
 ];
 

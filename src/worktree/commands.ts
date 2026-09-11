@@ -111,6 +111,8 @@ export async function cleanupWorktree(
 			failureMessage(removeResult, REMOVAL_FAILED),
 		);
 
+	const worktreeRemoved = options.worktreeRemoved;
+	if (worktreeRemoved !== undefined) worktreeRemoved.value = true;
 	const branchResult = await options.exec(
 		GIT,
 		[...BRANCH_ARGS, worktree.branch],
