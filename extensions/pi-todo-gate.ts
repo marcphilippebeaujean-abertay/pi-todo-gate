@@ -40,9 +40,9 @@ function startExtensions(
 
 export default function extension(
 	pi: ExtensionAPI,
-	dependencies: ExtensionDependencies = {},
+	dependencies?: ExtensionDependencies,
 ): void {
 	const shouldSkipSubagent = isSubagent();
 	if (shouldSkipSubagent) return;
-	startExtensions(pi, dependencies);
+	startExtensions(pi, dependencies ?? {});
 }

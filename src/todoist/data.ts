@@ -118,10 +118,11 @@ export function parseConfig(raw: string): TodoistProjectMapping {
 }
 
 export async function loadConfig(
-	path = defaultConfigPath(),
+	path?: string,
 ): Promise<TodoistProjectMapping> {
+	const configPath = path ?? defaultConfigPath();
 	try {
-		return parseConfig(await readFile(path, "utf8"));
+		return parseConfig(await readFile(configPath, "utf8"));
 	} catch {
 		return { projects: {} };
 	}
@@ -262,8 +263,9 @@ export function record(value: unknown): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-export function stringValue(value: unknown, fallback = ""): string {
-	return typeof value === "string" ? value : fallback;
+export function stringValue(value: unknown, fallback?: string): string {
+	const resolvedFallback = fallback ?? "";
+	return typeof value === "string" ? value : resolvedFallback;
 }
 
 export function safeHttpUrl(value: unknown): string | undefined {
@@ -424,13 +426,14 @@ function assistantTexts(stdout: string): string[] {
 
 export function parseResult(
 	stdout: string,
-	sessionId = EMPTY,
+	sessionId?: string,
 ): TaskClaimWorkerResult {
+	const resolvedSessionId = sessionId ?? EMPTY;
 	const texts = assistantTexts(stdout);
 	for (let index = texts.length - 1; index >= 0; index -= 1) {
 		const result = parseCandidate(texts[index].trim());
 		const hasResult = result !== undefined;
 		if (hasResult) return result;
 	}
-	return invalidResult(sessionId);
+	return invalidResult(resolvedSessionId);
 }

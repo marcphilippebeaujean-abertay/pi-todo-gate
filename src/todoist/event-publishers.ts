@@ -58,9 +58,10 @@ function sanitizeWorkerError(stderr: string): string {
 		.slice(0, 300);
 }
 
-export function createTaskClaimWorker(exec: Exec = spawnExec): TaskClaimWorker {
+export function createTaskClaimWorker(exec?: Exec): TaskClaimWorker {
+	const run = exec ?? spawnExec;
 	return async (input) => {
-		const result = await exec(
+		const result = await run(
 			PI_COMMAND,
 			buildPiWorkerArgs(workerPrompt(input), { thinking: HIGH_THINKING }),
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },

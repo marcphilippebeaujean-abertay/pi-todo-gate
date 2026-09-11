@@ -27,22 +27,26 @@ export interface PiWorkerOptions {
 
 export function buildPiWorkerArgs(
 	prompt: string,
-	options: PiWorkerOptions = {},
+	options?: PiWorkerOptions,
 ): string[] {
+	const resolvedOptions = options ?? {};
 	return [
 		...BASE_PI_WORKER_ARGS,
-		...(options.instructions === undefined
+		...(resolvedOptions.instructions === undefined
 			? []
-			: ["--append-system-prompt", options.instructions]),
-		...(options.thinking === undefined ? [] : ["--thinking", options.thinking]),
+			: ["--append-system-prompt", resolvedOptions.instructions]),
+		...(resolvedOptions.thinking === undefined
+			? []
+			: ["--thinking", resolvedOptions.thinking]),
 		prompt,
 	];
 }
 
 export function textFromAssistantMessage(
 	value: unknown,
-	separator = "\n",
+	separator?: string,
 ): string {
+	const resolvedSeparator = separator ?? "\n";
 	if (typeof value !== "object") return "";
 	if (value === null) return "";
 	const message = value as { role?: unknown; content?: unknown };
@@ -52,5 +56,5 @@ export function textFromAssistantMessage(
 	const textContent = hasTextContent ? (message.content as string) : undefined;
 	if (textContent !== undefined) return textContent;
 	if (!Array.isArray(message.content)) return "";
-	return message.content.map(textFromPart).join(separator);
+	return message.content.map(textFromPart).join(resolvedSeparator);
 }

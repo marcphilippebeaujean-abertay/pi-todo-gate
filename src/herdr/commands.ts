@@ -116,9 +116,9 @@ function registerWorkerLifecycle(
 
 export function startClaimWorker(
 	request: ClaimWorkerRequest,
-	options: ClaimWorkerOptions = {},
+	options?: ClaimWorkerOptions,
 ): ClaimWorkerHandle {
-	const child = spawnWorkerProcess(request, options);
+	const child = spawnWorkerProcess(request, options ?? {});
 	const state: WorkerState = {
 		settled: false,
 		cancelled: false,
@@ -159,13 +159,14 @@ interface CwdReference {
 
 export function boundCommandRunner(
 	cwd: string | (() => string) | CwdReference,
-	execute: typeof runCommand = runCommand,
+	execute?: typeof runCommand,
 ): CommandRunner {
+	const run = execute ?? runCommand;
 	return (command, args) => {
 		const isFunctionReference = typeof cwd === "function";
-		if (isFunctionReference) return execute(cwd(), command, args);
+		if (isFunctionReference) return run(cwd(), command, args);
 		const currentCwd = typeof cwd === "string" ? cwd : cwd.current;
-		return execute(currentCwd, command, args);
+		return run(currentCwd, command, args);
 	};
 }
 

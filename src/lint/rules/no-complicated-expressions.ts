@@ -12,8 +12,10 @@ export const noComplicatedExpressions: LintRule = ({
 	diagnostics,
 	config,
 }) => {
-	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
-		if (isLogicalExpression(node) && !hasLogicalParent(ancestors)) {
+	function visit(node: ts.Node, ancestors?: readonly ts.Node[]): void {
+		const resolvedAncestors = ancestors ?? [];
+
+		if (isLogicalExpression(node) && !hasLogicalParent(resolvedAncestors)) {
 			const checks = logicalCheckCount(node);
 			if (checks > config.maxBooleanChecks)
 				diagnostics.push(
@@ -27,7 +29,9 @@ export const noComplicatedExpressions: LintRule = ({
 					),
 				);
 		}
-		ts.forEachChild(node, (child) => visit(child, [...ancestors, node]));
+		ts.forEachChild(node, (child) =>
+			visit(child, [...resolvedAncestors, node]),
+		);
 	}
 	visit(sourceFile);
 };

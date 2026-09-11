@@ -44,9 +44,10 @@ export function replaceSessionState(
 export function appendState(
 	runtime: ExtensionRuntime,
 	state: ActiveSession["state"],
-	prDiscoveryDisabled = false,
+	prDiscoveryDisabled?: boolean,
 ): void {
-	const data = prDiscoveryDisabled
+	const shouldDisablePrDiscovery = prDiscoveryDisabled ?? false;
+	const data = shouldDisablePrDiscovery
 		? { ...state, prDiscoveryDisabled: true }
 		: state;
 	runtime.pi.appendEntry(C.entry.state, data);

@@ -97,10 +97,11 @@ async function emitPhase(
 export function createSharedEvents(): SharedEvents {
 	const listeners: ListenerMap = new Map();
 	return {
-		on(event, listener, phase = C.value.collect as EventPhase) {
+		on(event, listener, phase?: EventPhase) {
+			const resolvedPhase = phase ?? (C.value.collect as EventPhase);
 			const entry: AnyListener = {
 				listener: listener as EventListener<SharedEventPayloads[EventName]>,
-				phase,
+				phase: resolvedPhase,
 			};
 			return registerListener(listeners, event, entry);
 		},

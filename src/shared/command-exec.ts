@@ -74,10 +74,14 @@ function registerProcessListeners(state: ExecState): void {
 export function spawnExec(
 	command: string,
 	args: string[],
-	options: { timeout?: number; signal?: AbortSignal; cwd?: string } = {},
+	options?: { timeout?: number; signal?: AbortSignal; cwd?: string },
 ): Promise<CommandResult> {
+	const resolvedOptions = options ?? {};
 	return new Promise((resolveResult) => {
-		const child = spawn(command, args, { cwd: options.cwd, shell: false });
+		const child = spawn(command, args, {
+			cwd: resolvedOptions.cwd,
+			shell: false,
+		});
 		child.stdin?.end();
 		const state: ExecState = {
 			child,
@@ -86,16 +90,19 @@ export function spawnExec(
 			stderr: "",
 			killed: false,
 			settled: false,
-			options,
+			options: resolvedOptions,
 			onAbort: noop,
 		};
 		state.onAbort = killProcess.bind(null, state);
-		options.signal?.addEventListener(ABORT_EVENT, state.onAbort, {
+		resolvedOptions.signal?.addEventListener(ABORT_EVENT, state.onAbort, {
 			once: true,
 		});
-		const hasTimeout = options.timeout !== undefined;
+		const hasTimeout = resolvedOptions.timeout !== undefined;
 		if (hasTimeout)
-			state.timer = setTimeout(killProcess.bind(null, state), options.timeout);
+			state.timer = setTimeout(
+				killProcess.bind(null, state),
+				resolvedOptions.timeout,
+			);
 		registerProcessListeners(state);
 	});
 }

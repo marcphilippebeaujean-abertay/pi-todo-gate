@@ -1,6 +1,7 @@
 import type ts from "typescript";
 import type { LintConfig } from "../lint-config.ts";
 export type LintRuleId =
+	| "no-default-parameters"
 	| "no-magic-strings"
 	| "no-short-string-constants"
 	| "similar-string-literals"

@@ -309,8 +309,9 @@ export function renderPrLabel(
 export function renderPrStatus(
 	url: string | undefined,
 	theme?: PrFooterTheme,
-	hasUncommittedChanges = false,
+	hasUncommittedChanges?: boolean,
 ): string {
+	const isUncommitted = hasUncommittedChanges ?? false;
 	const normalized = normalizedPrUrl(url);
 	const number = prNumber(url);
 	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
@@ -318,7 +319,7 @@ export function renderPrStatus(
 	const hasNoPr = normalized === null || number === null;
 	if (hasNoPr)
 		return `${muted(FOOTER_PR_LINK_LABEL)}${value(FOOTER_NONE_TEXT)}${muted(FOOTER_PR_SEPARATOR)}`;
-	const dirtyMarker = hasUncommittedChanges ? "*" : "";
+	const dirtyMarker = isUncommitted ? "*" : "";
 	return `${muted(FOOTER_PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_PR_SEPARATOR)}`;
 }
 

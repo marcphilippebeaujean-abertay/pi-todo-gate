@@ -101,30 +101,23 @@ export class ExitActionPicker {
 	}
 
 	handleInput(data: string): void {
-		const movesForward =
-			matchesKey(data, Key.tab) || matchesKey(data, Key.down);
-		if (movesForward) {
-			this.moveFocus(1);
-			return;
+		switch (true) {
+			case matchesKey(data, Key.tab) || matchesKey(data, Key.down):
+				this.moveFocus(1);
+				return;
+			case matchesKey(data, Key.shift(EXIT_TAB_KEY)) ||
+				matchesKey(data, Key.up):
+				this.moveFocus(-1);
+				return;
+			case matchesKey(data, Key.space):
+				this.toggleFocusedAction();
+				return;
+			case matchesKey(data, Key.enter):
+				this.submitFocusedTarget();
+				return;
+			case matchesKey(data, Key.escape):
+				this.done(null);
 		}
-		const movesBackward =
-			matchesKey(data, Key.shift(EXIT_TAB_KEY)) || matchesKey(data, Key.up);
-		if (movesBackward) {
-			this.moveFocus(-1);
-			return;
-		}
-		const togglesAction = matchesKey(data, Key.space);
-		if (togglesAction) {
-			this.toggleFocusedAction();
-			return;
-		}
-		const submitsTarget = matchesKey(data, Key.enter);
-		if (submitsTarget) {
-			this.submitFocusedTarget();
-			return;
-		}
-		const cancelsPicker = matchesKey(data, Key.escape);
-		if (cancelsPicker) this.done(null);
 	}
 
 	private toggleFocusedAction(): void {
@@ -212,18 +205,19 @@ function selectedActions(
 export async function presentExitActions(
 	context: ExtensionContext | null,
 	actions: readonly ExitAction[],
-	isCurrent: () => boolean = () => true,
+	isCurrent?: () => boolean,
 ): Promise<void> {
+	const isCurrentPrompt = isCurrent ?? (() => true);
 	const hasContext = canPresent(context);
 	const hasActions = actions.length > 0;
 	const shouldPresent = hasContext && hasActions;
 	if (!shouldPresent) return;
 	const selected = await pickActions(context, actions);
-	const isCurrentAfterPick = isCurrent();
+	const isCurrentAfterPick = isCurrentPrompt();
 	if (!isCurrentAfterPick) return;
 	const actionsToExecute = selectedActions(actions, selected);
 	for (const action of actionsToExecute) {
-		const isCurrentBeforeAction = isCurrent();
+		const isCurrentBeforeAction = isCurrentPrompt();
 		if (!isCurrentBeforeAction) return;
 		await executeExitAction(context, action);
 	}

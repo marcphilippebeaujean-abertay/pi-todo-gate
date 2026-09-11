@@ -91,18 +91,20 @@ function formatTypeScriptDiagnostic(
 }
 
 export async function runLint(
-	root = process.cwd(),
-	output: (line: string) => void = (line) => console.error(line),
+	root?: string,
+	output?: (line: string) => void,
 ): Promise<number> {
-	const files = collectLintFiles(root);
-	const program = ts.createProgram(files, compilerOptionsFor(root));
+	const resolvedRoot = root ?? process.cwd();
+	const report = output ?? ((line: string) => console.error(line));
+	const files = collectLintFiles(resolvedRoot);
+	const program = ts.createProgram(files, compilerOptionsFor(resolvedRoot));
 	const compilerDiagnostics = ts.getPreEmitDiagnostics(program);
-	const config = await loadLintConfig(join(root, LINT_CONFIG_NAME));
+	const config = await loadLintConfig(join(resolvedRoot, LINT_CONFIG_NAME));
 	const customDiagnostics = lintProgram(program, config, files);
 	for (const diagnostic of compilerDiagnostics)
-		output(formatTypeScriptDiagnostic(diagnostic, root));
+		report(formatTypeScriptDiagnostic(diagnostic, resolvedRoot));
 	for (const diagnostic of customDiagnostics)
-		output(formatLintDiagnostic(diagnostic));
+		report(formatLintDiagnostic(diagnostic));
 	return compilerDiagnostics.length || customDiagnostics.length ? 1 : 0;
 }
 

@@ -181,9 +181,9 @@ class HerdrTabClaim {
 
 export function installHerdrTabClaim(
 	pi: ExtensionAPI,
-	options: HerdrTabOptions = {},
+	options?: HerdrTabOptions,
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
-	new HerdrTabClaim(pi, options);
+	new HerdrTabClaim(pi, options ?? {});
 }

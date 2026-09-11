@@ -23,7 +23,7 @@ export { renderTaskStatusCompact as renderTodoistTaskStatus } from "./footer-ren
 
 export function createFooterModule(
 	pi: ExtensionAPI,
-	dependencies: FooterModuleDependencies = {},
+	dependencies?: FooterModuleDependencies,
 ): FooterModule {
-	return new FooterEventConsumer(pi, dependencies);
+	return new FooterEventConsumer(pi, dependencies ?? {});
 }

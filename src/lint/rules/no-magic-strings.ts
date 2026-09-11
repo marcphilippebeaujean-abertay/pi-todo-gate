@@ -16,18 +16,19 @@ export const noMagicStrings: LintRule = ({ sourceFile, diagnostics }) => {
 	function visit(
 		node: ts.Node,
 		insideFunction: boolean,
-		ancestors: readonly ts.Node[] = [],
+		ancestors?: readonly ts.Node[],
 	): void {
+		const resolvedAncestors = ancestors ?? [];
 		const currentInsideFunction = insideFunction || isFunctionLike(node);
 		if (
 			currentInsideFunction &&
 			isStringLiteralLike(node) &&
-			!isIgnoredString(node, ancestors)
+			!isIgnoredString(node, resolvedAncestors)
 		)
 			occurrences.push({ node, text: node.text });
 		if (ts.isTypeNode(node)) return;
 		ts.forEachChild(node, (child) =>
-			visit(child, currentInsideFunction, [...ancestors, node]),
+			visit(child, currentInsideFunction, [...resolvedAncestors, node]),
 		);
 	}
 	visit(sourceFile, false);

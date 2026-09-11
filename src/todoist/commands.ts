@@ -42,9 +42,10 @@ export class TodoistClient {
 
 	private async run(
 		args: readonly string[],
-		parseJson = true,
+		parseJson?: boolean,
 		isCurrent?: IsCurrentOperation,
 	): Promise<unknown> {
+		const shouldParseJson = parseJson ?? true;
 		if (isCurrent !== undefined) {
 			const isCurrentBeforeRun = isCurrent();
 			if (!isCurrentBeforeRun) throw new TodoistOperationCancelled();
@@ -59,7 +60,7 @@ export class TodoistClient {
 			const family = args.slice(0, 2).join(" ");
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
-		return parseJson
+		return shouldParseJson
 			? parsePayload(result.stdout, args.slice(0, 2).join(" "))
 			: result.stdout;
 	}

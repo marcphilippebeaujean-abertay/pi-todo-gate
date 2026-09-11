@@ -19,7 +19,7 @@ export { hasNoSessionWork } from "./data.ts";
 
 export function createWorktreeModule(
 	events: SharedEvents,
-	dependencies: WorktreeModuleDependencies = {},
+	dependencies?: WorktreeModuleDependencies,
 ): WorktreeModule {
-	return createWorktreeConsumer(events, dependencies);
+	return createWorktreeConsumer(events, dependencies ?? {});
 }
