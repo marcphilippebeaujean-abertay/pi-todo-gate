@@ -7,7 +7,9 @@ import type {
 } from "./extension-types.ts";
 import { renderPrStatus, renderTaskStatus } from "./footer.ts";
 import { invalidateOperations } from "./session-operations.ts";
+import { applyStatePatch } from "./session-state.ts";
 import { spawnExec } from "./shared/command.ts";
+import { inspectProject } from "./shared/project.ts";
 import { TodoistClient } from "./todoist/client.ts";
 
 export function createClient(
@@ -43,6 +45,22 @@ export function appendState(
 		? { ...state, prDiscoveryDisabled: true }
 		: state;
 	runtime.pi.appendEntry(C.entry.state, data);
+}
+
+export async function initializeRemoteOrigin(
+	runtime: ExtensionRuntime,
+	ctx: ExtensionContext,
+	state: ActiveSession["state"],
+): Promise<ActiveSession["state"]> {
+	const project = await inspectProject(
+		runtime.dependencies.exec ?? spawnExec,
+		ctx.cwd,
+	);
+	const remoteOrigin = project.remoteOrigin ?? undefined;
+	const nextState = applyStatePatch(state, { remoteOrigin });
+	const hasChanged = state.remoteOrigin !== nextState.remoteOrigin;
+	if (hasChanged) appendState(runtime, nextState);
+	return nextState;
 }
 
 export function refreshFooterStatuses(

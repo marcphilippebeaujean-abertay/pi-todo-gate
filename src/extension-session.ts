@@ -9,6 +9,7 @@ import { persistPrIfAvailable } from "./extension-events.ts";
 import {
 	appendState,
 	deactivateSession,
+	initializeRemoteOrigin,
 	refreshFooterStatuses,
 } from "./extension-lifecycle.ts";
 import { branchTexts, latestStateData } from "./extension-message.ts";
@@ -175,12 +176,14 @@ export async function handleSessionStart(
 		stateEntry,
 		state,
 	);
-	state = inherited.state;
+	state = await initializeRemoteOrigin(runtime, ctx, inherited.state);
 	const inheritedHandoff = inherited.handoffContext;
 	await startFooter(runtime, event, ctx, inheritedHandoff);
+	const discoveryIsEnabled = stateEntry?.prDiscoveryDisabled !== true;
+	const hasNoPr = !state.prUrl;
 	const allowPrDiscovery = inheritedHandoff
 		? false
-		: stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
+		: discoveryIsEnabled && hasNoPr;
 	const session = activateSession(
 		runtime,
 		ctx,

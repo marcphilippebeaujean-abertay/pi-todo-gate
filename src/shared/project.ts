@@ -3,6 +3,9 @@ const GIT_COMMAND = "git";
 const STATUS_COMMAND = "status";
 const PORCELAIN_FLAG = "--porcelain=v1";
 const UNTRACKED_FILES_FLAG = "--untracked-files=all";
+const REMOTE_COMMAND = "remote";
+const GET_URL_COMMAND = "get-url";
+const ORIGIN_REMOTE = "origin";
 
 import { resolve } from "node:path";
 import type { CommandResult, Exec } from "./command.ts";
@@ -12,6 +15,7 @@ export interface ProjectInfo {
 	root: string | null;
 	branch: string | null;
 	mainRoot: string | null;
+	remoteOrigin: string | null;
 }
 
 export function resolveGitPath(cwd: string, output: string): string | null {
@@ -54,12 +58,20 @@ function projectInfo(
 	root: string | null,
 	branch: string | null,
 	mainRoot: string | null,
+	remoteOrigin: string | null,
 ): ProjectInfo {
 	const hasRoot = root !== null;
 	const hasMainRoot = mainRoot !== null;
 	const missingPath = !hasRoot || !hasMainRoot;
-	if (missingPath) return { isWorktree: false, root, branch, mainRoot };
-	return { isWorktree: root !== resolve(mainRoot), root, branch, mainRoot };
+	if (missingPath)
+		return { isWorktree: false, root, branch, mainRoot, remoteOrigin };
+	return {
+		isWorktree: root !== resolve(mainRoot),
+		root,
+		branch,
+		mainRoot,
+		remoteOrigin,
+	};
 }
 
 export async function hasUncommittedChanges(
@@ -84,6 +96,22 @@ export async function inspectProject(
 	exec: Exec,
 	cwd: string,
 ): Promise<ProjectInfo> {
+	let remoteOrigin: string | null = null;
+	try {
+		const remoteResult = await exec(
+			GIT_COMMAND,
+			[REMOTE_COMMAND, GET_URL_COMMAND, ORIGIN_REMOTE],
+			{ cwd },
+		);
+		const line = remoteResult.stdout
+			.split(/\r?\n/)
+			.find((value) => value.trim() !== "");
+		const value = line?.trim() ?? "";
+		remoteOrigin = successfulResult(remoteResult, value || null);
+	} catch {
+		remoteOrigin = null;
+	}
+
 	let rootResult: CommandResult;
 	let branchResult: CommandResult;
 	let listResult: CommandResult;
@@ -99,6 +127,7 @@ export async function inspectProject(
 			root: null,
 			branch: null,
 			mainRoot: null,
+			remoteOrigin,
 		};
 	}
 	const root = successfulResult(
@@ -111,5 +140,5 @@ export async function inspectProject(
 	);
 	const firstPath = firstWorktreePath(listResult.stdout) ?? "";
 	const mainRoot = successfulResult(listResult, resolveGitPath(cwd, firstPath));
-	return projectInfo(root, branch, mainRoot);
+	return projectInfo(root, branch, mainRoot, remoteOrigin);
 }

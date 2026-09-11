@@ -3,7 +3,7 @@ const PR_LINK_LABEL = "| PR Link: ";
 const FOOTER_SEPARATOR = " |";
 
 import { hyperlink } from "@earendil-works/pi-tui";
-import { githubPrUrl } from "./detection.ts";
+import { normalizeGithubPrUrl } from "./detection.ts";
 
 export interface PrFooterTheme {
 	fg(color: string, text: string): string;
@@ -16,7 +16,7 @@ function linkText(text: string, theme?: PrFooterTheme): string {
 
 function prNumber(url: string | undefined): string | null {
 	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
+	const normalized = hasUrl ? normalizeGithubPrUrl(url as string) : null;
 	const number = normalized?.match(/\/pull\/(\d+)$/)?.[1];
 	return number ?? null;
 }
@@ -31,7 +31,7 @@ export function renderPrLabel(
 	theme?: PrFooterTheme,
 ): string {
 	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
+	const normalized = hasUrl ? normalizeGithubPrUrl(url as string) : null;
 	const number = prNumber(url);
 	const hasNoPr = number === null || normalized === null;
 	if (hasNoPr) return NO_PR_LABEL;
@@ -49,7 +49,7 @@ export function renderPrStatus(
 	const muted = (text: string) => theme?.fg("muted", text) ?? text;
 	const value = (text: string) => theme?.fg("text", text) ?? text;
 	const hasUrl = Boolean(url);
-	const normalized = hasUrl ? githubPrUrl(url as string) : null;
+	const normalized = hasUrl ? normalizeGithubPrUrl(url as string) : null;
 	const number = prNumber(url);
 	const hasNoPr = number === null || normalized === null;
 	if (hasNoPr)
