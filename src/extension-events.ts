@@ -8,6 +8,7 @@ import type {
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import {
 	appendState,
+	initializeRemoteOrigin,
 	refreshFooterStatuses,
 	replaceSessionState,
 	updateWorkingTreeStatus,
@@ -31,13 +32,32 @@ const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 const BASH_COMMAND = "command";
 
+async function ensureRemoteOrigin(
+	runtime: ExtensionRuntime,
+	session: ActiveSession,
+): Promise<string | null> {
+	const knownOrigin = session.state.remoteOrigin;
+	if (knownOrigin !== undefined) return knownOrigin;
+	const nextState = await initializeRemoteOrigin(
+		runtime,
+		session.context,
+		session.state,
+	);
+	const isCurrentSession = runtime.active === session;
+	if (!isCurrentSession) return null;
+	replaceSessionState(session, nextState);
+	return nextState.remoteOrigin ?? null;
+}
+
 async function firstAvailablePrUrl(
 	runtime: ExtensionRuntime,
 	session: ActiveSession,
 	text: string,
 ): Promise<string | null> {
 	const exec = runtime.dependencies.exec ?? spawnExec;
-	for (const url of githubPrUrls(text)) {
+	const remoteOrigin = await ensureRemoteOrigin(runtime, session);
+	if (remoteOrigin === null) return null;
+	for (const url of githubPrUrls(text, remoteOrigin)) {
 		const hasTestedUrl = session.prDiscoveryTestedUrls.has(url);
 		if (hasTestedUrl) continue;
 		session.prDiscoveryTestedUrls.add(url);
@@ -45,6 +65,7 @@ async function firstAvailablePrUrl(
 			exec,
 			session.context.cwd,
 			url,
+			remoteOrigin,
 		);
 		if (isAvailable) return url;
 	}
@@ -93,12 +114,16 @@ async function appendWorktreePrompt(
 		ctx.cwd,
 	);
 	const branch = worktree.branch;
+	const remoteOrigin = worktree.remoteOrigin;
+	const hasRemoteOrigin = remoteOrigin !== null;
 	const hasWorktreeBranch = worktree.isWorktree && branch !== null;
-	if (!hasWorktreeBranch) return;
+	const canDetectWorktreePr = hasWorktreeBranch && hasRemoteOrigin;
+	if (!canDetectWorktreePr) return;
 	const pr = await findOpenPrSafe(
 		ctx,
 		branch,
 		runtime.dependencies.exec ?? spawnExec,
+		remoteOrigin,
 	);
 	switch (pr) {
 		case C.value.unknown:
@@ -222,8 +247,9 @@ export async function findOpenPrSafe(
 	ctx: ExtensionContext,
 	branch: string,
 	exec: Exec,
+	remoteOrigin?: string | null,
 ): Promise<string | null | "unknown"> {
-	const result = await findOpenPr(exec, ctx.cwd, branch);
+	const result = await findOpenPr(exec, ctx.cwd, branch, remoteOrigin);
 	const isUnknown = result.state.toLowerCase() === C.value.unknown;
 	if (isUnknown) return C.value.unknown;
 	return result.url;

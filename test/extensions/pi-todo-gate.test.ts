@@ -26,7 +26,6 @@ const TODOIST_TASK_NONE = "Todoist Task: none";
 const CUSTOM = "custom";
 const PI_TODO_GATE_STATE_ENTRY = "pi-todo-gate-state";
 const PARENT = "parent";
-const MESSAGE = "message";
 const ASSISTANT = "assistant";
 const TEXT_CONTENT_TYPE = "text";
 const PROJECT_1 = "project-1";
@@ -41,10 +40,13 @@ const WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO =
 const WORK = "work";
 const DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES =
 	"discovers the first PR URL and ignores later URLs";
-const USER = "user";
 const HTTPS_GITHUB_COM_O_R_PULL_1 = "https://github.com/o/r/pull/1";
+const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
+const SETS_REMOTE_ORIGIN_IN_SESSION_STATE =
+	"sets the project remote origin in session state on startup";
+const DISCOVERY_RETRIES_ORIGIN_BEFORE_SCANNING_PR_LINKS =
+	"retries origin before scanning PR links";
 const MESSAGE_END = "message_end";
-const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/owner/repo/pull/2";
 const HTTPS_GITHUB_COM_O_R_PULL_3 = "https://github.com/owner/repo/pull/3";
 const NEVER_SENDS_SYNCHRONIZATION_MESSAGES_TO_THE_AGENT =
 	"never sends synchronization messages to the agent";
@@ -603,6 +605,42 @@ describe("automatic Todoist task claiming", () => {
 });
 
 describe("hidden lifecycle context", () => {
+	it(SETS_REMOTE_ORIGIN_IN_SESSION_STATE, async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const exec = async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			switch (key) {
+				case "git rev-parse --show-toplevel":
+					return {
+						stdout: `${CONFIGURED_PROJECT}\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				case "git branch --show-current":
+					return { stdout: "main\n", stderr: EMPTY_STRING, code: 0 };
+				case "git worktree list --porcelain":
+					return {
+						stdout: `worktree ${CONFIGURED_PROJECT}\nHEAD abc\nbranch refs/heads/main\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				case "git remote get-url origin":
+					return {
+						stdout: `${REMOTE_ORIGIN}\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				default:
+					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+			}
+		};
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		expect(h.appended).toContainEqual({
+			type: PI_TODO_GATE_STATE_ENTRY,
+			data: { remoteOrigin: REMOTE_ORIGIN },
+		});
+	});
+
 	it(WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
@@ -628,22 +666,15 @@ describe("hidden lifecycle context", () => {
 	});
 
 	it(DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES, async () => {
-		const h = harness(CONFIGURED_PROJECT, [
-			{
-				type: MESSAGE,
-				message: {
-					role: USER,
-					content: [
-						{ type: TEXT_CONTENT_TYPE, text: HTTPS_GITHUB_COM_O_R_PULL_2 },
-					],
-				},
-			},
-		]);
-		const exec = vi.fn(async (command: string) => {
+		const h = harness(CONFIGURED_PROJECT);
+		const exec = vi.fn(async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git remote get-url origin")
+				return { stdout: `${REMOTE_ORIGIN}\n`, stderr: EMPTY_STRING, code: 0 };
 			if (command !== "gh")
 				return { stdout: EMPTY_STRING, stderr: "not found", code: 1 };
 			return {
-				stdout: JSON.stringify({ url: HTTPS_GITHUB_COM_O_R_PULL_2 }),
+				stdout: JSON.stringify({ url: args[2] }),
 				stderr: EMPTY_STRING,
 				code: 0,
 			};
@@ -664,7 +695,14 @@ describe("hidden lifecycle context", () => {
 		expect(h.appended).toEqual([
 			{
 				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_2 },
+				data: { remoteOrigin: REMOTE_ORIGIN },
+			},
+			{
+				type: PI_TODO_GATE_STATE_ENTRY,
+				data: {
+					remoteOrigin: REMOTE_ORIGIN,
+					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
+				},
 			},
 		]);
 		await h.handlers.get(MESSAGE_END)?.(
@@ -677,7 +715,56 @@ describe("hidden lifecycle context", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toHaveLength(1);
+		expect(h.appended).toHaveLength(2);
+	});
+
+	it(DISCOVERY_RETRIES_ORIGIN_BEFORE_SCANNING_PR_LINKS, async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		let remoteLookupCount = 0;
+		const exec = vi.fn(async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git remote get-url origin") {
+				remoteLookupCount += 1;
+				return remoteLookupCount <= 2
+					? { stdout: EMPTY_STRING, stderr: "no origin", code: 1 }
+					: {
+							stdout: `${REMOTE_ORIGIN}\n`,
+							stderr: EMPTY_STRING,
+							code: 0,
+						};
+			}
+			if (command === "gh")
+				return {
+					stdout: JSON.stringify({ url: HTTPS_GITHUB_COM_O_R_PULL_3 }),
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
+			return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+		});
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		await h.handlers.get(MESSAGE_END)?.(
+			{
+				type: MESSAGE_END,
+				message: {
+					role: ASSISTANT,
+					content: `${HTTPS_GITHUB_COM_O_R_PULL_3} https://github.com/other/repo/pull/4`,
+				},
+			},
+			h.ctx,
+		);
+		expect(h.appended).toEqual([
+			{
+				type: PI_TODO_GATE_STATE_ENTRY,
+				data: { remoteOrigin: REMOTE_ORIGIN },
+			},
+			{
+				type: PI_TODO_GATE_STATE_ENTRY,
+				data: {
+					remoteOrigin: REMOTE_ORIGIN,
+					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
+				},
+			},
+		]);
 	});
 
 	it(REJECTS_FAKE_PR_LINKS_AND_REMEMBERS_FAILED_LOOKUPS, async () => {
@@ -709,7 +796,7 @@ describe("hidden lifecycle context", () => {
 		expect(h.appended).toHaveLength(0);
 		expect(
 			exec.mock.calls.filter(([command]) => command === "gh"),
-		).toHaveLength(1);
+		).toHaveLength(0);
 	});
 
 	it(NEVER_SENDS_SYNCHRONIZATION_MESSAGES_TO_THE_AGENT, async () => {
@@ -1341,11 +1428,17 @@ describe("pi_todo_gate_state", () => {
 		]);
 		const completeTask = vi.fn();
 		const client = { completeTask };
-		const exec = async () => ({
-			stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
-			stderr: EMPTY_STRING,
-			code: 0,
-		});
+		const exec = async (command: string, args: string[]) => {
+			const isOriginLookup =
+				command === "git" && args.join(" ") === "remote get-url origin";
+			return isOriginLookup
+				? { stdout: EMPTY_STRING, stderr: "not found", code: 1 }
+				: {
+						stdout: JSON.stringify({ headRefName: FEATURE_AUTH }),
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+		};
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,

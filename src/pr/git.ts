@@ -74,6 +74,7 @@ export async function isGithubPrAvailable(
 	exec: Exec,
 	cwd: string,
 	prUrl: string,
+	remoteOrigin?: string | null,
 ): Promise<boolean> {
 	const result = await runGhView(exec, cwd, prUrl, "url");
 	if (result === null) return false;
@@ -86,7 +87,7 @@ export async function isGithubPrAvailable(
 		const url = parsed.data.url;
 		const hasNoUrl = url === undefined;
 		if (hasNoUrl) return false;
-		const normalizedUrl = githubPrUrl(url);
+		const normalizedUrl = githubPrUrl(url, remoteOrigin);
 		return normalizedUrl === prUrl;
 	} catch {
 		return false;
@@ -120,7 +121,10 @@ async function runGhList(
 	}
 }
 
-function parseOpenPrResult(stdout: string): OpenPrInfo {
+function parseOpenPrResult(
+	stdout: string,
+	remoteOrigin?: string | null,
+): OpenPrInfo {
 	try {
 		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
 		const isInvalidRows = !parsed.success;
@@ -130,7 +134,8 @@ function parseOpenPrResult(stdout: string): OpenPrInfo {
 		const row = parsed.data[0];
 		const hasNoRow = row === undefined;
 		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
-		const url = row.url === undefined ? null : githubPrUrl(row.url);
+		const url =
+			row.url === undefined ? null : githubPrUrl(row.url, remoteOrigin);
 		let state: OpenPrInfo["state"];
 		switch (row.state) {
 			case OPEN_STATE:
@@ -155,12 +160,13 @@ export async function findOpenPr(
 	exec: Exec,
 	cwd: string,
 	branch: string,
+	remoteOrigin?: string | null,
 ): Promise<OpenPrInfo> {
 	const result = await runGhList(exec, cwd, branch);
 	if (result === null) return { url: null, state: UNKNOWN_STATE };
 	const commandFailed = result.code !== 0;
 	if (commandFailed) return { url: null, state: UNKNOWN_STATE };
-	return parseOpenPrResult(result.stdout);
+	return parseOpenPrResult(result.stdout, remoteOrigin);
 }
 
 export {

@@ -6,6 +6,7 @@ const STRING_TYPE = "string";
 import type { WorkState } from "./types.ts";
 
 const STATE_KEYS: readonly (keyof WorkState)[] = [
+	"remoteOrigin",
 	"prUrl",
 	"taskUrl",
 	"taskRef",

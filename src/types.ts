@@ -1,4 +1,5 @@
 export interface WorkState {
+	remoteOrigin?: string;
 	prUrl?: string;
 	taskUrl?: string;
 	taskRef?: string;

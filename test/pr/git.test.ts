@@ -1,4 +1,8 @@
 const EMPTY_STRING = "";
+const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
+const FILTERS_OPEN_PRS_TO_THE_REMOTE_ORIGIN =
+	"filters open PRs to the remote origin";
+const OTHER_REPOSITORY_PR = "https://github.com/other/repo/pull/42";
 const ERROR_VALUE = "error";
 const SPACE = " ";
 const IDENTIFIES_A_LINKED_WORKTREE_AND_BRANCH =
@@ -129,6 +133,7 @@ describe("inspectWorktree", () => {
 			isWorktree: true,
 			root: REPO_WORKTREES_FEATURE_2,
 			branch: FEATURE_2,
+			remoteOrigin: null,
 			mainRoot: REPO_2,
 		});
 	});
@@ -145,12 +150,23 @@ describe("inspectWorktree", () => {
 			isWorktree: false,
 			root: REPO_2,
 			branch: MAIN_2,
+			remoteOrigin: null,
 			mainRoot: REPO_2,
 		});
 	});
 });
 
 describe("findOpenPr", () => {
+	it(FILTERS_OPEN_PRS_TO_THE_REMOTE_ORIGIN, async () => {
+		const exec = fakeExec({
+			"gh pr list --head feature --state open --json url,state --limit 1": ok(
+				JSON.stringify([{ url: OTHER_REPOSITORY_PR, state: OPEN }]),
+			),
+		});
+		await expect(
+			findOpenPr(exec, REPO_2, FEATURE_2, REMOTE_ORIGIN),
+		).resolves.toEqual({ url: null, state: OPEN });
+	});
 	it(PARSES_THE_FIRST_OPEN_PULL_REQUEST, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1": ok(
