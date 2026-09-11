@@ -16,10 +16,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;
 	private readonly promptQueue: PromptQueue;
 
-	constructor(
-		events: SharedEvents,
-		promptQueue: PromptQueue = new PromptQueue(),
-	) {
+	constructor(events: SharedEvents, promptQueue: PromptQueue) {
 		this.promptQueue = promptQueue;
 		events.on(C.event.prMerged, this.onPrMerged.bind(this), EXIT_PRESENT_PHASE);
 		events.on(

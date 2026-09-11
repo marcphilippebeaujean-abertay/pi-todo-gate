@@ -20,7 +20,7 @@ export * from "./user-prompts.ts";
 
 export function createExitProtocolModule(
 	events: SharedEvents,
-	promptQueue: PromptQueue = new PromptQueue(),
+	promptQueue: PromptQueue,
 ): ExitProtocolModule {
 	return new ExitProtocolConsumer(events, promptQueue);
 }
