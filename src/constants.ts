@@ -26,7 +26,6 @@ export const EXTENSION_CONSTANTS = {
 	},
 	event: {
 		prMerged: "prMerged",
-		sessionWillClose: "sessionWillClose",
 		sessionStart: "session_start",
 		messageEnd: "message_end",
 		beforeAgentStart: "before_agent_start",
@@ -49,7 +48,6 @@ export const EXTENSION_CONSTANTS = {
 		tui: "tui",
 		collect: "collect",
 		present: "present",
-		quit: "quit",
 	},
 	worktree: {
 		empty: "",
@@ -61,7 +59,6 @@ export const EXTENSION_CONSTANTS = {
 		branchArgs: ["branch", "-D"],
 		cleanupId: "remove-worktree",
 		cleanupSuccess: "Worktree and local branch deleted",
-		noChanges: "Worktree deleted because no changes were made",
 		cleanupFailed: "Worktree cleanup failed: ",
 		removalFailed: "worktree removal failed",
 		branchFailed: "branch deletion failed",

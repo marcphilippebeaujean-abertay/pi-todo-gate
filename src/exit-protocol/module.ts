@@ -21,11 +21,6 @@ class ExitProtocol implements ExitProtocolModule {
 
 	constructor(events: SharedEvents) {
 		events.on(C.event.prMerged, this.onPrMerged.bind(this), C.value.present);
-		events.on(
-			C.event.sessionWillClose,
-			this.enqueueOnQuit.bind(this),
-			C.value.present,
-		);
 	}
 
 	sessionStart(context: ExtensionContext): void {
@@ -36,14 +31,6 @@ class ExitProtocol implements ExitProtocolModule {
 	deactivate(): void {
 		this.operationGeneration += 1;
 		this.context = null;
-	}
-
-	private enqueueOnQuit(
-		request: EventRequest<SharedEventPayloads["sessionWillClose"]>,
-	): Promise<void> | void {
-		const isQuit = request.payload.reason === C.value.quit;
-		if (!isQuit) return;
-		return this.enqueue(request);
 	}
 
 	private onPrMerged(request: ExitRequest): Promise<void> {
