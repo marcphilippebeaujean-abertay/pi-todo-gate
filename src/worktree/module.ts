@@ -9,7 +9,7 @@ import type {
 } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
 import { confirmDirtyRemoval, createCleanupAction } from "./action.ts";
-import { cleanupWorktree } from "./cleanup.ts";
+import { cleanupWorktree, deleteLocalBranch } from "./cleanup.ts";
 import { currentWorktreeState, type WorktreeCurrentState } from "./commands.ts";
 import { notifyWorktree } from "./notify.ts";
 import { hasNoSessionWork, isCurrentWorktree } from "./state.ts";
@@ -43,6 +43,7 @@ class Worktree implements WorktreeModule {
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
+	private branchDeletionPending: WorktreeBaseline | null = null;
 	private operationGeneration = 0;
 
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
@@ -56,6 +57,7 @@ class Worktree implements WorktreeModule {
 		const generation = ++this.operationGeneration;
 		this.context = nextContext;
 		this.baseline = null;
+		this.branchDeletionPending = null;
 		const project = await inspectProject(this.exec, nextContext.cwd);
 		const isCurrent = generation === this.operationGeneration;
 		if (!isCurrent) return;
@@ -85,6 +87,7 @@ class Worktree implements WorktreeModule {
 		this.operationGeneration += 1;
 		this.context = null;
 		this.baseline = null;
+		this.branchDeletionPending = null;
 	}
 
 	private onPrMerged(request: MergeRequest): void {
@@ -145,16 +148,32 @@ class Worktree implements WorktreeModule {
 		if (context === null) return C.exit.failed;
 		const canExecute = context.hasUI;
 		if (!canExecute) return C.exit.failed;
-		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
 		const isCurrent = isCurrentWorktree(
 			this.baseline,
 			worktree,
 			generation,
 			this.operationGeneration,
 		);
+		if (!isCurrent) return C.exit.failed;
+		const hasPendingBranchDeletion = this.branchDeletionPending === worktree;
+		if (hasPendingBranchDeletion)
+			return this.cleanupNow(
+				worktree,
+				generation,
+				false,
+				C.worktree.cleanupSuccess,
+				true,
+			);
+		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
 		const hasState = state !== null;
-		const cannotContinue = !isCurrent || !hasState;
-		if (cannotContinue) return C.exit.failed;
+		if (!hasState) {
+			notifyWorktree(
+				this.context,
+				C.worktree.statusUnavailable,
+				C.value.warning,
+			);
+			return C.exit.failed;
+		}
 		const hasChanges = state.currentStatus !== C.worktree.empty;
 		let force = false;
 		if (hasChanges) {
@@ -174,11 +193,14 @@ class Worktree implements WorktreeModule {
 		generation: number,
 		force: boolean,
 		successMessage: string,
+		branchOnly = false,
 	): Promise<ExitActionResult> {
-		const result = await cleanupWorktree(worktree, force, {
+		const cleanupState = { value: false };
+		const cleanupOptions = {
 			exec: this.exec,
 			changeDirectory: this.changeDirectory,
 			notify: notifyWorktree.bind(null, this.context),
+			worktreeRemoved: cleanupState,
 			isCurrent: () =>
 				isCurrentWorktree(
 					this.baseline,
@@ -186,10 +208,16 @@ class Worktree implements WorktreeModule {
 					generation,
 					this.operationGeneration,
 				),
-		});
+		};
+		const result = branchOnly
+			? await deleteLocalBranch(worktree, cleanupOptions)
+			: await cleanupWorktree(worktree, force, cleanupOptions);
+		const worktreeWasRemoved = cleanupState.value;
+		if (worktreeWasRemoved) this.branchDeletionPending = worktree;
 		const cleanupSucceeded = result === C.exit.completed;
 		if (cleanupSucceeded) {
 			this.baseline = null;
+			this.branchDeletionPending = null;
 			notifyWorktree(this.context, successMessage);
 		}
 		return result;

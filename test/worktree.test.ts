@@ -281,6 +281,92 @@ describe("worktree event actions", () => {
 		);
 	});
 
+	it("retries branch deletion after worktree removal succeeds", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const changeDirectory = vi.fn();
+		let branchAttempts = 0;
+		const baseExec = projectResult("abc", "def", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isBranchDelete =
+				command === "git" && args[0] === "branch" && args[1] === "-D";
+			if (isBranchDelete && branchAttempts++ === 0)
+				return { stdout: "", stderr: "branch locked", code: 1 };
+			return result;
+		};
+		const module = createWorktreeModule(events, { exec, changeDirectory });
+		await module.sessionStart(context());
+		let firstAction: ExitAction | undefined;
+		let retryAction: ExitAction | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				if (firstAction === undefined) firstAction = request.actions[0];
+				else retryAction = request.actions[0];
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+		await expect(firstAction?.execute()).resolves.toBe("failed");
+		await events.emit("sessionWillClose", { reason: "quit" });
+		await expect(retryAction?.execute()).resolves.toBe("completed");
+
+		expect(
+			commands.filter(
+				({ args }) => args[0] === "worktree" && args[1] === "remove",
+			),
+		).toHaveLength(1);
+		expect(
+			commands.filter(({ args }) => args[0] === "branch" && args[1] === "-D"),
+		).toHaveLength(2);
+	});
+
+	it("notifies when Git worktree state is unavailable", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		let statusCalls = 0;
+		const baseExec = projectResult("abc", "def", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isStatus = command === "git" && args[0] === "status";
+			statusCalls += Number(isStatus);
+			if (isStatus && statusCalls > 1)
+				return { stdout: "", stderr: "status unavailable", code: 1 };
+			return result;
+		};
+		const ctx = context();
+		const module = createWorktreeModule(events, { exec });
+		await module.sessionStart(ctx);
+		let action: ExitAction | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				action = request.actions[0];
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+		await expect(action?.execute()).resolves.toBe("failed");
+
+		expect(ctx.ui.notify).toHaveBeenCalledWith(
+			"Worktree cleanup failed: Git status unavailable",
+			"warning",
+		);
+	});
+
 	it("requires confirmation before removing dirty worktree", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
