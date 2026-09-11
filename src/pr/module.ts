@@ -6,6 +6,7 @@ import "./event-publishers.ts";
 import "./user-prompts.ts";
 import "./notifications.ts";
 
+export { renderPrLabel, renderPrStatus } from "../shared/pr-rendering.ts";
 export * from "./commands.ts";
 export * from "./constants.ts";
 export * from "./data.ts";

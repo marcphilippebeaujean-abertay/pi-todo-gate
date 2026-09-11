@@ -6,6 +6,8 @@ import {
 	mergedUrls,
 	recordMergedPr,
 	removeMergedPr,
+	renderPrLabel,
+	renderPrStatus,
 } from "../../src/pr/module.ts";
 
 describe("isPrState", () => {
@@ -236,5 +238,15 @@ describe("firstUnmergedGithubPrUrl", () => {
 				],
 			),
 		).toBeNull();
+	});
+});
+
+describe("PR rendering compatibility", () => {
+	it("keeps rendering helpers available from the PR module facade", () => {
+		const theme = { fg: (_color: string, text: string) => text };
+		const url = "https://github.com/owner/repo/pull/42";
+
+		expect(renderPrLabel(url, theme)).toContain("PR #42");
+		expect(renderPrStatus(url, theme)).toContain("#42");
 	});
 });

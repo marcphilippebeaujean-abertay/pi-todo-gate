@@ -3,17 +3,15 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import { renderPrLabel, renderPrStatus } from "../shared/pr-rendering.ts";
 import {
 	FOOTER_ACCENT_COLOR,
 	FOOTER_DIM,
 	FOOTER_HTTP_PROTOCOL,
 	FOOTER_HTTPS_PROTOCOL,
 	FOOTER_MUTED_COLOR,
-	FOOTER_NO_PR_LABEL,
 	FOOTER_NONE_TEXT,
 	FOOTER_OPEN_TASK_LABEL,
-	FOOTER_PR_LINK_LABEL,
-	FOOTER_PR_SEPARATOR,
 	FOOTER_SPINNER_FRAMES,
 	FOOTER_SPINNER_INTERVAL_MS,
 	FOOTER_STATUS_SEPARATOR,
@@ -26,6 +24,8 @@ import type {
 	FooterUpdate,
 	FooterState as PersistedFooterState,
 } from "./data.ts";
+
+export { renderPrLabel, renderPrStatus };
 
 type SessionContext = {
 	ui: {
@@ -251,76 +251,6 @@ export function createFooterFactory(
 			render: renderFooterComponent.bind(null, state, footerData, theme),
 		};
 	};
-}
-
-interface PrFooterTheme {
-	fg(color: string, text: string): string;
-}
-
-function normalizedPrUrl(value: string | undefined): string | null {
-	const hasValue = value !== undefined;
-	if (!hasValue) return null;
-	try {
-		const url = new URL(value);
-		const isHttps = url.protocol === FOOTER_HTTPS_PROTOCOL;
-		if (!isHttps) return null;
-		const isGithub = url.hostname.toLowerCase() === "github.com";
-		if (!isGithub) return null;
-		const match = url.pathname.match(/^\/[^/]+\/[^/]+\/pull\/([1-9]\d*)\/?$/);
-		const hasMatch = match !== null;
-		return hasMatch
-			? `https://github.com${url.pathname.replace(/\/$/, "")}`
-			: null;
-	} catch {
-		return null;
-	}
-}
-
-function linkText(text: string, theme?: PrFooterTheme): string {
-	const colored =
-		theme?.fg(FOOTER_ACCENT_COLOR, text) ?? `\u001b[34m${text}\u001b[39m`;
-	return `\u001b[4m${colored}\u001b[24m`;
-}
-
-function prNumber(url: string | undefined): string | null {
-	const normalized = normalizedPrUrl(url);
-	return normalized?.match(/\/pull\/(\d+)$/)?.[1] ?? null;
-}
-
-function boundedPrNumber(number: string): string {
-	const exceedsNumberLimit = number.length > 6;
-	return exceedsNumberLimit ? `${number.slice(0, 5)}…` : number;
-}
-
-export function renderPrLabel(
-	url: string | undefined,
-	theme?: PrFooterTheme,
-): string {
-	const normalized = normalizedPrUrl(url);
-	const number = prNumber(url);
-	const hasNoPr = normalized === null || number === null;
-	if (hasNoPr) return FOOTER_NO_PR_LABEL;
-	return hyperlink(
-		linkText(`PR #${boundedPrNumber(number)}`, theme),
-		normalized,
-	);
-}
-
-export function renderPrStatus(
-	url: string | undefined,
-	theme?: PrFooterTheme,
-	hasUncommittedChanges?: boolean,
-): string {
-	const isUncommitted = hasUncommittedChanges ?? false;
-	const normalized = normalizedPrUrl(url);
-	const number = prNumber(url);
-	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
-	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
-	const hasNoPr = normalized === null || number === null;
-	if (hasNoPr)
-		return `${muted(FOOTER_PR_LINK_LABEL)}${value(FOOTER_NONE_TEXT)}${muted(FOOTER_PR_SEPARATOR)}`;
-	const dirtyMarker = isUncommitted ? "*" : "";
-	return `${muted(FOOTER_PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_PR_SEPARATOR)}`;
 }
 
 export interface TodoistFooterTheme {

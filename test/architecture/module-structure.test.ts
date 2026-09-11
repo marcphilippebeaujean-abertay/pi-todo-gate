@@ -50,6 +50,23 @@ describe("module structure checker", () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
 	});
 
+	it("rejects nested domain directories", async () => {
+		const root = await validFixture();
+		const nested = join(root, "src", "pr", "legacy");
+		await mkdir(nested, { recursive: true });
+		await writeFile(join(nested, "implementation.ts"), "export {};");
+
+		expect(await checkModuleStructure(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					domain: "pr",
+					path: "src/pr/legacy",
+					message: "nested domain directories are not allowed",
+				}),
+			]),
+		);
+	});
+
 	it("reports a missing domain with correction", async () => {
 		const root = await validFixture();
 		const missing = join(root, "src", "herdr");

@@ -99,6 +99,16 @@ export async function checkModuleStructure(
 		}
 		const entries = await readdir(domainPath, { withFileTypes: true });
 		for (const entry of entries) {
+			const entryPath = relative(root, join(domainPath, entry.name));
+			if (entry.isDirectory()) {
+				issues.push({
+					domain,
+					path: entryPath,
+					message: "nested domain directories are not allowed",
+					correction: `move files from ${entryPath} into ${relative(root, domainPath)} or delete the directory`,
+				});
+				continue;
+			}
 			const isUnclassified =
 				entry.isFile() &&
 				entry.name.endsWith(".ts") &&
@@ -107,7 +117,7 @@ export async function checkModuleStructure(
 			if (!isUnclassified) continue;
 			issues.push({
 				domain,
-				path: relative(root, join(domainPath, entry.name)),
+				path: entryPath,
 				message: "unclassified TypeScript implementation file",
 				correction: `move ${entry.name} into a canonical facet or delete it`,
 			});
