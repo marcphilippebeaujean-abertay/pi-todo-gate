@@ -11,6 +11,8 @@ import {
 } from "./commands.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
+	CLAIM_COMPLETED_EVENT,
+	CLAIM_FAILED_EVENT,
 	SESSION_SHUTDOWN_EVENT,
 	SESSION_START_EVENT,
 	TAB_CLAIM_FAILED,
@@ -18,13 +20,16 @@ import {
 	TAB_CLAIM_START_FAILED,
 } from "./constants.ts";
 import type {
+	ClaimCompletedEvent,
+	ClaimFailedEvent,
 	ClaimWorkerHandle,
-	ClaimWorkerRequest,
 	CommandRunner,
 	FooterEventSink,
+	HerdrEvents,
 	HerdrTabOptions,
 	StartBackgroundWorker,
 } from "./data.ts";
+import { createHerdrEvents } from "./events.ts";
 import {
 	hideHerdrFooter,
 	notifyHerdrFailure,
@@ -36,9 +41,11 @@ import {
 } from "./tab-validation.ts";
 
 interface TabClaimAttempt {
+	attemptId: number;
 	generation: number;
 	initialLabel: string | undefined;
 	paneId: string | undefined;
+	context: ExtensionContext;
 }
 
 class HerdrTabClaimConsumer {
@@ -46,17 +53,20 @@ class HerdrTabClaimConsumer {
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
 	private readonly emitFooter: FooterEventSink;
+	private readonly events: HerdrEvents;
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
 	private sessionGeneration = 0;
+	private nextAttemptId = 0;
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
 	private herdrGateClaimProcessed = false;
 	private initialLabel: string | undefined;
 	private paneId: string | undefined;
+	private activeAttempt: TabClaimAttempt | undefined;
 
-	constructor(pi: ExtensionAPI, options: HerdrTabOptions) {
+	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
 		this.commandRunner =
 			options.commandRunner ?? boundCommandRunner(this.sessionCwdReference);
 		this.sessionCwd = options.cwd ?? process.cwd();
@@ -67,6 +77,9 @@ class HerdrTabClaimConsumer {
 				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
 		this.shouldActivate = options.shouldActivate;
 		this.emitFooter = options.onFooterUpdate ?? (() => undefined);
+		this.events = events;
+		this.events.on(CLAIM_COMPLETED_EVENT, this.completeClaim.bind(this));
+		this.events.on(CLAIM_FAILED_EVENT, this.failClaim.bind(this));
 		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
 		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
@@ -75,6 +88,7 @@ class HerdrTabClaimConsumer {
 	private sessionStart(_event: unknown, ctx: ExtensionContext): void {
 		this.worker?.cancel();
 		this.worker = undefined;
+		this.activeAttempt = undefined;
 		this.sessionGeneration += 1;
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
@@ -106,75 +120,84 @@ class HerdrTabClaimConsumer {
 		const isProcessedOrWorking = hasProcessedGate || hasWorker;
 		const shouldSkip = isUnavailableOrClaimed || isProcessedOrWorking;
 		if (shouldSkip) return;
-		const attempt = structuredClone<TabClaimAttempt>({
+		const attempt: TabClaimAttempt = {
+			attemptId: ++this.nextAttemptId,
 			generation: this.sessionGeneration,
 			initialLabel: this.initialLabel,
 			paneId: this.paneId,
-		});
+			context: ctx,
+		};
+		this.activeAttempt = attempt;
 		this.herdrGateClaimProcessed = true;
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
 				instructions: TAB_CLAIM_INSTRUCTIONS,
-				onClaimComplete: this.completeClaim.bind(this, ctx, attempt),
-				onFailure: this.failClaim.bind(this, ctx, attempt.generation),
+				attemptId: attempt.attemptId,
+				events: this.events,
 			});
 			showHerdrFooter(this.emitFooter);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
-			this.failClaim(
-				ctx,
-				attempt.generation,
-				`${TAB_CLAIM_START_FAILED}${detail}`,
-				false,
-			);
+			this.failClaim({
+				attemptId: attempt.attemptId,
+				message: `${TAB_CLAIM_START_FAILED}${detail}`,
+				workerFailed: false,
+			});
 		}
 	}
 
-	private completeClaim(
-		ctx: ExtensionContext,
-		attempt: TabClaimAttempt,
-		claim?: Parameters<ClaimWorkerRequest["onClaimComplete"]>[0],
-	): void {
+	private isCurrentAttempt(attemptId: number): boolean {
+		return this.activeAttempt?.attemptId === attemptId;
+	}
+
+	private completeClaim(event: ClaimCompletedEvent): void {
+		const attempt = this.activeAttempt;
+		const hasAttempt = attempt !== undefined;
+		if (!hasAttempt) return;
 		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
+		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
+		if (!isCurrentAttempt) return;
 		this.worker = undefined;
+		this.activeAttempt = undefined;
 		hideHerdrFooter(this.emitFooter);
 		const isValidated = hasValidatedTabClaim(
 			this.commandRunner,
 			attempt.initialLabel,
 			attempt.paneId,
-			claim,
+			event.result,
 		);
 		if (isValidated) {
 			this.hasValidatedClaim = true;
 			return;
 		}
 		this.herdrGateClaimProcessed = true;
-		notifyHerdrFailure(ctx, TAB_CLAIM_FAILED);
+		notifyHerdrFailure(attempt.context, TAB_CLAIM_FAILED);
 	}
 
-	private failClaim(
-		ctx: ExtensionContext,
-		generation: number,
-		message: string,
-		workerFailed?: boolean,
-	): void {
-		const isCurrentGeneration = generation === this.sessionGeneration;
+	private failClaim(event: ClaimFailedEvent): void {
+		const attempt = this.activeAttempt;
+		const hasAttempt = attempt !== undefined;
+		if (!hasAttempt) return;
+		const isCurrentGeneration = attempt.generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
+		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
+		if (!isCurrentAttempt) return;
 		this.worker = undefined;
+		this.activeAttempt = undefined;
 		hideHerdrFooter(this.emitFooter);
-		const didWorkerFail = workerFailed ?? true;
 		const shouldTriggerRetry =
-			didWorkerFail && tabNameIsParseableAsInt(this.initialLabel);
+			event.workerFailed && tabNameIsParseableAsInt(this.initialLabel);
 		this.herdrGateClaimProcessed = !shouldTriggerRetry;
-		notifyHerdrFailure(ctx, message);
+		notifyHerdrFailure(attempt.context, event.message);
 	}
 
 	private sessionShutdown(): void {
 		this.sessionGeneration += 1;
 		this.worker?.cancel();
 		this.worker = undefined;
+		this.activeAttempt = undefined;
 		hideHerdrFooter(this.emitFooter);
 		this.hasValidatedClaim = false;
 		this.herdrGateClaimProcessed = false;
@@ -188,5 +211,6 @@ export function installHerdrTabClaim(
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
-	new HerdrTabClaimConsumer(pi, options ?? {});
+	const events = createHerdrEvents();
+	new HerdrTabClaimConsumer(pi, options ?? {}, events);
 }

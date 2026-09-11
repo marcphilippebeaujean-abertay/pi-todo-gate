@@ -11,6 +11,7 @@ import { noDefaultParameters } from "./rules/no-default-parameters.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
+import { noWorkerConsumerCallbacks } from "./rules/no-worker-consumer-callbacks.ts";
 import { preferSwitchDispatch } from "./rules/prefer-switch-dispatch.ts";
 import { repeatedFieldChecks } from "./rules/repeated-field-checks.ts";
 import { similarStringLiterals } from "./rules/similar-string-literals.ts";
@@ -20,6 +21,7 @@ export { formatLintDiagnostic } from "./diagnostic.ts";
 export type { LintDiagnostic, LintRuleId } from "./types.ts";
 
 const RULES: readonly LintRule[] = [
+	noWorkerConsumerCallbacks,
 	noDefaultParameters,
 	noShortStringConstants,
 	noMagicStrings,

@@ -7,13 +7,43 @@ export type FooterEventSink = (event: {
 	isVisible: boolean;
 }) => void;
 
+export interface ClaimCompletedEvent {
+	attemptId: number;
+	result?: import("./claim-worker-result.ts").ClaimWorkerResult;
+}
+
+export interface ClaimFailedEvent {
+	attemptId: number;
+	message: string;
+	workerFailed: boolean;
+}
+
+export interface HerdrEventPayloads {
+	claimCompleted: ClaimCompletedEvent;
+	claimFailed: ClaimFailedEvent;
+}
+
+export type HerdrEventName = keyof HerdrEventPayloads;
+export type HerdrEventListener<K extends HerdrEventName> = (
+	payload: HerdrEventPayloads[K],
+) => void;
+
+export interface HerdrEvents {
+	on<K extends HerdrEventName>(
+		event: K,
+		listener: HerdrEventListener<K>,
+	): () => void;
+	emit<K extends HerdrEventName>(
+		event: K,
+		payload: HerdrEventPayloads[K],
+	): void;
+}
+
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	onClaimComplete: (
-		result?: import("./claim-worker-result.ts").ClaimWorkerResult,
-	) => void;
-	onFailure: (message: string) => void;
+	attemptId: number;
+	events: HerdrEvents;
 }
 
 export interface ClaimWorkerHandle {

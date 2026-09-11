@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import {
 	type ClaimWorkerRequest,
+	createHerdrEvents,
 	startClaimWorker,
 	type WorkerProcess,
 	type WorkerSpawner,
@@ -27,20 +28,23 @@ function setup() {
 		spawned = { command, args, options };
 		return process;
 	};
-	const onClaimComplete = vi.fn();
-	const onFailure = vi.fn();
+	const events = createHerdrEvents();
+	const completed = vi.fn();
+	const failed = vi.fn();
+	events.on("claimCompleted", completed);
+	events.on("claimFailed", failed);
 	const request: ClaimWorkerRequest = {
 		prompt: "Fix dialog",
 		instructions: "Claim tab",
-		onClaimComplete,
-		onFailure,
+		attemptId: 1,
+		events,
 	};
 	return {
 		process,
 		spawnWorker,
 		request,
-		onClaimComplete,
-		onFailure,
+		completed,
+		failed,
 		get spawned() {
 			return spawned;
 		},
@@ -82,7 +86,7 @@ describe("startClaimWorker", () => {
 		expect(handle.cancel).toBeTypeOf("function");
 	});
 
-	it("calls completion without forwarding worker output", () => {
+	it("emits completion without forwarding worker output", () => {
 		const setupState = setup();
 		startClaimWorker(setupState.request, {
 			spawnWorker: setupState.spawnWorker,
@@ -105,11 +109,11 @@ describe("startClaimWorker", () => {
 		setupState.process.stderr.write("private warning\n");
 		setupState.process.emit("close", 0);
 
-		expect(setupState.onClaimComplete).toHaveBeenCalledWith({
-			tabId: "w1:t1",
-			label: "dialog-editor",
+		expect(setupState.completed).toHaveBeenCalledWith({
+			attemptId: 1,
+			result: { tabId: "w1:t1", label: "dialog-editor" },
 		});
-		expect(setupState.onFailure).not.toHaveBeenCalled();
+		expect(setupState.failed).not.toHaveBeenCalled();
 	});
 
 	it("reports missing claim evidence on clean worker exit", () => {
@@ -120,10 +124,12 @@ describe("startClaimWorker", () => {
 
 		setupState.process.emit("close", 0);
 
-		expect(setupState.onClaimComplete).not.toHaveBeenCalled();
-		expect(setupState.onFailure).toHaveBeenCalledWith(
-			"completed without claim evidence",
-		);
+		expect(setupState.completed).not.toHaveBeenCalled();
+		expect(setupState.failed).toHaveBeenCalledWith({
+			attemptId: 1,
+			message: "completed without claim evidence",
+			workerFailed: true,
+		});
 	});
 
 	it("reports process failure once and cancels child with SIGTERM", () => {
@@ -137,15 +143,17 @@ describe("startClaimWorker", () => {
 		setupState.process.emit("close", 1);
 		setupState.process.emit("error", new Error("worker failed"));
 
-		expect(setupState.onFailure).not.toHaveBeenCalled();
+		expect(setupState.failed).not.toHaveBeenCalled();
 
 		const retry = setup();
 		startClaimWorker(retry.request, { spawnWorker: retry.spawnWorker });
 		retry.process.emit("error", new Error("worker failed"));
 		retry.process.emit("close", 1);
-		expect(retry.onFailure).toHaveBeenCalledOnce();
-		expect(retry.onFailure).toHaveBeenCalledWith(
-			expect.stringContaining("worker"),
-		);
+		expect(retry.failed).toHaveBeenCalledOnce();
+		expect(retry.failed).toHaveBeenCalledWith({
+			attemptId: 1,
+			message: expect.stringContaining("worker"),
+			workerFailed: true,
+		});
 	});
 });

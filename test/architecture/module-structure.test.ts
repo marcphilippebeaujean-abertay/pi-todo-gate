@@ -1,12 +1,15 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	CANONICAL_FACETS,
 	checkModuleStructure,
 	SCOPED_DOMAINS,
 } from "../../scripts/check-module-structure.ts";
+
+const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function validFixture(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "module-structure-"));
@@ -22,6 +25,16 @@ async function validFixture(): Promise<string> {
 }
 
 describe("module structure checker", () => {
+	it("protects worker and publisher modules from consumer imports", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		expect(config).toContain("no-herdr-worker-to-consumer");
+		expect(config).toContain(
+			"^src/herdr/(commands|claim-worker-result|tab-validation|event-publishers)/",
+		);
+	});
 	it("accepts all canonical files, including empty facets", async () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
 	});

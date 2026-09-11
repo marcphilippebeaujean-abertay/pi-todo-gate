@@ -3,6 +3,8 @@ import { withWorkerMarker } from "../session.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
 import { appendBounded, parseClaimResult } from "./claim-worker-result.ts";
 import {
+	CLAIM_COMPLETED_EVENT,
+	CLAIM_FAILED_EVENT,
 	CLOSE_EVENT,
 	DATA_EVENT,
 	ERROR_EVENT,
@@ -63,6 +65,46 @@ interface WorkerState {
 	stderr: string;
 }
 
+function emitClaimFailure(request: ClaimWorkerRequest, message: string): void {
+	request.events.emit(CLAIM_FAILED_EVENT, {
+		attemptId: request.attemptId,
+		message,
+		workerFailed: true,
+	});
+}
+
+function handleWorkerClose(
+	request: ClaimWorkerRequest,
+	state: WorkerState,
+	...args: unknown[]
+): void {
+	const isFinished = state.settled || state.cancelled;
+	if (isFinished) return;
+	const code = args[0];
+	state.settled = true;
+	const didSucceed = code === 0;
+	if (didSucceed) {
+		const result = parseClaimResult(state.stdout);
+		const hasNoClaimResult = result === undefined;
+		if (hasNoClaimResult) {
+			emitClaimFailure(request, MISSING_CLAIM_EVIDENCE);
+			return;
+		}
+		request.events.emit(CLAIM_COMPLETED_EVENT, {
+			attemptId: request.attemptId,
+			result,
+		});
+		return;
+	}
+	const detail = state.stderr.trim();
+	const hasDetail = detail !== "";
+	const detailSuffix = hasDetail ? `: ${detail}` : "";
+	emitClaimFailure(
+		request,
+		`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detailSuffix}`,
+	);
+}
+
 function registerWorkerLifecycle(
 	child: WorkerProcess,
 	request: ClaimWorkerRequest,
@@ -74,43 +116,19 @@ function registerWorkerLifecycle(
 	child.stderr.on(DATA_EVENT, (chunk) => {
 		state.stderr = appendBounded(state.stderr, chunk);
 	});
-
 	const fail = (message: string): void => {
 		const isFinished = state.settled || state.cancelled;
 		if (isFinished) return;
 		state.settled = true;
-		request.onFailure(message);
+		emitClaimFailure(request, message);
 	};
-
 	child.on(ERROR_EVENT, (...args) => {
 		const error = args[0];
 		const detail =
 			error instanceof Error ? error.message : String(error ?? UNKNOWN_ERROR);
 		fail(`Herdr claim worker failed: ${detail}`);
 	});
-	child.on(CLOSE_EVENT, (...args) => {
-		const isFinished = state.settled || state.cancelled;
-		if (isFinished) return;
-		const code = args[0];
-		state.settled = true;
-		const didSucceed = code === 0;
-		if (didSucceed) {
-			const result = parseClaimResult(state.stdout);
-			const hasNoClaimResult = result === undefined;
-			if (hasNoClaimResult) {
-				request.onFailure(MISSING_CLAIM_EVIDENCE);
-				return;
-			}
-			request.onClaimComplete(result);
-			return;
-		}
-		const detail = state.stderr.trim();
-		const hasDetail = detail !== "";
-		const detailSuffix = hasDetail ? `: ${detail}` : "";
-		request.onFailure(
-			`Herdr claim worker exited with code ${String(code ?? UNKNOWN_ERROR)}${detailSuffix}`,
-		);
-	});
+	child.on(CLOSE_EVENT, handleWorkerClose.bind(null, request, state));
 }
 
 export function startClaimWorker(
