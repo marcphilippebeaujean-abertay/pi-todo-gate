@@ -23,7 +23,12 @@ function setup(overrides: Record<string, unknown> = {}) {
 				theme: { fg: (_color: string, text: string) => text },
 			},
 		},
-		state: { prUrl: PR_URL, taskRef: "task-1", taskName: "Implement feature" },
+		state: {
+			prUrl: PR_URL,
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			taskUrl: "https://app.todoist.com/app/task/task-1",
+		},
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
@@ -63,6 +68,29 @@ describe("Todoist merge consumer", () => {
 			expect.any(Function),
 		);
 		expect(payload.taskMarkedAsCompleted).toBe(true);
+	});
+
+	it("clears completed task state and refreshes the task footer", async () => {
+		const setupResult = setup();
+		registerTodoistMergeConsumer(setupResult.runtime);
+
+		await emit(setupResult.runtime);
+
+		expect(setupResult.session.state).toMatchObject({ prUrl: PR_URL });
+		expect(setupResult.session.state.taskRef).toBeUndefined();
+		expect(setupResult.session.state.taskName).toBeUndefined();
+		expect(setupResult.session.state.taskUrl).toBeUndefined();
+		const appendedEntry = (
+			setupResult.runtime.pi.appendEntry as ReturnType<typeof vi.fn>
+		).mock.calls.at(-1)?.[1];
+		expect(appendedEntry).not.toHaveProperty("taskRef");
+		expect(appendedEntry).not.toHaveProperty("taskName");
+		expect(appendedEntry).not.toHaveProperty("taskUrl");
+		expect(setupResult.runtime.footer.update).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				text: expect.stringContaining("Todoist Task: none"),
+			}),
+		);
 	});
 
 	it("leaves the merge event and task unchanged when declined", async () => {

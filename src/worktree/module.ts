@@ -43,7 +43,6 @@ class Worktree implements WorktreeModule {
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
-	private pendingCleanup = false;
 	private operationGeneration = 0;
 
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
@@ -57,7 +56,6 @@ class Worktree implements WorktreeModule {
 		const generation = ++this.operationGeneration;
 		this.context = nextContext;
 		this.baseline = null;
-		this.pendingCleanup = false;
 		const project = await inspectProject(this.exec, nextContext.cwd);
 		const isCurrent = generation === this.operationGeneration;
 		if (!isCurrent) return;
@@ -87,20 +85,17 @@ class Worktree implements WorktreeModule {
 		this.operationGeneration += 1;
 		this.context = null;
 		this.baseline = null;
-		this.pendingCleanup = false;
 	}
 
 	private onPrMerged(request: MergeRequest): void {
 		if (this.context === null) return;
 		if (this.baseline === null) return;
-		const cleanupPending = this.pendingCleanup;
-		if (cleanupPending) return;
 		const worktree = this.baseline;
 		const generation = this.operationGeneration;
 		request.addAction(
 			createCleanupAction(
 				worktree,
-				this.scheduleCleanup.bind(this, worktree, generation),
+				this.executeCleanup.bind(this, worktree, generation),
 			),
 		);
 	}
@@ -140,22 +135,6 @@ class Worktree implements WorktreeModule {
 				this.executeCleanup.bind(this, worktree, generation),
 			),
 		);
-	}
-
-	private scheduleCleanup(
-		worktree: WorktreeBaseline,
-		generation: number,
-	): Promise<ExitActionResult> {
-		const isCurrent = isCurrentWorktree(
-			this.baseline,
-			worktree,
-			generation,
-			this.operationGeneration,
-		);
-		if (!isCurrent) return Promise.resolve(C.exit.failed);
-		this.pendingCleanup = true;
-		notifyWorktree(this.context, C.worktree.cleanupScheduled);
-		return Promise.resolve(C.exit.deferred);
 	}
 
 	private async executeCleanup(
@@ -211,7 +190,6 @@ class Worktree implements WorktreeModule {
 		const cleanupSucceeded = result === C.exit.completed;
 		if (cleanupSucceeded) {
 			this.baseline = null;
-			this.pendingCleanup = false;
 			notifyWorktree(this.context, successMessage);
 		}
 		return result;

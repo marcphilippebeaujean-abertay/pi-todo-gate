@@ -99,12 +99,14 @@ describe("worktree session baseline", () => {
 });
 
 describe("worktree event actions", () => {
-	it("defers cleanup after a merge", async () => {
+	it("executes cleanup immediately after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
+		const changeDirectory = vi.fn();
 		const module = createWorktreeModule(events, {
 			exec: projectResult("abc", "abc", "", "", commands),
+			changeDirectory,
 		});
 		await module.sessionStart(context());
 		let mergeAction: ExitAction | undefined;
@@ -121,40 +123,98 @@ describe("worktree event actions", () => {
 
 		expect(mergeAction?.id).toBe("remove-worktree");
 		expect(payload.taskMarkedAsCompleted).toBe(false);
-		await expect(mergeAction?.execute()).resolves.toBe("deferred");
-		expect(
-			commands.filter(
-				({ args }) => args[0] === "worktree" && args[1] === "remove",
-			),
-		).toEqual([]);
+		await expect(mergeAction?.execute()).resolves.toBe("completed");
+		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(commands.at(-2)).toEqual({
+			command: "git",
+			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			cwd: "/repo",
+		});
+		expect(commands.at(-1)).toEqual({
+			command: "git",
+			args: ["branch", "-D", "feature"],
+			cwd: "/repo",
+		});
 	});
 
-	it("does not add cleanup action for non-quit shutdown", async () => {
+	it("keeps quit cleanup available when merged cleanup is unselected", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
+		const changeDirectory = vi.fn();
 		const module = createWorktreeModule(events, {
-			exec: projectResult("abc", "abc", "", "", commands),
+			exec: projectResult("abc", "def", "", "", commands),
+			changeDirectory,
 		});
 		await module.sessionStart(context());
-		let actions = 0;
+		let mergeAction: ExitAction | undefined;
+		let quitAction: ExitAction | undefined;
+		events.on(
+			"prMerged",
+			(request) => {
+				mergeAction = request.actions[0];
+			},
+			"present",
+		);
 		events.on(
 			"sessionWillClose",
 			(request) => {
-				actions += request.actions.length;
+				quitAction = request.actions[0];
 			},
 			"present",
 		);
 
-		await events.emit("sessionWillClose", { reason: "new" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+		await events.emit("sessionWillClose", { reason: "quit" });
 
-		expect(actions).toBe(0);
-		expect(
-			commands.filter(
-				({ args }) => args[0] === "worktree" && args[1] === "remove",
-			),
-		).toEqual([]);
+		expect(mergeAction?.id).toBe("remove-worktree");
+		expect(quitAction?.id).toBe("remove-worktree");
+		await expect(quitAction?.execute()).resolves.toBe("completed");
+		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(commands.at(-2)).toEqual({
+			command: "git",
+			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			cwd: "/repo",
+		});
+		expect(commands.at(-1)).toEqual({
+			command: "git",
+			args: ["branch", "-D", "feature"],
+			cwd: "/repo",
+		});
 	});
+
+	it.each(["new", "resume", "fork", "reload"] as const)(
+		"does not add cleanup action for %s shutdown",
+		async (reason) => {
+			const events = createSharedEvents();
+			const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+				[];
+			const module = createWorktreeModule(events, {
+				exec: projectResult("abc", "abc", "", "", commands),
+			});
+			await module.sessionStart(context());
+			let actions = 0;
+			events.on(
+				"sessionWillClose",
+				(request) => {
+					actions += request.actions.length;
+				},
+				"present",
+			);
+
+			await events.emit("sessionWillClose", { reason });
+
+			expect(actions).toBe(0);
+			expect(
+				commands.filter(
+					({ args }) => args[0] === "worktree" && args[1] === "remove",
+				),
+			).toEqual([]);
+		},
+	);
 
 	it("adds cleanup action for changed worktree at quit", async () => {
 		const events = createSharedEvents();
