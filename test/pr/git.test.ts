@@ -2,6 +2,8 @@ const EMPTY_STRING = "";
 const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const FILTERS_OPEN_PRS_TO_THE_REMOTE_ORIGIN =
 	"filters open PRs to the remote origin";
+const REJECTS_OPEN_PR_SCAN_WITHOUT_REMOTE_ORIGIN =
+	"rejects open PR scan without remote origin";
 const OTHER_REPOSITORY_PR = "https://github.com/other/repo/pull/42";
 const ERROR_VALUE = "error";
 const SPACE = " ";
@@ -91,7 +93,7 @@ const URL_HTTPS_GITHUB_COM_OTHER_REPO_PULL =
 const REJECTS_AMBIGUOUS_MERGE_TARGETS = "rejects ambiguous merge targets";
 const GIT_MERGE_FEATURE_AUTH_OTHER = "git merge feature/auth other";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	findOpenPr,
 	findPrState,
@@ -157,6 +159,21 @@ describe("inspectWorktree", () => {
 });
 
 describe("findOpenPr", () => {
+	it(REJECTS_OPEN_PR_SCAN_WITHOUT_REMOTE_ORIGIN, async () => {
+		const exec = vi.fn(async () =>
+			ok(
+				JSON.stringify([
+					{ url: HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, state: OPEN },
+				]),
+			),
+		);
+		await expect(findOpenPr(exec, REPO_2, FEATURE_2, null)).resolves.toEqual({
+			url: null,
+			state: UNKNOWN_VALUE,
+		});
+		expect(exec).not.toHaveBeenCalled();
+	});
+
 	it(FILTERS_OPEN_PRS_TO_THE_REMOTE_ORIGIN, async () => {
 		const exec = fakeExec({
 			"gh pr list --head feature --state open --json url,state --limit 1": ok(
@@ -173,7 +190,9 @@ describe("findOpenPr", () => {
 				URL_HTTPS_GITHUB_COM_OWNER_REPO_PULL,
 			),
 		});
-		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
+		await expect(
+			findOpenPr(exec, REPO_2, FEATURE_2, REMOTE_ORIGIN),
+		).resolves.toEqual({
 			url: HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
 			state: OPEN,
 		});
@@ -184,7 +203,9 @@ describe("findOpenPr", () => {
 			"gh pr list --head feature --state open --json url,state --limit 1":
 				ok(EMPTY_LIST_JSON),
 		});
-		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
+		await expect(
+			findOpenPr(exec, REPO_2, FEATURE_2, REMOTE_ORIGIN),
+		).resolves.toEqual({
 			url: null,
 			state: OPEN,
 		});
@@ -195,14 +216,18 @@ describe("findOpenPr", () => {
 			"gh pr list --head feature --state open --json url,state --limit 1":
 				ok(MALFORMED_PR_ROW),
 		});
-		await expect(findOpenPr(exec, REPO_2, FEATURE_2)).resolves.toEqual({
+		await expect(
+			findOpenPr(exec, REPO_2, FEATURE_2, REMOTE_ORIGIN),
+		).resolves.toEqual({
 			url: null,
 			state: UNKNOWN_VALUE,
 		});
 	});
 
 	it(RETURNS_UNKNOWN_RATHER_THAN_THROWING_ON_UNAVAILABLE, async () => {
-		await expect(findOpenPr(fakeExec({}), REPO_2, FEATURE_2)).resolves.toEqual({
+		await expect(
+			findOpenPr(fakeExec({}), REPO_2, FEATURE_2, REMOTE_ORIGIN),
+		).resolves.toEqual({
 			url: null,
 			state: UNKNOWN_VALUE,
 		});

@@ -32,7 +32,7 @@ function repositoryKeyFromOrigin(remoteOrigin: string): string | null {
 	}
 }
 
-function normalizedGithubPrUrl(candidate: string): string | null {
+export function normalizeGithubPrUrl(candidate: string): string | null {
 	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
 	try {
 		const url = new URL(trimmed);
@@ -64,38 +64,32 @@ function belongsToOrigin(url: string, remoteOrigin: string): boolean {
 
 export function githubPrUrls(
 	text: string,
-	remoteOrigin?: string | null,
+	remoteOrigin: string | null | undefined,
 ): string[] {
+	const hasRemoteOrigin =
+		typeof remoteOrigin === "string" && remoteOrigin.trim() !== "";
+	if (!hasRemoteOrigin) return [];
 	const urls: string[] = [];
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
-		const normalized = normalizedGithubPrUrl(candidate);
+		const normalized = normalizeGithubPrUrl(candidate);
 		const hasNormalized = normalized !== null;
 		if (!hasNormalized) continue;
-		switch (remoteOrigin) {
-			case undefined:
-				urls.push(normalized);
-				continue;
-			case null:
-				continue;
-			default: {
-				const hasMatchingOrigin = belongsToOrigin(normalized, remoteOrigin);
-				if (hasMatchingOrigin) urls.push(normalized);
-			}
-		}
+		const hasMatchingOrigin = belongsToOrigin(normalized, remoteOrigin);
+		if (hasMatchingOrigin) urls.push(normalized);
 	}
 	return urls;
 }
 
 export function githubPrUrl(
 	text: string,
-	remoteOrigin?: string | null,
+	remoteOrigin: string | null | undefined,
 ): string | null {
 	return githubPrUrls(text, remoteOrigin)[0] ?? null;
 }
 
 export function firstGithubPrUrl(
 	texts: readonly string[],
-	remoteOrigin?: string | null,
+	remoteOrigin: string | null | undefined,
 ): string | null {
 	for (const text of texts) {
 		const url = githubPrUrl(text, remoteOrigin);
@@ -108,7 +102,7 @@ export function firstGithubPrUrl(
 export function firstUnmergedGithubPrUrl(
 	texts: readonly string[],
 	mergedPrs: readonly string[],
-	remoteOrigin?: string | null,
+	remoteOrigin: string | null | undefined,
 ): string | null {
 	const merged = new Set(mergedPrs);
 	for (const text of texts) {

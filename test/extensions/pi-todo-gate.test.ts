@@ -46,6 +46,8 @@ const SETS_REMOTE_ORIGIN_IN_SESSION_STATE =
 	"sets the project remote origin in session state on startup";
 const DISCOVERY_RETRIES_ORIGIN_BEFORE_SCANNING_PR_LINKS =
 	"retries origin before scanning PR links";
+const REJECTS_EXPLICIT_PR_PIN_WITHOUT_REMOTE_ORIGIN =
+	"rejects explicit PR pin without remote origin";
 const MESSAGE_END = "message_end";
 const HTTPS_GITHUB_COM_O_R_PULL_3 = "https://github.com/owner/repo/pull/3";
 const NEVER_SENDS_SYNCHRONIZATION_MESSAGES_TO_THE_AGENT =
@@ -767,6 +769,20 @@ describe("hidden lifecycle context", () => {
 		]);
 	});
 
+	it(REJECTS_EXPLICIT_PR_PIN_WITHOUT_REMOTE_ORIGIN, async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		await start(h, { "/configured": MERGE_TD });
+		await expect(
+			h.tools[0]?.execute(
+				CALL,
+				{ action: SET_PR, url: HTTPS_GITHUB_COM_O_R_PULL_3 },
+				undefined,
+				undefined,
+				h.ctx,
+			),
+		).rejects.toThrow("set_pr requires a valid GitHub pull request URL");
+	});
+
 	it(REJECTS_FAKE_PR_LINKS_AND_REMEMBERS_FAILED_LOOKUPS, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const exec = vi.fn(async (_command: string) => ({
@@ -862,7 +878,15 @@ describe("pi_todo_gate_state", () => {
 				},
 			},
 		]);
-		await start(h, { "/configured": MERGE_TD });
+		const exec = async (_command: string, args: string[]) =>
+			args.join(" ") === "remote get-url origin"
+				? {
+						stdout: `${REMOTE_ORIGIN}\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					}
+				: { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+		await start(h, { "/configured": MERGE_TD }, { exec });
 		const result = (await h.tools[0].execute(
 			CALL,
 			{ action: SET_PR, url: HTTPS_GITHUB_COM_O_R_PULL_42 },
@@ -872,7 +896,10 @@ describe("pi_todo_gate_state", () => {
 		)) as StateToolResult;
 		expect(h.appended.at(-1)).toEqual({
 			type: PI_TODO_GATE_STATE_ENTRY,
-			data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+			data: {
+				remoteOrigin: REMOTE_ORIGIN,
+				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+			},
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
 		expect(h.statusCalls.slice(-2)).toEqual([

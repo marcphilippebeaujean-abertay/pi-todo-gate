@@ -39,7 +39,7 @@ function setPrAction(
 	session: ActiveSession,
 	params: StateToolParams,
 ): AgentToolResult<undefined> {
-	const url = githubPrUrl(params.url ?? "");
+	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
 	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
 	replaceSessionState(

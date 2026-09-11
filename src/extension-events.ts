@@ -247,7 +247,7 @@ export async function findOpenPrSafe(
 	ctx: ExtensionContext,
 	branch: string,
 	exec: Exec,
-	remoteOrigin?: string | null,
+	remoteOrigin: string | null,
 ): Promise<string | null | "unknown"> {
 	const result = await findOpenPr(exec, ctx.cwd, branch, remoteOrigin);
 	const isUnknown = result.state.toLowerCase() === C.value.unknown;

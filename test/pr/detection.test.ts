@@ -25,6 +25,8 @@ const HTTPS_GITHUB_COM_O_R_PULL_2 = "https://github.com/o/r/pull/2";
 const REMOTE_ORIGIN = "git@github.com:owner/repo.git";
 const FILTERS_PR_LINKS_TO_THE_REMOTE_ORIGIN =
 	"filters PR links to the remote origin";
+const REJECTS_PR_LINKS_WITHOUT_REMOTE_ORIGIN =
+	"rejects PR links without remote origin";
 const FILTERS_INVALID_AND_NON_GITHUB_PR_LINKS =
 	"filters invalid and non-GitHub PR links";
 
@@ -36,22 +38,34 @@ import {
 } from "../../src/pr/detection.ts";
 
 describe("githubPrUrl", () => {
+	it(REJECTS_PR_LINKS_WITHOUT_REMOTE_ORIGIN, () => {
+		expect(
+			githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, undefined),
+		).toBeNull();
+	});
+
 	it(ACCEPTS_A_VALID_GITHUB_PULL_REQUEST_URL, () => {
-		expect(githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42)).toBe(
-			HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
-		);
+		expect(
+			githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, REMOTE_ORIGIN),
+		).toBe(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42);
 	});
 
 	it(REMOVES_QUERY_HASH_AND_TRAILING_PUNCTUATION, () => {
-		expect(githubPrUrl(SEE_HTTPS_GITHUB_COM_OWNER_REPO_PULL)).toBe(
-			HTTPS_GITHUB_COM_OWNER_REPO_PULL_42,
-		);
+		expect(
+			githubPrUrl(SEE_HTTPS_GITHUB_COM_OWNER_REPO_PULL, REMOTE_ORIGIN),
+		).toBe(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42);
 	});
 
 	it(REJECTS_INVALID_PATHS_AND_NON_GITHUB_URLS, () => {
-		expect(githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_ISSUES_42)).toBeNull();
-		expect(githubPrUrl(HTTPS_GITLAB_COM_OWNER_REPO_PULL_42)).toBeNull();
-		expect(githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_0)).toBeNull();
+		expect(
+			githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_ISSUES_42, REMOTE_ORIGIN),
+		).toBeNull();
+		expect(
+			githubPrUrl(HTTPS_GITLAB_COM_OWNER_REPO_PULL_42, REMOTE_ORIGIN),
+		).toBeNull();
+		expect(
+			githubPrUrl(HTTPS_GITHUB_COM_OWNER_REPO_PULL_0, REMOTE_ORIGIN),
+		).toBeNull();
 	});
 });
 
@@ -72,6 +86,7 @@ describe("githubPrUrls", () => {
 					HTTPS_GITHUB_COM_OWNER_REPO_ISSUES_42,
 					HTTPS_GITLAB_COM_OWNER_REPO_PULL_42,
 				].join(" "),
+				REMOTE_ORIGIN,
 			),
 		).toEqual([HTTPS_GITHUB_COM_OWNER_REPO_PULL_42]);
 	});
@@ -80,17 +95,20 @@ describe("githubPrUrls", () => {
 describe("firstGithubPrUrl", () => {
 	it(SCANS_OLDEST_TO_NEWEST_AND_KEEPS_THE, () => {
 		expect(
-			firstGithubPrUrl([
-				NO_PULL_REQUEST_HERE,
-				HTTPS_GITHUB_COM_OLD_REPO_PULL_7,
-				HTTPS_GITHUB_COM_NEW_REPO_PULL_8,
-			]),
+			firstGithubPrUrl(
+				[
+					NO_PULL_REQUEST_HERE,
+					HTTPS_GITHUB_COM_OLD_REPO_PULL_7,
+					HTTPS_GITHUB_COM_NEW_REPO_PULL_8,
+				],
+				"https://github.com/old/repo.git",
+			),
 		).toBe(HTTPS_GITHUB_COM_OLD_REPO_PULL_7);
 	});
 
 	it(ACCEPTS_A_PLACEHOLDER_SHAPED_PR_URL, () => {
-		expect(firstGithubPrUrl([HTTPS_GITHUB_COM_O_R_PULL_2])).toBe(
-			HTTPS_GITHUB_COM_O_R_PULL_2,
-		);
+		expect(
+			firstGithubPrUrl([HTTPS_GITHUB_COM_O_R_PULL_2], "git@github.com:o/r.git"),
+		).toBe(HTTPS_GITHUB_COM_O_R_PULL_2);
 	});
 });

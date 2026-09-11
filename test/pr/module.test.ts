@@ -220,6 +220,7 @@ describe("firstUnmergedGithubPrUrl", () => {
 					"https://github.com/owner/repo/pull/42 https://github.com/owner/repo/pull/43",
 				],
 				["https://github.com/owner/repo/pull/42"],
+				"https://github.com/owner/repo.git",
 			),
 		).toBe("https://github.com/owner/repo/pull/43");
 	});
@@ -234,6 +235,7 @@ describe("firstUnmergedGithubPrUrl", () => {
 					"https://github.com/owner/repo/pull/42",
 					"https://github.com/owner/repo/pull/43",
 				],
+				"https://github.com/owner/repo.git",
 			),
 		).toBeNull();
 	});
