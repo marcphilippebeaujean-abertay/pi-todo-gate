@@ -281,12 +281,11 @@ describe("worktree event actions", () => {
 		);
 	});
 
-	it("retries branch deletion after worktree removal succeeds", async () => {
+	it("does not retry cleanup after branch deletion fails", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
 		const changeDirectory = vi.fn();
-		let branchAttempts = 0;
 		const baseExec = projectResult("abc", "def", "", "", commands);
 		const exec = async (
 			command: string,
@@ -296,28 +295,37 @@ describe("worktree event actions", () => {
 			const result = await baseExec(command, args, options);
 			const isBranchDelete =
 				command === "git" && args[0] === "branch" && args[1] === "-D";
-			if (isBranchDelete && branchAttempts++ === 0)
+			if (isBranchDelete)
 				return { stdout: "", stderr: "branch locked", code: 1 };
 			return result;
 		};
 		const module = createWorktreeModule(events, { exec, changeDirectory });
 		await module.sessionStart(context());
-		let firstAction: ExitAction | undefined;
-		let retryAction: ExitAction | undefined;
+		let mergeAction: ExitAction | undefined;
+		let quitActions = 0;
+		events.on(
+			"prMerged",
+			(request) => {
+				mergeAction = request.actions[0];
+			},
+			"present",
+		);
 		events.on(
 			"sessionWillClose",
 			(request) => {
-				if (firstAction === undefined) firstAction = request.actions[0];
-				else retryAction = request.actions[0];
+				quitActions = request.actions.length;
 			},
 			"present",
 		);
 
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+		await expect(mergeAction?.execute()).resolves.toBe("failed");
 		await events.emit("sessionWillClose", { reason: "quit" });
-		await expect(firstAction?.execute()).resolves.toBe("failed");
-		await events.emit("sessionWillClose", { reason: "quit" });
-		await expect(retryAction?.execute()).resolves.toBe("completed");
 
+		expect(quitActions).toBe(0);
 		expect(
 			commands.filter(
 				({ args }) => args[0] === "worktree" && args[1] === "remove",
@@ -325,7 +333,44 @@ describe("worktree event actions", () => {
 		).toHaveLength(1);
 		expect(
 			commands.filter(({ args }) => args[0] === "branch" && args[1] === "-D"),
-		).toHaveLength(2);
+		).toHaveLength(1);
+	});
+
+	it("does not offer a second cleanup after automatic cleanup partially fails", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const changeDirectory = vi.fn();
+		const baseExec = projectResult("abc", "abc", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isBranchDelete =
+				command === "git" && args[0] === "branch" && args[1] === "-D";
+			if (isBranchDelete)
+				return { stdout: "", stderr: "branch locked", code: 1 };
+			return result;
+		};
+		const module = createWorktreeModule(events, { exec, changeDirectory });
+		await module.sessionStart(context());
+		let actions: readonly ExitAction[] | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				actions = request.actions;
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+
+		expect(actions).toEqual([]);
+		expect(
+			commands.filter(({ args }) => args[0] === "branch" && args[1] === "-D"),
+		).toHaveLength(1);
 	});
 
 	it("notifies when Git worktree state is unavailable", async () => {

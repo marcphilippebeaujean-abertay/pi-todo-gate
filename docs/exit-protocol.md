@@ -13,4 +13,4 @@ Pi Todo Gate handles PR merges and session close through one shared exit protoco
 - Unchanged worktrees auto-delete on quit and notify `Worktree deleted because no changes were made`.
 - Active Todoist tasks still prompt when unchanged worktree auto-deletion occurs.
 - `/new`, `/resume`, `/fork`, and `/reload` do not complete tasks or delete worktrees.
-- Failed actions retain state for a later attempt.
+- If worktree removal succeeds but branch deletion fails, the failure is reported without a later retry.

@@ -31,35 +31,6 @@ function cleanupFailure(
 	return C.exit.failed;
 }
 
-export async function deleteLocalBranch(
-	worktree: WorktreeBaseline,
-	options: CleanupOptions,
-): Promise<ExitActionResult> {
-	const isCurrent = options.isCurrent();
-	if (!isCurrent) return C.exit.failed;
-	try {
-		options.changeDirectory(worktree.mainRoot);
-	} catch (error) {
-		return cleanupFailure(options, errorDetail(error));
-	}
-	const branchResult = await options.exec(
-		C.worktree.git,
-		[...C.worktree.branchArgs, worktree.branch],
-		{ cwd: worktree.mainRoot },
-	);
-	const isCurrentAfterBranch = options.isCurrent();
-	if (!isCurrentAfterBranch) return C.exit.failed;
-	const branchFailed = branchResult.code !== 0;
-	if (branchFailed) {
-		options.notify(
-			`${C.worktree.removedBranchFailed}${failureMessage(branchResult, C.worktree.branchFailed)}`,
-			C.value.warning,
-		);
-		return C.exit.failed;
-	}
-	return C.exit.completed;
-}
-
 export async function cleanupWorktree(
 	worktree: WorktreeBaseline,
 	force: boolean,
@@ -89,5 +60,20 @@ export async function cleanupWorktree(
 		);
 	const worktreeRemoved = options.worktreeRemoved;
 	if (worktreeRemoved !== undefined) worktreeRemoved.value = true;
-	return deleteLocalBranch(worktree, options);
+	const branchResult = await options.exec(
+		C.worktree.git,
+		[...C.worktree.branchArgs, worktree.branch],
+		{ cwd: worktree.mainRoot },
+	);
+	const isCurrentAfterBranch = options.isCurrent();
+	if (!isCurrentAfterBranch) return C.exit.failed;
+	const branchFailed = branchResult.code !== 0;
+	if (branchFailed) {
+		options.notify(
+			`${C.worktree.removedBranchFailed}${failureMessage(branchResult, C.worktree.branchFailed)}`,
+			C.value.warning,
+		);
+		return C.exit.failed;
+	}
+	return C.exit.completed;
 }
