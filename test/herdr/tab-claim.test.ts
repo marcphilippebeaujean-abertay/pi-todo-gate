@@ -8,35 +8,22 @@ import {
 	type StartBackgroundWorker,
 } from "../../src/herdr/tab-claim.ts";
 
-const CUSTOM = "custom";
-const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
-const RAN = "ran";
 const WORKER_FAILED = "worker failed";
-const RETRIES_TAB_NAMING_AFTER_A_WORKER_FAILURE =
-	"retries tab naming after a worker failure in the same session";
-const PERSISTS_SUCCESSFUL_TAB_NAMING_IN_SESSION_STATE =
-	"persists successful tab naming in session state";
-const SKIPS_TAB_NAMING_WHEN_SESSION_STATE_RECORDS_SUCCESS =
-	"skips tab naming when session state records success";
+const BLOCKS_TAB_NAMING_RETRY_FOR_DESCRIPTIVE_TAB =
+	"blocks tab naming retry for a descriptive tab after worker failure";
 
 interface FakePi {
 	handlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
-	entries: unknown[];
 	on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
-	appendEntry(type: string, data: unknown): void;
 }
 
 function fakePi(): FakePi {
 	return {
 		handlers: new Map(),
-		entries: [],
 		on(event, handler) {
 			const handlers = this.handlers.get(event) ?? [];
 			handlers.push(handler);
 			this.handlers.set(event, handlers);
-		},
-		appendEntry(type, data) {
-			this.entries.push({ type, data });
 		},
 	};
 }
@@ -129,7 +116,7 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it("does not accept matching evidence for unchanged numeric label", async () => {
+	it("blocks tab naming retry after invalid claim evidence", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
@@ -152,19 +139,19 @@ describe("background Herdr tab claim", () => {
 				context(),
 			);
 
-			expect(backgroundWorker.start).toHaveBeenCalledTimes(2);
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 		} finally {
 			restore();
 		}
 	});
 
-	it(RETRIES_TAB_NAMING_AFTER_A_WORKER_FAILURE, async () => {
+	it("retries tab naming after worker failure for a numeric tab", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
+				commandRunner: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -184,7 +171,33 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it(PERSISTS_SUCCESSFUL_TAB_NAMING_IN_SESSION_STATE, async () => {
+	it(BLOCKS_TAB_NAMING_RETRY_FOR_DESCRIPTIVE_TAB, async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner(),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "fix dialog editor" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.onFailure(WORKER_FAILED);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "retry dialog editor" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
+	it("processes successful tab naming once per session", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
@@ -202,48 +215,18 @@ describe("background Herdr tab claim", () => {
 				tabId: "w1:t1",
 				label: "dialog-editor",
 			});
-
-			expect(pi.entries).toContainEqual({
-				type: HERDR_STATE_TYPE,
-				data: { [RAN]: true },
-			});
-		} finally {
-			restore();
-		}
-	});
-
-	it(SKIPS_TAB_NAMING_WHEN_SESSION_STATE_RECORDS_SUCCESS, async () => {
-		const restore = herdrEnvironment();
-		try {
-			const pi = fakePi();
-			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
-				startBackgroundWorker: backgroundWorker.start,
-			});
-			const branch = [
-				{
-					type: CUSTOM,
-					customType: HERDR_STATE_TYPE,
-					data: { [RAN]: true },
-				},
-			];
-			await pi.handlers.get("session_start")?.[0]?.(
-				{},
-				context("/repo", branch),
-			);
 			await pi.handlers.get("before_agent_start")?.[0]?.(
-				{ prompt: "fix dialog editor" },
+				{ prompt: "another task" },
 				context(),
 			);
 
-			expect(backgroundWorker.start).not.toHaveBeenCalled();
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 		} finally {
 			restore();
 		}
 	});
 
-	it("allows tab naming again when a new session starts", async () => {
+	it("keeps gate processed across session start until shutdown", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
@@ -258,6 +241,34 @@ describe("background Herdr tab claim", () => {
 				context(),
 			);
 			backgroundWorker.requests[0]?.onFailure(WORKER_FAILED);
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "second task" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
+	it("allows tab naming again after session shutdown", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner(),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "first task" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.onFailure(WORKER_FAILED);
+			await pi.handlers.get("session_shutdown")?.[0]?.({}, context());
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "second task" },

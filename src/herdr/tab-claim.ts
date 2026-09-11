@@ -13,8 +13,10 @@ import {
 	tabLabel,
 } from "./environment.ts";
 import { hideHerdrFooter, showHerdrFooter } from "./footer.ts";
-import { hasHerdrClaimRun } from "./session-state.ts";
-import { hasValidatedTabClaim } from "./tab-validation.ts";
+import {
+	hasValidatedTabClaim,
+	tabNameIsParseableAsInt as isTabNameParseableAsInt,
+} from "./tab-validation.ts";
 import type {
 	CommandRunner,
 	HerdrTabOptions,
@@ -27,8 +29,6 @@ const SESSION_SHUTDOWN_EVENT = "session_shutdown";
 const HERDR = "Herdr";
 const TAB_CLAIM_FAILED = "completed without claim evidence";
 const TAB_CLAIM_START_FAILED = "failed to start";
-const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
-const RAN = "ran";
 const TAB_CLAIM_INSTRUCTIONS = `Rename current Herdr tab for task in parent prompt.
 Use bash. First run \`herdr pane current\`, then \`herdr tab get <tab-id>\`.
 If current label clearly describes task, leave tab unchanged. Otherwise inspect current tab panes and
@@ -52,7 +52,6 @@ interface TabClaimAttempt {
 }
 
 class HerdrTabClaim {
-	private readonly pi: ExtensionAPI;
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
@@ -63,12 +62,11 @@ class HerdrTabClaim {
 	private sessionGeneration = 0;
 	private herdrAvailable = false;
 	private hasClaim = false;
-	private hasRun = false;
+	private herdrGateClaimProcessed = false;
 	private initialLabel: string | undefined;
 	private paneId: string | undefined;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions) {
-		this.pi = pi;
 		this.commandRunner =
 			options.commandRunner ?? boundCommandRunner(this.sessionCwdReference);
 		this.sessionCwd = options.cwd ?? process.cwd();
@@ -92,7 +90,6 @@ class HerdrTabClaim {
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
 		this.hasClaim = false;
-		this.hasRun = hasHerdrClaimRun(ctx.sessionManager.getBranch());
 		this.initialLabel = undefined;
 		this.paneId = undefined;
 		hideHerdrFooter(this.emitFooter);
@@ -114,16 +111,17 @@ class HerdrTabClaim {
 		const isUnavailable = !this.herdrAvailable;
 		const isClaimed = this.hasClaim;
 		const hasWorker = this.worker !== undefined;
-		const hasAlreadyRun = this.hasRun;
+		const hasProcessedGate = this.herdrGateClaimProcessed;
 		const isUnavailableOrClaimed = isUnavailable || isClaimed;
-		const isAlreadyRunOrWorking = hasAlreadyRun || hasWorker;
-		const shouldSkip = isUnavailableOrClaimed || isAlreadyRunOrWorking;
+		const isProcessedOrWorking = hasProcessedGate || hasWorker;
+		const shouldSkip = isUnavailableOrClaimed || isProcessedOrWorking;
 		if (shouldSkip) return;
 		const attempt = structuredClone<TabClaimAttempt>({
 			generation: this.sessionGeneration,
 			initialLabel: this.initialLabel,
 			paneId: this.paneId,
 		});
+		this.herdrGateClaimProcessed = true;
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
@@ -138,6 +136,7 @@ class HerdrTabClaim {
 				ctx,
 				attempt.generation,
 				`${TAB_CLAIM_START_FAILED}${detail}`,
+				false,
 			);
 		}
 	}
@@ -159,10 +158,9 @@ class HerdrTabClaim {
 		);
 		if (isValidated) {
 			this.hasClaim = true;
-			this.hasRun = true;
-			this.pi.appendEntry(HERDR_STATE_TYPE, { [RAN]: true });
 			return;
 		}
+		this.herdrGateClaimProcessed = true;
 		handleClaimError(ctx, { jobType: HERDR, error: TAB_CLAIM_FAILED });
 	}
 
@@ -170,11 +168,15 @@ class HerdrTabClaim {
 		ctx: ExtensionContext,
 		generation: number,
 		message: string,
+		workerFailed = true,
 	): void {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
+		const tabNameIsParseableAsInt = isTabNameParseableAsInt(this.initialLabel);
+		const shouldTriggerRetry = workerFailed && tabNameIsParseableAsInt;
+		this.herdrGateClaimProcessed = !shouldTriggerRetry;
 		handleClaimError(ctx, { jobType: HERDR, error: message });
 	}
 
@@ -184,7 +186,7 @@ class HerdrTabClaim {
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
 		this.hasClaim = false;
-		this.hasRun = false;
+		this.herdrGateClaimProcessed = false;
 		this.herdrAvailable = false;
 	}
 }
