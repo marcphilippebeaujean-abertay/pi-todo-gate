@@ -9,27 +9,17 @@ import type {
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
 import { cleanupWorktree, currentWorktreeState } from "./commands.ts";
-import {
-	CLEANUP_SUCCESS,
-	COMPLETED,
-	EMPTY,
-	FAILED,
-	NO_CHANGES,
-	QUIT,
-} from "./constants.ts";
+import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import type {
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,
 } from "./data.ts";
-import { hasNoSessionWork, isCurrentWorktree } from "./data.ts";
+import { isCurrentWorktree } from "./data.ts";
 import { createCleanupAction } from "./event-publishers.ts";
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
-type CloseRequest = EventRequest<
-	SharedEventPayloads[typeof C.event.sessionWillClose]
->;
 type MergeRequest = EventRequest<SharedEventPayloads[typeof C.event.prMerged]>;
 
 class Worktree implements WorktreeModule {
@@ -42,7 +32,6 @@ class Worktree implements WorktreeModule {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
 		events.on(C.event.prMerged, this.onPrMerged.bind(this));
-		events.on(C.event.sessionWillClose, this.onSessionWillClose.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -86,43 +75,6 @@ class Worktree implements WorktreeModule {
 		if (this.context === null) return;
 		if (this.baseline === null) return;
 		const worktree = this.baseline;
-		request.addAction(
-			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
-		);
-	}
-
-	private async onSessionWillClose(request: CloseRequest): Promise<void> {
-		const context = this.context;
-		const worktree = this.baseline;
-		const isQuit = request.payload.reason === QUIT;
-		if (!isQuit) return;
-		const hasNoContext = context === null;
-		if (hasNoContext) return;
-		const hasNoWorktree = worktree === null;
-		if (hasNoWorktree) return;
-		const hasNoUi = !context.hasUI;
-		if (hasNoUi) return;
-		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrent = isCurrentWorktree(this.baseline, worktree);
-		if (!isCurrent) return;
-		const hasState = state !== null;
-		if (hasState) {
-			const hasNoWork = hasNoSessionWork(worktree, state);
-			if (!hasNoWork) {
-				request.addAction(
-					createCleanupAction(
-						worktree,
-						this.executeCleanup.bind(this, worktree),
-					),
-				);
-				return;
-			}
-			const result = await this.cleanupNow(worktree, false, NO_CHANGES);
-			const cleanupCompleted = result === COMPLETED;
-			const cleanupConsumedWorktree = this.baseline !== worktree;
-			const cleanupShouldStop = cleanupCompleted || cleanupConsumedWorktree;
-			if (cleanupShouldStop) return;
-		}
 		request.addAction(
 			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
 		);

@@ -19,5 +19,4 @@ export const EXIT_UNSELECTED = EXIT_MARKERS.unselected;
 export const EXIT_FOCUSED = EXIT_MARKERS.focused;
 export const EXIT_UNFOCUSED = EXIT_MARKERS.unfocused;
 export const EXIT_PRESENT_PHASE = "present";
-export const EXIT_QUIT = "quit";
 export const EXIT_TUI_MODE = "tui";

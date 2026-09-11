@@ -15,7 +15,6 @@ export type {
 	WorktreeModule,
 	WorktreeModuleDependencies,
 } from "./data.ts";
-export { hasNoSessionWork } from "./data.ts";
 
 export function createWorktreeModule(
 	events: SharedEvents,

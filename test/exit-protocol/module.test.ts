@@ -134,23 +134,6 @@ describe("exit protocol presenter", () => {
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
 
-	it("ignores non-quit close events", async () => {
-		const events = createSharedEvents();
-		const queue = new PromptQueue();
-		const ctx = context();
-		const module = createExitProtocolModule(events, queue);
-		module.sessionStart(ctx);
-		events.on("sessionWillClose", (request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.emit("sessionWillClose", { reason: "new" });
-		await queue.drain();
-
-		expect(ctx.ui.custom).not.toHaveBeenCalled();
-		expect(actions[0].execute).not.toHaveBeenCalled();
-	});
-
 	it("ignores a visible prompt that becomes stale after reset", async () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();

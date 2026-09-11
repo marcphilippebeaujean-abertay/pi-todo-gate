@@ -210,13 +210,7 @@ export async function persistInitialPr(
 	await persistPrIfAvailable(runtime, branchTexts(branch).join("\n"));
 }
 
-export async function handleSessionShutdown(
-	runtime: ExtensionRuntime,
-	event: { reason: "quit" | "new" | "resume" | "fork" | "reload" },
-): Promise<void> {
-	await runtime.events.emit(C.event.sessionWillClose, { reason: event.reason });
-	const isQuit = event.reason === "quit";
-	if (isQuit) await runtime.promptQueue.drain();
+export function handleSessionShutdown(runtime: ExtensionRuntime): void {
 	resetTemporarySessionState(runtime);
 	const session = runtime.active;
 	if (session !== null) {

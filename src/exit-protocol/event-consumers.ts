@@ -6,7 +6,7 @@ import type {
 	SharedEvents,
 } from "../shared/events.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
-import { EXIT_PRESENT_PHASE, EXIT_QUIT } from "./constants.ts";
+import { EXIT_PRESENT_PHASE } from "./constants.ts";
 import type { ExitProtocolModule } from "./data.ts";
 import { presentExitActions } from "./user-prompts.ts";
 
@@ -19,11 +19,6 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	constructor(events: SharedEvents, promptQueue: PromptQueue) {
 		this.promptQueue = promptQueue;
 		events.on(C.event.prMerged, this.onPrMerged.bind(this), EXIT_PRESENT_PHASE);
-		events.on(
-			C.event.sessionWillClose,
-			this.enqueueOnQuit.bind(this),
-			EXIT_PRESENT_PHASE,
-		);
 	}
 
 	sessionStart(context: ExtensionContext): void {
@@ -32,14 +27,6 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 
 	deactivate(): void {
 		this.context = null;
-	}
-
-	private enqueueOnQuit(
-		request: EventRequest<SharedEventPayloads[typeof C.event.sessionWillClose]>,
-	): void {
-		const isQuit = request.payload.reason === EXIT_QUIT;
-		if (!isQuit) return;
-		this.enqueue(request);
 	}
 
 	private onPrMerged(request: ExitRequest): void {

@@ -1,5 +1,4 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EMPTY } from "./constants.ts";
 
 export interface WorktreeBaseline {
 	worktreePath: string;
@@ -37,15 +36,4 @@ export function isCurrentWorktree(
 	worktree: WorktreeBaseline,
 ): boolean {
 	return baseline === worktree;
-}
-
-export function hasNoSessionWork(
-	baseline: Pick<WorktreeBaseline, "initialHead" | "initialStatus">,
-	current: WorktreeCurrentState,
-): boolean {
-	const headUnchanged = baseline.initialHead === current.currentHead;
-	const baselineClean = baseline.initialStatus === EMPTY;
-	const currentClean = current.currentStatus === EMPTY;
-	const isUnchangedAndClean = headUnchanged && baselineClean;
-	return isUnchangedAndClean && currentClean;
 }
