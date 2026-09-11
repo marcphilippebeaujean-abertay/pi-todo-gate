@@ -49,14 +49,11 @@ export type WorkerSpawner = (
 
 import {
 	CLAIMED_STATUS,
-	CUSTOM_ENTRY,
 	HERDR_COMMAND,
 	HERDR_OBJECT_TYPE,
-	HERDR_STATE_TYPE,
 	MAX_DIAGNOSTIC_BYTES,
 	NUMERIC_LABEL,
 	PANE_GET_ARGS,
-	RAN,
 	STRING_TYPE,
 	TAB_GET_ARGS,
 } from "./constants.ts";
@@ -110,29 +107,10 @@ export function parseClaimResult(
 	return undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === HERDR_OBJECT_TYPE;
-	if (!isObject) return false;
-	const isNull = value === null;
-	if (isNull) return false;
-	return !Array.isArray(value);
-}
-
-export function hasHerdrClaimRun(entries: readonly unknown[]): boolean {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const entry = entries[index];
-		const isRecordEntry = isRecord(entry);
-		if (!isRecordEntry) continue;
-		const isHerdrState =
-			entry.type === CUSTOM_ENTRY && entry.customType === HERDR_STATE_TYPE;
-		if (!isHerdrState) continue;
-		const data = entry.data;
-		const hasRecordData = isRecord(data);
-		if (!hasRecordData) continue;
-		const hasRanFlag = data[RAN] === true;
-		if (hasRanFlag) return true;
-	}
-	return false;
+export function tabNameIsParseableAsInt(label: string | undefined): boolean {
+	if (label === undefined) return false;
+	const value = label.trim();
+	return value.length > 0 && NUMERIC_LABEL.test(value);
 }
 
 function labelIsDescriptive(label: string | undefined | null): boolean {
@@ -140,7 +118,7 @@ function labelIsDescriptive(label: string | undefined | null): boolean {
 	if (hasNoLabel) return false;
 	const value = label.trim();
 	const hasValue = Boolean(value);
-	const isNotNumeric = !NUMERIC_LABEL.test(value);
+	const isNotNumeric = !tabNameIsParseableAsInt(value);
 	return hasValue && isNotNumeric;
 }
 

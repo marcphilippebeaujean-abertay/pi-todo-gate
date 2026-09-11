@@ -1,9 +1,6 @@
 export const MAX_DIAGNOSTIC_BYTES = 500;
 export const HERDR_OBJECT_TYPE = "object";
 export const CLAIMED_STATUS = "claimed";
-export const CUSTOM_ENTRY = "custom";
-export const HERDR_STATE_TYPE = "pi-todo-gate-herdr-state";
-export const RAN = "ran";
 export const HERDR_COMMAND = "herdr";
 export const PI_COMMAND = "pi";
 export const HIGH_THINKING = "high";

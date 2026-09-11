@@ -11,8 +11,6 @@ import {
 } from "./commands.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
-	HERDR_STATE_TYPE,
-	RAN,
 	SESSION_SHUTDOWN_EVENT,
 	SESSION_START_EVENT,
 	TAB_CLAIM_FAILED,
@@ -25,9 +23,9 @@ import {
 	type ClaimWorkerRequest,
 	type CommandRunner,
 	type HerdrTabOptions,
-	hasHerdrClaimRun,
 	hasValidatedTabClaim,
 	type StartBackgroundWorker,
+	tabNameIsParseableAsInt,
 } from "./data.ts";
 import {
 	hideHerdrFooter,
@@ -42,7 +40,6 @@ interface TabClaimAttempt {
 }
 
 class HerdrTabClaim {
-	private readonly pi: ExtensionAPI;
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
@@ -53,12 +50,11 @@ class HerdrTabClaim {
 	private sessionGeneration = 0;
 	private herdrAvailable = false;
 	private hasClaim = false;
-	private hasRun = false;
+	private herdrGateClaimProcessed = false;
 	private initialLabel: string | undefined;
 	private paneId: string | undefined;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions) {
-		this.pi = pi;
 		this.commandRunner =
 			options.commandRunner ?? boundCommandRunner(this.sessionCwdReference);
 		this.sessionCwd = options.cwd ?? process.cwd();
@@ -82,7 +78,6 @@ class HerdrTabClaim {
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
 		this.hasClaim = false;
-		this.hasRun = hasHerdrClaimRun(ctx.sessionManager.getBranch());
 		this.initialLabel = undefined;
 		this.paneId = undefined;
 		hideHerdrFooter(this.emitFooter);
@@ -104,16 +99,17 @@ class HerdrTabClaim {
 		const isUnavailable = !this.herdrAvailable;
 		const isClaimed = this.hasClaim;
 		const hasWorker = this.worker !== undefined;
-		const hasAlreadyRun = this.hasRun;
+		const hasProcessedGate = this.herdrGateClaimProcessed;
 		const isUnavailableOrClaimed = isUnavailable || isClaimed;
-		const isAlreadyRunOrWorking = hasAlreadyRun || hasWorker;
-		const shouldSkip = isUnavailableOrClaimed || isAlreadyRunOrWorking;
+		const isProcessedOrWorking = hasProcessedGate || hasWorker;
+		const shouldSkip = isUnavailableOrClaimed || isProcessedOrWorking;
 		if (shouldSkip) return;
 		const attempt = structuredClone<TabClaimAttempt>({
 			generation: this.sessionGeneration,
 			initialLabel: this.initialLabel,
 			paneId: this.paneId,
 		});
+		this.herdrGateClaimProcessed = true;
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
@@ -128,6 +124,7 @@ class HerdrTabClaim {
 				ctx,
 				attempt.generation,
 				`${TAB_CLAIM_START_FAILED}${detail}`,
+				false,
 			);
 		}
 	}
@@ -149,10 +146,9 @@ class HerdrTabClaim {
 		);
 		if (isValidated) {
 			this.hasClaim = true;
-			this.hasRun = true;
-			this.pi.appendEntry(HERDR_STATE_TYPE, { [RAN]: true });
 			return;
 		}
+		this.herdrGateClaimProcessed = true;
 		notifyHerdrFailure(ctx, TAB_CLAIM_FAILED);
 	}
 
@@ -160,11 +156,16 @@ class HerdrTabClaim {
 		ctx: ExtensionContext,
 		generation: number,
 		message: string,
+		workerFailed?: boolean,
 	): void {
 		const isCurrentGeneration = generation === this.sessionGeneration;
 		if (!isCurrentGeneration) return;
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
+		const didWorkerFail = workerFailed ?? true;
+		const shouldTriggerRetry =
+			didWorkerFail && tabNameIsParseableAsInt(this.initialLabel);
+		this.herdrGateClaimProcessed = !shouldTriggerRetry;
 		notifyHerdrFailure(ctx, message);
 	}
 
@@ -174,7 +175,7 @@ class HerdrTabClaim {
 		this.worker = undefined;
 		hideHerdrFooter(this.emitFooter);
 		this.hasClaim = false;
-		this.hasRun = false;
+		this.herdrGateClaimProcessed = false;
 		this.herdrAvailable = false;
 	}
 }
