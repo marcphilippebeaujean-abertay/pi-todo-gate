@@ -1,6 +1,6 @@
 export type ExitActionId = "remove-worktree";
 
-export type ExitActionResult = "completed" | "deferred" | "failed";
+export type ExitActionResult = "completed" | "failed";
 
 export interface ExitAction {
 	id: ExitActionId;

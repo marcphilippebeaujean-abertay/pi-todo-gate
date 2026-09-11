@@ -99,12 +99,14 @@ describe("worktree session baseline", () => {
 });
 
 describe("worktree event actions", () => {
-	it("defers cleanup after a merge", async () => {
+	it("executes cleanup immediately after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
+		const changeDirectory = vi.fn();
 		const module = createWorktreeModule(events, {
 			exec: projectResult("abc", "abc", "", "", commands),
+			changeDirectory,
 		});
 		await module.sessionStart(context());
 		let mergeAction: ExitAction | undefined;
@@ -121,40 +123,98 @@ describe("worktree event actions", () => {
 
 		expect(mergeAction?.id).toBe("remove-worktree");
 		expect(payload.taskMarkedAsCompleted).toBe(false);
-		await expect(mergeAction?.execute()).resolves.toBe("deferred");
-		expect(
-			commands.filter(
-				({ args }) => args[0] === "worktree" && args[1] === "remove",
-			),
-		).toEqual([]);
+		await expect(mergeAction?.execute()).resolves.toBe("completed");
+		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(commands.at(-2)).toEqual({
+			command: "git",
+			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			cwd: "/repo",
+		});
+		expect(commands.at(-1)).toEqual({
+			command: "git",
+			args: ["branch", "-D", "feature"],
+			cwd: "/repo",
+		});
 	});
 
-	it("does not add cleanup action for non-quit shutdown", async () => {
+	it("keeps quit cleanup available when merged cleanup is unselected", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
+		const changeDirectory = vi.fn();
 		const module = createWorktreeModule(events, {
-			exec: projectResult("abc", "abc", "", "", commands),
+			exec: projectResult("abc", "def", "", "", commands),
+			changeDirectory,
 		});
 		await module.sessionStart(context());
-		let actions = 0;
+		let mergeAction: ExitAction | undefined;
+		let quitAction: ExitAction | undefined;
+		events.on(
+			"prMerged",
+			(request) => {
+				mergeAction = request.actions[0];
+			},
+			"present",
+		);
 		events.on(
 			"sessionWillClose",
 			(request) => {
-				actions += request.actions.length;
+				quitAction = request.actions[0];
 			},
 			"present",
 		);
 
-		await events.emit("sessionWillClose", { reason: "new" });
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+		await events.emit("sessionWillClose", { reason: "quit" });
 
-		expect(actions).toBe(0);
-		expect(
-			commands.filter(
-				({ args }) => args[0] === "worktree" && args[1] === "remove",
-			),
-		).toEqual([]);
+		expect(mergeAction?.id).toBe("remove-worktree");
+		expect(quitAction?.id).toBe("remove-worktree");
+		await expect(quitAction?.execute()).resolves.toBe("completed");
+		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(commands.at(-2)).toEqual({
+			command: "git",
+			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			cwd: "/repo",
+		});
+		expect(commands.at(-1)).toEqual({
+			command: "git",
+			args: ["branch", "-D", "feature"],
+			cwd: "/repo",
+		});
 	});
+
+	it.each(["new", "resume", "fork", "reload"] as const)(
+		"does not add cleanup action for %s shutdown",
+		async (reason) => {
+			const events = createSharedEvents();
+			const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+				[];
+			const module = createWorktreeModule(events, {
+				exec: projectResult("abc", "abc", "", "", commands),
+			});
+			await module.sessionStart(context());
+			let actions = 0;
+			events.on(
+				"sessionWillClose",
+				(request) => {
+					actions += request.actions.length;
+				},
+				"present",
+			);
+
+			await events.emit("sessionWillClose", { reason });
+
+			expect(actions).toBe(0);
+			expect(
+				commands.filter(
+					({ args }) => args[0] === "worktree" && args[1] === "remove",
+				),
+			).toEqual([]);
+		},
+	);
 
 	it("adds cleanup action for changed worktree at quit", async () => {
 		const events = createSharedEvents();
@@ -218,6 +278,137 @@ describe("worktree event actions", () => {
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
 			"Worktree deleted because no changes were made",
 			"info",
+		);
+	});
+
+	it("does not retry cleanup after branch deletion fails", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const changeDirectory = vi.fn();
+		const baseExec = projectResult("abc", "def", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isBranchDelete =
+				command === "git" && args[0] === "branch" && args[1] === "-D";
+			if (isBranchDelete)
+				return { stdout: "", stderr: "branch locked", code: 1 };
+			return result;
+		};
+		const module = createWorktreeModule(events, { exec, changeDirectory });
+		await module.sessionStart(context());
+		let mergeAction: ExitAction | undefined;
+		let quitActions = 0;
+		events.on(
+			"prMerged",
+			(request) => {
+				mergeAction = request.actions[0];
+			},
+			"present",
+		);
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				quitActions = request.actions.length;
+			},
+			"present",
+		);
+
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+		await expect(mergeAction?.execute()).resolves.toBe("failed");
+		await events.emit("sessionWillClose", { reason: "quit" });
+
+		expect(quitActions).toBe(0);
+		expect(
+			commands.filter(
+				({ args }) => args[0] === "worktree" && args[1] === "remove",
+			),
+		).toHaveLength(1);
+		expect(
+			commands.filter(({ args }) => args[0] === "branch" && args[1] === "-D"),
+		).toHaveLength(1);
+	});
+
+	it("does not offer a second cleanup after automatic cleanup partially fails", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const changeDirectory = vi.fn();
+		const baseExec = projectResult("abc", "abc", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isBranchDelete =
+				command === "git" && args[0] === "branch" && args[1] === "-D";
+			if (isBranchDelete)
+				return { stdout: "", stderr: "branch locked", code: 1 };
+			return result;
+		};
+		const module = createWorktreeModule(events, { exec, changeDirectory });
+		await module.sessionStart(context());
+		let actions: readonly ExitAction[] | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				actions = request.actions;
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+
+		expect(actions).toEqual([]);
+		expect(
+			commands.filter(({ args }) => args[0] === "branch" && args[1] === "-D"),
+		).toHaveLength(1);
+	});
+
+	it("notifies when Git worktree state is unavailable", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		let statusCalls = 0;
+		const baseExec = projectResult("abc", "def", "", "", commands);
+		const exec = async (
+			command: string,
+			args: string[],
+			options?: { cwd?: string },
+		) => {
+			const result = await baseExec(command, args, options);
+			const isStatus = command === "git" && args[0] === "status";
+			statusCalls += Number(isStatus);
+			if (isStatus && statusCalls > 1)
+				return { stdout: "", stderr: "status unavailable", code: 1 };
+			return result;
+		};
+		const ctx = context();
+		const module = createWorktreeModule(events, { exec });
+		await module.sessionStart(ctx);
+		let action: ExitAction | undefined;
+		events.on(
+			"sessionWillClose",
+			(request) => {
+				action = request.actions[0];
+			},
+			"present",
+		);
+
+		await events.emit("sessionWillClose", { reason: "quit" });
+		await expect(action?.execute()).resolves.toBe("failed");
+
+		expect(ctx.ui.notify).toHaveBeenCalledWith(
+			"Worktree cleanup failed: Git status unavailable",
+			"warning",
 		);
 	});
 

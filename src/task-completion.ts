@@ -39,6 +39,9 @@ function recordSuccessfulCompletion(
 	replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
+			taskRef: undefined,
+			taskName: undefined,
+			taskUrl: undefined,
 			mergeCompletedAt: new Date().toISOString(),
 			todoistCompletionAttemptedAt: new Date().toISOString(),
 		}),
