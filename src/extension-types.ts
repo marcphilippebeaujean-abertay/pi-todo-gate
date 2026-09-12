@@ -10,12 +10,14 @@ import type {
 } from "./herdr/module.ts";
 import type { Exec } from "./shared/command.ts";
 import type { SharedEvents } from "./shared/events.ts";
-import type { TaskClaimWorker } from "./todoist/claim-worker.ts";
-import type { TodoistClient } from "./todoist/client.ts";
+import type { ExitActionResult } from "./shared/exit-actions.ts";
+import type { PromptQueue } from "./shared/prompt-queue.ts";
 import type {
 	ResolvedProject,
+	TaskClaimWorker,
+	TodoistClient,
 	TodoistProjectMapping,
-} from "./todoist/config.ts";
+} from "./todoist/module.ts";
 import type { WorkState } from "./types.ts";
 import type { WorktreeModule } from "./worktree/module.ts";
 
@@ -60,8 +62,12 @@ export interface ActiveSession {
 	workRevision: number;
 	operationGeneration: number;
 	operationQueue: Promise<void>;
-	taskClaimAnalysisStarted: boolean;
-	taskClaimGeneration: number;
+}
+
+export interface TaskClaimOperation {
+	pending: boolean;
+	completed: boolean;
+	session?: ActiveSession;
 }
 
 export interface ExtensionRuntime {
@@ -71,6 +77,29 @@ export interface ExtensionRuntime {
 	exitProtocol: ExitProtocolModule;
 	footer: FooterModule;
 	worktree: WorktreeModule;
+	taskClaim: TaskClaimOperation;
+	promptQueue: PromptQueue;
 	active: ActiveSession | null;
+	appendState(
+		state: ActiveSession["state"],
+		prDiscoveryDisabled?: boolean,
+	): void;
+	refreshFooterStatuses(session: ActiveSession): void;
+	replaceSessionState(
+		session: ActiveSession,
+		nextState: ActiveSession["state"],
+	): void;
+	completeMergedTask(
+		session: ActiveSession,
+		taskRef: string,
+		stateSnapshot: ActiveSession["state"],
+		workRevision: number,
+		operationGeneration: number,
+	): Promise<ExitActionResult>;
+	isCurrentOperation(session: ActiveSession, generation: number): boolean;
+	enqueueSessionOperation<T>(
+		session: ActiveSession,
+		operation: () => Promise<T>,
+	): Promise<T>;
 	registered: boolean;
 }

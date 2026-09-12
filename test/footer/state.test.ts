@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseFooterEvent } from "../../src/footer/events.ts";
+import type { FooterState, FooterUpdate } from "../../src/footer/state.ts";
 import {
+	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
 } from "../../src/footer/state.ts";
-import type { FooterState, FooterUpdate } from "../../src/footer/types.ts";
 
 const visible: FooterUpdate = {
 	footerType: "task",

@@ -1,86 +1,48 @@
-export const PR_STATE_TYPE = "pi-pr-gate-state";
+import type { Exec } from "../shared/command.ts";
+import type { PrMergedEvent } from "../shared/events.ts";
 
-import { prStateDataSchema } from "./schemas.ts";
+export interface PrSession {
+	context: { cwd: string; hasUI: boolean };
+	state: { prUrl?: string };
+	operationGeneration: number;
+	operationQueue?: Promise<void>;
+}
 
+export interface PrRuntime {
+	active: PrSession | null;
+	dependencies: { exec?: Exec };
+	events: {
+		emit(event: string, payload: PrMergedEvent): Promise<void>;
+	};
+	isCurrentOperation?(session: PrSession, generation: number): boolean;
+	enqueueSessionOperation?<T>(
+		session: PrSession,
+		operation: () => Promise<T>,
+	): Promise<T>;
+}
+
+export interface OpenPrInfo {
+	url: string | null;
+	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
+}
 export interface MergedPr {
 	prUrl: string;
 	detectedAt: string;
 	reminderPending: boolean;
 }
-
 export interface PrState {
 	prUrl?: string;
 	mergedPrs?: MergedPr[];
 	discoveryDisabled?: boolean;
 }
-
-function withoutPrUrl(entries: MergedPr[], prUrl: string): MergedPr[] {
-	const result: MergedPr[] = [];
-	for (const entry of entries) {
-		const isSamePrUrl = entry.prUrl === prUrl;
-		if (isSamePrUrl) continue;
-		result.push(entry);
-	}
-	return result;
+export interface ParsedMerge {
+	kind: "git" | "gh";
+	args: string[];
 }
 
-function hasPendingReminder(entry: MergedPr): boolean {
-	return entry.reminderPending;
-}
-
-function clearReminder(entry: MergedPr): MergedPr {
-	return { ...entry, reminderPending: false };
-}
-
-function prUrlOf(entry: MergedPr): string {
-	return entry.prUrl;
-}
-
-export function isPrState(value: unknown): value is PrState {
-	return prStateDataSchema.safeParse(value).success;
-}
-
-export function recordMergedPr(state: PrState, detectedAt: string): PrState {
-	const prUrl = state.prUrl;
-	if (prUrl === undefined) return state;
-	const hasPrUrl = prUrl !== "";
-	if (!hasPrUrl) return state;
-	const existingMergedPrs = state.mergedPrs ?? [];
-	const mergedPrs = [
-		...withoutPrUrl(existingMergedPrs, prUrl),
-		{ prUrl, detectedAt, reminderPending: true },
-	];
-	return { mergedPrs, discoveryDisabled: false };
-}
-
-export function markRemindersDelivered(state: PrState): PrState {
-	const existingMergedPrs = state.mergedPrs;
-	if (existingMergedPrs === undefined) return state;
-	const hasPending = existingMergedPrs.some(hasPendingReminder);
-	if (!hasPending) return state;
-	return {
-		...state,
-		mergedPrs: existingMergedPrs.map(clearReminder),
-	};
-}
-
-export function removeMergedPr(state: PrState, prUrl: string): PrState {
-	const existingMergedPrs = state.mergedPrs;
-	if (existingMergedPrs === undefined) return state;
-	const mergedPrs = withoutPrUrl(existingMergedPrs, prUrl);
-	const mergedPrsLength = mergedPrs.length;
-	const hasSameLength = mergedPrsLength === existingMergedPrs.length;
-	if (hasSameLength) return state;
-	switch (mergedPrsLength) {
-		case 0: {
-			const { mergedPrs: _mergedPrs, ...next } = state;
-			return next;
-		}
-		default:
-			return { ...state, mergedPrs };
-	}
-}
-
-export function mergedUrls(state: PrState): string[] {
-	return state.mergedPrs?.map(prUrlOf) ?? [];
+export type QuoteCharacter = "'" | '"';
+export interface ShellState {
+	current: string;
+	quote: QuoteCharacter | null;
+	escaped: boolean;
 }

@@ -1,11 +1,11 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import type {
 	BeforeAgentStartEvent,
-	BeforeAgentStartEventResult,
-	ExtensionContext,
+	BeforeAgentStartResultEvent,
 	MessageEndEvent,
 	ToolResultEvent,
-} from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
+} from "./events.ts";
 import {
 	appendState,
 	initializeRemoteOrigin,
@@ -159,7 +159,7 @@ export async function handleBeforeAgentStart(
 	runtime: ExtensionRuntime,
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionContext,
-): Promise<BeforeAgentStartEventResult | undefined> {
+): Promise<BeforeAgentStartResultEvent | undefined> {
 	const session = runtime.active;
 	const hasSession = session !== null;
 	if (!hasSession) return undefined;

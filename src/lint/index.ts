@@ -1,14 +1,21 @@
 import ts from "typescript";
 import { DEFAULT_LINT_CONFIG } from "../lint-config.ts";
 import { compareDiagnostics } from "./diagnostic.ts";
+import { commandsOnlyRegister } from "./rules/commands-only-register.ts";
 import { cyclomaticComplexity } from "./rules/cyclomatic-complexity.ts";
+import { eventTypesLocation } from "./rules/event-types-location.ts";
+import { eventTypesOutsideEvents } from "./rules/event-types-outside-events.ts";
 import { functionLength } from "./rules/function-length.ts";
 import { functionsPerFile } from "./rules/functions-per-file.ts";
 import { namedIfCondition } from "./rules/named-if-condition.ts";
 import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
 import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts";
+import { noDefaultParameters } from "./rules/no-default-parameters.ts";
+import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state.ts";
+import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
+import { noWorkerConsumerCallbacks } from "./rules/no-worker-consumer-callbacks.ts";
 import { preferSwitchDispatch } from "./rules/prefer-switch-dispatch.ts";
 import { repeatedFieldChecks } from "./rules/repeated-field-checks.ts";
 import { similarStringLiterals } from "./rules/similar-string-literals.ts";
@@ -18,10 +25,17 @@ export { formatLintDiagnostic } from "./diagnostic.ts";
 export type { LintDiagnostic, LintRuleId } from "./types.ts";
 
 const RULES: readonly LintRule[] = [
+	commandsOnlyRegister,
+	noWorkerConsumerCallbacks,
+	noDefaultParameters,
 	noShortStringConstants,
 	noMagicStrings,
 	similarStringLiterals,
 	namedIfCondition,
+	eventTypesOutsideEvents,
+	eventTypesLocation,
+	noDomainTypesOutsideState,
+	noFunctionsInData,
 	repeatedFieldChecks,
 	preferSwitchDispatch,
 	noComplicatedExpressions,
@@ -33,10 +47,10 @@ const RULES: readonly LintRule[] = [
 
 export function lintProgram(
 	program: ts.Program,
-	config: Partial<import("../lint-config.ts").LintConfig> = DEFAULT_LINT_CONFIG,
+	config?: Partial<import("../lint-config.ts").LintConfig>,
 	lintRoots?: readonly string[],
 ): LintDiagnostic[] {
-	const resolvedConfig = { ...DEFAULT_LINT_CONFIG, ...config };
+	const resolvedConfig = { ...DEFAULT_LINT_CONFIG, ...(config ?? {}) };
 	const diagnostics: LintDiagnostic[] = [];
 	const checker = program.getTypeChecker();
 	const explicitRoots = lintRoots

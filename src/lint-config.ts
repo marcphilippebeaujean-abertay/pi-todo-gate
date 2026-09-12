@@ -35,11 +35,12 @@ function isPositiveInteger(value: unknown): value is number {
 	return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-export async function loadLintConfig(
-	path = LINT_CONFIG_JSON,
-): Promise<LintConfig> {
+export async function loadLintConfig(path?: string): Promise<LintConfig> {
+	const configPath = path ?? LINT_CONFIG_JSON;
 	try {
-		const parsed: unknown = JSON.parse(await readFile(path, UTF8_ENCODING));
+		const parsed: unknown = JSON.parse(
+			await readFile(configPath, UTF8_ENCODING),
+		);
 		if (!isRecord(parsed)) return { ...DEFAULT_LINT_CONFIG };
 		const config = { ...DEFAULT_LINT_CONFIG };
 		for (const key of CONFIG_KEYS) {

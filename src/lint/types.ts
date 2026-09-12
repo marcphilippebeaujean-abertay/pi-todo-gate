@@ -1,6 +1,9 @@
 import type ts from "typescript";
 import type { LintConfig } from "../lint-config.ts";
 export type LintRuleId =
+	| "commands-only-register"
+	| "no-worker-consumer-callbacks"
+	| "no-default-parameters"
 	| "no-magic-strings"
 	| "no-short-string-constants"
 	| "similar-string-literals"
@@ -11,7 +14,11 @@ export type LintRuleId =
 	| "functions-per-file"
 	| "nested-function-depth"
 	| "repeated-field-checks"
-	| "prefer-switch-dispatch";
+	| "prefer-switch-dispatch"
+	| "domain-types-outside-state"
+	| "event-types-outside-events"
+	| "event-types-location"
+	| "no-functions-in-data";
 export interface LintDiagnostic {
 	filePath: string;
 	line: number;

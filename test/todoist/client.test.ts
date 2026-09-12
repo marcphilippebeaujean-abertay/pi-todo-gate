@@ -62,7 +62,7 @@ import {
 	TodoistError,
 	type TodoistExec,
 	TodoistOperationCancelled,
-} from "../../src/todoist/client.ts";
+} from "../../src/todoist/module.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),

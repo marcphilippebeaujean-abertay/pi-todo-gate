@@ -5,12 +5,19 @@ import type {
 	ExtensionDependencies,
 	ExtensionRuntime,
 } from "./extension-types.ts";
-import { renderPrStatus, renderTaskStatus } from "./footer.ts";
+import { renderPrStatus, renderTodoistTaskStatus } from "./footer/module.ts";
 import { invalidateOperations } from "./session-operations.ts";
 import { applyStatePatch } from "./session-state.ts";
 import { spawnExec } from "./shared/command.ts";
 import { inspectProject } from "./shared/project.ts";
-import { TodoistClient } from "./todoist/client.ts";
+import { TodoistClient } from "./todoist/module.ts";
+
+export function resetTemporarySessionState(runtime: ExtensionRuntime): void {
+	runtime.promptQueue.reset();
+	runtime.taskClaim.pending = false;
+	runtime.taskClaim.completed = false;
+	runtime.taskClaim.session = undefined;
+}
 
 export function createClient(
 	ctx: ExtensionContext,
@@ -39,9 +46,10 @@ export function replaceSessionState(
 export function appendState(
 	runtime: ExtensionRuntime,
 	state: ActiveSession["state"],
-	prDiscoveryDisabled = false,
+	prDiscoveryDisabled?: boolean,
 ): void {
-	const data = prDiscoveryDisabled
+	const shouldDisablePrDiscovery = prDiscoveryDisabled ?? false;
+	const data = shouldDisablePrDiscovery
 		? { ...state, prDiscoveryDisabled: true }
 		: state;
 	runtime.pi.appendEntry(C.entry.state, data);
@@ -80,7 +88,7 @@ export function refreshFooterStatuses(
 	runtime.footer.update({
 		footerType: C.status.task,
 		isLoading: false,
-		text: renderTaskStatus(
+		text: renderTodoistTaskStatus(
 			session.state.taskUrl,
 			session.context.ui.theme,
 			session.state.taskName,

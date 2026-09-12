@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTodoistState } from "../../src/todoist/state.ts";
+import { isTodoistState } from "../../src/todoist/module.ts";
 
 describe("isTodoistState", () => {
 	it("accepts task state and rejects PR-shaped state", () => {

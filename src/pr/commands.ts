@@ -1,0 +1,144 @@
+import type {
+	ExtensionAPI,
+	ExtensionCommandContext,
+} from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import type { CommandResult } from "../shared/command.ts";
+import { spawnExec } from "../shared/command.ts";
+import {
+	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
+	mergeProtocolSkillPath,
+} from "./constants.ts";
+import { mergePinnedPr } from "./git.ts";
+import {
+	notifyInactive,
+	notifyMergeFailure,
+	notifyMergeSucceeded,
+	notifyNoPr,
+	notifyNoUi,
+} from "./notifications.ts";
+import type { PrRuntime, PrSession } from "./state.ts";
+import { confirmMerge } from "./user-prompts.ts";
+
+function currentSession(
+	runtime: PrRuntime,
+	session: PrSession,
+	generation: number,
+): boolean {
+	const current =
+		runtime.isCurrentOperation?.(session, generation) ??
+		session.operationGeneration === generation;
+	return runtime.active === session && current;
+}
+
+function enqueueOperation<T>(
+	session: PrSession,
+	operation: () => Promise<T>,
+): Promise<T> {
+	const previous = session.operationQueue ?? Promise.resolve();
+	const result = previous.then(operation);
+	session.operationQueue = result.then(
+		() => undefined,
+		() => undefined,
+	);
+	return result;
+}
+
+function failureDetail(stderr: string): string {
+	return stderr.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+async function mergeNow(
+	runtime: PrRuntime,
+	session: PrSession,
+	ctx: ExtensionCommandContext,
+	prUrl: string,
+	generation: number,
+): Promise<boolean> {
+	const isCurrent = currentSession(runtime, session, generation);
+	if (!isCurrent) return false;
+	const exec = runtime.dependencies.exec ?? spawnExec;
+	let result: CommandResult;
+	try {
+		result = await mergePinnedPr(exec, session.context.cwd, prUrl);
+	} catch (error) {
+		const isCurrentAfterFailure = currentSession(runtime, session, generation);
+		if (!isCurrentAfterFailure) return false;
+		const detail = failureDetail(
+			error instanceof Error ? error.message : String(error),
+		);
+		notifyMergeFailure(ctx, detail);
+		return false;
+	}
+	const isCurrentAfterCommand = currentSession(runtime, session, generation);
+	if (!isCurrentAfterCommand) return false;
+	const commandFailed = result.code !== 0;
+	if (commandFailed) {
+		notifyMergeFailure(ctx, failureDetail(result.stderr));
+		return false;
+	}
+	return true;
+}
+
+async function confirmAndMerge(
+	runtime: PrRuntime,
+	session: PrSession,
+	ctx: ExtensionCommandContext,
+	prUrl: string,
+	generation: number,
+): Promise<boolean> {
+	const confirmed = await confirmMerge(ctx, prUrl);
+	if (!confirmed) return false;
+	const isCurrent = currentSession(runtime, session, generation);
+	if (!isCurrent) return false;
+	return mergeNow(runtime, session, ctx, prUrl, generation);
+}
+
+async function runMergeProtocol(
+	runtime: PrRuntime,
+	ctx: ExtensionCommandContext,
+): Promise<void> {
+	const session = runtime.active;
+	if (session === null) {
+		notifyInactive(ctx);
+		return;
+	}
+	const hasInteractiveUi = ctx.hasUI && session.context.hasUI;
+	if (!hasInteractiveUi) {
+		notifyNoUi(ctx);
+		return;
+	}
+	const prUrl = session.state.prUrl;
+	const hasPrUrl = typeof prUrl === "string" && prUrl.trim() !== "";
+	if (!hasPrUrl) {
+		notifyNoPr(ctx);
+		return;
+	}
+	const generation = session.operationGeneration;
+	const enqueue = runtime.enqueueSessionOperation ?? enqueueOperation;
+	const merged = await enqueue(
+		session,
+		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
+	);
+	const isMerged = merged;
+	const isCurrent = currentSession(runtime, session, generation);
+	const shouldStop = !isMerged || !isCurrent;
+	if (shouldStop) return;
+	await runtime.events.emit(C.event.prMerged, {
+		prUrl,
+		taskMarkedAsCompleted: false,
+	});
+	const isCurrentAfterEmit = currentSession(runtime, session, generation);
+	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
+}
+
+export function register(pi: ExtensionAPI, runtime: PrRuntime): void {
+	pi.on("resources_discover", () => ({
+		skillPaths: [mergeProtocolSkillPath],
+	}));
+	if (typeof pi.registerCommand !== "function") return;
+	pi.registerCommand(MERGE_PROTOCOL_COMMAND, {
+		description: "Merge the active session's pinned pull request",
+		handler: (_args, ctx) => runMergeProtocol(runtime, ctx),
+	});
+}

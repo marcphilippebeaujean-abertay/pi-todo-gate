@@ -10,6 +10,8 @@ describe("session shutdown", () => {
 		const runtime = {
 			events,
 			active: null,
+			promptQueue: { reset: vi.fn() },
+			taskClaim: { pending: false, completed: false, session: undefined },
 			footer: { deactivate: vi.fn() },
 			worktree: { deactivate: vi.fn() },
 			exitProtocol: { deactivate: vi.fn() },

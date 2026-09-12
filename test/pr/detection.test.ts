@@ -35,7 +35,7 @@ import {
 	firstGithubPrUrl,
 	githubPrUrl,
 	githubPrUrls,
-} from "../../src/pr/detection.ts";
+} from "../../src/pr/module.ts";
 
 describe("githubPrUrl", () => {
 	it(REJECTS_PR_LINKS_WITHOUT_REMOTE_ORIGIN, () => {

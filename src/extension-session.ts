@@ -1,16 +1,17 @@
 import {
 	type ExtensionContext,
 	SessionManager,
-	type SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import { loadConfig, resolveConfiguredProject } from "./config.ts";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
+import type { SessionStartEvent } from "./events.ts";
 import { persistPrIfAvailable } from "./extension-events.ts";
 import {
 	appendState,
 	deactivateSession,
 	initializeRemoteOrigin,
 	refreshFooterStatuses,
+	resetTemporarySessionState,
 } from "./extension-lifecycle.ts";
 import { branchTexts, latestStateData } from "./extension-message.ts";
 import { installStateTool } from "./extension-tool.ts";
@@ -22,7 +23,7 @@ import type {
 import { extractInheritedState, latestState } from "./session-state.ts";
 import { spawnExec } from "./shared/command.ts";
 import { hasUncommittedChanges } from "./shared/project.ts";
-import type { TodoistProjectMapping } from "./todoist/config.ts";
+import type { TodoistProjectMapping } from "./todoist/module.ts";
 
 const FUNCTION_TYPE = "function";
 
@@ -43,6 +44,8 @@ function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
 		}
 	}
 	if (!hasSession) runtime.footer.deactivate();
+	runtime.worktree.deactivate();
+	runtime.exitProtocol.deactivate();
 	runtime.active = null;
 }
 
@@ -97,8 +100,6 @@ function activateSession(
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
-		taskClaimAnalysisStarted: false,
-		taskClaimGeneration: 0,
 	};
 	runtime.active = session;
 	return session;
@@ -155,8 +156,8 @@ export async function handleSessionStart(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	runtime.exitProtocol.sessionStart(ctx);
-	void runtime.worktree.sessionStart(ctx);
+	resetTemporarySessionState(runtime);
+	deactivateUnconfiguredSession(runtime);
 	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	const hasProject = project !== null;
@@ -164,7 +165,8 @@ export async function handleSessionStart(
 		deactivateUnconfiguredSession(runtime);
 		return;
 	}
-	if (runtime.active !== null) deactivateSession(runtime, runtime.active);
+	runtime.exitProtocol.sessionStart(ctx);
+	void runtime.worktree.sessionStart(ctx);
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -179,11 +181,9 @@ export async function handleSessionStart(
 	state = await initializeRemoteOrigin(runtime, ctx, inherited.state);
 	const inheritedHandoff = inherited.handoffContext;
 	await startFooter(runtime, event, ctx, inheritedHandoff);
-	const discoveryIsEnabled = stateEntry?.prDiscoveryDisabled !== true;
-	const hasNoPr = !state.prUrl;
 	const allowPrDiscovery = inheritedHandoff
 		? false
-		: discoveryIsEnabled && hasNoPr;
+		: stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
 	const session = activateSession(
 		runtime,
 		ctx,
@@ -212,6 +212,7 @@ export async function persistInitialPr(
 }
 
 export function handleSessionShutdown(runtime: ExtensionRuntime): void {
+	resetTemporarySessionState(runtime);
 	const session = runtime.active;
 	if (session !== null) {
 		deactivateSession(runtime, session);

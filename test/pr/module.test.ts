@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { firstUnmergedGithubPrUrl } from "../../src/pr/detection.ts";
 import {
+	firstUnmergedGithubPrUrl,
 	isPrState,
 	markRemindersDelivered,
 	mergedUrls,
 	recordMergedPr,
 	removeMergedPr,
-} from "../../src/pr/state.ts";
+} from "../../src/pr/module.ts";
 
 describe("isPrState", () => {
 	it("accepts valid PR state and rejects malformed state", () => {

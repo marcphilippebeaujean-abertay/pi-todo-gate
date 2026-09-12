@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ExitAction } from "../src/exit-protocol/types.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
+import type { ExitAction } from "../src/shared/exit-actions.ts";
 
 const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
 	id,
@@ -96,6 +96,21 @@ describe("shared events", () => {
 		});
 
 		expect(order).toEqual(["failed", "continued", "present:1"]);
+	});
+
+	it("allows merge events to clear pinned PR URL", async () => {
+		const events = createSharedEvents();
+		let observed: string | null | undefined;
+		events.on("prMerged", (request) => {
+			observed = request.payload.prUrl;
+		});
+
+		await events.emit("prMerged", {
+			prUrl: null,
+			taskMarkedAsCompleted: false,
+		});
+
+		expect(observed).toBeNull();
 	});
 
 	it("unsubscribes listeners and isolates separate emits", async () => {

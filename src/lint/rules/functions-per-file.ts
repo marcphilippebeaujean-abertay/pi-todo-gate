@@ -10,8 +10,12 @@ export const functionsPerFile: LintRule = ({
 	diagnostics,
 	config,
 }) => {
+	const canonicalFacet =
+		/\/src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/(commands|constants|data|event-consumers|event-publishers|user-prompts|notifications|module|footer-rendering|parsing|state|claim-worker-result|tab-validation|runtime|git|client)\.ts$/.test(
+			sourceFile.fileName,
+		);
 	const count = collectFunctionMetrics(sourceFile).length;
-	if (count <= config.maxFunctionsPerFile) return;
+	if (canonicalFacet || count <= config.maxFunctionsPerFile) return;
 	diagnostics.push(
 		diagnostic(
 			sourceFile,

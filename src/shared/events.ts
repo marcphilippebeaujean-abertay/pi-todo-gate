@@ -1,9 +1,13 @@
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitAction } from "../exit-protocol/types.ts";
-
-export interface SharedEventPayloads {
-	prMerged: { prUrl: string; taskMarkedAsCompleted: boolean };
+import type { ExitAction } from "./exit-actions.ts";
+export interface PrMergedEvent {
+	prUrl: string | null;
+	taskMarkedAsCompleted: boolean;
 }
+
+export type SharedEventPayloads = {
+	prMerged: PrMergedEvent;
+};
 
 export interface EventRequest<T> {
 	payload: T;
@@ -15,13 +19,14 @@ export type EventListener<T> = (
 	request: EventRequest<T>,
 ) => void | Promise<void>;
 
-type EventName = keyof SharedEventPayloads;
-type EventPhase = "collect" | "present";
-type Listener<T> = { listener: EventListener<T>; phase: EventPhase };
-type AnyListener = Listener<SharedEventPayloads[EventName]>;
-type ListenerMap = Map<EventName, AnyListener[]>;
+export type EventName = keyof SharedEventPayloads;
+export type EventPhase = "collect" | "present";
 
-type AnyRequest = EventRequest<SharedEventPayloads[EventName]>;
+type Listener<T> = { listener: EventListener<T>; phase: EventPhase };
+export type AnyListener = Listener<SharedEventPayloads[EventName]>;
+export type ListenerMap = Map<EventName, AnyListener[]>;
+
+export type AnyRequest = EventRequest<SharedEventPayloads[EventName]>;
 
 export interface SharedEvents {
 	on<K extends EventName>(
@@ -94,10 +99,11 @@ async function emitPhase(
 export function createSharedEvents(): SharedEvents {
 	const listeners: ListenerMap = new Map();
 	return {
-		on(event, listener, phase = C.value.collect as EventPhase) {
+		on(event, listener, phase?: EventPhase) {
+			const resolvedPhase = phase ?? (C.value.collect as EventPhase);
 			const entry: AnyListener = {
 				listener: listener as EventListener<SharedEventPayloads[EventName]>,
-				phase,
+				phase: resolvedPhase,
 			};
 			return registerListener(listeners, event, entry);
 		},

@@ -44,16 +44,22 @@ const RENDERS_CURRENT_STATE_AND_REQUESTS_REFRESH_ON =
 	"renders current state and requests refresh on branch changes";
 const MAIN = "main";
 const FEATURE = "feature";
+const PR_LINK_PREFIX = "| PR Link: ";
+const PR_NUMBER = "#42";
+const BOUNDED_PR_NUMBER = "#12345…";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import {
 	createFooterFactory,
+	Footer,
 	type FooterTheme,
+	renderFooter,
 	renderFooterLine,
+	renderPrLabel,
 	renderPrStatus,
 	renderTaskStatus,
-} from "../../src/footer.ts";
+} from "../../src/footer/module.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);
@@ -61,7 +67,42 @@ const styledTheme: FooterTheme = {
 	fg: (color, text) => `<${color}>${text}</${color}>`,
 };
 
+describe("Footer entries", () => {
+	it("updates only its own value and renders visible entries with separators", () => {
+		const task = new Footer("task", "Task: ");
+		const pr = new Footer("pr", "PR: ");
+		task.update({
+			footerType: "task",
+			isLoading: false,
+			text: "work",
+			isVisible: true,
+		});
+		pr.update({
+			footerType: "pr",
+			isLoading: false,
+			text: "42",
+			isVisible: false,
+		});
+
+		expect(task.isVisible).toBe(true);
+		expect(pr.isVisible).toBe(false);
+		expect(renderFooter([task, pr])).toBe("|Task: work");
+	});
+});
+
 describe("renderFooterLine", () => {
+	it("preserves spaced separators between footer values", () => {
+		const line = renderFooterLine(
+			{ branch: "feature/auth" },
+			80,
+			theme,
+			new Map([["status", "Caveman: ready"]]),
+		);
+
+		expect(line).toBe(
+			"PR: none | Todoist Task: none | branch: feature/auth | Caveman: ready",
+		);
+	});
 	it(STYLES_FOOTER_LABELS_SEPARATELY_FROM_CLICKABLE_VALUES, () => {
 		const pr = renderPrStatus(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, styledTheme);
 		const task = renderTaskStatus(
@@ -169,5 +210,58 @@ describe("createFooterFactory", () => {
 		expect(component.render(80)[0]).toContain(FEATURE);
 		component.invalidate();
 		component.dispose();
+	});
+});
+
+describe("renderPrLabel", () => {
+	it("renders a clickable normalized pull request label", () => {
+		const label = renderPrLabel(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, theme);
+
+		expect(label).toContain("PR #42");
+		expect(label).toContain(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42);
+	});
+
+	it("renders no PR for missing or invalid values", () => {
+		expect(renderPrLabel(undefined, theme)).toBe("PR: none");
+		expect(renderPrLabel("https://example.com/pr/42", theme)).toBe("PR: none");
+	});
+});
+
+describe("renderPrStatus", () => {
+	it("renders the PR link status with a clickable number", () => {
+		const status = renderPrStatus(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, theme);
+
+		expect(status).toContain(PR_LINK_PREFIX);
+		expect(status).toContain(PR_NUMBER);
+		expect(status).toContain(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42);
+	});
+
+	it("bounds long PR numbers", () => {
+		const status = renderPrStatus(
+			HTTPS_GITHUB_COM_OWNER_REPO_PULL_123456789,
+			theme,
+		);
+
+		expect(status).toContain(BOUNDED_PR_NUMBER);
+		expect(status).not.toContain("#123456789");
+	});
+});
+
+describe("Todoist footer rendering", () => {
+	it("renders a linked task with a bounded name", () => {
+		const status = renderTaskStatus(
+			"https://app.todoist.com/app/task/7",
+			styledTheme,
+			"12345678901234567890",
+		);
+		expect(status).toContain("123456789012345...");
+		expect(status).not.toContain("12345678901234567890");
+		expect(status).toContain("\u001b]8;;https://app.todoist.com/app/task/7");
+	});
+
+	it("renders a missing task safely", () => {
+		expect(renderTaskStatus(undefined, styledTheme)).toContain(
+			"<muted>Todoist Task: </muted><text>none</text><muted> |</muted>",
+		);
 	});
 });

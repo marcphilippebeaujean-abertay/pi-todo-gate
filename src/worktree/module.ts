@@ -1,173 +1,36 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitActionResult } from "../exit-protocol/types.ts";
-import { type Exec, spawnExec } from "../shared/command.ts";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
-import { inspectProject } from "../shared/project.ts";
-import { confirmDirtyRemoval, createCleanupAction } from "./action.ts";
-import { cleanupWorktree } from "./cleanup.ts";
-import { currentWorktreeState, type WorktreeCurrentState } from "./commands.ts";
-import { notifyWorktree } from "./notify.ts";
-import { isCurrentWorktree } from "./state.ts";
+import "./commands.ts";
+import "./git.ts";
+import "./constants.ts";
+import "./state.ts";
+import "./events.ts";
+import "./event-consumers.ts";
+import "./event-publishers.ts";
+import "./notifications.ts";
+import "./user-prompts.ts";
+import type { SharedEvents } from "../shared/events.ts";
+import { createWorktreeConsumer } from "./event-consumers.ts";
+import type { WorktreeModule, WorktreeModuleDependencies } from "./state.ts";
 
-export interface WorktreeModuleDependencies {
-	exec?: Exec;
-	changeDirectory?: (path: string) => void;
-}
-
-export interface WorktreeModule {
-	sessionStart(ctx: ExtensionContext): Promise<void>;
-	deactivate(): void;
-}
-
-export interface WorktreeBaseline {
-	worktreePath: string;
-	branch: string;
-	mainRoot: string;
-	initialHead: string;
-	initialStatus: string;
-}
-
-export type { WorktreeCurrentState };
-
-type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
-
-class Worktree implements WorktreeModule {
-	private readonly exec: Exec;
-	private readonly changeDirectory: (path: string) => void;
-	private context: ExtensionContext | null = null;
-	private baseline: WorktreeBaseline | null = null;
-	private operationGeneration = 0;
-
-	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
-		this.exec = dependencies.exec ?? spawnExec;
-		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.on(C.event.prMerged, this.onPrMerged.bind(this));
-	}
-
-	async sessionStart(nextContext: ExtensionContext): Promise<void> {
-		const generation = ++this.operationGeneration;
-		this.context = nextContext;
-		this.baseline = null;
-		const project = await inspectProject(this.exec, nextContext.cwd);
-		const isCurrent = generation === this.operationGeneration;
-		if (!isCurrent) return;
-		const isWorktree = project.isWorktree;
-		if (!isWorktree) return;
-		const root = project.root;
-		const branch = project.branch;
-		const mainRoot = project.mainRoot;
-		if (root === null) return;
-		if (branch === null) return;
-		if (mainRoot === null) return;
-		const state = await currentWorktreeState(this.exec, nextContext.cwd);
-		const isCurrentGeneration = generation === this.operationGeneration;
-		if (!isCurrentGeneration) return;
-		const hasState = state !== null;
-		if (!hasState) return;
-		this.baseline = {
-			worktreePath: root,
-			branch,
-			mainRoot,
-			initialHead: state.currentHead,
-			initialStatus: state.currentStatus,
-		};
-	}
-
-	deactivate(): void {
-		this.operationGeneration += 1;
-		this.context = null;
-		this.baseline = null;
-	}
-
-	private onPrMerged(request: MergeRequest): void {
-		if (this.context === null) return;
-		if (this.baseline === null) return;
-		const worktree = this.baseline;
-		const generation = this.operationGeneration;
-		request.addAction(
-			createCleanupAction(
-				worktree,
-				this.executeCleanup.bind(this, worktree, generation),
-			),
-		);
-	}
-
-	private async executeCleanup(
-		worktree: WorktreeBaseline,
-		generation: number,
-	): Promise<ExitActionResult> {
-		const context = this.context;
-		if (context === null) return C.exit.failed;
-		const canExecute = context.hasUI;
-		if (!canExecute) return C.exit.failed;
-		const isCurrent = isCurrentWorktree(
-			this.baseline,
-			worktree,
-			generation,
-			this.operationGeneration,
-		);
-		if (!isCurrent) return C.exit.failed;
-		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const hasState = state !== null;
-		if (!hasState) {
-			notifyWorktree(
-				this.context,
-				C.worktree.statusUnavailable,
-				C.value.warning,
-			);
-			return C.exit.failed;
-		}
-		const hasChanges = state.currentStatus !== C.worktree.empty;
-		let force = false;
-		if (hasChanges) {
-			force = await confirmDirtyRemoval(context, worktree);
-			if (!force) return C.exit.failed;
-		}
-		return this.cleanupNow(
-			worktree,
-			generation,
-			force,
-			C.worktree.cleanupSuccess,
-		);
-	}
-
-	private async cleanupNow(
-		worktree: WorktreeBaseline,
-		generation: number,
-		force: boolean,
-		successMessage: string,
-	): Promise<ExitActionResult> {
-		const cleanupState = { value: false };
-		const cleanupOptions = {
-			exec: this.exec,
-			changeDirectory: this.changeDirectory,
-			notify: notifyWorktree.bind(null, this.context),
-			worktreeRemoved: cleanupState,
-			isCurrent: () =>
-				isCurrentWorktree(
-					this.baseline,
-					worktree,
-					generation,
-					this.operationGeneration,
-				),
-		};
-		const result = await cleanupWorktree(worktree, force, cleanupOptions);
-		const worktreeWasRemoved = cleanupState.value;
-		if (worktreeWasRemoved) this.baseline = null;
-		const cleanupSucceeded = result === C.exit.completed;
-		if (cleanupSucceeded) notifyWorktree(this.context, successMessage);
-		return result;
-	}
-}
+export * from "./events.ts";
+export type {
+	MergeRequest,
+	WorktreeBaseline,
+	WorktreeCurrentState,
+	WorktreeModule,
+	WorktreeModuleDependencies,
+} from "./state.ts";
 
 export function createWorktreeModule(
 	events: SharedEvents,
-	dependencies: WorktreeModuleDependencies = {},
+	dependencies?: WorktreeModuleDependencies,
 ): WorktreeModule {
-	return new Worktree(events, dependencies);
+	return createWorktreeConsumer(events, dependencies ?? {});
 }
+
+export {
+	cleanupWorktree,
+	commandFailure,
+	commandOutput,
+	currentWorktreeState,
+	isCurrentWorktree,
+} from "./git.ts";

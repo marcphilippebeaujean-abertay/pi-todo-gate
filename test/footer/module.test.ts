@@ -8,8 +8,8 @@ import {
 	FOOTER_STATE_TYPE,
 } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
+import type { FooterUpdate } from "../../src/footer/state.ts";
 import { restoreFooterState } from "../../src/footer/state.ts";
-import type { FooterUpdate } from "../../src/footer/types.ts";
 
 function harness(branch: unknown[] = []) {
 	const appended: unknown[] = [];

@@ -1,62 +1,44 @@
-const PROJECT = "project";
-const LIST = "list";
-const JSON_OUTPUT_FLAG = "--json";
-const ID = "id:";
-const PROJECT_LIST = "project list";
-const TASK = "task";
-const VIEW = "view";
-const ADD = "add";
-const COMPLETE = "complete";
-const TASK_CLAIM = "task claim";
-const TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT =
-	"task is outside the configured project";
-const SECTION = "section";
-const PROJECT_FLAG = "--project";
-const SECTION_FLAG = "--section";
-const DESCRIPTION_FLAG = "--description";
-const IN_PROGRESS_VALUE = "in progress";
-const IN_PROGRESS_LABEL = "In Progress";
-const MOVE = "move";
-
-import type { CommandResult } from "../shared/command.ts";
+import {
+	ADD,
+	COMPLETE,
+	DESCRIPTION_FLAG,
+	ID,
+	IN_PROGRESS_LABEL,
+	IN_PROGRESS_VALUE,
+	JSON_OUTPUT_FLAG,
+	LIST,
+	MOVE,
+	PROJECT,
+	PROJECT_FLAG,
+	PROJECT_LIST,
+	SECTION,
+	SECTION_FLAG,
+	TASK,
+	TASK_CLAIM,
+	TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
+	VIEW,
+} from "./constants.ts";
 import {
 	childList,
 	parsePayload,
 	record,
 	sanitizeError,
 	stringValue,
+	TodoistError,
+	TodoistOperationCancelled,
 	taskFromPayload,
 } from "./parsing.ts";
-
-export interface TodoistTask {
-	id: string;
-	content: string;
-	description: string;
-	projectId: string;
-	sectionId?: string | null;
-	sectionName?: string | null;
-	url?: string;
-	webUrl?: string;
-}
-
-export interface TodoistExec {
-	run(args: readonly string[]): Promise<CommandResult>;
-}
-
-export type IsCurrentOperation = () => boolean;
-
-import { TodoistError, TodoistOperationCancelled } from "./errors.ts";
-
-export { TodoistError, TodoistOperationCancelled } from "./errors.ts";
+import type { IsCurrentOperation, TodoistExec, TodoistTask } from "./state.ts";
 
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}
 
 	private async run(
 		args: readonly string[],
-		parseJson = true,
+		parseJson?: boolean,
 		isCurrent?: IsCurrentOperation,
 	): Promise<unknown> {
+		const shouldParseJson = parseJson ?? true;
 		if (isCurrent !== undefined) {
 			const isCurrentBeforeRun = isCurrent();
 			if (!isCurrentBeforeRun) throw new TodoistOperationCancelled();
@@ -71,7 +53,7 @@ export class TodoistClient {
 			const family = args.slice(0, 2).join(" ");
 			throw new TodoistError(family, sanitizeError(result.stderr));
 		}
-		return parseJson
+		return shouldParseJson
 			? parsePayload(result.stdout, args.slice(0, 2).join(" "))
 			: result.stdout;
 	}

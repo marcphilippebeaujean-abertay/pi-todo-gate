@@ -1,11 +1,11 @@
-import type { ClaimWorkerResult } from "./claim-worker-result.ts";
-import type { CommandRunner } from "./types.ts";
-
-const HERDR_COMMAND = "herdr";
-const TAB_GET_ARGS = ["tab", "get"];
-const PANE_GET_ARGS = ["pane", "get"];
-const STRING_TYPE = "string";
-const NUMERIC_LABEL = /^\d+$/;
+import {
+	HERDR_COMMAND,
+	NUMERIC_LABEL,
+	PANE_GET_ARGS,
+	STRING_TYPE,
+	TAB_GET_ARGS,
+} from "./constants.ts";
+import type { ClaimWorkerResult, CommandRunner } from "./state.ts";
 
 export function tabNameIsParseableAsInt(label: string | undefined): boolean {
 	if (label === undefined) return false;

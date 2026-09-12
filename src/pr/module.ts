@@ -1,17 +1,22 @@
-export {
-	firstGithubPrUrl,
-	firstUnmergedGithubPrUrl,
-	githubPrUrl,
-	githubPrUrls,
-	normalizeGithubPrUrl,
-} from "./detection.ts";
-export { renderPrLabel, renderPrStatus } from "./footer.ts";
-export type { OpenPrInfo } from "./git.ts";
-export {
-	findOpenPr,
-	findPrState,
-	isGithubPrAvailable,
-	matchesPinnedPr,
-	mergeCommand,
-} from "./git.ts";
-export { mergePinnedPr } from "./protocol.ts";
+import "./commands.ts";
+import "./constants.ts";
+import "./state.ts";
+import "./events.ts";
+import "./parsing.ts";
+import "./git.ts";
+import "./event-consumers.ts";
+import "./event-publishers.ts";
+import "./user-prompts.ts";
+import "./notifications.ts";
+
+export * from "./commands.ts";
+export { register as registerMergeProtocol } from "./commands.ts";
+export * from "./constants.ts";
+export * from "./event-consumers.ts";
+export * from "./event-publishers.ts";
+export * from "./events.ts";
+export * from "./git.ts";
+export * from "./notifications.ts";
+export * from "./parsing.ts";
+export * from "./state.ts";
+export * from "./user-prompts.ts";

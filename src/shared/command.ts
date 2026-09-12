@@ -1,9 +1,6 @@
-export interface CommandResult {
-	stdout: string;
-	stderr: string;
-	code: number;
-	killed?: boolean;
-}
+export type { CommandResult } from "./command-data.ts";
+
+import type { CommandResult } from "./command-data.ts";
 
 export type Exec = (
 	command: string,

@@ -1,13 +1,11 @@
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
+import {
+	CLAIMED_STATUS,
+	HERDR_OBJECT_TYPE,
+	MAX_DIAGNOSTIC_BYTES,
+} from "./constants.ts";
 
-export interface ClaimWorkerResult {
-	tabId: string;
-	label: string;
-}
-
-const MAX_DIAGNOSTIC_BYTES = 500;
-const OBJECT_TYPE = "object";
-const CLAIMED_STATUS = "claimed";
+import type { ClaimWorkerResponse, ClaimWorkerResult } from "./state.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;
@@ -16,23 +14,19 @@ export function appendBounded(current: string, chunk: Buffer | string): string {
 }
 
 function claimResult(value: unknown): ClaimWorkerResult | undefined {
-	const isObject = typeof value === OBJECT_TYPE;
+	const isObject = typeof value === HERDR_OBJECT_TYPE;
 	const isNull = value === null;
 	const isInvalidValue = !isObject || isNull;
 	if (isInvalidValue) return undefined;
-	const result = value as {
-		status?: unknown;
-		tabId?: unknown;
-		label?: unknown;
-	};
+	const result = value as Partial<ClaimWorkerResponse>;
 	const hasClaimedStatus = result.status === CLAIMED_STATUS;
-	const hasTabId =
-		typeof result.tabId === "string" && result.tabId.trim().length > 0;
-	const hasLabel =
-		typeof result.label === "string" && result.label.trim().length > 0;
+	const hasTabId = typeof result.tabId === "string";
+	const hasNonEmptyTabId = hasTabId && (result.tabId as string).trim() !== "";
+	const hasLabel = typeof result.label === "string";
+	const hasNonEmptyLabel = hasLabel && (result.label as string).trim() !== "";
 	if (!hasClaimedStatus) return undefined;
-	if (!hasTabId) return undefined;
-	if (!hasLabel) return undefined;
+	if (!hasNonEmptyTabId) return undefined;
+	if (!hasNonEmptyLabel) return undefined;
 	return { tabId: result.tabId as string, label: result.label as string };
 }
 

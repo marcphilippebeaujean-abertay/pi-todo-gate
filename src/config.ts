@@ -2,7 +2,7 @@ export type {
 	ResolvedProject,
 	TodoistProjectMapping,
 	TodoistProjectSettings,
-} from "./todoist/config.ts";
+} from "./todoist/module.ts";
 export {
 	configPathForAgentDir,
 	DEFAULT_CONFIG_PATH,
@@ -11,4 +11,4 @@ export {
 	parentDirectory,
 	parseConfig,
 	resolveConfiguredProject,
-} from "./todoist/config.ts";
+} from "./todoist/module.ts";

@@ -1,41 +1,20 @@
-const GH_COMMAND = "gh";
-const PR_COMMAND = "pr";
-const JSON_FLAG = "--json";
-const UNKNOWN_STATE = "UNKNOWN";
-const MERGED_STATE = "MERGED";
-const OPEN_STATE = "OPEN";
-const CLOSED_STATE = "CLOSED";
-
-function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
-	const parsed = mergedPrDataSchema.safeParse(data);
-	const isInvalidData = !parsed.success;
-	if (isInvalidData) return UNKNOWN_STATE;
-	const row = parsed.data;
-	const hasMergedAt = row.mergedAt !== undefined && row.mergedAt.trim() !== "";
-	switch (row.state) {
-		case MERGED_STATE:
-			return hasMergedAt ? MERGED_STATE : UNKNOWN_STATE;
-		case OPEN_STATE:
-			return OPEN_STATE;
-		case CLOSED_STATE:
-			return CLOSED_STATE;
-		default:
-			return UNKNOWN_STATE;
-	}
-}
-
 import type { CommandResult, Exec } from "../shared/command.ts";
-import { githubPrUrl } from "./detection.ts";
 import {
-	mergedPrDataSchema,
+	GH_COMMAND,
+	JSON_FLAG,
+	MERGE_PR_MODE,
+	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
+	PR_COMMAND,
+	UNKNOWN_STATE,
+	VIEW_COMMAND,
+} from "./constants.ts";
+import {
+	githubPrUrl,
 	openPrRowSchema,
-	openPrRowsSchema,
-} from "./schemas.ts";
-
-export interface OpenPrInfo {
-	url: string | null;
-	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
-}
+	parseOpenPrResult,
+	stateFromMergedData,
+} from "./parsing.ts";
+import type { OpenPrInfo } from "./state.ts";
 
 async function runGhView(
 	exec: Exec,
@@ -46,7 +25,7 @@ async function runGhView(
 	try {
 		return await exec(
 			GH_COMMAND,
-			[PR_COMMAND, "view", target, JSON_FLAG, fields],
+			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, fields],
 			{ cwd },
 		);
 	} catch {
@@ -123,41 +102,6 @@ async function runGhList(
 	}
 }
 
-function parseOpenPrResult(
-	stdout: string,
-	remoteOrigin: string | null,
-): OpenPrInfo {
-	try {
-		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
-		const isInvalidRows = !parsed.success;
-		if (isInvalidRows) return { url: null, state: UNKNOWN_STATE };
-		const hasNoRows = parsed.data.length === 0;
-		if (hasNoRows) return { url: null, state: OPEN_STATE };
-		const row = parsed.data[0];
-		const hasNoRow = row === undefined;
-		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
-		const url =
-			row.url === undefined ? null : githubPrUrl(row.url, remoteOrigin);
-		let state: OpenPrInfo["state"];
-		switch (row.state) {
-			case OPEN_STATE:
-				state = OPEN_STATE;
-				break;
-			case CLOSED_STATE:
-				state = CLOSED_STATE;
-				break;
-			case MERGED_STATE:
-				state = MERGED_STATE;
-				break;
-			default:
-				state = UNKNOWN_STATE;
-		}
-		return { url, state };
-	} catch {
-		return { url: null, state: UNKNOWN_STATE };
-	}
-}
-
 export async function findOpenPr(
 	exec: Exec,
 	cwd: string,
@@ -173,8 +117,72 @@ export async function findOpenPr(
 	return parseOpenPrResult(result.stdout, remoteOrigin);
 }
 
-export {
-	detectMerge,
-	matchesPinnedPr,
-	mergeCommand,
-} from "./merge-detection.ts";
+export function mergePinnedPr(
+	exec: Exec,
+	cwd: string,
+	prUrl: string,
+): Promise<CommandResult> {
+	return exec(
+		GH_COMMAND,
+		[PR_COMMAND, MERGE_PROTOCOL_COMMAND, prUrl, MERGE_PR_MODE],
+		{ cwd },
+	);
+}
+
+export async function queryPinnedHead(
+	exec: Exec,
+	cwd: string,
+	prUrl: string,
+): Promise<string | null> {
+	try {
+		const result = await exec(
+			GH_COMMAND,
+			[PR_COMMAND, VIEW_COMMAND, prUrl, JSON_FLAG, "headRefName"],
+			{ cwd },
+		);
+		const commandFailed = result.code !== 0;
+		if (commandFailed) return null;
+		const data: unknown = JSON.parse(result.stdout);
+		const isObject = typeof data === "object";
+		const isNull = data === null;
+		const isInvalidObject = !isObject || isNull;
+		if (isInvalidObject) return null;
+		const headRefName = (data as { headRefName?: unknown }).headRefName;
+		const hasHeadRefName = typeof headRefName === "string";
+		return hasHeadRefName ? headRefName : null;
+	} catch {
+		return null;
+	}
+}
+
+export async function queryCurrentPr(
+	exec: Exec,
+	cwd: string,
+	target: string,
+): Promise<{ url: string; headRefName: string } | null> {
+	try {
+		const result = await exec(
+			GH_COMMAND,
+			[PR_COMMAND, VIEW_COMMAND, target, JSON_FLAG, "url,headRefName"],
+			{ cwd },
+		);
+		const commandFailed = result.code !== 0;
+		if (commandFailed) return null;
+		const data: unknown = JSON.parse(result.stdout);
+		const isObject = typeof data === "object";
+		const isNull = data === null;
+		const isInvalidObject = !isObject || isNull;
+		if (isInvalidObject) return null;
+		const row = data as { url?: unknown; headRefName?: unknown };
+		const hasUrl = typeof row.url === "string";
+		const hasHeadRefName = typeof row.headRefName === "string";
+		const hasInvalidFields = !hasUrl || !hasHeadRefName;
+		if (hasInvalidFields) return null;
+		return {
+			url: row.url as string,
+			headRefName: row.headRefName as string,
+		};
+	} catch {
+		return null;
+	}
+}

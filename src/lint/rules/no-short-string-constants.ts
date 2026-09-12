@@ -10,8 +10,12 @@ export const noShortStringConstants: LintRule = ({
 	sourceFile,
 	diagnostics,
 }) => {
-	function visit(node: ts.Node, ancestors: readonly ts.Node[] = []): void {
-		if (isSingleCharacterLiteral(node) && isConstInitializer(node, ancestors))
+	function visit(node: ts.Node, ancestors?: readonly ts.Node[]): void {
+		const resolvedAncestors = ancestors ?? [];
+		if (
+			isSingleCharacterLiteral(node) &&
+			isConstInitializer(node, resolvedAncestors)
+		)
 			diagnostics.push(
 				diagnostic(
 					sourceFile,
@@ -22,7 +26,9 @@ export const noShortStringConstants: LintRule = ({
 					1,
 				),
 			);
-		ts.forEachChild(node, (child) => visit(child, [...ancestors, node]));
+		ts.forEachChild(node, (child) =>
+			visit(child, [...resolvedAncestors, node]),
+		);
 	}
 	visit(sourceFile);
 };
