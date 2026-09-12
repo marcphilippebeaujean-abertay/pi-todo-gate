@@ -21,13 +21,18 @@ function applyModuleState(
 	state: SessionState,
 	update: ModuleStateChangedEvent,
 ): void {
-	state.moduleState[update.moduleId] = structuredClone(update.moduleState);
+	const nextModuleState = structuredClone(update.moduleState);
 	const hasGitStatePatch = update.gitStatePatch !== undefined;
-	if (!hasGitStatePatch) return;
-	state.gitState = {
+	if (!hasGitStatePatch) {
+		state.moduleState[update.moduleId] = nextModuleState;
+		return;
+	}
+	const nextGitState = {
 		...state.gitState,
 		...structuredClone(update.gitStatePatch),
 	};
+	state.moduleState[update.moduleId] = nextModuleState;
+	state.gitState = nextGitState;
 }
 
 export function updateModuleState(
