@@ -7,4 +7,5 @@ export interface WorkState {
 	inheritedFrom?: string;
 	mergeCompletedAt?: string;
 	todoistCompletionAttemptedAt?: string;
+	herdrClaimReturnedSuccessfully?: string;
 }

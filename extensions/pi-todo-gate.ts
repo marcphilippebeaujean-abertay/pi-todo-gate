@@ -11,6 +11,7 @@ import {
 	handleSessionStart,
 } from "../src/extension-session.ts";
 import type { ExtensionDependencies } from "../src/extension-types.ts";
+import { HERDR_CLAIM_RETURNED } from "../src/herdr/constants.ts";
 import { installHerdrTabClaim } from "../src/herdr/module.ts";
 import { register } from "../src/pr/module.ts";
 import { isSubagent } from "../src/session.ts";
@@ -35,6 +36,19 @@ function startExtensions(
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 		onFooterUpdate: runtime.footer.update.bind(runtime.footer),
+		hasClaimReturnedSuccessfully: () =>
+			runtime.active?.state.herdrClaimReturnedSuccessfully ===
+			HERDR_CLAIM_RETURNED,
+		onClaimReturnedSuccessfully: () => {
+			const session = runtime.active;
+			if (session === null) return;
+			const nextState = {
+				...session.state,
+				herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
+			};
+			runtime.replaceSessionState(session, nextState);
+			runtime.appendState(nextState);
+		},
 	});
 }
 

@@ -14,6 +14,7 @@ const STATE_KEYS: readonly (keyof WorkState)[] = [
 	"inheritedFrom",
 	"mergeCompletedAt",
 	"todoistCompletionAttemptedAt",
+	"herdrClaimReturnedSuccessfully",
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {

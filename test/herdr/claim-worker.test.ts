@@ -100,7 +100,7 @@ describe("startClaimWorker", () => {
 					content: [
 						{
 							type: "text",
-							text: '{"status":"claimed","tabId":"w1:t1","label":"dialog-editor"}',
+							text: '{"tabName":"dialog-editor","shouldMoveToNewTab":false}',
 						},
 					],
 				},
@@ -111,9 +111,32 @@ describe("startClaimWorker", () => {
 
 		expect(setupState.completed).toHaveBeenCalledWith({
 			attemptId: 1,
-			result: { tabId: "w1:t1", label: "dialog-editor" },
+			result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
 		});
 		expect(setupState.failed).not.toHaveBeenCalled();
+	});
+
+	it("accepts null when the worker confirms no tab changes are needed", () => {
+		const setupState = setup();
+		startClaimWorker(setupState.request, {
+			spawnWorker: setupState.spawnWorker,
+		});
+
+		setupState.process.stdout.write(
+			`${JSON.stringify({
+				type: "message_end",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "null" }],
+				},
+			})}\n`,
+		);
+		setupState.process.emit("close", 0);
+
+		expect(setupState.completed).toHaveBeenCalledWith({
+			attemptId: 1,
+			result: null,
+		});
 	});
 
 	it("reports missing claim evidence on clean worker exit", () => {
