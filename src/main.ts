@@ -72,7 +72,6 @@ function createWorktreeAndExitModules(
 	dependencies: ExtensionDependencies,
 ): Pick<ExtensionState, "worktree" | "exitProtocol"> {
 	const worktree = createWorktreeModule({
-		promptQueue,
 		eventHandler,
 		sessionState,
 		dependencies: {
@@ -86,7 +85,6 @@ function createWorktreeAndExitModules(
 		exitProtocol: createExitProtocolModule({
 			promptQueue,
 			eventHandler,
-			sessionState,
 			worktree,
 		}),
 	};
@@ -111,9 +109,7 @@ function createScopedModules(
 	);
 	return {
 		footer: createFooterModule({
-			promptQueue,
 			eventHandler,
-			sessionState,
 			pi,
 			dependencies: { openSession: dependencies.openSession },
 		}),
@@ -129,7 +125,11 @@ function createScopedModules(
 			eventHandler,
 			sessionState,
 			stateRef,
-			dependencies,
+			dependencies: {
+				exec: dependencies.exec,
+				taskClaimWorker: dependencies.taskClaimWorker,
+				createTodoistClient: dependencies.createTodoistClient,
+			},
 		}),
 		...worktreeAndExit,
 	};

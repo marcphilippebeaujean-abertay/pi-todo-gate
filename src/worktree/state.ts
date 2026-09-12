@@ -1,5 +1,4 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
 export interface WorktreeBaseline {
@@ -31,7 +30,6 @@ export interface WorktreeModuleDependencies {
 }
 
 export interface WorktreeModuleOptions {
-	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	dependencies?: WorktreeModuleDependencies;
@@ -54,6 +52,7 @@ export interface WorktreeModule {
 	sessionStart(ctx: ExtensionContext): Promise<void>;
 	deactivate(): void;
 	getWorktreeInfo(): WorktreeInfo | null;
+	getHasUncommittedChanges(): boolean;
 	removeWorktree(): Promise<
 		import("../shared/exit-actions.ts").ExitActionResult
 	>;

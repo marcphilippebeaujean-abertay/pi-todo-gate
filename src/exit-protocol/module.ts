@@ -9,7 +9,6 @@ import "./user-prompts.ts";
 import { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import { createSessionState } from "../state.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import { ExitProtocolConsumer } from "./event-consumers.ts";
 import type { ExitProtocolModule, ExitProtocolModuleOptions } from "./state.ts";
@@ -44,12 +43,10 @@ export function createExitProtocolModule(
 	const context = moduleContext ?? {
 		promptQueue: promptQueue ?? new PromptQueue(),
 		eventHandler: optionsOrEvents,
-		sessionState: createSessionState(),
 	};
 	return new ExitProtocolConsumer({
 		promptQueue: context.promptQueue,
 		eventHandler: context.eventHandler,
-		sessionState: context.sessionState,
 		worktree,
 	});
 }

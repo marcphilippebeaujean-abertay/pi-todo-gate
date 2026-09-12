@@ -85,9 +85,7 @@ export function createFooterModule(
 		sessionState: createSessionState(),
 	};
 	return new FooterEventConsumer({
-		promptQueue: context.promptQueue,
 		eventHandler: context.eventHandler,
-		sessionState: context.sessionState,
 		pi: optionsOrPi,
 		dependencies: moduleDependencies,
 	});

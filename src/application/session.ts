@@ -5,11 +5,9 @@ import {
 import { refreshFooterStatuses } from "../footer/module.ts";
 import type { PrSession } from "../pr/state.ts";
 import { installStateTool } from "../pr/state-tool.ts";
-import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { SessionStartEvent } from "../shared/events.ts";
 import { latestStateData } from "../shared/extension-message.ts";
-import { hasUncommittedChanges } from "../shared/project.ts";
 import type {
 	ExtensionState,
 	SessionContext,
@@ -134,24 +132,6 @@ function manageActiveTools(runtime: ExtensionState): void {
 	runtime.pi.setActiveTools([...activeTools, C.tool.state]);
 }
 
-async function initializeWorkingTreeStatus(
-	runtime: ExtensionState,
-	session: SessionContext,
-	cwd: string,
-): Promise<void> {
-	if (session.state.prUrl === undefined) return;
-	const status = await hasUncommittedChanges(
-		runtime.dependencies.exec ?? spawnExec,
-		cwd,
-	);
-	const isCurrentSession =
-		currentSessionContext(runtime.sessionState) === session;
-	const shouldSkipStatusUpdate = !isCurrentSession || status === null;
-	if (shouldSkipStatusUpdate) return;
-	session.hasUncommittedChanges = status;
-	refreshFooterStatuses(runtime.footer, session);
-}
-
 async function activateConfiguredSession(
 	runtime: ExtensionState,
 	event: SessionStartEvent,
@@ -160,7 +140,7 @@ async function activateConfiguredSession(
 	config: TodoistProjectMapping,
 ): Promise<{ session: SessionContext; branch: readonly unknown[] }> {
 	runtime.exitProtocol.sessionStart(ctx);
-	void runtime.worktree.sessionStart(ctx);
+	await runtime.worktree.sessionStart(ctx);
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -227,8 +207,8 @@ export async function handleSessionStart(
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
 	await persistInitialPr(runtime, branch);
+	session.hasUncommittedChanges = runtime.worktree.getHasUncommittedChanges();
 	refreshFooterStatuses(runtime.footer, session);
-	void initializeWorkingTreeStatus(runtime, session, ctx.cwd);
 }
 
 export async function persistInitialPr(

@@ -1,6 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { PromptQueue } from "../../src/prompt-queue.ts";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -127,7 +126,6 @@ describe("worktree event actions", () => {
 		};
 		const ctx = context();
 		const module = createWorktreeModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: {
@@ -148,6 +146,60 @@ describe("worktree event actions", () => {
 			moduleId: "worktree",
 			gitStatePatch: { hasUncommittedChanges: true },
 		});
+	});
+
+	it("ignores stale concurrent status refresh results", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		const moduleUpdates: Array<{ hasUncommittedChanges?: boolean }> = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			const state = update.moduleState as { hasUncommittedChanges?: boolean };
+			moduleUpdates.push(state);
+		});
+		let statusCalls = 0;
+		let releaseFirstRefresh!: () => void;
+		const firstRefreshBlocked = new Promise<void>((resolve) => {
+			releaseFirstRefresh = resolve;
+		});
+		const exec: Exec = async (command, args) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return ok("/repo/.worktrees/feature\n");
+			if (key === "git branch --show-current") return ok("feature\n");
+			if (key === "git worktree list --porcelain")
+				return ok("worktree /repo\nHEAD abc\nbranch refs/heads/main\n");
+			if (key === "git rev-parse HEAD") return ok("def\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all") {
+				statusCalls += 1;
+				if (statusCalls === 2) await firstRefreshBlocked;
+				return ok(statusCalls === 2 ? " M stale\n" : "");
+			}
+			return ok("origin\n");
+		};
+		const ctx = context();
+		const module = createWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		await module.sessionStart(ctx);
+
+		const first = events.toolResultEvent.emit({
+			event: { toolName: "bash", isError: false } as never,
+			context: ctx,
+		});
+		await Promise.resolve();
+		const second = events.toolResultEvent.emit({
+			event: { toolName: "bash", isError: false } as never,
+			context: ctx,
+		});
+		releaseFirstRefresh();
+		await Promise.all([first, second]);
+
+		expect(moduleUpdates.at(-1)?.hasUncommittedChanges).toBe(false);
+		expect(
+			moduleUpdates.filter((state) => state.hasUncommittedChanges).length,
+		).toBe(0);
 	});
 
 	it("executes cleanup immediately after a merge", async () => {

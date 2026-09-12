@@ -38,6 +38,7 @@ class Worktree implements WorktreeModule {
 	private baseline: WorktreeBaseline | null = null;
 	private hasUncommittedChanges = false;
 	private sessionGeneration = 0;
+	private refreshSequence = 0;
 
 	constructor(options: WorktreeModuleOptions) {
 		this.eventHandler = options.eventHandler;
@@ -55,6 +56,7 @@ class Worktree implements WorktreeModule {
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
 		const generation = ++this.sessionGeneration;
+		this.refreshSequence += 1;
 		this.context = nextContext;
 		this.baseline = null;
 		await this.initializeSession(nextContext, generation);
@@ -80,7 +82,9 @@ class Worktree implements WorktreeModule {
 		const shouldRefresh = isFileMutation || isBashTool;
 		const shouldSkipRefresh = !shouldRefresh;
 		if (shouldSkipRefresh) return;
-		await this.refreshStatus(context, this.sessionGeneration);
+		const generation = this.sessionGeneration;
+		const sequence = ++this.refreshSequence;
+		await this.refreshStatus(context, generation, sequence);
 	}
 
 	private emitState(gitStatePatch?: Record<string, unknown>): void {
@@ -134,11 +138,14 @@ class Worktree implements WorktreeModule {
 	private async refreshStatus(
 		context: ExtensionContext,
 		generation: number,
+		sequence: number,
 	): Promise<void> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
 		const isCurrent = this.isCurrentSession(context, generation);
 		const hasStatus = dirtyStatus !== null;
-		const shouldSkipStatus = !isCurrent || !hasStatus;
+		const isCurrentAndHasStatus = isCurrent && hasStatus;
+		const isLatestRequest = sequence === this.refreshSequence;
+		const shouldSkipStatus = !isCurrentAndHasStatus || !isLatestRequest;
 		if (shouldSkipStatus) return;
 		this.hasUncommittedChanges = dirtyStatus;
 		this.updateApplicationSessionStatus();
@@ -163,7 +170,17 @@ class Worktree implements WorktreeModule {
 		const isCurrentContextAfterProject = this.isCurrentSession(ctx, generation);
 		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
-		if (isNotWorktree) return;
+		if (isNotWorktree) {
+			const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
+			const isCurrentAfterDirtyStatus = this.isCurrentSession(ctx, generation);
+			const hasStatus = dirtyStatus !== null;
+			const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
+			if (shouldSkipDirtyStatus) return;
+			this.hasUncommittedChanges = dirtyStatus;
+			this.updateApplicationSessionStatus();
+			this.emitState({ hasUncommittedChanges: dirtyStatus });
+			return;
+		}
 		if (project.root === null) return;
 		if (project.branch === null) return;
 		if (project.mainRoot === null) return;
@@ -192,6 +209,7 @@ class Worktree implements WorktreeModule {
 
 	deactivate(): void {
 		this.sessionGeneration += 1;
+		this.refreshSequence += 1;
 		this.context = null;
 		this.baseline = null;
 		this.hasUncommittedChanges = false;
@@ -200,6 +218,10 @@ class Worktree implements WorktreeModule {
 			moduleState: {},
 			gitStatePatch: {},
 		});
+	}
+
+	getHasUncommittedChanges(): boolean {
+		return this.hasUncommittedChanges;
 	}
 
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null {

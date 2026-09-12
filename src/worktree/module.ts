@@ -7,7 +7,6 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import { createSessionState } from "../state.ts";
@@ -46,12 +45,10 @@ export function createWorktreeModule(
 	}
 	const moduleDependencies = dependencies ?? {};
 	const context = moduleContext ?? {
-		promptQueue: new PromptQueue(),
 		eventHandler: optionsOrEvents,
 		sessionState: createSessionState(),
 	};
 	return createWorktreeConsumer({
-		promptQueue: context.promptQueue,
 		eventHandler: context.eventHandler,
 		sessionState: context.sessionState,
 		dependencies: moduleDependencies,
