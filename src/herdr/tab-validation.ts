@@ -5,7 +5,7 @@ import {
 	STRING_TYPE,
 	TAB_GET_ARGS,
 } from "./constants.ts";
-import type { ClaimWorkerResult, CommandRunner } from "./state.ts";
+import type { ClaimWorkerResponse, CommandRunner } from "./state.ts";
 
 export function tabNameIsParseableAsInt(label: string | undefined): boolean {
 	if (label === undefined) return false;
@@ -23,15 +23,18 @@ function labelIsDescriptive(label: string | undefined | null): boolean {
 }
 
 function matchesWorkerClaim(
-	claim: ClaimWorkerResult | undefined,
-	tabId: string,
+	claim: ClaimWorkerResponse | undefined,
 	label: string,
+	initialLabel: string,
 ): boolean {
-	const hasClaim = claim !== undefined;
-	if (!hasClaim) return false;
-	const hasMatchingTab = claim.tabId === tabId;
-	const hasMatchingLabel = claim.label === label;
-	return hasMatchingTab && hasMatchingLabel;
+	switch (claim) {
+		case undefined:
+			return false;
+		case null:
+			return label === initialLabel;
+		default:
+			return claim.tabName === label;
+	}
 }
 
 function jsonResult<T>(output: string): T | undefined {
@@ -71,7 +74,7 @@ export function hasValidatedTabClaim(
 	commandRunner: CommandRunner,
 	initialLabel: string | undefined,
 	paneId: string | undefined,
-	claim: ClaimWorkerResult | undefined,
+	claim: ClaimWorkerResponse | undefined,
 ): boolean {
 	const hasInitialLabel = initialLabel !== undefined;
 	if (!hasInitialLabel) return false;
@@ -84,10 +87,11 @@ export function hasValidatedTabClaim(
 		const currentLabel = tabLabel(commandRunner, observedTabId);
 		const hasDescriptiveLabel = labelIsDescriptive(currentLabel);
 		const hasChangedLabel = currentLabel !== initialLabel;
+		const currentTabLabel = currentLabel ?? "";
 		const hasMatchingWorkerClaim = matchesWorkerClaim(
 			claim,
-			observedTabId,
-			currentLabel ?? "",
+			currentTabLabel,
+			initialLabel,
 		);
 		const hasClaimedOrChangedLabel = hasChangedLabel || hasMatchingWorkerClaim;
 		const hasValidObservedClaim =

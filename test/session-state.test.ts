@@ -44,10 +44,16 @@ describe("session state", () => {
 				{
 					type: CUSTOM,
 					customType: PI_TODO_GATE_STATE,
-					data: { remoteOrigin: REMOTE_ORIGIN },
+					data: {
+						remoteOrigin: REMOTE_ORIGIN,
+						herdrClaimReturnedSuccessfully: "true",
+					},
 				},
 			]),
-		).toEqual({ remoteOrigin: REMOTE_ORIGIN });
+		).toEqual({
+			remoteOrigin: REMOTE_ORIGIN,
+			herdrClaimReturnedSuccessfully: "true",
+		});
 	});
 
 	it(USES_THE_LATEST_VALID_CUSTOM_STATE_ENTRY, () => {

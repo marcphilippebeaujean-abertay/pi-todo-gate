@@ -103,7 +103,7 @@ function worker() {
 function emitClaim(request: ClaimWorkerRequest, label = "dialog-editor"): void {
 	request.events.emit("claimCompleted", {
 		attemptId: request.attemptId,
-		result: { tabId: "w1:t1", label },
+		result: { tabName: label, shouldMoveToNewTab: false },
 	});
 }
 
@@ -122,6 +122,9 @@ describe("background Herdr tab claim", () => {
 	it("derives worker response instructions from typed response template", () => {
 		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
 			JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE),
+		);
+		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
+			"or null when no changes are needed",
 		);
 	});
 
@@ -275,6 +278,73 @@ describe("background Herdr tab claim", () => {
 				context(),
 			);
 			emitClaim(backgroundWorker.requests[0] as ClaimWorkerRequest);
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "another task" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
+	it("does not restart a successful claim after a new session", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			let claimReturned = false;
+			const label = { value: "7" };
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: mutableRunner(label),
+				startBackgroundWorker: backgroundWorker.start,
+				hasClaimReturnedSuccessfully: () => claimReturned,
+				onClaimReturnedSuccessfully: () => {
+					claimReturned = true;
+				},
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "successful claim" },
+				context(),
+			);
+			label.value = "dialog-editor";
+			emitClaim(backgroundWorker.requests[0] as ClaimWorkerRequest);
+			await pi.handlers.get("session_shutdown")?.[0]?.(
+				{ reason: "new" },
+				context(),
+			);
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "new session" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
+	it("does not restart after a successful unchanged-label response", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("dialog-editor"),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "already named" },
+				context(),
+			);
+			backgroundWorker.requests[0]?.events.emit("claimCompleted", {
+				attemptId: backgroundWorker.requests[0]?.attemptId ?? 0,
+				result: null,
+			});
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "another task" },
 				context(),

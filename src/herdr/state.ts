@@ -5,22 +5,17 @@ import type {
 } from "../shared/pi-worker-data.ts";
 import type { FooterEventSink, HerdrEvents } from "./events.ts";
 
-export interface ClaimWorkerResponse {
-	status: "claimed";
-	tabId: string;
-	label: string;
+export interface ClaimWorkerResponseData {
+	tabName: string;
+	shouldMoveToNewTab: boolean;
 }
 
-export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponse = {
-	status: "claimed",
-	tabId: "<current-tab-id>",
-	label: "<current-tab-label>",
+export type ClaimWorkerResponse = ClaimWorkerResponseData | null;
+
+export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponseData = {
+	tabName: "<current-tab-label>",
+	shouldMoveToNewTab: false,
 };
-
-export interface ClaimWorkerResult {
-	tabId: string;
-	label: string;
-}
 
 export interface ClaimWorkerRequest {
 	prompt: string;
@@ -65,4 +60,6 @@ export interface HerdrTabOptions {
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
 	onFooterUpdate?: FooterEventSink;
+	hasClaimReturnedSuccessfully?: (ctx: ExtensionContext) => boolean;
+	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void;
 }

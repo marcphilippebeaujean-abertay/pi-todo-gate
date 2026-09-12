@@ -1,8 +1,8 @@
-import type { ClaimWorkerResult } from "./state.ts";
+import type { ClaimWorkerResponse } from "./state.ts";
 
 export interface ClaimCompletedEvent {
 	attemptId: number;
-	result?: ClaimWorkerResult;
+	result?: ClaimWorkerResponse;
 }
 
 export interface ClaimFailedEvent {

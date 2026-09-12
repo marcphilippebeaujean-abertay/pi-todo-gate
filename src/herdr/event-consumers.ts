@@ -45,6 +45,8 @@ class HerdrTabClaimConsumer {
 	private readonly commandRunner: CommandRunner;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
+	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
+	private readonly onClaimReturnedSuccessfully: HerdrTabOptions["onClaimReturnedSuccessfully"];
 	private readonly emitFooter: FooterEventSink;
 	private readonly events: HerdrEvents;
 	private sessionCwd: string;
@@ -54,6 +56,7 @@ class HerdrTabClaimConsumer {
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
 	private herdrGateClaimProcessed = false;
+	private hasClaimReturnedSuccessfully = false;
 	private initialLabel: string | undefined;
 	private paneId: string | undefined;
 	private activeAttempt: TabClaimAttempt | undefined;
@@ -68,6 +71,8 @@ class HerdrTabClaimConsumer {
 			((request) =>
 				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
 		this.shouldActivate = options.shouldActivate;
+		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
+		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
 		this.emitFooter = options.onFooterUpdate ?? (() => undefined);
 		this.events = events;
 		this.events.on(CLAIM_COMPLETED_EVENT, this.completeClaim.bind(this));
@@ -84,7 +89,9 @@ class HerdrTabClaimConsumer {
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
-		this.hasValidatedClaim = false;
+		const storedClaim = this.shouldHaveStoredClaim(ctx);
+		this.hasClaimReturnedSuccessfully = storedClaim;
+		this.hasValidatedClaim = storedClaim;
 		this.initialLabel = undefined;
 		this.paneId = undefined;
 		hideHerdrFooter(this.emitFooter);
@@ -99,12 +106,18 @@ class HerdrTabClaimConsumer {
 		}
 	}
 
+	private shouldHaveStoredClaim(ctx: ExtensionContext): boolean {
+		const storedClaim = this.hasStoredClaim?.(ctx);
+		return storedClaim ?? this.hasClaimReturnedSuccessfully;
+	}
+
 	private beforeAgentStart(
 		event: BeforeAgentStartEvent,
 		ctx: ExtensionContext,
 	): void {
 		const isUnavailable = !this.herdrAvailable;
-		const isClaimed = this.hasValidatedClaim;
+		const isClaimed =
+			this.hasValidatedClaim || this.hasClaimReturnedSuccessfully;
 		const hasWorker = this.worker !== undefined;
 		const hasProcessedGate = this.herdrGateClaimProcessed;
 		const isUnavailableOrClaimed = isUnavailable || isClaimed;
@@ -160,6 +173,8 @@ class HerdrTabClaimConsumer {
 		);
 		if (isValidated) {
 			this.hasValidatedClaim = true;
+			this.hasClaimReturnedSuccessfully = true;
+			this.onClaimReturnedSuccessfully?.(attempt.context);
 			this.nextAttemptId = 0;
 			return;
 		}
