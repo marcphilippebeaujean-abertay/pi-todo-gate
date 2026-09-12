@@ -31,8 +31,8 @@ function setup() {
 	const events = createHerdrEvents();
 	const completed = vi.fn();
 	const failed = vi.fn();
-	events.on("claimCompleted", completed);
-	events.on("claimFailed", failed);
+	events.claimCompletedEvent.subscribe(completed);
+	events.claimFailedEvent.subscribe(failed);
 	const request: ClaimWorkerRequest = {
 		prompt: "Fix dialog",
 		instructions: "Claim tab",

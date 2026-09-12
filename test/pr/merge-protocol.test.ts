@@ -50,7 +50,9 @@ function createRuntime(
 	const currentRuntime = {
 		sessionState,
 		dependencies: { exec },
-		eventHandler: { emit: vi.fn(async () => undefined) },
+		eventHandler: {
+			prMergedEvent: { emit: vi.fn(async () => undefined) },
+		},
 	} as unknown as ExtensionState;
 	currentSessionContext(sessionState, session);
 	return { runtime: currentRuntime, context, session };
@@ -112,7 +114,13 @@ describe("merge protocol command", () => {
 			["pr", "merge", PR_URL, "--merge"],
 			{ cwd },
 		);
-		expect(currentRuntime.eventHandler.emit).toHaveBeenCalledWith("prMerged", {
+		expect(
+			currentRuntime.eventHandler.prMergedEvent.emit,
+		).toHaveBeenCalledOnce();
+		const emit = currentRuntime.eventHandler.prMergedEvent.emit as unknown as {
+			mock: { calls: Array<[{ payload: unknown }]> };
+		};
+		expect(emit.mock.calls[0]?.[0].payload).toEqual({
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
 		});
@@ -123,7 +131,7 @@ describe("merge protocol command", () => {
 		const { runtime, context } = createRuntime(exec, false);
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
-		expect(runtime.eventHandler.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 	});
 
 	it("reports command failures without emitting an event", async () => {
@@ -136,7 +144,7 @@ describe("merge protocol command", () => {
 		);
 		const { runtime, context } = createRuntime(exec);
 		await (await commandFor(runtime)).handler("", context);
-		expect(runtime.eventHandler.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 		expect(context.ui.notify).toHaveBeenCalledWith(
 			"Pull request merge failed: permission denied extra output",
 			"warning",
@@ -163,7 +171,7 @@ describe("merge protocol command", () => {
 		});
 		const { runtime, context } = createRuntime(exec);
 		await (await commandFor(runtime)).handler("", context);
-		expect(runtime.eventHandler.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 		expect(context.ui.notify).toHaveBeenCalledWith(
 			"Pull request merge failed: gh unavailable",
 			"warning",

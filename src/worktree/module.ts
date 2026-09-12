@@ -7,7 +7,7 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { SharedEvents } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type { WorktreeModule, WorktreeModuleDependencies } from "./state.ts";
@@ -22,7 +22,7 @@ export type {
 } from "./state.ts";
 
 export function createWorktreeModule(
-	events: SharedEvents,
+	events: EventHandler,
 	dependencies?: WorktreeModuleDependencies,
 	moduleContext?: ModuleContext,
 ): WorktreeModule {

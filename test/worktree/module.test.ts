@@ -1,7 +1,10 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
-import { createSharedEvents } from "../../src/shared/events.ts";
+import {
+	createPrMergedRequest,
+	createSharedEvents,
+} from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
 
@@ -95,17 +98,15 @@ describe("worktree event actions", () => {
 		await firstStart;
 
 		let mergeAction: ExitAction | undefined;
-		events.on(
-			"prMerged",
-			(request) => {
-				mergeAction = request.actions[0];
-			},
-			"present",
-		);
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
+		events.prMergedEvent.subscribe((request) => {
+			mergeAction = request.actions[0];
 		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 
 		expect(mergeAction?.label).toContain('"later"');
 	});
@@ -121,16 +122,12 @@ describe("worktree event actions", () => {
 		});
 		await module.sessionStart(context());
 		let mergeAction: ExitAction | undefined;
-		events.on(
-			"prMerged",
-			(request) => {
-				mergeAction = request.actions[0];
-			},
-			"present",
-		);
+		events.prMergedEvent.subscribe((request) => {
+			mergeAction = request.actions[0];
+		});
 
 		const payload = { prUrl: "pr", taskMarkedAsCompleted: false };
-		await events.emit("prMerged", payload);
+		await events.prMergedEvent.emit(createPrMergedRequest(payload));
 
 		expect(mergeAction?.id).toBe("remove-worktree");
 		expect(payload.taskMarkedAsCompleted).toBe(false);

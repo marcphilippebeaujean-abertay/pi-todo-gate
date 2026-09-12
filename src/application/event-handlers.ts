@@ -17,6 +17,7 @@ import type {
 	MessageEndEvent,
 	ToolResultEvent,
 } from "../shared/events.ts";
+import { createPrMergedRequest } from "../shared/events.ts";
 import { textOf } from "../shared/extension-message.ts";
 import { hasUncommittedChanges, inspectProject } from "../shared/project.ts";
 import { isCurrentMerge } from "../shared/work-state.ts";
@@ -215,10 +216,12 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!currentMerge) return;
-	await runtime.eventHandler.emit(C.event.prMerged, {
-		prUrl: claimedPrUrl,
-		taskMarkedAsCompleted: false,
-	});
+	await runtime.eventHandler.prMergedEvent.emit(
+		createPrMergedRequest({
+			prUrl: claimedPrUrl,
+			taskMarkedAsCompleted: false,
+		}),
+	);
 }
 
 export async function handleToolResult(

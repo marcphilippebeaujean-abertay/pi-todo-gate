@@ -1,9 +1,8 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { SharedEvents } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import { EXIT_PRESENT_PHASE } from "./constants.ts";
 import { enqueueExitActions } from "./event-publishers.ts";
 import type { ExitProtocolModule, ExitRequest } from "./state.ts";
 
@@ -12,21 +11,17 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private readonly promptQueue: PromptQueue;
 
 	constructor(
-		events: SharedEvents,
+		events: EventHandler,
 		promptQueue: PromptQueue,
 		readonly _moduleContext?: ModuleContext,
 	) {
 		this.promptQueue = promptQueue;
-		events.setupListener(
-			C.event.prMerged,
-			this.onPrMerged.bind(this),
-			EXIT_PRESENT_PHASE,
-		);
+		events.prMergedPresentEvent.subscribe(this.onPrMerged.bind(this));
 	}
 
 	sessionStart(context: ExtensionContext): void {
 		this.context = context;
-		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.exitProtocol,
 			moduleState: { active: true },
 		});
@@ -34,7 +29,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 
 	deactivate(): void {
 		this.context = null;
-		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.exitProtocol,
 			moduleState: { active: false },
 		});

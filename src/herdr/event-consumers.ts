@@ -6,8 +6,6 @@ import type { BeforeAgentStartEvent } from "../shared/events.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
-	CLAIM_COMPLETED_EVENT,
-	CLAIM_FAILED_EVENT,
 	HERDR_MAX_CLAIM_ATTEMPTS,
 	SESSION_SHUTDOWN_EVENT,
 	SESSION_START_EVENT,
@@ -70,8 +68,8 @@ class HerdrTabClaimConsumer {
 		this.shouldActivate = options.shouldActivate;
 		this.emitFooter = options.onFooterUpdate ?? (() => undefined);
 		this.events = events;
-		this.events.on(CLAIM_COMPLETED_EVENT, this.completeClaim.bind(this));
-		this.events.on(CLAIM_FAILED_EVENT, this.failClaim.bind(this));
+		this.events.claimCompletedEvent.subscribe(this.completeClaim.bind(this));
+		this.events.claimFailedEvent.subscribe(this.failClaim.bind(this));
 		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
 		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));

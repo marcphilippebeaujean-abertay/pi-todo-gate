@@ -8,7 +8,10 @@ import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { register } from "../../src/pr/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
-import { createSharedEvents } from "../../src/shared/events.ts";
+import {
+	createPrMergedRequest,
+	createSharedEvents,
+} from "../../src/shared/events.ts";
 import {
 	currentSessionContext,
 	type ExtensionState,
@@ -87,7 +90,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 
 async function emit(runtime: ExtensionState) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
-	await runtime.eventHandler.emit(C.event.prMerged, payload);
+	await runtime.eventHandler.prMergedEvent.emit(createPrMergedRequest(payload));
 	await runtime.promptQueue.drain();
 	return payload;
 }
@@ -161,7 +164,7 @@ describe("Todoist merge consumer", () => {
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
 		);
-		setupResult.runtime.eventHandler.on("prMerged", (request) => {
+		setupResult.runtime.eventHandler.prMergedEvent.subscribe((request) => {
 			request.addAction({
 				id: "remove-worktree",
 				label: "Run exit action",

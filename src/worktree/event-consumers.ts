@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { SharedEvents } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import { inspectProject } from "../shared/project.ts";
@@ -29,13 +29,13 @@ class Worktree implements WorktreeModule {
 	private sessionGeneration = 0;
 
 	constructor(
-		events: SharedEvents,
+		events: EventHandler,
 		dependencies: WorktreeModuleDependencies,
 		readonly _moduleContext?: ModuleContext,
 	) {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.setupListener(C.event.prMerged, this.onPrMerged.bind(this));
+		events.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -72,7 +72,7 @@ class Worktree implements WorktreeModule {
 			initialHead: state.currentHead,
 			initialStatus: state.currentStatus,
 		};
-		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.worktree,
 			moduleState: { ...this.baseline },
 		});
@@ -82,7 +82,7 @@ class Worktree implements WorktreeModule {
 		this.sessionGeneration += 1;
 		this.context = null;
 		this.baseline = null;
-		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.worktree,
 			moduleState: {},
 		});
@@ -143,7 +143,7 @@ class Worktree implements WorktreeModule {
 }
 
 export function createWorktreeConsumer(
-	events: SharedEvents,
+	events: EventHandler,
 	dependencies: WorktreeModuleDependencies,
 	moduleContext?: ModuleContext,
 ): WorktreeModule {

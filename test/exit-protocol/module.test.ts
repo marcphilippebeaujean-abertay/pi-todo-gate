@@ -9,7 +9,10 @@ import {
 	toggleAction,
 } from "../../src/exit-protocol/state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
-import { createSharedEvents } from "../../src/shared/events.ts";
+import {
+	createPrMergedRequest,
+	createSharedEvents,
+} from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
 
 const actions: ExitAction[] = [
@@ -124,14 +127,16 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule(events);
 		module.sessionStart(ctx);
-		events.on("prMerged", (request) => {
+		events.prMergedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
@@ -143,14 +148,16 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.on("prMerged", (request) => {
+		events.prMergedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 		await queue.drain();
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
@@ -164,10 +171,12 @@ describe("exit protocol presenter", () => {
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 		await queue.drain();
 
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
@@ -185,14 +194,16 @@ describe("exit protocol presenter", () => {
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.on("prMerged", (request) => {
+		events.prMergedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 		await Promise.resolve();
 		queue.reset();
 		resolvePrompt(["remove-worktree"]);
@@ -214,14 +225,16 @@ describe("exit protocol presenter", () => {
 		});
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.on("prMerged", (request) => {
+		events.prMergedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await events.prMergedEvent.emit(
+			createPrMergedRequest({
+				prUrl: "pr",
+				taskMarkedAsCompleted: false,
+			}),
+		);
 		await queue.drain();
 
 		expect(confirm).toHaveBeenCalledOnce();

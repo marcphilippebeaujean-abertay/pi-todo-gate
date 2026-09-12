@@ -32,13 +32,11 @@ export const EXTENSION_CONSTANTS = {
 		clearAll: "clear_all",
 	},
 	event: {
-		prMerged: "prMerged",
 		sessionStart: "session_start",
 		messageEnd: "message_end",
 		beforeAgentStart: "before_agent_start",
 		toolResult: "tool_result",
 		sessionShutdown: "session_shutdown",
-		updateModuleState: "updateModuleState",
 	},
 	tool: {
 		state: "pi_todo_gate_state",

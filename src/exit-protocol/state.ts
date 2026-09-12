@@ -1,10 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
+import type { EventHandler, PrMergedRequest } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import {
 	EXIT_ACTION_KEY,
@@ -12,9 +8,7 @@ import {
 	EXIT_SUBMIT_KEY,
 } from "./constants.ts";
 
-export type ExitRequest = EventRequest<
-	SharedEventPayloads[keyof SharedEventPayloads]
->;
+export type ExitRequest = PrMergedRequest;
 
 export type {
 	ExitAction,
@@ -28,7 +22,7 @@ export interface ExitProtocolModule {
 }
 
 export type ExitProtocolFactory = (
-	events: SharedEvents,
+	events: EventHandler,
 	promptQueue?: PromptQueue,
 	moduleContext?: ModuleContext,
 ) => ExitProtocolModule;

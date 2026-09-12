@@ -101,7 +101,7 @@ function worker() {
 }
 
 function emitClaim(request: ClaimWorkerRequest, label = "dialog-editor"): void {
-	request.events.emit("claimCompleted", {
+	void request.events.claimCompletedEvent.emit({
 		attemptId: request.attemptId,
 		result: { tabId: "w1:t1", label },
 	});
@@ -111,7 +111,7 @@ function emitFailure(
 	request: ClaimWorkerRequest,
 	message = WORKER_FAILED,
 ): void {
-	request.events.emit("claimFailed", {
+	void request.events.claimFailedEvent.emit({
 		attemptId: request.attemptId,
 		message,
 		workerFailed: true,

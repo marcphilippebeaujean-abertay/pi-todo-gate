@@ -29,7 +29,7 @@ export function publishModuleState(
 	moduleId: string,
 	moduleState: Record<string, unknown>,
 ): void {
-	void runtime.eventHandler.emit(C.event.updateModuleState, {
+	void runtime.eventHandler.moduleStateChangedEvent.emit({
 		moduleId,
 		moduleState,
 	});

@@ -4,7 +4,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { CommandResult } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
-import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { createPrMergedRequest } from "../shared/events.ts";
 import { currentSessionContext } from "../state.ts";
 import {
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
@@ -125,10 +125,12 @@ async function runMergeProtocol(
 	const isCurrent = currentSession(runtime, session, generation);
 	const shouldStop = !isMerged || !isCurrent;
 	if (shouldStop) return;
-	await runtime.eventHandler.emit(C.event.prMerged, {
-		prUrl,
-		taskMarkedAsCompleted: false,
-	});
+	await runtime.eventHandler.prMergedEvent.emit(
+		createPrMergedRequest({
+			prUrl,
+			taskMarkedAsCompleted: false,
+		}),
+	);
 	const isCurrentAfterEmit = currentSession(runtime, session, generation);
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
 }

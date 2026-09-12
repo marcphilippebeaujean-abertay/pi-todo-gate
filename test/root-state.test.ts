@@ -30,12 +30,12 @@ describe("extension module state", () => {
 	it("consumes published module state updates", async () => {
 		const state = createSessionState();
 		const events = createSharedEvents();
-		events.setupListener("updateModuleState", (request) => {
-			state.moduleState.direct = request.payload.moduleState;
+		events.moduleStateChangedEvent.subscribe((event) => {
+			state.moduleState.direct = event.moduleState;
 		});
 		registerModuleStateConsumer(events, state);
 
-		await events.emit("updateModuleState", {
+		await events.moduleStateChangedEvent.emit({
 			moduleId: "pr",
 			moduleState: { prUrl: "https://github.com/o/r/pull/42" },
 		});

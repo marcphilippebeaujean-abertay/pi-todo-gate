@@ -1,5 +1,4 @@
 import { spawnExec } from "../shared/command.ts";
-import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { inspectProject } from "../shared/project.ts";
 import { applyStatePatch, currentSessionContext } from "../state.ts";
 import {
@@ -206,9 +205,7 @@ async function consumeMergedEvent(
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
-	runtime.eventHandler.setupListener(
-		C.event.prMerged,
+	runtime.eventHandler.prMergedEvent.subscribe(
 		consumeMergedEvent.bind(null, runtime),
-		C.value.collect,
 	);
 }

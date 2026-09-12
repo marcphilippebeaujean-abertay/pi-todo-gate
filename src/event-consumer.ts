@@ -9,22 +9,27 @@ import {
 	handleSessionStart,
 } from "./application/session.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
-import type { SharedEvents, UpdateModuleStateEvent } from "./shared/events.ts";
+import type {
+	EventHandler,
+	ExtensionContext,
+	ModuleStateChangedEvent,
+	ToolResultEvent,
+} from "./shared/events.ts";
 import type { ExtensionState, SessionState } from "./state.ts";
 
 export function updateModuleState(
 	state: SessionState,
-	event: UpdateModuleStateEvent,
+	event: ModuleStateChangedEvent,
 ): void {
 	state.moduleState[event.moduleId] = event.moduleState;
 }
 
 export function registerModuleStateConsumer(
-	events: SharedEvents,
+	events: EventHandler,
 	state: SessionState,
 ): void {
-	events.setupListener(C.event.updateModuleState, (request) => {
-		updateModuleState(state, request.payload);
+	events.moduleStateChangedEvent.subscribe((event) => {
+		updateModuleState(state, event);
 	});
 }
 
@@ -35,6 +40,13 @@ export function registerExtensionEventConsumers(
 	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));
 	pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, runtime));
-	pi.on(C.event.toolResult, handleToolResult.bind(null, runtime));
+	runtime.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
+		handleToolResult(runtime, event, context),
+	);
+	pi.on(
+		C.event.toolResult,
+		(event: ToolResultEvent, context: ExtensionContext) =>
+			runtime.eventHandler.toolResultEvent.emit({ event, context }),
+	);
 	pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, runtime));
 }

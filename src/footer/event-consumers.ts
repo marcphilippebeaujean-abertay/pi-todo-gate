@@ -96,7 +96,7 @@ export class FooterEventConsumer implements FooterModule {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
 		this.state = applyFooterUpdate(this.state, parsed);
-		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.footer,
 			moduleState: { ...this.getState() },
 		});

@@ -1,8 +1,6 @@
 import { startPiWorker } from "../shared/pi-worker-runtime.ts";
 import { parseClaimResult } from "./claim-worker-result.ts";
 import {
-	CLAIM_COMPLETED_EVENT,
-	CLAIM_FAILED_EVENT,
 	EXPECTED_RESULT_FAILURE,
 	HERDR_CLAIM_FAILURE_PREFIX,
 	MISSING_CLAIM_EVIDENCE,
@@ -33,12 +31,12 @@ export function startClaimWorker(
 			instructions: request.instructions,
 			parseResult: parseClaimResult,
 			onResult: (result) =>
-				request.events.emit(CLAIM_COMPLETED_EVENT, {
+				void request.events.claimCompletedEvent.emit({
 					attemptId: request.attemptId,
 					result,
 				}),
 			onFailure: (message) =>
-				request.events.emit(CLAIM_FAILED_EVENT, {
+				void request.events.claimFailedEvent.emit({
 					attemptId: request.attemptId,
 					message: claimFailureMessage(message),
 					workerFailed: true,
