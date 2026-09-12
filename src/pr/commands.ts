@@ -4,7 +4,6 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { CommandResult } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
-import { currentSessionContext } from "../state.ts";
 import {
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
 	mergeProtocolSkillPath,
@@ -25,10 +24,15 @@ function currentSession(
 	session: PrSession,
 	generation: number,
 ): boolean {
+	const activeSession =
+		runtime.getSession?.() ??
+		(runtime.sessionState.moduleState.application as PrSession | null);
 	const current =
 		runtime.isCurrentOperation?.(session, generation) ??
-		session.operationGeneration === generation;
-	return currentSessionContext(runtime.sessionState) === session && current;
+		(activeSession?.sessionId === session.sessionId &&
+			(runtime.prState?.().operationGeneration ??
+				session.operationGeneration) === generation);
+	return runtime.sessionState.sessionId === session.sessionId && current;
 }
 
 function enqueueOperation<T>(
@@ -55,8 +59,8 @@ async function mergeNow(
 	prUrl: string,
 	generation: number,
 ): Promise<boolean> {
-	const isCurrent = currentSession(runtime, session, generation);
-	if (!isCurrent) return false;
+	const isCurrentBeforeCommand = currentSession(runtime, session, generation);
+	if (!isCurrentBeforeCommand) return false;
 	const exec = runtime.dependencies.exec ?? spawnExec;
 	let result: CommandResult;
 	try {
@@ -89,8 +93,8 @@ async function confirmAndMerge(
 ): Promise<boolean> {
 	const confirmed = await confirmMerge(ctx, prUrl);
 	if (!confirmed) return false;
-	const isCurrent = currentSession(runtime, session, generation);
-	if (!isCurrent) return false;
+	const isCurrentAfterConfirm = currentSession(runtime, session, generation);
+	if (!isCurrentAfterConfirm) return false;
 	return mergeNow(runtime, session, ctx, prUrl, generation);
 }
 
@@ -98,8 +102,11 @@ async function runMergeProtocol(
 	runtime: PrRuntime,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
-	const session = currentSessionContext(runtime.sessionState);
-	if (session === null) {
+	const session =
+		runtime.getSession?.() ??
+		(runtime.sessionState.moduleState.application as PrSession | null);
+	const hasSession = session !== null;
+	if (!hasSession) {
 		notifyInactive(ctx);
 		return;
 	}
@@ -114,15 +121,14 @@ async function runMergeProtocol(
 		notifyNoPr(ctx);
 		return;
 	}
-	const generation = session.operationGeneration;
+	const generation = runtime.prState?.().operationGeneration ?? 0;
 	const enqueue = runtime.enqueueSessionOperation ?? enqueueOperation;
 	const merged = await enqueue(
 		session,
 		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
 	);
-	const isMerged = merged;
-	const isCurrent = currentSession(runtime, session, generation);
-	const shouldStop = !isMerged || !isCurrent;
+	const isCurrentAfterMerge = currentSession(runtime, session, generation);
+	const shouldStop = !merged || !isCurrentAfterMerge;
 	if (shouldStop) return;
 	await runtime.eventHandler.prMergedEvent.emit({
 		prUrl,

@@ -1,10 +1,6 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import { inspectProject } from "../shared/project.ts";
 import { invalidateOperations } from "../shared/session-operations.ts";
 import type { ExtensionState, SessionContext, SessionState } from "../state.ts";
-import { applyStatePatch } from "../state.ts";
 
 export function resetTemporarySessionState(runtime: ExtensionState): void {
 	runtime.promptQueue.reset();
@@ -48,22 +44,6 @@ export function appendState(
 	runtime.pi.appendEntry(C.entry.state, data);
 }
 
-export async function initializeRemoteOrigin(
-	runtime: ExtensionState,
-	ctx: ExtensionContext,
-	state: SessionContext["state"],
-): Promise<SessionContext["state"]> {
-	const project = await inspectProject(
-		runtime.dependencies.exec ?? spawnExec,
-		ctx.cwd,
-	);
-	const remoteOrigin = project.remoteOrigin ?? undefined;
-	const nextState = applyStatePatch(state, { remoteOrigin });
-	const hasChanged = state.remoteOrigin !== nextState.remoteOrigin;
-	if (hasChanged) appendState(runtime, nextState);
-	return nextState;
-}
-
 export function resetSessionState(sessionState: SessionState): void {
 	sessionState.sessionId = null;
 	sessionState.gitState = {};
@@ -80,6 +60,7 @@ export function deactivateSession(
 	const sessionState = runtime.sessionState;
 	const isCurrentSession = sessionState.sessionId === session.sessionId;
 	if (isCurrentSession) resetSessionState(sessionState);
+	runtime.pr.deactivateSession();
 	runtime.footer.deactivate();
 	session.context.ui.setFooter(undefined);
 }

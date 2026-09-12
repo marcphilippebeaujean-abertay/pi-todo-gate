@@ -7,17 +7,32 @@ import type {
 import { Type } from "typebox";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { extensionResult } from "../shared/extension-message.ts";
-import type { SessionContext, StateToolParams } from "../state.ts";
-import { applyStatePatch, currentSessionContext } from "../state.ts";
 import { githubPrUrl } from "./module.ts";
-import type { StateToolRuntime } from "./state.ts";
+import type {
+	PrSession,
+	PrWorkState,
+	StateToolParams,
+	StateToolRuntime,
+} from "./state.ts";
 
 export const stateParameters = Type.Object({
 	action: StringEnum(["status", "set_pr", "clear_pr", "clear_all"] as const),
 	url: Type.Optional(Type.String()),
 });
 
-function statusAction(session: SessionContext): AgentToolResult<undefined> {
+function applyStatePatch(
+	state: PrWorkState,
+	patch: Partial<PrWorkState>,
+): PrWorkState {
+	const next = { ...state };
+	for (const [key, value] of Object.entries(patch)) {
+		if (value === undefined) delete next[key as keyof PrWorkState];
+		else next[key as keyof PrWorkState] = value as never;
+	}
+	return next;
+}
+
+function statusAction(session: PrSession): AgentToolResult<undefined> {
 	return extensionResult(
 		JSON.stringify({
 			...session.state,
@@ -28,7 +43,7 @@ function statusAction(session: SessionContext): AgentToolResult<undefined> {
 
 function setPrAction(
 	runtime: StateToolRuntime,
-	session: SessionContext,
+	session: PrSession,
 	params: StateToolParams,
 ): AgentToolResult<undefined> {
 	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
@@ -54,7 +69,7 @@ function setPrAction(
 
 function clearPrState(
 	runtime: StateToolRuntime,
-	session: SessionContext,
+	session: PrSession,
 	message: string,
 ): AgentToolResult<undefined> {
 	runtime.replaceSessionState(
@@ -79,8 +94,8 @@ export async function executeStateTool(
 	_onUpdate: AgentToolUpdateCallback<undefined> | undefined,
 	_ctx: ExtensionContext,
 ): Promise<AgentToolResult<undefined>> {
-	const session = currentSessionContext(runtime.sessionState);
-	const hasSession = session !== null;
+	const session = runtime.getSession?.();
+	const hasSession = session !== undefined && session !== null;
 	if (!hasSession) throw new Error(C.message.inactive);
 	switch (params.action) {
 		case C.action.status:
@@ -94,16 +109,23 @@ export async function executeStateTool(
 	}
 }
 
-export function installStateTool(runtime: StateToolRuntime): void {
-	const isRegistered = runtime.registered;
+export function installStateTool(
+	runtime: StateToolRuntime,
+	getSession?: () => PrSession | null,
+): void {
+	const hasSessionGetter = getSession !== undefined;
+	const effectiveRuntime = hasSessionGetter
+		? { ...runtime, getSession }
+		: runtime;
+	const isRegistered = effectiveRuntime.registered;
 	if (isRegistered) return;
-	runtime.registered = true;
-	runtime.pi.registerTool<typeof stateParameters>({
+	effectiveRuntime.registered = true;
+	effectiveRuntime.pi.registerTool<typeof stateParameters>({
 		name: C.tool.state,
 		label: C.tool.todoist,
 		description: C.message.prDescription,
 		promptSnippet: C.message.prPrompt,
 		parameters: stateParameters,
-		execute: executeStateTool.bind(null, runtime),
+		execute: executeStateTool.bind(null, effectiveRuntime),
 	});
 }

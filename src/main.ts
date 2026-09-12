@@ -11,7 +11,7 @@ import {
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
 import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
-import { createPrModule } from "./pr/module.ts";
+import { createRootPrModule } from "./pr-root.ts";
 import { PromptQueue } from "./prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import { createEventHandler } from "./shared/events.ts";
@@ -67,7 +67,7 @@ export function createExtensionState(
 	const eventHandler = createEventHandler();
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
-	const stateRef: { current: ExtensionState | null } = { current: null };
+	const extensionRef: { current: ExtensionState | null } = { current: null };
 	const moduleContext = { promptQueue, eventHandler, sessionState };
 	const worktree = createWorktreeModule(
 		eventHandler,
@@ -91,14 +91,20 @@ export function createExtensionState(
 			{ openSession: dependencies.openSession },
 			moduleContext,
 		),
-		pr: createPrModule(eventHandler, sessionState, stateRef),
-		todoist: createTodoistModule(eventHandler, sessionState, stateRef),
+		pr: createRootPrModule(
+			promptQueue,
+			eventHandler,
+			sessionState,
+			dependencies.exec,
+			extensionRef,
+		),
+		todoist: createTodoistModule(eventHandler, sessionState, extensionRef),
 		worktree,
 		exitProtocol,
 		registered: false,
 	} as ExtensionState;
 	attachApplicationOperations(extensionState);
-	stateRef.current = extensionState;
+	extensionRef.current = extensionState;
 	return extensionState;
 }
 

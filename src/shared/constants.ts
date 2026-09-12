@@ -24,6 +24,7 @@ export const EXTENSION_CONSTANTS = {
 		worktree: "worktree",
 		exitProtocol: "exit-protocol",
 		work: "work",
+		pr: "pr",
 	},
 	action: {
 		status: "status",

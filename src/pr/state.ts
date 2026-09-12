@@ -1,23 +1,45 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
-import type { SessionContext, SessionState } from "../state.ts";
+import type { SessionState } from "../state.ts";
 
-export interface PrSession {
-	context: { cwd: string; hasUI: boolean };
-	state: { prUrl?: string };
-	operationGeneration: number;
-	operationQueue?: Promise<void>;
+export interface PrWorkState {
+	remoteOrigin?: string;
+	prUrl?: string;
+	taskUrl?: string;
+	taskRef?: string;
+	taskName?: string;
+	inheritedFrom?: string;
+	mergeCompletedAt?: string;
+	todoistCompletionAttemptedAt?: string;
 }
 
-export interface PrModule {
-	register(pi: ExtensionAPI): void;
+/** Session-shaped data PR facets need; root application adapters stay outside PR. */
+export interface PrSession {
+	sessionId: string;
+	context: ExtensionContext;
+	project: { codingRoot: string };
+	state: PrWorkState;
+	allowPrDiscovery: boolean;
+	prDiscoveryTestedUrls: Set<string>;
+	handoffContext: boolean;
+	workChanged: boolean;
+	hasUncommittedChanges: boolean;
+	workRevision: number;
+	operationGeneration: number;
+	operationQueue: Promise<void>;
 }
 
 export interface PrRuntime {
 	sessionState: SessionState;
 	eventHandler: EventHandler;
 	dependencies: { exec?: Exec };
+	getSession?: () => PrSession | null;
+	prState?: () => PrState;
 	isCurrentOperation?(session: PrSession, generation: number): boolean;
 	enqueueSessionOperation?<T>(
 		session: PrSession,
@@ -25,19 +47,62 @@ export interface PrRuntime {
 	): Promise<T>;
 }
 
+export type StateToolParams =
+	| { action: "status"; url?: string }
+	| { action: "set_pr"; url?: string }
+	| { action: "clear_pr"; url?: string }
+	| { action: "clear_all"; url?: string };
+
 export interface StateToolRuntime {
 	pi: ExtensionAPI;
 	registered: boolean;
+	getSession?: () => PrSession | null;
+	appendState(state: PrWorkState, prDiscoveryDisabled?: boolean): void;
+	replaceSessionState(session: PrSession, state: PrWorkState): void;
+	refreshFooterStatuses(session: PrSession): void;
+}
+
+export interface PrModuleDependencies {
+	exec?: Exec;
+	appendState?: (state: PrWorkState, prDiscoveryDisabled?: boolean) => void;
+	replaceSessionState?: (session: PrSession, state: PrWorkState) => void;
+	refreshFooterStatuses?: (session: PrSession) => void;
+}
+
+export interface PrModuleOptions {
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
 	sessionState: SessionState;
-	appendState(
-		state: SessionContext["state"],
-		prDiscoveryDisabled?: boolean,
-	): void;
-	refreshFooterStatuses(session: SessionContext): void;
-	replaceSessionState(
-		session: SessionContext,
-		nextState: SessionContext["state"],
-	): void;
+	getSession: () => PrSession | null;
+	dependencies?: PrModuleDependencies;
+}
+
+export interface PrModule {
+	register(pi: ExtensionAPI): void;
+	activateSession(session: PrSession): void;
+	deactivateSession(): void;
+	initializeRemoteOrigin(
+		ctx: ExtensionContext,
+		state: PrWorkState,
+	): Promise<PrWorkState>;
+	persistPrIfAvailable(text: string): Promise<void>;
+	persistInitialPr(branch: readonly unknown[]): Promise<void>;
+	isDiscoveryAllowed(
+		stateEntry: Record<string, unknown> | null,
+		state: PrWorkState,
+		handoffContext: boolean,
+	): boolean;
+	appendBeforeAgentPrompt(
+		ctx: ExtensionContext,
+		messages: string[],
+	): Promise<void>;
+	isCurrentMerge(
+		session: PrSession,
+		workRevision: number,
+		operationGeneration: number,
+		taskRef: string | undefined,
+		prUrl: string,
+	): boolean;
 }
 
 export interface OpenPrInfo {
@@ -50,9 +115,14 @@ export interface MergedPr {
 	reminderPending: boolean;
 }
 export interface PrState {
+	remoteOrigin?: string;
 	prUrl?: string;
 	mergedPrs?: MergedPr[];
 	discoveryDisabled?: boolean;
+	discoveryTestedUrls?: string[];
+	operationGeneration?: number;
+	mergeCompletedAt?: string;
+	todoistCompletionAttemptedAt?: string;
 }
 export interface ParsedMerge {
 	kind: "git" | "gh";

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+	createPrModule,
 	firstUnmergedGithubPrUrl,
 	isPrState,
 	markRemindersDelivered,
@@ -7,6 +8,9 @@ import {
 	recordMergedPr,
 	removeMergedPr,
 } from "../../src/pr/module.ts";
+import { PromptQueue } from "../../src/prompt-queue.ts";
+import { createEventHandler } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 
 describe("isPrState", () => {
 	it("accepts valid PR state and rejects malformed state", () => {
@@ -238,5 +242,103 @@ describe("firstUnmergedGithubPrUrl", () => {
 				"https://github.com/owner/repo.git",
 			),
 		).toBeNull();
+	});
+});
+
+describe("PR module ownership", () => {
+	it("emits remote origin through module state and shared Git state", async () => {
+		const events = createEventHandler();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const exec = vi.fn(async (command: string, args: string[]) => {
+			if (args[0] === "remote")
+				return { stdout: "git@github.com:o/r.git\n", stderr: "", code: 0 };
+			return command === "git"
+				? { stdout: "/repo\n", stderr: "", code: 0 }
+				: { stdout: "", stderr: "", code: 0 };
+		});
+		const module = createPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState: createSessionState(),
+			getSession: () => null,
+			dependencies: { exec },
+		});
+
+		await module.initializeRemoteOrigin(
+			{ cwd: "/repo", hasUI: false } as never,
+			{},
+		);
+
+		expect(updates).toEqual([
+			expect.objectContaining({
+				moduleId: "pr",
+				gitStatePatch: { remoteOrigin: "git@github.com:o/r.git" },
+			}),
+		]);
+		await events.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/42",
+			taskMarkedAsCompleted: false,
+		});
+		expect(updates.at(-1)).toEqual(
+			expect.objectContaining({
+				moduleId: "pr",
+				moduleState: expect.objectContaining({
+					mergedPrs: expect.arrayContaining([
+						expect.objectContaining({
+							prUrl: "https://github.com/o/r/pull/42",
+						}),
+					]),
+				}),
+			}),
+		);
+	});
+
+	it("guards merge results by stable session and PR generations", () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		const session = {
+			sessionId: "session",
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo" },
+			state: { prUrl: "https://github.com/o/r/pull/42", taskRef: "task" },
+			allowPrDiscovery: false,
+			prDiscoveryTestedUrls: new Set<string>(),
+			handoffContext: false,
+			workChanged: false,
+			hasUncommittedChanges: false,
+			workRevision: 2,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/state.ts").PrSession;
+		sessionState.sessionId = session.sessionId;
+		const module = createPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			getSession: () => session,
+		});
+		module.activateSession(session);
+
+		expect(
+			module.isCurrentMerge(
+				session,
+				2,
+				0,
+				"task",
+				"https://github.com/o/r/pull/42",
+			),
+		).toBe(true);
+		expect(
+			module.isCurrentMerge(
+				session,
+				2,
+				1,
+				"task",
+				"https://github.com/o/r/pull/42",
+			),
+		).toBe(false);
 	});
 });

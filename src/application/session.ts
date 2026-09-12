@@ -3,11 +3,12 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { refreshFooterStatuses } from "../footer/module.ts";
+import type { PrSession } from "../pr/state.ts";
 import { installStateTool } from "../pr/state-tool.ts";
 import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { SessionStartEvent } from "../shared/events.ts";
-import { branchTexts, latestStateData } from "../shared/extension-message.ts";
+import { latestStateData } from "../shared/extension-message.ts";
 import { hasUncommittedChanges } from "../shared/project.ts";
 import type {
 	ExtensionState,
@@ -21,11 +22,9 @@ import {
 } from "../state.ts";
 import { loadConfig, resolveConfiguredProject } from "../todoist/config.ts";
 import type { TodoistProjectMapping } from "../todoist/module.ts";
-import { persistPrIfAvailable } from "./event-handlers.ts";
 import {
 	appendState,
 	deactivateSession,
-	initializeRemoteOrigin,
 	publishModuleState,
 	resetSessionState,
 	resetTemporarySessionState,
@@ -111,6 +110,7 @@ function activateSession(
 	runtime.sessionState.sessionId = session.sessionId;
 	publishModuleState(runtime, C.module.work, { ...state });
 	currentSessionContext(runtime.sessionState, session);
+	runtime.pr.activateSession(session);
 	return session;
 }
 
@@ -169,15 +169,17 @@ async function activateConfiguredSession(
 		stateEntry,
 		state,
 	);
-	state = await initializeRemoteOrigin(runtime, ctx, inherited.state);
+	state = await runtime.pr.initializeRemoteOrigin(ctx, inherited.state);
 	const isHandoff = inherited.handoffContext;
 	const footerEvent = isHandoff
 		? event
 		: { ...event, previousSessionFile: undefined };
 	await runtime.footer.sessionStart(footerEvent, ctx);
-	const isPrDiscoveryEnabled =
-		stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
-	const allowPrDiscovery = !isHandoff && isPrDiscoveryEnabled;
+	const allowPrDiscovery = runtime.pr.isDiscoveryAllowed(
+		stateEntry,
+		state,
+		isHandoff,
+	);
 	const session = activateSession(
 		runtime,
 		ctx,
@@ -210,7 +212,13 @@ export async function handleSessionStart(
 		project,
 		config,
 	);
-	installStateTool(runtime);
+	installStateTool(
+		runtime,
+		currentSessionContext.bind(
+			null,
+			runtime.sessionState,
+		) as unknown as () => PrSession | null,
+	);
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
@@ -226,7 +234,7 @@ export async function persistInitialPr(
 	const session = currentSessionContext(runtime.sessionState);
 	const canDiscoverPr = session?.allowPrDiscovery === true;
 	if (!canDiscoverPr) return;
-	await persistPrIfAvailable(runtime, branchTexts(branch).join("\n"));
+	await runtime.pr.persistInitialPr(branch);
 }
 
 export function handleSessionShutdown(runtime: ExtensionState): void {
