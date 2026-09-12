@@ -5,6 +5,7 @@ import type {
 import type { CommandResult } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { currentSessionContext } from "../state.ts";
 import {
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
 	mergeProtocolSkillPath,
@@ -28,7 +29,7 @@ function currentSession(
 	const current =
 		runtime.isCurrentOperation?.(session, generation) ??
 		session.operationGeneration === generation;
-	return runtime.active === session && current;
+	return currentSessionContext(runtime.sessionState) === session && current;
 }
 
 function enqueueOperation<T>(
@@ -98,7 +99,7 @@ async function runMergeProtocol(
 	runtime: PrRuntime,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	if (session === null) {
 		notifyInactive(ctx);
 		return;
@@ -124,7 +125,7 @@ async function runMergeProtocol(
 	const isCurrent = currentSession(runtime, session, generation);
 	const shouldStop = !isMerged || !isCurrent;
 	if (shouldStop) return;
-	await runtime.events.emit(C.event.prMerged, {
+	await runtime.eventHandler.emit(C.event.prMerged, {
 		prUrl,
 		taskMarkedAsCompleted: false,
 	});

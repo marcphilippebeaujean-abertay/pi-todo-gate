@@ -9,7 +9,11 @@ import { register } from "../../src/pr/module.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { PromptQueue } from "../../src/shared/prompt-queue.ts";
-import type { ExtensionRuntime } from "../../src/state.ts";
+import {
+	currentSessionContext,
+	type ExtensionState,
+	type SessionContext,
+} from "../../src/state.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
@@ -42,10 +46,14 @@ function setup(overrides: Record<string, unknown> = {}) {
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 		...sessionOverrides,
-	};
+	} as unknown as SessionContext;
+	const sessionState = { sessionId: session.sessionId, moduleState: {} };
 	const runtime = {
-		active: session,
-		events: createSharedEvents(),
+		sessionState,
+		todoist: {
+			taskClaim: { pending: false, completed: false, session: undefined },
+		},
+		eventHandler: createSharedEvents(),
 		promptQueue:
 			(promptQueueOverride as PromptQueue | undefined) ?? new PromptQueue(),
 		dependencies: {
@@ -61,7 +69,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 			generation: number,
 		) => {
 			const isCurrent = () =>
-				(runtime.active as unknown) === targetSession &&
+				currentSessionContext(runtime.sessionState) === targetSession &&
 				targetSession.operationGeneration === generation;
 			if (!isCurrent()) return "failed" as const;
 			try {
@@ -72,19 +80,20 @@ function setup(overrides: Record<string, unknown> = {}) {
 			}
 			return isCurrent() ? ("completed" as const) : ("failed" as const);
 		},
-	} as unknown as ExtensionRuntime;
+	} as unknown as ExtensionState;
+	currentSessionContext(sessionState, session);
 	return { runtime, session, confirm, notify, completeTask };
 }
 
-async function emit(runtime: ExtensionRuntime) {
+async function emit(runtime: ExtensionState) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
-	await runtime.events.emit(C.event.prMerged, payload);
+	await runtime.eventHandler.emit(C.event.prMerged, payload);
 	await runtime.promptQueue.drain();
 	return payload;
 }
 
 async function runMergeCommand(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	context: ExtensionCommandContext,
 ): Promise<void> {
 	let handler:
@@ -146,13 +155,13 @@ describe("Todoist merge consumer", () => {
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
 		const exitModule = createExitProtocolModule(
-			setupResult.runtime.events,
+			setupResult.runtime.eventHandler,
 			setupResult.runtime.promptQueue,
 		);
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
 		);
-		setupResult.runtime.events.on("prMerged", (request) => {
+		setupResult.runtime.eventHandler.on("prMerged", (request) => {
 			request.addAction({
 				id: "remove-worktree",
 				label: "Run exit action",
@@ -206,7 +215,7 @@ describe("Todoist merge consumer", () => {
 	it("does not complete a task after the session becomes stale", async () => {
 		const setupResult = setup();
 		setupResult.confirm.mockImplementation(async () => {
-			setupResult.runtime.active = null;
+			currentSessionContext(setupResult.runtime.sessionState, null);
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
@@ -258,15 +267,19 @@ describe("Todoist merge consumer", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		};
+		} as unknown as SessionContext;
+		const sessionState = { sessionId: session.sessionId, moduleState: {} };
 		const runtime = {
-			active: session,
+			sessionState,
+			todoist: {
+				taskClaim: { pending: false, completed: false, session: undefined },
+			},
 			promptQueue: new PromptQueue(),
 			dependencies: {
 				exec,
 				createTodoistClient: () => ({ completeTask }),
 			},
-			events: createSharedEvents(),
+			eventHandler: createSharedEvents(),
 			pi: { appendEntry: vi.fn() },
 			footer: { update: vi.fn() },
 			completeMergedTask: async (
@@ -277,13 +290,14 @@ describe("Todoist merge consumer", () => {
 				generation: number,
 			) => {
 				const isCurrent = () =>
-					(runtime.active as unknown) === targetSession &&
+					currentSessionContext(runtime.sessionState) === targetSession &&
 					targetSession.operationGeneration === generation;
 				if (!isCurrent()) return "failed" as const;
 				await completeTask(taskRef, isCurrent);
 				return isCurrent() ? ("completed" as const) : ("failed" as const);
 			},
-		} as unknown as ExtensionRuntime;
+		} as unknown as ExtensionState;
+		currentSessionContext(sessionState, session);
 		registerTodoistMergeConsumer(runtime);
 
 		await runMergeCommand(runtime, context);

@@ -4,11 +4,11 @@ import {
 	updateModuleState,
 } from "../src/event-consumer.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
-import { createExtensionState, type ExtensionState } from "../src/state.ts";
+import { createSessionState, type SessionState } from "../src/state.ts";
 
 describe("extension module state", () => {
 	it("replaces state for addressed module without touching other modules", () => {
-		const state: ExtensionState = createExtensionState();
+		const state: SessionState = createSessionState();
 		state.moduleState.todoist = { taskRef: "42" };
 
 		updateModuleState(state, {
@@ -28,8 +28,11 @@ describe("extension module state", () => {
 	});
 
 	it("consumes published module state updates", async () => {
-		const state = createExtensionState();
+		const state = createSessionState();
 		const events = createSharedEvents();
+		events.setupListener("updateModuleState", (request) => {
+			state.moduleState.direct = request.payload.moduleState;
+		});
 		registerModuleStateConsumer(events, state);
 
 		await events.emit("updateModuleState", {
@@ -39,6 +42,13 @@ describe("extension module state", () => {
 
 		expect(state.moduleState.pr).toEqual({
 			prUrl: "https://github.com/o/r/pull/42",
+		});
+	});
+
+	it("starts with null session id", () => {
+		expect(createSessionState()).toEqual({
+			sessionId: null,
+			moduleState: {},
 		});
 	});
 });

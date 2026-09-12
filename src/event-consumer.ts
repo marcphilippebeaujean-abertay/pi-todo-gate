@@ -10,10 +10,10 @@ import {
 } from "./application/session.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { SharedEvents, UpdateModuleStateEvent } from "./shared/events.ts";
-import type { ExtensionRuntime, ExtensionState } from "./state.ts";
+import type { ExtensionState, SessionState } from "./state.ts";
 
 export function updateModuleState(
-	state: ExtensionState,
+	state: SessionState,
 	event: UpdateModuleStateEvent,
 ): void {
 	state.moduleState[event.moduleId] = event.moduleState;
@@ -21,16 +21,16 @@ export function updateModuleState(
 
 export function registerModuleStateConsumer(
 	events: SharedEvents,
-	state: ExtensionState,
+	state: SessionState,
 ): void {
-	events.on(C.event.updateModuleState, (request) => {
+	events.setupListener(C.event.updateModuleState, (request) => {
 		updateModuleState(state, request.payload);
 	});
 }
 
 export function registerExtensionEventConsumers(
 	pi: ExtensionAPI,
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 ): void {
 	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));

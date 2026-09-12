@@ -1,7 +1,7 @@
 import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { inspectProject } from "../shared/project.ts";
-import { applyStatePatch } from "../state.ts";
+import { applyStatePatch, currentSessionContext } from "../state.ts";
 import {
 	CLAIM,
 	COMPLETED,
@@ -25,11 +25,11 @@ import type {
 } from "./state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
-function isActiveSession(
+function isSessionContext(
 	runtime: TodoistRuntime,
 	session: TodoistSession,
 ): boolean {
-	return runtime.active === session;
+	return currentSessionContext(runtime.sessionState) === session;
 }
 
 function isCurrentEvent(
@@ -37,8 +37,8 @@ function isCurrentEvent(
 	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): boolean {
-	const operation = runtime.taskClaim;
-	const isCurrentSession = isActiveSession(runtime, session);
+	const operation = runtime.todoist.taskClaim;
+	const isCurrentSession = isSessionContext(runtime, session);
 	if (!isCurrentSession) return false;
 	const isPending = operation.pending;
 	if (!isPending) return false;
@@ -90,18 +90,18 @@ export function handleTaskClaimResult(
 ): void {
 	const isStale = !isCurrentEvent(runtime, session, event);
 	if (isStale) return;
-	runtime.taskClaim.pending = false;
-	runtime.taskClaim.session = undefined;
+	runtime.todoist.taskClaim.pending = false;
+	runtime.todoist.taskClaim.session = undefined;
 	const taskData = claimTaskData(event.result);
 	const hasClaim = taskData !== undefined;
 	if (hasClaim) {
-		runtime.taskClaim.completed = true;
+		runtime.todoist.taskClaim.completed = true;
 		const canPersist = session.state.taskRef === undefined;
 		if (canPersist) persistClaim(runtime, session, taskData);
 		return;
 	}
-	runtime.taskClaim.completed = false;
-	const isCurrentSession = isActiveSession(runtime, session);
+	runtime.todoist.taskClaim.completed = false;
+	const isCurrentSession = isSessionContext(runtime, session);
 	if (!isCurrentSession) return;
 	const error = event.result.error ?? INVALID_RESULT;
 	notifyClaimFailure(session.context, error);
@@ -148,10 +148,11 @@ export function maybeAnalyzeTaskClaim(
 	prompt: string,
 ): void {
 	const canStart =
-		runtime.active === session && session.state.taskRef === undefined;
+		currentSessionContext(runtime.sessionState) === session &&
+		session.state.taskRef === undefined;
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
-	const operation = runtime.taskClaim;
+	const operation = runtime.todoist.taskClaim;
 	const isAlreadyHandled = operation.pending || operation.completed;
 	if (isAlreadyHandled) return;
 	operation.pending = true;
@@ -165,7 +166,7 @@ async function consumeMergedEvent(
 ): Promise<void> {
 	const alreadyCompleted = request.payload.taskMarkedAsCompleted === true;
 	if (alreadyCompleted) return;
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	if (session === null) return;
 	const hasInteractiveUi = session.context.hasUI;
 	if (!hasInteractiveUi) return;
@@ -177,7 +178,7 @@ async function consumeMergedEvent(
 	const operationGeneration = session.operationGeneration;
 	void runtime.promptQueue
 		.enqueue(async (isCurrent) => {
-			const isCurrentBeforePrompt = isActiveSession(runtime, session);
+			const isCurrentBeforePrompt = isSessionContext(runtime, session);
 			const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
 			if (isPromptStale) return;
 			const confirmed = await confirmTaskCompletion(
@@ -189,7 +190,7 @@ async function consumeMergedEvent(
 			if (!isConfirmed) return;
 			const isCurrentAfterPromptEpoch = isCurrent();
 			if (!isCurrentAfterPromptEpoch) return;
-			const isCurrentSessionAfterPrompt = isActiveSession(runtime, session);
+			const isCurrentSessionAfterPrompt = isSessionContext(runtime, session);
 			if (!isCurrentSessionAfterPrompt) return;
 			const result = await runtime.completeMergedTask(
 				session,
@@ -205,7 +206,7 @@ async function consumeMergedEvent(
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
-	runtime.events.on(
+	runtime.eventHandler.setupListener(
 		C.event.prMerged,
 		consumeMergedEvent.bind(null, runtime),
 		C.value.collect,

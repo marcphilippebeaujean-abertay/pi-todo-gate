@@ -61,6 +61,11 @@ export type ListenerMap = Map<EventName, AnyListener[]>;
 export type AnyRequest = EventRequest<SharedEventPayloads[EventName]>;
 
 export interface SharedEvents {
+	setupListener<K extends EventName>(
+		event: K,
+		listener: EventListener<SharedEventPayloads[K]>,
+		phase?: EventPhase,
+	): () => void;
 	on<K extends EventName>(
 		event: K,
 		listener: EventListener<SharedEventPayloads[K]>,
@@ -128,9 +133,14 @@ async function emitPhase(
 	}
 }
 
-export function createSharedEvents(): SharedEvents {
+export interface EventHandler extends SharedEvents {}
+
+export function createSharedEvents(): EventHandler {
 	const listeners: ListenerMap = new Map();
 	return {
+		setupListener(event, listener, phase?: EventPhase) {
+			return this.on(event, listener, phase);
+		},
 		on(event, listener, phase?: EventPhase) {
 			const resolvedPhase = phase ?? (C.value.collect as EventPhase);
 			const entry: AnyListener = {
@@ -147,3 +157,5 @@ export function createSharedEvents(): SharedEvents {
 		},
 	};
 }
+
+export const createEventHandler = createSharedEvents;

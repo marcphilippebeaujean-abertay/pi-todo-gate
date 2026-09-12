@@ -1,5 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { appendState, replaceSessionState } from "./application/lifecycle.ts";
+import {
+	appendState,
+	publishModuleState,
+	replaceSessionState,
+} from "./application/lifecycle.ts";
 import {
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
@@ -7,81 +11,110 @@ import {
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
 import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
-import { register } from "./pr/module.ts";
-import { createSharedEvents } from "./shared/events.ts";
+import { createPrModule } from "./pr/module.ts";
+import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
+import { createEventHandler } from "./shared/events.ts";
 import { PromptQueue } from "./shared/prompt-queue.ts";
 import { isSubagent } from "./shared/session.ts";
 import {
 	enqueueSessionOperation,
 	isCurrentOperation,
 } from "./shared/session-operations.ts";
-import type { ExtensionDependencies, ExtensionRuntime } from "./state.ts";
-import { createExtensionState } from "./state.ts";
+import {
+	createSessionState,
+	type ExtensionDependencies,
+	type ExtensionState,
+} from "./state.ts";
 import { completeMergedTask } from "./todoist/completion.ts";
-import { registerTodoistMergeConsumer } from "./todoist/module.ts";
+import { createTodoistModule } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 
 export type { ExtensionDependencies, WorkStateAction } from "./state.ts";
 
-export function createExtensionRuntime(
-	pi: ExtensionAPI,
-	dependencies: ExtensionDependencies,
-): ExtensionRuntime {
-	const events = createSharedEvents();
-	const promptQueue = new PromptQueue();
-	const runtime: ExtensionRuntime = {
-		pi,
-		dependencies,
-		state: createExtensionState(),
-		events,
-		exitProtocol: createExitProtocolModule(events, promptQueue),
-		footer: createFooterModule(pi, {
-			openSession: dependencies.openSession,
-		}),
-		worktree: createWorktreeModule(events, { exec: dependencies.exec }),
-		taskClaim: { pending: false, completed: false },
-		promptQueue,
-		active: null,
-		appendState: (state, prDiscoveryDisabled) =>
-			appendState(runtime, state, prDiscoveryDisabled),
-		refreshFooterStatuses: (session) => refreshFooterStatuses(runtime, session),
-		replaceSessionState,
-		completeMergedTask: (
+function attachApplicationOperations(extensionState: ExtensionState): void {
+	extensionState.appendState = (state, prDiscoveryDisabled) =>
+		appendState(extensionState, state, prDiscoveryDisabled);
+	extensionState.refreshFooterStatuses = (session) =>
+		refreshFooterStatuses(extensionState.footer, session);
+	extensionState.replaceSessionState = (session, nextState) => {
+		replaceSessionState(session, nextState);
+		publishModuleState(extensionState, C.module.work, { ...nextState });
+	};
+	extensionState.completeMergedTask = (
+		session,
+		taskRef,
+		stateSnapshot,
+		workRevision,
+		generation,
+	) =>
+		completeMergedTask(
+			extensionState,
 			session,
+			session.context,
 			taskRef,
 			stateSnapshot,
 			workRevision,
 			generation,
-		) =>
-			completeMergedTask(
-				runtime,
-				session,
-				session.context,
-				taskRef,
-				stateSnapshot,
-				workRevision,
-				generation,
-			),
-		isCurrentOperation,
-		enqueueSessionOperation,
+		);
+	extensionState.isCurrentOperation = isCurrentOperation;
+	extensionState.enqueueSessionOperation = enqueueSessionOperation;
+}
+
+export function createExtensionState(
+	pi: ExtensionAPI,
+	dependencies: ExtensionDependencies,
+): ExtensionState {
+	const eventHandler = createEventHandler();
+	const promptQueue = new PromptQueue();
+	const sessionState = createSessionState();
+	const stateRef: { current: ExtensionState | null } = { current: null };
+	const moduleContext = { promptQueue, eventHandler, sessionState };
+	const extensionState = {
+		pi,
+		dependencies,
+		sessionState,
+		promptQueue,
+		eventHandler,
+		footer: createFooterModule(
+			pi,
+			{ openSession: dependencies.openSession },
+			moduleContext,
+		),
+		pr: createPrModule(eventHandler, sessionState, stateRef),
+		todoist: createTodoistModule(eventHandler, sessionState, stateRef),
+		worktree: createWorktreeModule(
+			eventHandler,
+			{ exec: dependencies.exec },
+			moduleContext,
+		),
+		exitProtocol: createExitProtocolModule(
+			eventHandler,
+			promptQueue,
+			moduleContext,
+		),
 		registered: false,
-	};
-	registerTodoistMergeConsumer(runtime);
-	return runtime;
+	} as ExtensionState;
+	attachApplicationOperations(extensionState);
+	stateRef.current = extensionState;
+	return extensionState;
 }
 
 function startExtensions(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
 ): void {
-	const runtime = createExtensionRuntime(pi, dependencies);
-	registerModuleStateConsumer(runtime.events, runtime.state);
-	registerExtensionEventConsumers(pi, runtime);
-	register(pi, runtime);
+	const extensionState = createExtensionState(pi, dependencies);
+	registerModuleStateConsumer(
+		extensionState.eventHandler,
+		extensionState.sessionState,
+	);
+	registerExtensionEventConsumers(pi, extensionState);
+	extensionState.pr.register(pi);
+	extensionState.todoist.register();
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
-		onFooterUpdate: runtime.footer.update.bind(runtime.footer),
+		onFooterUpdate: extensionState.footer.update.bind(extensionState.footer),
 	});
 }
 

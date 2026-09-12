@@ -5,23 +5,19 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { appendState, replaceSessionState } from "../application/lifecycle.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { extensionResult } from "../shared/extension-message.ts";
-import type {
-	ActiveSession,
-	ExtensionRuntime,
-	StateToolParams,
-} from "../state.ts";
-import { applyStatePatch } from "../state.ts";
+import type { SessionContext, StateToolParams } from "../state.ts";
+import { applyStatePatch, currentSessionContext } from "../state.ts";
 import { githubPrUrl } from "./module.ts";
+import type { StateToolRuntime } from "./state.ts";
 
 export const stateParameters = Type.Object({
 	action: StringEnum(["status", "set_pr", "clear_pr", "clear_all"] as const),
 	url: Type.Optional(Type.String()),
 });
 
-function statusAction(session: ActiveSession): AgentToolResult<undefined> {
+function statusAction(session: SessionContext): AgentToolResult<undefined> {
 	return extensionResult(
 		JSON.stringify({
 			...session.state,
@@ -31,14 +27,14 @@ function statusAction(session: ActiveSession): AgentToolResult<undefined> {
 }
 
 function setPrAction(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: StateToolRuntime,
+	session: SessionContext,
 	params: StateToolParams,
 ): AgentToolResult<undefined> {
 	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
 	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
-	replaceSessionState(
+	runtime.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			prUrl: url,
@@ -51,17 +47,17 @@ function setPrAction(
 		}),
 	);
 	session.allowPrDiscovery = false;
-	appendState(runtime, session.state);
+	runtime.appendState(session.state);
 	runtime.refreshFooterStatuses(session);
 	return extensionResult(`Pinned PR ${url}`);
 }
 
 function clearPrState(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: StateToolRuntime,
+	session: SessionContext,
 	message: string,
 ): AgentToolResult<undefined> {
-	replaceSessionState(
+	runtime.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			prUrl: undefined,
@@ -70,20 +66,20 @@ function clearPrState(
 		}),
 	);
 	session.allowPrDiscovery = false;
-	appendState(runtime, session.state, true);
+	runtime.appendState(session.state, true);
 	runtime.refreshFooterStatuses(session);
 	return extensionResult(message);
 }
 
 export async function executeStateTool(
-	runtime: ExtensionRuntime,
+	runtime: StateToolRuntime,
 	_toolCallId: string,
 	params: StateToolParams,
 	_signal: AbortSignal | undefined,
 	_onUpdate: AgentToolUpdateCallback<undefined> | undefined,
 	_ctx: ExtensionContext,
 ): Promise<AgentToolResult<undefined>> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	const hasSession = session !== null;
 	if (!hasSession) throw new Error(C.message.inactive);
 	switch (params.action) {
@@ -98,7 +94,7 @@ export async function executeStateTool(
 	}
 }
 
-export function installStateTool(runtime: ExtensionRuntime): void {
+export function installStateTool(runtime: StateToolRuntime): void {
 	const isRegistered = runtime.registered;
 	if (isRegistered) return;
 	runtime.registered = true;

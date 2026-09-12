@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { ActiveSession, ExtensionRuntime } from "../state.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
+import type { SessionContext } from "../state.ts";
 import "./commands.ts";
 import "./constants.ts";
 import "./state.ts";
@@ -20,10 +21,10 @@ export * from "./state.ts";
 export { renderPrStatus, renderTaskStatusCompact as renderTodoistTaskStatus };
 
 export function refreshFooterStatuses(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	footer: FooterModule,
+	session: SessionContext,
 ): void {
-	runtime.footer.update({
+	footer.update({
 		footerType: C.status.pr,
 		isLoading: false,
 		text: renderPrStatus(
@@ -33,7 +34,7 @@ export function refreshFooterStatuses(
 		),
 		isVisible: true,
 	});
-	runtime.footer.update({
+	footer.update({
 		footerType: C.status.task,
 		isLoading: false,
 		text: renderTaskStatusCompact(
@@ -46,19 +47,20 @@ export function refreshFooterStatuses(
 }
 
 export function updateWorkingTreeStatus(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	footer: FooterModule,
+	session: SessionContext,
 	hasUncommittedChanges: boolean,
 ): void {
 	const hasStatusChanged =
 		session.hasUncommittedChanges !== hasUncommittedChanges;
 	session.hasUncommittedChanges = hasUncommittedChanges;
-	if (hasStatusChanged) refreshFooterStatuses(runtime, session);
+	if (hasStatusChanged) refreshFooterStatuses(footer, session);
 }
 
 export function createFooterModule(
 	pi: ExtensionAPI,
 	dependencies?: FooterModuleDependencies,
+	moduleContext?: ModuleContext,
 ): FooterModule {
-	return new FooterEventConsumer(pi, dependencies ?? {});
+	return new FooterEventConsumer(pi, dependencies ?? {}, moduleContext);
 }

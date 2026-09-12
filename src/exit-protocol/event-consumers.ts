@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { SharedEvents } from "../shared/events.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import { EXIT_PRESENT_PHASE } from "./constants.ts";
 import { enqueueExitActions } from "./event-publishers.ts";
@@ -10,17 +11,33 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;
 	private readonly promptQueue: PromptQueue;
 
-	constructor(events: SharedEvents, promptQueue: PromptQueue) {
+	constructor(
+		events: SharedEvents,
+		promptQueue: PromptQueue,
+		readonly _moduleContext?: ModuleContext,
+	) {
 		this.promptQueue = promptQueue;
-		events.on(C.event.prMerged, this.onPrMerged.bind(this), EXIT_PRESENT_PHASE);
+		events.setupListener(
+			C.event.prMerged,
+			this.onPrMerged.bind(this),
+			EXIT_PRESENT_PHASE,
+		);
 	}
 
 	sessionStart(context: ExtensionContext): void {
 		this.context = context;
+		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+			moduleId: C.module.exitProtocol,
+			moduleState: { active: true },
+		});
 	}
 
 	deactivate(): void {
 		this.context = null;
+		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+			moduleId: C.module.exitProtocol,
+			moduleState: { active: false },
+		});
 	}
 
 	private onPrMerged(request: ExitRequest): void {

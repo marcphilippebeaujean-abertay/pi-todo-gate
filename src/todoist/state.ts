@@ -8,7 +8,7 @@ import type {
 } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
-import type { WorkState } from "../state.ts";
+import type { SessionState, WorkState } from "../state.ts";
 
 export type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
 
@@ -105,6 +105,15 @@ export interface TodoistState {
 	mergePromptedPrUrl?: string;
 }
 
+export interface TodoistModule {
+	register(): void;
+	taskClaim: {
+		pending: boolean;
+		completed: boolean;
+		session?: TodoistSession;
+	};
+}
+
 export interface TodoistSession {
 	sessionId: string;
 	context: ExtensionContext;
@@ -116,15 +125,11 @@ export interface TodoistSession {
 }
 
 export interface TodoistRuntime {
-	active: TodoistSession | null;
-	taskClaim: {
-		pending: boolean;
-		completed: boolean;
-		session?: TodoistSession;
-	};
+	sessionState: SessionState;
+	todoist: TodoistModule;
 	promptQueue: PromptQueue;
 	dependencies: { exec?: Exec; taskClaimWorker?: TaskClaimWorker };
-	events: SharedEvents;
+	eventHandler: SharedEvents;
 	appendState(state: WorkState, prDiscoveryDisabled?: boolean): void;
 	refreshFooterStatuses(session: TodoistSession): void;
 	replaceSessionState(session: TodoistSession, nextState: WorkState): void;

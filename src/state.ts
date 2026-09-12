@@ -8,14 +8,17 @@ import type {
 	CommandRunner as HerdrCommandRunner,
 	StartBackgroundWorker,
 } from "./herdr/state.ts";
+import type { PrModule } from "./pr/state.ts";
 import type { Exec } from "./shared/command.ts";
-import type { SharedEvents } from "./shared/events.ts";
+import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
+import type { EventHandler } from "./shared/events.ts";
 import type { ExitActionResult } from "./shared/exit-actions.ts";
 import type { PromptQueue } from "./shared/prompt-queue.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
 	TodoistClientLike,
+	TodoistModule,
 	TodoistProjectMapping,
 } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
@@ -33,12 +36,31 @@ export interface WorkState {
 
 export type ModuleState = Record<string, unknown>;
 
-export interface ExtensionState {
-	moduleState: Record<string, ModuleState>;
+export interface SessionState {
+	sessionId: string | null;
+	moduleState: Record<string, unknown>;
 }
 
-export function createExtensionState(): ExtensionState {
-	return { moduleState: {} };
+export function createSessionState(): SessionState {
+	return { sessionId: null, moduleState: {} };
+}
+
+const APPLICATION_STATE_MODULE = C.module.application;
+
+export function currentSessionContext(
+	sessionState: SessionState,
+	session?: SessionContext | null,
+): SessionContext | null {
+	const hasUpdate = session !== undefined;
+	if (hasUpdate) {
+		const shouldClear = session === null;
+		if (shouldClear) delete sessionState.moduleState[APPLICATION_STATE_MODULE];
+		else sessionState.moduleState[APPLICATION_STATE_MODULE] = session;
+	}
+	return (
+		(sessionState.moduleState[APPLICATION_STATE_MODULE] as SessionContext) ??
+		null
+	);
 }
 
 const CUSTOM = "custom";
@@ -156,7 +178,7 @@ export type SessionReader = {
 	getCwd(): string;
 };
 
-export interface ActiveSession {
+export interface SessionContext {
 	sessionId: string;
 	context: ExtensionContext;
 	project: ResolvedProject;
@@ -171,43 +193,37 @@ export interface ActiveSession {
 	operationQueue: Promise<void>;
 }
 
-export interface TaskClaimOperation {
-	pending: boolean;
-	completed: boolean;
-	session?: ActiveSession;
-}
-
-export interface ExtensionRuntime {
+export interface ExtensionState {
 	pi: ExtensionAPI;
 	dependencies: ExtensionDependencies;
-	state: ExtensionState;
-	events: SharedEvents;
-	exitProtocol: ExitProtocolModule;
-	footer: FooterModule;
-	worktree: WorktreeModule;
-	taskClaim: TaskClaimOperation;
+	sessionState: SessionState;
 	promptQueue: PromptQueue;
-	active: ActiveSession | null;
+	eventHandler: EventHandler;
+	footer: FooterModule;
+	pr: PrModule;
+	todoist: TodoistModule;
+	worktree: WorktreeModule;
+	exitProtocol: ExitProtocolModule;
+	registered: boolean;
 	appendState(
-		state: ActiveSession["state"],
+		state: SessionContext["state"],
 		prDiscoveryDisabled?: boolean,
 	): void;
-	refreshFooterStatuses(session: ActiveSession): void;
+	refreshFooterStatuses(session: SessionContext): void;
 	replaceSessionState(
-		session: ActiveSession,
-		nextState: ActiveSession["state"],
+		session: SessionContext,
+		nextState: SessionContext["state"],
 	): void;
 	completeMergedTask(
-		session: ActiveSession,
+		session: SessionContext,
 		taskRef: string,
-		stateSnapshot: ActiveSession["state"],
+		stateSnapshot: SessionContext["state"],
 		workRevision: number,
 		operationGeneration: number,
 	): Promise<ExitActionResult>;
-	isCurrentOperation(session: ActiveSession, generation: number): boolean;
+	isCurrentOperation(session: SessionContext, generation: number): boolean;
 	enqueueSessionOperation<T>(
-		session: ActiveSession,
+		session: SessionContext,
 		operation: () => Promise<T>,
 	): Promise<T>;
-	registered: boolean;
 }

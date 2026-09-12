@@ -1,5 +1,7 @@
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Exec } from "../shared/command.ts";
-import type { PrMergedEvent } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { SessionContext, SessionState } from "../state.ts";
 
 export interface PrSession {
 	context: { cwd: string; hasUI: boolean };
@@ -8,17 +10,34 @@ export interface PrSession {
 	operationQueue?: Promise<void>;
 }
 
+export interface PrModule {
+	register(pi: ExtensionAPI): void;
+}
+
 export interface PrRuntime {
-	active: PrSession | null;
+	sessionState: SessionState;
+	eventHandler: EventHandler;
 	dependencies: { exec?: Exec };
-	events: {
-		emit(event: string, payload: PrMergedEvent): Promise<void>;
-	};
 	isCurrentOperation?(session: PrSession, generation: number): boolean;
 	enqueueSessionOperation?<T>(
 		session: PrSession,
 		operation: () => Promise<T>,
 	): Promise<T>;
+}
+
+export interface StateToolRuntime {
+	pi: ExtensionAPI;
+	registered: boolean;
+	sessionState: SessionState;
+	appendState(
+		state: SessionContext["state"],
+		prDiscoveryDisabled?: boolean,
+	): void;
+	refreshFooterStatuses(session: SessionContext): void;
+	replaceSessionState(
+		session: SessionContext,
+		nextState: SessionContext["state"],
+	): void;
 }
 
 export interface OpenPrInfo {

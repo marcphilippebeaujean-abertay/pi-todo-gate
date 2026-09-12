@@ -7,6 +7,7 @@ import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
 import type { SharedEvents } from "../shared/events.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
 import { PromptQueue } from "../shared/prompt-queue.ts";
 import { ExitProtocolConsumer } from "./event-consumers.ts";
 import type { ExitProtocolModule } from "./state.ts";
@@ -23,7 +24,8 @@ export * from "./user-prompts.ts";
 export function createExitProtocolModule(
 	events: SharedEvents,
 	promptQueue?: PromptQueue,
+	moduleContext?: ModuleContext,
 ): ExitProtocolModule {
 	const queue = promptQueue ?? new PromptQueue();
-	return new ExitProtocolConsumer(events, queue);
+	return new ExitProtocolConsumer(events, queue, moduleContext);
 }

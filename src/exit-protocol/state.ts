@@ -4,6 +4,7 @@ import type {
 	SharedEventPayloads,
 	SharedEvents,
 } from "../shared/events.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import {
 	EXIT_ACTION_KEY,
@@ -29,6 +30,7 @@ export interface ExitProtocolModule {
 export type ExitProtocolFactory = (
 	events: SharedEvents,
 	promptQueue?: PromptQueue,
+	moduleContext?: ModuleContext,
 ) => ExitProtocolModule;
 
 export type PickerFocus =

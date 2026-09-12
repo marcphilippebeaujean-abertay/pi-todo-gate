@@ -3,6 +3,7 @@ import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { SharedEvents } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
 import { inspectProject } from "../shared/project.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import { createCleanupAction } from "./event-publishers.ts";
@@ -27,10 +28,14 @@ class Worktree implements WorktreeModule {
 	private baseline: WorktreeBaseline | null = null;
 	private sessionGeneration = 0;
 
-	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
+	constructor(
+		events: SharedEvents,
+		dependencies: WorktreeModuleDependencies,
+		readonly _moduleContext?: ModuleContext,
+	) {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.on(C.event.prMerged, this.onPrMerged.bind(this));
+		events.setupListener(C.event.prMerged, this.onPrMerged.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -67,12 +72,20 @@ class Worktree implements WorktreeModule {
 			initialHead: state.currentHead,
 			initialStatus: state.currentStatus,
 		};
+		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+			moduleId: C.module.worktree,
+			moduleState: { ...this.baseline },
+		});
 	}
 
 	deactivate(): void {
 		this.sessionGeneration += 1;
 		this.context = null;
 		this.baseline = null;
+		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+			moduleId: C.module.worktree,
+			moduleState: {},
+		});
 	}
 
 	private onPrMerged(request: MergeRequest): void {
@@ -132,6 +145,7 @@ class Worktree implements WorktreeModule {
 export function createWorktreeConsumer(
 	events: SharedEvents,
 	dependencies: WorktreeModuleDependencies,
+	moduleContext?: ModuleContext,
 ): WorktreeModule {
-	return new Worktree(events, dependencies);
+	return new Worktree(events, dependencies, moduleContext);
 }

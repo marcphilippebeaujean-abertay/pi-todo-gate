@@ -3,19 +3,19 @@ import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { inspectProject } from "../shared/project.ts";
 import { invalidateOperations } from "../shared/session-operations.ts";
-import type { ActiveSession, ExtensionRuntime } from "../state.ts";
+import type { ExtensionState, SessionContext, SessionState } from "../state.ts";
 import { applyStatePatch } from "../state.ts";
 
-export function resetTemporarySessionState(runtime: ExtensionRuntime): void {
+export function resetTemporarySessionState(runtime: ExtensionState): void {
 	runtime.promptQueue.reset();
-	runtime.taskClaim.pending = false;
-	runtime.taskClaim.completed = false;
-	runtime.taskClaim.session = undefined;
+	runtime.todoist.taskClaim.pending = false;
+	runtime.todoist.taskClaim.completed = false;
+	runtime.todoist.taskClaim.session = undefined;
 }
 
 export function replaceSessionState(
-	session: ActiveSession,
-	nextState: ActiveSession["state"],
+	session: SessionContext,
+	nextState: SessionContext["state"],
 ): void {
 	const hasTaskChanged = session.state.taskRef !== nextState.taskRef;
 	const hasPrChanged = session.state.prUrl !== nextState.prUrl;
@@ -24,11 +24,23 @@ export function replaceSessionState(
 	session.state = nextState;
 }
 
+export function publishModuleState(
+	runtime: ExtensionState,
+	moduleId: string,
+	moduleState: Record<string, unknown>,
+): void {
+	void runtime.eventHandler.emit(C.event.updateModuleState, {
+		moduleId,
+		moduleState,
+	});
+}
+
 export function appendState(
-	runtime: ExtensionRuntime,
-	state: ActiveSession["state"],
+	runtime: ExtensionState,
+	state: SessionContext["state"],
 	prDiscoveryDisabled?: boolean,
 ): void {
+	publishModuleState(runtime, C.module.work, { ...state });
 	const shouldDisablePrDiscovery = prDiscoveryDisabled ?? false;
 	const data = shouldDisablePrDiscovery
 		? { ...state, prDiscoveryDisabled: true }
@@ -37,10 +49,10 @@ export function appendState(
 }
 
 export async function initializeRemoteOrigin(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	ctx: ExtensionContext,
-	state: ActiveSession["state"],
-): Promise<ActiveSession["state"]> {
+	state: SessionContext["state"],
+): Promise<SessionContext["state"]> {
 	const project = await inspectProject(
 		runtime.dependencies.exec ?? spawnExec,
 		ctx.cwd,
@@ -52,11 +64,21 @@ export async function initializeRemoteOrigin(
 	return nextState;
 }
 
+export function resetSessionState(sessionState: SessionState): void {
+	sessionState.sessionId = null;
+	for (const moduleId of Object.keys(sessionState.moduleState)) {
+		delete sessionState.moduleState[moduleId];
+	}
+}
+
 export function deactivateSession(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 ): void {
 	invalidateOperations(session);
+	const sessionState = runtime.sessionState;
+	const isCurrentSession = sessionState.sessionId === session.sessionId;
+	if (isCurrentSession) resetSessionState(sessionState);
 	runtime.footer.deactivate();
 	session.context.ui.setFooter(undefined);
 }

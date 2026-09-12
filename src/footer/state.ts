@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { ModuleContext } from "../shared/module-context.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
@@ -55,6 +56,7 @@ export interface FooterModule {
 export type FooterModuleFactory = (
 	pi: ExtensionAPI,
 	dependencies?: FooterModuleDependencies,
+	moduleContext?: ModuleContext,
 ) => FooterModule;
 
 export type FooterSessionContext = {

@@ -10,11 +10,15 @@ import type { SessionStartEvent } from "../shared/events.ts";
 import { branchTexts, latestStateData } from "../shared/extension-message.ts";
 import { hasUncommittedChanges } from "../shared/project.ts";
 import type {
-	ActiveSession,
-	ExtensionRuntime,
+	ExtensionState,
+	SessionContext,
 	SessionReader,
 } from "../state.ts";
-import { extractInheritedState, latestState } from "../state.ts";
+import {
+	currentSessionContext,
+	extractInheritedState,
+	latestState,
+} from "../state.ts";
 import { loadConfig, resolveConfiguredProject } from "../todoist/config.ts";
 import type { TodoistProjectMapping } from "../todoist/module.ts";
 import { persistPrIfAvailable } from "./event-handlers.ts";
@@ -22,13 +26,15 @@ import {
 	appendState,
 	deactivateSession,
 	initializeRemoteOrigin,
+	publishModuleState,
+	resetSessionState,
 	resetTemporarySessionState,
 } from "./lifecycle.ts";
 
 const FUNCTION_TYPE = "function";
 
-function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
-	const session = runtime.active;
+function deactivateUnconfiguredSession(runtime: ExtensionState): void {
+	const session = currentSessionContext(runtime.sessionState);
 	const hasSession = session !== null;
 	if (hasSession) {
 		deactivateSession(runtime, session);
@@ -46,17 +52,18 @@ function deactivateUnconfiguredSession(runtime: ExtensionRuntime): void {
 	if (!hasSession) runtime.footer.deactivate();
 	runtime.worktree.deactivate();
 	runtime.exitProtocol.deactivate();
-	runtime.active = null;
+	resetSessionState(runtime.sessionState);
+	currentSessionContext(runtime.sessionState, null);
 }
 
 function inheritPreviousState(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	event: SessionStartEvent,
 	config: TodoistProjectMapping,
-	project: NonNullable<ActiveSession["project"]>,
+	project: NonNullable<SessionContext["project"]>,
 	stateEntry: Record<string, unknown> | null,
-	state: ActiveSession["state"],
-): { state: ActiveSession["state"]; handoffContext: boolean } {
+	state: SessionContext["state"],
+): { state: SessionContext["state"]; handoffContext: boolean } {
 	const hasPreviousSession =
 		stateEntry === null && event.previousSessionFile !== undefined;
 	if (!hasPreviousSession) return { state, handoffContext: false };
@@ -80,14 +87,14 @@ function inheritPreviousState(
 }
 
 function activateSession(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	ctx: ExtensionContext,
-	project: NonNullable<ActiveSession["project"]>,
-	state: ActiveSession["state"],
+	project: NonNullable<SessionContext["project"]>,
+	state: SessionContext["state"],
 	handoffContext: boolean,
 	allowPrDiscovery: boolean,
-): ActiveSession {
-	const session: ActiveSession = {
+): SessionContext {
+	const session: SessionContext = {
 		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
 		project,
@@ -101,12 +108,14 @@ function activateSession(
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 	};
-	runtime.active = session;
+	runtime.sessionState.sessionId = session.sessionId;
+	publishModuleState(runtime, C.module.work, { ...state });
+	currentSessionContext(runtime.sessionState, session);
 	return session;
 }
 
-function manageActiveTools(runtime: ExtensionRuntime): void {
-	const session = runtime.active;
+function manageActiveTools(runtime: ExtensionState): void {
+	const session = currentSessionContext(runtime.sessionState);
 	const hasSession = session !== null;
 	if (!hasSession) return;
 	const hasActiveToolReader =
@@ -122,21 +131,9 @@ function manageActiveTools(runtime: ExtensionRuntime): void {
 	runtime.pi.setActiveTools([...activeTools, C.tool.state]);
 }
 
-async function startFooter(
-	runtime: ExtensionRuntime,
-	event: SessionStartEvent,
-	ctx: ExtensionContext,
-	inheritedHandoff: boolean,
-): Promise<void> {
-	const footerEvent = inheritedHandoff
-		? event
-		: { ...event, previousSessionFile: undefined };
-	await runtime.footer.sessionStart(footerEvent, ctx);
-}
-
 async function initializeWorkingTreeStatus(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 	cwd: string,
 ): Promise<void> {
 	if (session.state.prUrl === undefined) return;
@@ -144,27 +141,21 @@ async function initializeWorkingTreeStatus(
 		runtime.dependencies.exec ?? spawnExec,
 		cwd,
 	);
-	const isCurrentSession = runtime.active === session;
+	const isCurrentSession =
+		currentSessionContext(runtime.sessionState) === session;
 	const shouldSkipStatusUpdate = !isCurrentSession || status === null;
 	if (shouldSkipStatusUpdate) return;
 	session.hasUncommittedChanges = status;
-	refreshFooterStatuses(runtime, session);
+	refreshFooterStatuses(runtime.footer, session);
 }
 
-export async function handleSessionStart(
-	runtime: ExtensionRuntime,
+async function activateConfiguredSession(
+	runtime: ExtensionState,
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
-): Promise<void> {
-	resetTemporarySessionState(runtime);
-	deactivateUnconfiguredSession(runtime);
-	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
-	const project = resolveConfiguredProject(ctx.cwd, config);
-	const hasProject = project !== null;
-	if (!hasProject) {
-		deactivateUnconfiguredSession(runtime);
-		return;
-	}
+	project: NonNullable<SessionContext["project"]>,
+	config: TodoistProjectMapping,
+): Promise<{ session: SessionContext; branch: readonly unknown[] }> {
 	runtime.exitProtocol.sessionStart(ctx);
 	void runtime.worktree.sessionStart(ctx);
 	const branch = ctx.sessionManager.getBranch();
@@ -179,11 +170,14 @@ export async function handleSessionStart(
 		state,
 	);
 	state = await initializeRemoteOrigin(runtime, ctx, inherited.state);
-	const inheritedHandoff = inherited.handoffContext;
-	await startFooter(runtime, event, ctx, inheritedHandoff);
-	const allowPrDiscovery = inheritedHandoff
-		? false
-		: stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
+	const isHandoff = inherited.handoffContext;
+	const footerEvent = isHandoff
+		? event
+		: { ...event, previousSessionFile: undefined };
+	await runtime.footer.sessionStart(footerEvent, ctx);
+	const isPrDiscoveryEnabled =
+		stateEntry?.prDiscoveryDisabled !== true && !state.prUrl;
+	const allowPrDiscovery = !isHandoff && isPrDiscoveryEnabled;
 	const session = activateSession(
 		runtime,
 		ctx,
@@ -192,34 +186,60 @@ export async function handleSessionStart(
 		inherited.handoffContext,
 		allowPrDiscovery,
 	);
+	return { session, branch };
+}
+
+export async function handleSessionStart(
+	runtime: ExtensionState,
+	event: SessionStartEvent,
+	ctx: ExtensionContext,
+): Promise<void> {
+	resetTemporarySessionState(runtime);
+	deactivateUnconfiguredSession(runtime);
+	const config = await (runtime.dependencies.loadConfig ?? loadConfig)();
+	const project = resolveConfiguredProject(ctx.cwd, config);
+	const hasProject = project !== null;
+	if (!hasProject) {
+		deactivateUnconfiguredSession(runtime);
+		return;
+	}
+	const { session, branch } = await activateConfiguredSession(
+		runtime,
+		event,
+		ctx,
+		project,
+		config,
+	);
 	installStateTool(runtime);
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
 	if (isTuiMode) ctx.ui.setFooter(undefined);
 	await persistInitialPr(runtime, branch);
-	refreshFooterStatuses(runtime, session);
+	refreshFooterStatuses(runtime.footer, session);
 	void initializeWorkingTreeStatus(runtime, session, ctx.cwd);
 }
 
 export async function persistInitialPr(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	branch: readonly unknown[],
 ): Promise<void> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	const canDiscoverPr = session?.allowPrDiscovery === true;
 	if (!canDiscoverPr) return;
 	await persistPrIfAvailable(runtime, branchTexts(branch).join("\n"));
 }
 
-export function handleSessionShutdown(runtime: ExtensionRuntime): void {
+export function handleSessionShutdown(runtime: ExtensionState): void {
 	resetTemporarySessionState(runtime);
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	if (session !== null) {
 		deactivateSession(runtime, session);
-		runtime.active = null;
+		currentSessionContext(runtime.sessionState, null);
 	} else {
 		runtime.footer.deactivate();
 	}
 	runtime.worktree.deactivate();
 	runtime.exitProtocol.deactivate();
+	resetSessionState(runtime.sessionState);
+	currentSessionContext(runtime.sessionState, null);
 }

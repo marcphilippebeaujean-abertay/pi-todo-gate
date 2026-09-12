@@ -3,6 +3,8 @@ import {
 	type ExtensionContext,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { ModuleContext } from "../shared/module-context.ts";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import { FooterDisplay } from "./footer-rendering.ts";
@@ -54,6 +56,7 @@ export class FooterEventConsumer implements FooterModule {
 	constructor(
 		private readonly pi: ExtensionAPI,
 		private readonly dependencies: FooterModuleDependencies,
+		readonly _moduleContext?: ModuleContext,
 	) {}
 
 	private appendState(): void {
@@ -93,6 +96,10 @@ export class FooterEventConsumer implements FooterModule {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
 		this.state = applyFooterUpdate(this.state, parsed);
+		void this._moduleContext?.eventHandler.emit(C.event.updateModuleState, {
+			moduleId: C.module.footer,
+			moduleState: { ...this.getState() },
+		});
 		this.appendState();
 		this.display.update(this.state, parsed);
 	}

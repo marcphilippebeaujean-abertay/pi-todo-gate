@@ -18,6 +18,13 @@ export const EXTENSION_CONSTANTS = {
 		pr: "pi-todo-gate-pr",
 		task: "pi-todo-gate-task",
 	},
+	module: {
+		application: "application",
+		footer: "footer",
+		worktree: "worktree",
+		exitProtocol: "exit-protocol",
+		work: "work",
+	},
 	action: {
 		status: "status",
 		setPr: "set_pr",

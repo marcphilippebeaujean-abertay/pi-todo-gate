@@ -1,16 +1,21 @@
-import type { ActiveSession, ExtensionRuntime, WorkState } from "../state.ts";
+import {
+	currentSessionContext,
+	type ExtensionState,
+	type SessionContext,
+	type WorkState,
+} from "../state.ts";
 
 export type { WorkState } from "../state.ts";
 
 export function isCurrentMerge(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 	workRevision: number,
 	operationGeneration: number,
 	taskRef: string | undefined,
 	prUrl: string,
 ): boolean {
-	const isActive = runtime.active === session;
+	const isActive = currentSessionContext(runtime.sessionState) === session;
 	const hasSameRevision = session.workRevision === workRevision;
 	const hasSameGeneration = session.operationGeneration === operationGeneration;
 	const hasSameWork = matchesWorkState(session.state, taskRef, prUrl);

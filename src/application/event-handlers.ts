@@ -20,8 +20,8 @@ import type {
 import { textOf } from "../shared/extension-message.ts";
 import { hasUncommittedChanges, inspectProject } from "../shared/project.ts";
 import { isCurrentMerge } from "../shared/work-state.ts";
-import type { ActiveSession, ExtensionRuntime } from "../state.ts";
-import { applyStatePatch } from "../state.ts";
+import type { ExtensionState, SessionContext } from "../state.ts";
+import { applyStatePatch, currentSessionContext } from "../state.ts";
 import { maybeAnalyzeTaskClaim } from "../todoist/module.ts";
 import {
 	appendState,
@@ -35,8 +35,8 @@ const GIT_MUTATION_RE =
 const BASH_COMMAND = "command";
 
 async function ensureRemoteOrigin(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 ): Promise<string | null> {
 	const knownOrigin = session.state.remoteOrigin;
 	if (knownOrigin !== undefined) return knownOrigin;
@@ -45,15 +45,16 @@ async function ensureRemoteOrigin(
 		session.context,
 		session.state,
 	);
-	const isCurrentSession = runtime.active === session;
+	const isCurrentSession =
+		currentSessionContext(runtime.sessionState) === session;
 	if (!isCurrentSession) return null;
 	replaceSessionState(session, nextState);
 	return nextState.remoteOrigin ?? null;
 }
 
 async function firstAvailablePrUrl(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 	text: string,
 ): Promise<string | null> {
 	const exec = runtime.dependencies.exec ?? spawnExec;
@@ -75,10 +76,10 @@ async function firstAvailablePrUrl(
 }
 
 export async function persistPrIfAvailable(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	text: string,
 ): Promise<void> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	const hasSession = session !== null;
 	if (!hasSession) return;
 	const hasPrUrl = Boolean(session.state.prUrl);
@@ -87,7 +88,8 @@ export async function persistPrIfAvailable(
 	const url = await firstAvailablePrUrl(runtime, session, text);
 	const hasUrl = url !== null;
 	if (!hasUrl) return;
-	const isCurrentSession = runtime.active === session;
+	const isCurrentSession =
+		currentSessionContext(runtime.sessionState) === session;
 	if (!isCurrentSession) return;
 	const canDiscoverPr = session.allowPrDiscovery;
 	if (!canDiscoverPr) return;
@@ -96,18 +98,18 @@ export async function persistPrIfAvailable(
 	replaceSessionState(session, applyStatePatch(session.state, { prUrl: url }));
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
-	refreshFooterStatuses(runtime, session);
+	refreshFooterStatuses(runtime.footer, session);
 }
 
 export async function handleMessageEnd(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	event: MessageEndEvent,
 ): Promise<void> {
 	await persistPrIfAvailable(runtime, textOf(event.message));
 }
 
 async function appendWorktreePrompt(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	ctx: ExtensionContext,
 	messages: string[],
 ): Promise<void> {
@@ -137,8 +139,8 @@ async function appendWorktreePrompt(
 }
 
 async function buildBeforeAgentMessages(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionContext,
 ): Promise<string[]> {
@@ -158,11 +160,11 @@ async function buildBeforeAgentMessages(
 }
 
 export async function handleBeforeAgentStart(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionContext,
 ): Promise<BeforeAgentStartResultEvent | undefined> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	const hasSession = session !== null;
 	if (!hasSession) return undefined;
 	const messages = await buildBeforeAgentMessages(runtime, session, event, ctx);
@@ -178,8 +180,8 @@ export async function handleBeforeAgentStart(
 }
 
 async function handleBashResult(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: ExtensionState,
+	session: SessionContext,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
@@ -213,18 +215,18 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!currentMerge) return;
-	await runtime.events.emit(C.event.prMerged, {
+	await runtime.eventHandler.emit(C.event.prMerged, {
 		prUrl: claimedPrUrl,
 		taskMarkedAsCompleted: false,
 	});
 }
 
 export async function handleToolResult(
-	runtime: ExtensionRuntime,
+	runtime: ExtensionState,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	const session = runtime.active;
+	const session = currentSessionContext(runtime.sessionState);
 	const shouldIgnoreToolResult = session === null || event.isError;
 	if (shouldIgnoreToolResult) return;
 	if (session === null) return;
@@ -242,7 +244,7 @@ export async function handleToolResult(
 		ctx.cwd,
 	);
 	if (workingTreeStatus === null) return;
-	updateWorkingTreeStatus(runtime, session, workingTreeStatus);
+	updateWorkingTreeStatus(runtime.footer, session, workingTreeStatus);
 }
 
 export async function findOpenPrSafe(

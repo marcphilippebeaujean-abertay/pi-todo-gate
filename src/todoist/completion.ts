@@ -1,24 +1,25 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { appendState, replaceSessionState } from "../application/lifecycle.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { enqueueSessionOperation } from "../shared/session-operations.ts";
-import type { ActiveSession, ExtensionRuntime } from "../state.ts";
-import { applyStatePatch } from "../state.ts";
+import type { SessionContext } from "../state.ts";
+import { applyStatePatch, currentSessionContext } from "../state.ts";
 import { createClient } from "./client.ts";
 import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
 } from "./event-publishers.ts";
+import type { TodoistRuntime } from "./state.ts";
 
 function isCurrentCompletion(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	stateSnapshot: ActiveSession["state"],
+	runtime: TodoistRuntime,
+	session: SessionContext,
+	stateSnapshot: SessionContext["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): boolean {
-	const isCurrentSession = runtime.active === session;
+	const isCurrentSession =
+		currentSessionContext(runtime.sessionState) === session;
 	const isCurrentGeneration =
 		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
@@ -32,11 +33,11 @@ function isCurrentCompletion(
 }
 
 function recordSuccessfulCompletion(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: TodoistRuntime,
+	session: SessionContext,
 	ctx: ExtensionContext,
 ): void {
-	replaceSessionState(
+	runtime.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			taskRef: undefined,
@@ -46,7 +47,7 @@ function recordSuccessfulCompletion(
 			todoistCompletionAttemptedAt: new Date().toISOString(),
 		}),
 	);
-	appendState(runtime, session.state);
+	runtime.appendState(session.state);
 	runtime.refreshFooterStatuses(session);
 	notifyCompletionSuccess(ctx);
 }
@@ -56,11 +57,11 @@ function recordFailedCompletion(ctx: ExtensionContext): void {
 }
 
 async function completeMergedTaskNow(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: TodoistRuntime,
+	session: SessionContext,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: ActiveSession["state"],
+	stateSnapshot: SessionContext["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {
@@ -93,11 +94,11 @@ async function completeMergedTaskNow(
 }
 
 export async function completeMergedTask(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
+	runtime: TodoistRuntime,
+	session: SessionContext,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: ActiveSession["state"],
+	stateSnapshot: SessionContext["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {
