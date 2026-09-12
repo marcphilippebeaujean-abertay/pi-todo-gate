@@ -158,6 +158,9 @@ describe("background Herdr tab claim", () => {
 		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
 			"Do not rename or move any Herdr tab or pane.",
 		);
+		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
+			"Review requests for the current branch or worktree stay in the current tab when the tab relates to the feature under review.",
+		);
 	});
 
 	it("leaves worktree tab naming to the launcher", async () => {

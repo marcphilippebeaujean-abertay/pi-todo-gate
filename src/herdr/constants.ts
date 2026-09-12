@@ -46,4 +46,6 @@ If current label clearly describes task, return null. Otherwise derive short low
 from task prompt and return \`${JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE)}\` or null when no changes
 are needed, setting shouldMoveToNewTab to true when another agent shares current tab and current pane
 should move.
+Review requests for the current branch or worktree stay in the current tab when the tab relates to the feature under review.
+Keep reviewer and implementer side by side; another agent sharing a related tab alone does not warrant a new tab.
 Do not rename or move any Herdr tab or pane. Output only JSON. Exit nonzero if inspection cannot complete.`;
