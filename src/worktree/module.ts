@@ -7,7 +7,7 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { SharedEvents } from "../shared/state.ts";
+import type { SharedEvents } from "../shared/events.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type { WorktreeModule, WorktreeModuleDependencies } from "./state.ts";
 

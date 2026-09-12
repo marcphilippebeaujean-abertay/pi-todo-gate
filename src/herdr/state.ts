@@ -3,7 +3,7 @@ import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
-import type { ClaimCompletedEvent, ClaimFailedEvent } from "./events.ts";
+import type { FooterEventSink, HerdrEvents } from "./events.ts";
 
 export interface ClaimWorkerResponse {
 	status: "claimed";
@@ -21,35 +21,6 @@ export interface ClaimWorkerResult {
 	tabId: string;
 	label: string;
 }
-
-export type HerdrEventPayloads = {
-	claimCompleted: ClaimCompletedEvent;
-	claimFailed: ClaimFailedEvent;
-};
-
-export type HerdrEventName = keyof HerdrEventPayloads;
-export type HerdrEventListener<K extends HerdrEventName> = (
-	payload: HerdrEventPayloads[K],
-) => void;
-export type HerdrEvents = {
-	on<K extends HerdrEventName>(
-		event: K,
-		listener: HerdrEventListener<K>,
-	): () => void;
-	emit<K extends HerdrEventName>(
-		event: K,
-		payload: HerdrEventPayloads[K],
-	): void;
-};
-export type AnyListener = HerdrEventListener<HerdrEventName>;
-export type ListenerSet = Set<AnyListener>;
-
-export type FooterEventSink = (event: {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}) => void;
 
 export interface ClaimWorkerRequest {
 	prompt: string;

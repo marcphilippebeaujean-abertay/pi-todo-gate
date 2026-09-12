@@ -1,11 +1,4 @@
-import type {
-	AnyListener,
-	ClaimWorkerResult,
-	HerdrEventListener,
-	HerdrEventName,
-	HerdrEvents,
-	ListenerSet,
-} from "./state.ts";
+import type { ClaimWorkerResult } from "./state.ts";
 
 export interface ClaimCompletedEvent {
 	attemptId: number;
@@ -17,6 +10,35 @@ export interface ClaimFailedEvent {
 	message: string;
 	workerFailed: boolean;
 }
+
+export type HerdrEventPayloads = {
+	claimCompleted: ClaimCompletedEvent;
+	claimFailed: ClaimFailedEvent;
+};
+
+export type HerdrEventName = keyof HerdrEventPayloads;
+export type HerdrEventListener<K extends HerdrEventName> = (
+	payload: HerdrEventPayloads[K],
+) => void;
+export type HerdrEvents = {
+	on<K extends HerdrEventName>(
+		event: K,
+		listener: HerdrEventListener<K>,
+	): () => void;
+	emit<K extends HerdrEventName>(
+		event: K,
+		payload: HerdrEventPayloads[K],
+	): void;
+};
+export type AnyListener = HerdrEventListener<HerdrEventName>;
+export type ListenerSet = Set<AnyListener>;
+
+export type FooterEventSink = (event: {
+	footerType: string;
+	isLoading: boolean;
+	text: string;
+	isVisible: boolean;
+}) => void;
 
 function removeListener(entries: ListenerSet, listener: AnyListener): void {
 	entries.delete(listener);

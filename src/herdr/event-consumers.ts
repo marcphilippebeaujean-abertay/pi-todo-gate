@@ -16,8 +16,13 @@ import {
 	TAB_CLAIM_START_FAILED,
 } from "./constants.ts";
 import { defaultStartWorker } from "./event-publishers.ts";
-import type { ClaimCompletedEvent, ClaimFailedEvent } from "./events.ts";
-import { createHerdrEvents } from "./events.ts";
+import {
+	type ClaimCompletedEvent,
+	type ClaimFailedEvent,
+	createHerdrEvents,
+	type FooterEventSink,
+	type HerdrEvents,
+} from "./events.ts";
 import {
 	hideHerdrFooter,
 	notifyHerdrFailure,
@@ -27,8 +32,6 @@ import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
 import type {
 	ClaimWorkerHandle,
 	CommandRunner,
-	FooterEventSink,
-	HerdrEvents,
 	HerdrTabOptions,
 	StartBackgroundWorker,
 	TabClaimAttempt,

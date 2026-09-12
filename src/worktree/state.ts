@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { EventRequest, SharedEventPayloads } from "../shared/state.ts";
+import type { EventRequest, SharedEventPayloads } from "../shared/events.ts";
 
 export type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
 

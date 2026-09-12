@@ -5,7 +5,6 @@ import type {
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
-export type FooterEventSink = (event: FooterUpdateEvent) => void;
 
 import {
 	requireBoolean,
