@@ -39,6 +39,21 @@ Task 4 plan wording about separate PR merge channels conflicts with authoritativ
 - `npm run architecture` — passed dependency and module checks.
 - `git diff --check` — passed.
 
+## Follow-up P1 fixes
+
+- `recordMergedPr` now preserves complete facet fields and removes only active `prUrl`; `recordMerge` preserves generation and unrelated metadata.
+- Origin discovery captures state-reference, work-revision, pinned-PR, eligibility, session, and generation identity before awaits; post-await validation blocks stale same-session set/clear overwrites.
+- Added merge-facet preservation and same-session set_pr-vs-origin race regressions.
+
+## Follow-up validation
+
+- `env -u PI_SUBAGENT_CHILD npx vitest run test/pr test/extensions/pi-todo-gate.test.ts` — passed, 92 tests / 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed architecture plus 292 tests / 8 skipped.
+- `npm run lint` — passed Biome and strict lint.
+- `npm run typecheck -- --pretty false` — passed.
+- `npm run architecture` — passed dependency and module checks.
+- `git diff --check` — passed.
+
 ## Residual risks
 
 - Transitional `SessionContext` and `src/application/` remain by design for Tasks 5–6.

@@ -279,7 +279,12 @@ export function recordMergedPr(state: PrState, detectedAt: string): PrState {
 		...withoutPrUrl(existingMergedPrs, prUrl),
 		{ prUrl, detectedAt, reminderPending: true },
 	];
-	return { mergedPrs, discoveryDisabled: false };
+	const { prUrl: _prUrl, ...stateWithoutActivePr } = state;
+	return {
+		...stateWithoutActivePr,
+		mergedPrs,
+		discoveryDisabled: false,
+	};
 }
 
 export function markRemindersDelivered(state: PrState): PrState {

@@ -366,6 +366,25 @@ describe("PR module ownership", () => {
 				"https://github.com/o/r/pull/43",
 			),
 		).toBe(true);
+
+		session.state.remoteOrigin = "git@github.com:o/r.git";
+		session.prDiscoveryTestedUrls.add("https://github.com/o/r/pull/41");
+		await module.syncSessionState(session);
+		await events.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/43",
+			taskMarkedAsCompleted: false,
+		});
+		expect(updates.at(-1)).toEqual(
+			expect.objectContaining({
+				moduleState: expect.objectContaining({
+					remoteOrigin: "git@github.com:o/r.git",
+					discoveryTestedUrls: ["https://github.com/o/r/pull/41"],
+					discoveryDisabled: false,
+					operationGeneration: 0,
+					mergedPrs: expect.any(Array),
+				}),
+			}),
+		);
 	});
 
 	it("rejects stale remote-origin discovery", async () => {
@@ -471,6 +490,55 @@ describe("PR module ownership", () => {
 
 		expect(session.prDiscoveryTestedUrls).toEqual(new Set());
 		expect(session.state.prUrl).toBeUndefined();
+	});
+
+	it("does not let origin discovery overwrite same-session set_pr", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		const session = {
+			sessionId: "session",
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo" },
+			state: {},
+			allowPrDiscovery: true,
+			prDiscoveryTestedUrls: new Set<string>(),
+			handoffContext: false,
+			workChanged: false,
+			hasUncommittedChanges: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/state.ts").PrSession;
+		sessionState.sessionId = session.sessionId;
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const exec = vi.fn(async (_command: string, args: string[]) => {
+			if (args[0] === "remote") await gate;
+			return { stdout: "git@github.com:o/r.git\n", stderr: "", code: 0 };
+		});
+		const module = createPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			getSession: () => session,
+			dependencies: { exec },
+		});
+		await module.activateSession(session);
+		const discovery = module.persistPrIfAvailable(
+			"https://github.com/o/r/pull/42",
+		);
+		session.state = { prUrl: "https://github.com/o/r/pull/99" };
+		session.allowPrDiscovery = false;
+		session.workRevision += 1;
+		await module.syncSessionState(session);
+		release();
+		await discovery;
+
+		expect(session.state).toEqual({
+			prUrl: "https://github.com/o/r/pull/99",
+		});
 	});
 
 	it("persists and emits origin discovered during before-agent prompting", async () => {

@@ -116,6 +116,21 @@ export interface MergedPr {
 	detectedAt: string;
 	reminderPending: boolean;
 }
+export interface PrSessionIdentity {
+	state: PrWorkState;
+	workRevision: number;
+	prUrl: string | undefined;
+	allowPrDiscovery: boolean;
+	operationGeneration: number;
+}
+
+export interface OriginRequest {
+	operationGeneration: number;
+	sessionId: string | null;
+	session?: PrSession;
+	identity?: PrSessionIdentity;
+}
+
 export interface PrState {
 	remoteOrigin?: string;
 	prUrl?: string;
