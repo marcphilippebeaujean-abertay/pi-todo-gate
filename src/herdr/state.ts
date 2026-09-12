@@ -3,53 +3,7 @@ import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
-
-export interface ClaimWorkerResult {
-	tabId: string;
-	label: string;
-}
-
-export type FooterEventSink = (event: {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}) => void;
-
-export interface ClaimCompletedEvent {
-	attemptId: number;
-	result?: ClaimWorkerResult;
-}
-
-export interface ClaimFailedEvent {
-	attemptId: number;
-	message: string;
-	workerFailed: boolean;
-}
-
-export interface HerdrEventPayloads {
-	claimCompleted: ClaimCompletedEvent;
-	claimFailed: ClaimFailedEvent;
-}
-
-export type HerdrEventName = keyof HerdrEventPayloads;
-export type AnyListener = HerdrEventListener<HerdrEventName>;
-export type ListenerSet = Set<AnyListener>;
-export type HerdrEventListener<K extends HerdrEventName> = (
-	payload: HerdrEventPayloads[K],
-) => void;
-
-export interface HerdrEvents {
-	on<K extends HerdrEventName>(
-		event: K,
-		listener: HerdrEventListener<K>,
-	): () => void;
-	emit<K extends HerdrEventName>(
-		event: K,
-		payload: HerdrEventPayloads[K],
-	): void;
-}
-
+import type { ClaimWorkerRequest, FooterEventSink } from "./events.ts";
 export interface CwdReference {
 	current: string;
 }
@@ -61,21 +15,8 @@ export interface TabClaimAttempt {
 	context: ExtensionContext;
 }
 
-export interface ClaimWorkerRequest {
-	prompt: string;
-	instructions: string;
-	attemptId: number;
-	events: HerdrEvents;
-}
-
 export interface ClaimWorkerHandle {
 	cancel(): void;
-}
-
-export interface ClaimWorkerOptions {
-	command?: string;
-	cwd?: string;
-	spawnWorker?: WorkerSpawner;
 }
 
 export type WorkerProcess = PiWorkerProcess;

@@ -1,6 +1,7 @@
 import "./commands.ts";
 import "./constants.ts";
 import "./state.ts";
+import "./events.ts";
 import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
@@ -15,6 +16,7 @@ export type {
 	ExitActionId,
 	ExitActionResult,
 } from "../shared/exit-actions.ts";
+export * from "./events.ts";
 export * from "./state.ts";
 export * from "./user-prompts.ts";
 

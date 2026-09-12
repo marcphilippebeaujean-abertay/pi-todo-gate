@@ -1,10 +1,10 @@
 import {
 	type ExtensionContext,
 	SessionManager,
-	type SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import { loadConfig, resolveConfiguredProject } from "./config.ts";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
+import type { SessionStartEvent } from "./events.ts";
 import { persistPrIfAvailable } from "./extension-events.ts";
 import {
 	appendState,

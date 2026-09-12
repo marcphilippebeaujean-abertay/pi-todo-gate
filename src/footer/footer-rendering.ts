@@ -21,6 +21,7 @@ import {
 	FOOTER_TEXT_COLOR,
 	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
+import type { FooterUpdate } from "./events.ts";
 import type {
 	FooterAnimation as Animation,
 	FooterData,
@@ -30,7 +31,6 @@ import type {
 	FooterState,
 	FooterTheme,
 	FooterTui,
-	FooterUpdate,
 	FooterSessionContext as SessionContext,
 	TodoistFooterTheme,
 } from "./state.ts";

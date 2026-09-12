@@ -1,9 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
+import type { SharedEvents } from "../shared/events.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import {
 	EXIT_ACTION_KEY,
@@ -71,7 +67,3 @@ export function focusAction(state: PickerState, id: string): PickerState {
 export function focusSubmit(state: PickerState): PickerState {
 	return { ...state, focused: EXIT_SUBMIT_KEY };
 }
-
-export type ExitRequest = EventRequest<
-	SharedEventPayloads[keyof SharedEventPayloads]
->;

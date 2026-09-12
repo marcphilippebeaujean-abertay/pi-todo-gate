@@ -14,6 +14,7 @@ export const CANONICAL_FACETS = [
 	"commands.ts",
 	"constants.ts",
 	"state.ts",
+	"events.ts",
 	"event-consumers.ts",
 	"event-publishers.ts",
 	"user-prompts.ts",
@@ -22,7 +23,7 @@ export const CANONICAL_FACETS = [
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
-	herdr: ["claim-worker-result.ts", "events.ts", "tab-validation.ts"],
+	herdr: ["claim-worker-result.ts", "tab-validation.ts"],
 	pr: ["parsing.ts"],
 	todoist: ["parsing.ts"],
 };

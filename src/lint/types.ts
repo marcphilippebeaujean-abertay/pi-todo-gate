@@ -15,6 +15,7 @@ export type LintRuleId =
 	| "repeated-field-checks"
 	| "prefer-switch-dispatch"
 	| "domain-types-outside-state"
+	| "event-types-outside-events"
 	| "no-functions-in-data";
 export interface LintDiagnostic {
 	filePath: string;

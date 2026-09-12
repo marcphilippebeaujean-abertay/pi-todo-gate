@@ -11,9 +11,9 @@ import {
 } from "./commands.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import { createCleanupAction } from "./event-publishers.ts";
+import type { MergeRequest } from "./events.ts";
 import { notifyWorktree } from "./notifications.ts";
 import type {
-	MergeRequest,
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,

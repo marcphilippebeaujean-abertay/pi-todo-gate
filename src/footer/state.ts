@@ -2,6 +2,10 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { FooterSessionStartEvent, FooterUpdate } from "./events.ts";
+
+export type { FooterUpdate } from "./events.ts";
+
 import {
 	requireBoolean,
 	requireNonEmptyString,
@@ -19,13 +23,6 @@ import {
 	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
 
-export interface FooterUpdate {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}
-
 export interface FooterState {
 	footers: Record<string, FooterUpdate>;
 }
@@ -40,7 +37,6 @@ export interface PersistedFooterState {
 	footers: Record<string, PersistedFooterUpdate>;
 }
 
-export type FooterEventSink = (event: FooterUpdate) => void;
 export interface FooterSessionReader {
 	getBranch(): unknown[];
 }
@@ -49,7 +45,7 @@ export interface FooterModuleDependencies {
 }
 export interface FooterModule {
 	sessionStart(
-		event: { previousSessionFile?: string },
+		event: FooterSessionStartEvent,
 		ctx: ExtensionContext,
 	): Promise<void>;
 	update(event: FooterUpdate): void;

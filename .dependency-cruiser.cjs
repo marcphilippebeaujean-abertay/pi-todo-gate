@@ -86,6 +86,12 @@ module.exports = {
 			to: { path: "^src/pr/state\\.ts$" },
 		},
 		{
+			name: "pr-module-requires-events",
+			severity: "error",
+			module: { path: "^src/pr/module\\.ts$" },
+			to: { path: "^src/pr/events\\.ts$" },
+		},
+		{
 			name: "pr-module-requires-event-consumers",
 			severity: "error",
 			module: { path: "^src/pr/module\\.ts$" },
@@ -126,6 +132,12 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/todoist/module\\.ts$" },
 			to: { path: "^src/todoist/state\\.ts$" },
+		},
+		{
+			name: "todoist-module-requires-events",
+			severity: "error",
+			module: { path: "^src/todoist/module\\.ts$" },
+			to: { path: "^src/todoist/events\\.ts$" },
 		},
 		{
 			name: "todoist-module-requires-event-consumers",
@@ -170,6 +182,12 @@ module.exports = {
 			to: { path: "^src/herdr/state\\.ts$" },
 		},
 		{
+			name: "herdr-module-requires-events",
+			severity: "error",
+			module: { path: "^src/herdr/module\\.ts$" },
+			to: { path: "^src/herdr/events\\.ts$" },
+		},
+		{
 			name: "herdr-module-requires-event-consumers",
 			severity: "error",
 			module: { path: "^src/herdr/module\\.ts$" },
@@ -210,6 +228,12 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
 			to: { path: "^src/worktree/state\\.ts$" },
+		},
+		{
+			name: "worktree-module-requires-events",
+			severity: "error",
+			module: { path: "^src/worktree/module\\.ts$" },
+			to: { path: "^src/worktree/events\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-event-consumers",
@@ -254,6 +278,12 @@ module.exports = {
 			to: { path: "^src/exit-protocol/state\\.ts$" },
 		},
 		{
+			name: "exit-protocol-module-requires-events",
+			severity: "error",
+			module: { path: "^src/exit-protocol/module\\.ts$" },
+			to: { path: "^src/exit-protocol/events\\.ts$" },
+		},
+		{
 			name: "exit-protocol-module-requires-event-consumers",
 			severity: "error",
 			module: { path: "^src/exit-protocol/module\\.ts$" },
@@ -294,6 +324,12 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/footer/module\\.ts$" },
 			to: { path: "^src/footer/state\\.ts$" },
+		},
+		{
+			name: "footer-module-requires-events",
+			severity: "error",
+			module: { path: "^src/footer/module\\.ts$" },
+			to: { path: "^src/footer/events\\.ts$" },
 		},
 		{
 			name: "footer-module-requires-event-consumers",

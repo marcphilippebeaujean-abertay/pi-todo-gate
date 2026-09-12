@@ -9,6 +9,7 @@ const HEAD_REF_PREFIX = "refs/heads/";
 const REMOTE_HEAD_REF_PREFIX = "refs/remotes/";
 
 import { GH_KIND } from "./constants.ts";
+import type { MergeEvent } from "./events.ts";
 import {
 	ghMergeTargets,
 	gitMergeTargets,
@@ -16,7 +17,7 @@ import {
 	mergeCommand,
 	normalizedUrl,
 } from "./parsing.ts";
-import type { MergeEvent, ParsedMerge } from "./state.ts";
+import type { ParsedMerge } from "./state.ts";
 
 async function matchesGhMerge(
 	exec: Exec,

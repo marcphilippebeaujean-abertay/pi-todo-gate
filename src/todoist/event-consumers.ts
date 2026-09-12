@@ -15,10 +15,9 @@ import {
 	notifyClaimFailure,
 	notifyTaskAssigned,
 } from "./event-publishers.ts";
+import type { MergeRequest, TaskClaimResultEvent } from "./events.ts";
 import type {
 	ClaimTaskData,
-	MergeRequest,
-	TaskClaimResultEvent,
 	TaskClaimWorkerResult,
 	TodoistRuntime,
 	TodoistSession,

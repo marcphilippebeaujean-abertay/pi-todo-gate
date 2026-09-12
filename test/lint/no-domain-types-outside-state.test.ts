@@ -50,4 +50,16 @@ type FooterId = string;
 
 		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
 	});
+
+	it("allows declarations in every module events.ts", async () => {
+		const diagnostics = await lintSource(
+			"footer",
+			"events.ts",
+			`interface FooterEvent { visible: boolean; }
+	type FooterEventId = string;
+`,
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
+	});
 });

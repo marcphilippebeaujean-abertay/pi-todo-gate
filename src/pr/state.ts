@@ -37,9 +37,6 @@ export interface PrState {
 	mergedPrs?: MergedPr[];
 	discoveryDisabled?: boolean;
 }
-export interface MergeEvent {
-	prUrl: string;
-}
 export interface ParsedMerge {
 	kind: "git" | "gh";
 	args: string[];

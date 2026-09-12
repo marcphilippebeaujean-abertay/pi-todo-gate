@@ -1,5 +1,4 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { EventRequest, SharedEventPayloads } from "../shared/events.ts";
 
 export interface WorktreeBaseline {
 	worktreePath: string;
@@ -31,5 +30,3 @@ export interface WorktreeModule {
 	sessionStart(ctx: ExtensionContext): Promise<void>;
 	deactivate(): void;
 }
-
-export type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;

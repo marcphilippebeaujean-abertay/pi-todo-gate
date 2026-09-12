@@ -4,12 +4,12 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
+import type { FooterSessionStartEvent, FooterUpdate } from "./events.ts";
 import { FooterDisplay } from "./footer-rendering.ts";
 import type {
 	FooterModule,
 	FooterModuleDependencies,
 	FooterState,
-	FooterUpdate,
 } from "./state.ts";
 import {
 	applyFooterUpdate,
@@ -61,7 +61,7 @@ export class FooterEventConsumer implements FooterModule {
 	}
 
 	async sessionStart(
-		event: { previousSessionFile?: string },
+		event: FooterSessionStartEvent,
 		nextContext: ExtensionContext,
 	): Promise<void> {
 		this.context = nextContext;

@@ -1,11 +1,11 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
-	ExtensionContext,
 	MessageEndEvent,
 	ToolResultEvent,
-} from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
+} from "./events.ts";
 import {
 	appendState,
 	refreshFooterStatuses,

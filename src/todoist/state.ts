@@ -1,11 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Exec } from "../shared/command.ts";
-import type {
-	EventRequest,
-	SharedEventPayloads,
-	SharedEvents,
-} from "../shared/events.ts";
+import type { SharedEvents } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import type { WorkState } from "../types.ts";
@@ -128,10 +124,3 @@ export interface ClaimTaskData {
 	description: string;
 	id: string;
 }
-
-export interface TaskClaimResultEvent {
-	sessionId: string;
-	result: TaskClaimWorkerResult;
-}
-
-export type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;

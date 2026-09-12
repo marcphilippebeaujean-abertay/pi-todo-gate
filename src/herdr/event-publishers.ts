@@ -8,10 +8,9 @@ import {
 	MISSING_CLAIM_EVIDENCE,
 } from "./constants.ts";
 
+import type { ClaimWorkerOptions, ClaimWorkerRequest } from "./events.ts";
 import type {
 	ClaimWorkerHandle,
-	ClaimWorkerOptions,
-	ClaimWorkerRequest,
 	StartBackgroundWorker,
 	WorkerSpawner,
 } from "./state.ts";

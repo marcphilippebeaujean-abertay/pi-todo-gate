@@ -51,6 +51,13 @@ describe("module structure checker", () => {
 			).resolves.toBeDefined();
 	});
 
+	it("requires every scoped module to define events.ts", async () => {
+		for (const domain of SCOPED_DOMAINS)
+			await expect(
+				readFile(join(PROJECT_ROOT, "src", domain, "events.ts")),
+			).resolves.toBeDefined();
+	});
+
 	it("accepts all canonical files, including empty facets", async () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
 	});

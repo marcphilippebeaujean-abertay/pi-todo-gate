@@ -3,11 +3,12 @@ import ts from "typescript";
 import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
-const STATE_FILE_NAME = "state.ts";
+const ALLOWED_TYPE_FILES = new Set(["state.ts", "events.ts"]);
 const DOMAIN_PATH =
 	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/][^\\/]+\.ts$/;
 const RULE_ID = "domain-types-outside-state" as const;
-const MESSAGE = "Domain interfaces and type aliases must live in state.ts";
+const MESSAGE =
+	"Domain interfaces and type aliases must live in state.ts or events.ts";
 
 function isTypeDeclaration(node: ts.Node): boolean {
 	return ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node);
@@ -18,8 +19,10 @@ export const noDomainTypesOutsideState: LintRule = ({
 	diagnostics,
 }) => {
 	const isDomainFile = DOMAIN_PATH.test(sourceFile.fileName);
-	const isStateFile = basename(sourceFile.fileName) === STATE_FILE_NAME;
-	if (!isDomainFile || isStateFile) return;
+	const isAllowedTypeFile = ALLOWED_TYPE_FILES.has(
+		basename(sourceFile.fileName),
+	);
+	if (!isDomainFile || isAllowedTypeFile) return;
 	function visit(node: ts.Node): void {
 		if (isTypeDeclaration(node))
 			diagnostics.push(diagnostic(sourceFile, node, RULE_ID, MESSAGE, 1, 0));

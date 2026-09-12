@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { BeforeAgentStartEvent } from "../events.ts";
 import { isSubagent } from "../session.ts";
 import { boundCommandRunner, isInsideHerdr, tabLabel } from "./commands.ts";
 import {
@@ -16,6 +17,12 @@ import {
 	TAB_CLAIM_START_FAILED,
 } from "./constants.ts";
 import { defaultStartWorker } from "./event-publishers.ts";
+import type {
+	ClaimCompletedEvent,
+	ClaimFailedEvent,
+	FooterEventSink,
+	HerdrEvents,
+} from "./events.ts";
 import { createHerdrEvents } from "./events.ts";
 import {
 	hideHerdrFooter,
@@ -23,12 +30,8 @@ import {
 	showHerdrFooter,
 } from "./notifications.ts";
 import type {
-	ClaimCompletedEvent,
-	ClaimFailedEvent,
 	ClaimWorkerHandle,
 	CommandRunner,
-	FooterEventSink,
-	HerdrEvents,
 	HerdrTabOptions,
 	StartBackgroundWorker,
 	TabClaimAttempt,
@@ -97,7 +100,7 @@ class HerdrTabClaimConsumer {
 	}
 
 	private beforeAgentStart(
-		event: { prompt?: string },
+		event: BeforeAgentStartEvent,
 		ctx: ExtensionContext,
 	): void {
 		const isUnavailable = !this.herdrAvailable;
