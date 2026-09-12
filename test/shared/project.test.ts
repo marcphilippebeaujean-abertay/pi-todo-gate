@@ -8,6 +8,7 @@ import {
 } from "../../src/shared/project.ts";
 
 const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", code: 0 });
+const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const fail = (stderr = "error"): CommandResult => ({
 	stdout: "",
 	stderr,
@@ -54,6 +55,7 @@ describe("inspectProject", () => {
 		const exec = fakeExec({
 			"git rev-parse --show-toplevel": ok("/repo/.worktrees/feature\n"),
 			"git branch --show-current": ok("feature\n"),
+			"git remote get-url origin": ok(`${REMOTE_ORIGIN}\n`),
 			"git worktree list --porcelain": ok(
 				"worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.worktrees/feature\nHEAD def\nbranch refs/heads/feature\n",
 			),
@@ -65,6 +67,7 @@ describe("inspectProject", () => {
 			root: "/repo/.worktrees/feature",
 			branch: "feature",
 			mainRoot: "/repo",
+			remoteOrigin: REMOTE_ORIGIN,
 		});
 	});
 
@@ -77,6 +80,7 @@ describe("inspectProject", () => {
 			root: null,
 			branch: null,
 			mainRoot: null,
+			remoteOrigin: null,
 		});
 	});
 
@@ -84,6 +88,7 @@ describe("inspectProject", () => {
 		const exec = fakeExec({
 			"git rev-parse --show-toplevel": ok("/repo\n"),
 			"git branch --show-current": ok("main\n"),
+			"git remote get-url origin": ok(`${REMOTE_ORIGIN}\n`),
 			"git worktree list --porcelain": ok(
 				"worktree /repo\nHEAD abc\nbranch refs/heads/main\n",
 			),
@@ -93,6 +98,7 @@ describe("inspectProject", () => {
 			root: "/repo",
 			branch: "main",
 			mainRoot: "/repo",
+			remoteOrigin: REMOTE_ORIGIN,
 		});
 	});
 });

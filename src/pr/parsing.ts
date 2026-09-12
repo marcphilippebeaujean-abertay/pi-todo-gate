@@ -86,7 +86,10 @@ export function stateFromMergedData(data: unknown): OpenPrInfo["state"] {
 	}
 }
 
-export function parseOpenPrResult(stdout: string): OpenPrInfo {
+export function parseOpenPrResult(
+	stdout: string,
+	remoteOrigin: string | null,
+): OpenPrInfo {
 	try {
 		const parsed = openPrRowsSchema.safeParse(JSON.parse(stdout));
 		const isInvalidRows = !parsed.success;
@@ -96,7 +99,8 @@ export function parseOpenPrResult(stdout: string): OpenPrInfo {
 		const row = parsed.data[0];
 		const hasNoRow = row === undefined;
 		if (hasNoRow) return { url: null, state: UNKNOWN_STATE };
-		const url = row.url === undefined ? null : githubPrUrl(row.url);
+		const url =
+			row.url === undefined ? null : githubPrUrl(row.url, remoteOrigin);
 		let state: OpenPrInfo["state"];
 		switch (row.state) {
 			case OPEN_STATE:
@@ -125,41 +129,99 @@ import {
 	TRAILING_PUNCTUATION,
 } from "./constants.ts";
 
-function normalizedGithubPrUrl(candidate: string): string | null {
-	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
+const SCP_ORIGIN = /^(?:[^@/]+@)?([^:]+):(.+)$/;
+const GIT_SUFFIX = /\.git$/i;
+
+function repositoryKey(hostname: string, pathname: string): string | null {
+	const isGithubHostname = hostname.toLowerCase() === GITHUB_HOSTNAME;
+	if (!isGithubHostname) return null;
+	const path = pathname.replace(/^\/+|\/+$/g, "").replace(GIT_SUFFIX, "");
+	const parts = path.split("/");
+	const hasTwoPathParts = parts.length === 2;
+	const hasNonEmptyPathParts = parts.every(Boolean);
+	const hasRepositoryPath = hasTwoPathParts && hasNonEmptyPathParts;
+	if (!hasRepositoryPath) return null;
+	return parts.map((part) => part.toLowerCase()).join("/");
+}
+
+function repositoryKeyFromOrigin(remoteOrigin: string): string | null {
+	const value = remoteOrigin.trim();
+	const hasUriScheme = value.includes("://");
+	const scpMatch = hasUriScheme ? null : value.match(SCP_ORIGIN);
+	const hasScpMatch = scpMatch !== null;
+	if (hasScpMatch) {
+		return repositoryKey(scpMatch[1] ?? "", scpMatch[2] ?? "");
+	}
 	try {
-		const url = new URL(trimmed);
-		const hasGithubHostname = url.hostname.toLowerCase() === GITHUB_HOSTNAME;
-		if (!hasGithubHostname) return null;
-		const match = url.pathname.match(
-			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
-		);
-		const hasMatch = Array.isArray(match);
-		if (!hasMatch) return null;
-		return `${GITHUB_URL_PREFIX}/${match[1]}/${match[2]}/pull/${match[3]}`;
+		const url = new URL(value);
+		return repositoryKey(url.hostname, url.pathname);
 	} catch {
 		return null;
 	}
 }
 
-export function githubPrUrls(text: string): string[] {
+export function normalizeGithubPrUrl(candidate: string): string | null {
+	const trimmed = candidate.replace(TRAILING_PUNCTUATION, "");
+	try {
+		const url = new URL(trimmed);
+		const match = url.pathname.match(
+			/^\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)\/?$/,
+		);
+		const hasMatch = Array.isArray(match);
+		if (!hasMatch) return null;
+		const repository = repositoryKey(url.hostname, `/${match[1]}/${match[2]}`);
+		if (repository === null) return null;
+		const number = match[3];
+		return `${GITHUB_URL_PREFIX}/${match[1]}/${match[2]}/pull/${number}`;
+	} catch {
+		return null;
+	}
+}
+
+function belongsToOrigin(url: string, remoteOrigin: string): boolean {
+	const originRepository = repositoryKeyFromOrigin(remoteOrigin);
+	if (originRepository === null) return false;
+	const parsedUrl = new URL(url);
+	const match = parsedUrl.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\//);
+	if (match === null) return false;
+	const prRepository = repositoryKey(
+		parsedUrl.hostname,
+		`/${match[1]}/${match[2]}`,
+	);
+	return prRepository === originRepository;
+}
+
+export function githubPrUrls(
+	text: string,
+	remoteOrigin: string | null | undefined,
+): string[] {
+	const hasRemoteOrigin =
+		typeof remoteOrigin === "string" && remoteOrigin.trim() !== "";
+	if (!hasRemoteOrigin) return [];
 	const urls: string[] = [];
 	for (const candidate of text.match(PR_CANDIDATE) ?? []) {
-		const normalized = normalizedGithubPrUrl(candidate);
+		const normalized = normalizeGithubPrUrl(candidate);
 		const hasNormalized = normalized !== null;
-		const shouldInclude = hasNormalized;
-		if (shouldInclude) urls.push(normalized);
+		if (!hasNormalized) continue;
+		const hasMatchingOrigin = belongsToOrigin(normalized, remoteOrigin);
+		if (hasMatchingOrigin) urls.push(normalized);
 	}
 	return urls;
 }
 
-export function githubPrUrl(text: string): string | null {
-	return githubPrUrls(text)[0] ?? null;
+export function githubPrUrl(
+	text: string,
+	remoteOrigin: string | null | undefined,
+): string | null {
+	return githubPrUrls(text, remoteOrigin)[0] ?? null;
 }
 
-export function firstGithubPrUrl(texts: readonly string[]): string | null {
+export function firstGithubPrUrl(
+	texts: readonly string[],
+	remoteOrigin: string | null | undefined,
+): string | null {
 	for (const text of texts) {
-		const url = githubPrUrl(text);
+		const url = githubPrUrl(text, remoteOrigin);
 		const hasUrl = url !== null;
 		if (hasUrl) return url;
 	}
@@ -169,10 +231,11 @@ export function firstGithubPrUrl(texts: readonly string[]): string | null {
 export function firstUnmergedGithubPrUrl(
 	texts: readonly string[],
 	mergedPrs: readonly string[],
+	remoteOrigin: string | null | undefined,
 ): string | null {
 	const merged = new Set(mergedPrs);
 	for (const text of texts) {
-		for (const url of githubPrUrls(text)) {
+		for (const url of githubPrUrls(text, remoteOrigin)) {
 			const isUnmerged = !merged.has(url);
 			if (isUnmerged) return url;
 		}

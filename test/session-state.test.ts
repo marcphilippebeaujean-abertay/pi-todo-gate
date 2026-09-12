@@ -22,6 +22,7 @@ const PR = "pr";
 const TASK = "task";
 const PRESERVES_INHERITED_SESSION_IDS = "preserves inherited session IDs";
 const SESSION_123 = "session-123";
+const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const HTTPS_GITHUB_COM_A_B_PULL_1 = "https://github.com/a/b/pull/1";
 
 import { describe, expect, it } from "vitest";
@@ -35,6 +36,18 @@ import {
 describe("session state", () => {
 	it(STARTS_EMPTY, () => {
 		expect(emptyWorkState()).toEqual({});
+	});
+
+	it("accepts a remote origin in session state", () => {
+		expect(
+			latestState([
+				{
+					type: CUSTOM,
+					customType: PI_TODO_GATE_STATE,
+					data: { remoteOrigin: REMOTE_ORIGIN },
+				},
+			]),
+		).toEqual({ remoteOrigin: REMOTE_ORIGIN });
 	});
 
 	it(USES_THE_LATEST_VALID_CUSTOM_STATE_ENTRY, () => {
@@ -113,6 +126,7 @@ describe("session state", () => {
 					type: CUSTOM,
 					customType: PI_TODO_GATE_STATE,
 					data: {
+						remoteOrigin: REMOTE_ORIGIN,
 						inheritedFrom: SESSION_123,
 						prUrl: HTTPS_GITHUB_COM_A_B_PULL_1,
 					},
@@ -121,6 +135,7 @@ describe("session state", () => {
 		).toEqual({
 			inheritedFrom: SESSION_123,
 			prUrl: HTTPS_GITHUB_COM_A_B_PULL_1,
+			remoteOrigin: REMOTE_ORIGIN,
 		});
 	});
 });
