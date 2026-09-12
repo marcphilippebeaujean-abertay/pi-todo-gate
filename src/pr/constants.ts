@@ -1,3 +1,9 @@
+import { fileURLToPath } from "node:url";
+
+export const mergeProtocolSkillPath = fileURLToPath(
+	new URL("../../skills/merge-protocol", import.meta.url),
+);
+
 export const GH_COMMAND = "gh";
 export const PR_COMMAND = "pr";
 export const JSON_FLAG = "--json";

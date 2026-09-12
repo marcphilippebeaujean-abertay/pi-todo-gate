@@ -1,4 +1,5 @@
 import "./commands.ts";
+import "./git.ts";
 import "./constants.ts";
 import "./state.ts";
 import "./events.ts";
@@ -26,4 +27,10 @@ export function createWorktreeModule(
 	return createWorktreeConsumer(events, dependencies ?? {});
 }
 
-export { isCurrentWorktree } from "./commands.ts";
+export {
+	cleanupWorktree,
+	commandFailure,
+	commandOutput,
+	currentWorktreeState,
+	isCurrentWorktree,
+} from "./git.ts";

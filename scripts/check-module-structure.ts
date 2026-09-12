@@ -23,9 +23,10 @@ export const CANONICAL_FACETS = [
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
-	herdr: ["claim-worker-result.ts", "tab-validation.ts"],
-	pr: ["parsing.ts"],
-	todoist: ["parsing.ts"],
+	herdr: ["claim-worker-result.ts", "runtime.ts", "tab-validation.ts"],
+	pr: ["git.ts", "parsing.ts"],
+	todoist: ["client.ts", "parsing.ts"],
+	worktree: ["git.ts"],
 };
 
 function isAllowedFacet(domain: string, name: string): boolean {

@@ -4,13 +4,13 @@ import { type Exec, spawnExec } from "../shared/command.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
 import type { SharedEvents } from "../shared/state.ts";
+import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
+import { createCleanupAction } from "./event-publishers.ts";
 import {
 	cleanupWorktree,
 	currentWorktreeState,
 	isCurrentWorktree,
-} from "./commands.ts";
-import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
-import { createCleanupAction } from "./event-publishers.ts";
+} from "./git.ts";
 import { notifyWorktree } from "./notifications.ts";
 import type {
 	MergeRequest,

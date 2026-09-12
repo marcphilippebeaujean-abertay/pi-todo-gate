@@ -4,7 +4,6 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { BeforeAgentStartEvent } from "../events.ts";
 import { isSubagent } from "../session.ts";
-import { boundCommandRunner, isInsideHerdr, tabLabel } from "./commands.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
 	CLAIM_COMPLETED_EVENT,
@@ -24,6 +23,7 @@ import {
 	notifyHerdrFailure,
 	showHerdrFooter,
 } from "./notifications.ts";
+import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
 import type {
 	ClaimWorkerHandle,
 	CommandRunner,

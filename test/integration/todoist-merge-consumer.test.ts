@@ -1,4 +1,5 @@
 import type {
+	ExtensionAPI,
 	ExtensionCommandContext,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { EXTENSION_CONSTANTS as C } from "../../src/constants.ts";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import type { ExtensionRuntime } from "../../src/extension-types.ts";
-import { runMergeProtocol } from "../../src/pr/module.ts";
+import { register } from "../../src/pr/module.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { PromptQueue } from "../../src/shared/prompt-queue.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
@@ -78,6 +79,28 @@ async function emit(runtime: ExtensionRuntime) {
 	await runtime.events.emit(C.event.prMerged, payload);
 	await runtime.promptQueue.drain();
 	return payload;
+}
+
+async function runMergeCommand(
+	runtime: ExtensionRuntime,
+	context: ExtensionCommandContext,
+): Promise<void> {
+	let handler:
+		| ((args: string, ctx: ExtensionCommandContext) => Promise<void>)
+		| undefined;
+	const pi = {
+		on: vi.fn(),
+		registerCommand: (
+			_name: string,
+			command: {
+				handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+			},
+		) => {
+			handler = command.handler;
+		},
+	} as unknown as ExtensionAPI;
+	register(pi, runtime);
+	await handler?.("", context);
 }
 
 describe("Todoist merge consumer", () => {
@@ -247,7 +270,7 @@ describe("Todoist merge consumer", () => {
 		} as unknown as ExtensionRuntime;
 		registerTodoistMergeConsumer(runtime);
 
-		await runMergeProtocol(runtime, context);
+		await runMergeCommand(runtime, context);
 		await runtime.promptQueue.drain();
 
 		expect(exec).toHaveBeenCalledWith(

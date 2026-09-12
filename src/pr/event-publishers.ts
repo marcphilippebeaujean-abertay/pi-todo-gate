@@ -1,5 +1,5 @@
 import type { CommandResult, Exec } from "../shared/command.ts";
-import { queryCurrentPr, queryPinnedHead } from "./commands.ts";
+import { queryCurrentPr, queryPinnedHead } from "./git.ts";
 
 const GIT_COMMAND = "git";
 const REV_PARSE_COMMAND = "rev-parse";

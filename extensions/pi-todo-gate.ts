@@ -12,7 +12,7 @@ import {
 } from "../src/extension-session.ts";
 import type { ExtensionDependencies } from "../src/extension-types.ts";
 import { installHerdrTabClaim } from "../src/herdr/module.ts";
-import { registerMergeProtocol } from "../src/pr/module.ts";
+import { register } from "../src/pr/module.ts";
 import { isSubagent } from "../src/session.ts";
 
 export type {
@@ -30,7 +30,7 @@ function startExtensions(
 	pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, runtime));
 	pi.on(C.event.toolResult, handleToolResult.bind(null, runtime));
 	pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, runtime));
-	registerMergeProtocol(pi, runtime);
+	register(pi, runtime);
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
