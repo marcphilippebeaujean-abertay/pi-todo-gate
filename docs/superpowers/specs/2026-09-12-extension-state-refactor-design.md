@@ -141,33 +141,51 @@ Exit protocol owns:
 
 ## Event contracts and flow
 
-Shared event contracts live in `src/shared/events.ts`. Root action publishers live in new root `src/event-publishers.ts`. Root consumers live in `src/event-consumer.ts`.
+Shared event contracts and the generic typed event channel live in `src/shared/events.ts`. Root action publishers live in new root `src/event-publishers.ts`. Root consumers live in `src/event-consumer.ts`.
+
+The shared event primitive is:
+
+```ts
+interface Event<T> {
+  emit(payload: T): Promise<void>;
+  subscribe(callback: (payload: T) => void | Promise<void>): () => void;
+}
+
+function event<T>(): Event<T>;
+```
+
+Every event uses a named typed channel on the relevant `EventHandler` or module event bundle. Producers call `.emit(payload)` and consumers call `.subscribe(callback)`. String event names, untyped payload maps, `.on(...)`, and `.setupListener(...)` are removed from module event code. Existing ordering-sensitive behavior is preserved by channel subscription order or explicit typed channel sequencing.
 
 ### Module-to-root state flow
 
-Modules emit:
+Modules emit through a typed channel:
 
 ```ts
-moduleStateChanged: {
+interface ModuleStateChangedEvent {
   moduleId: string;
   moduleState: Record<string, unknown>;
   gitStatePatch?: Partial<GitState>;
 }
-```
 
-Root consumer validates the addressed update, replaces `sessionState.moduleState[moduleId]`, applies the optional Git patch, and emits:
+interface SessionStateChangedEvent {
+  previousState: SessionState;
+  currentState: SessionState;
+}
 
-```ts
-sessionStateChanged: {
-  sessionState: SessionState;
+interface EventHandler {
+  moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
+  sessionStateChangedEvent: Event<SessionStateChangedEvent>;
+  // other named typed channels
 }
 ```
+
+Root subscribes to `moduleStateChangedEvent`, validates the addressed update, replaces `sessionState.moduleState[moduleId]`, applies the optional Git patch, deep-copies the previous/current snapshots, and emits `sessionStateChangedEvent`.
 
 The stable `SessionState` reference remains unchanged. The event communicates the complete current state after the update. Root is the only writer for the general state-change event.
 
 ### Root-to-module action flow
 
-Root publishers emit typed actions for:
+Root publishers emit typed actions through named event channels for:
 
 - `sessionActivated` with session identity and lifecycle context data needed by modules;
 - `sessionDeactivated`;
@@ -175,7 +193,7 @@ Root publishers emit typed actions for:
 - `refreshWorkingTree` when root receives a relevant native tool result;
 - other explicit orchestration requests that cannot be handled by a module-native listener.
 
-Modules register listeners through `eventHandler.setupListener(...)` in constructors. No module is registered by passing `ExtensionState` to a module method.
+Modules subscribe to typed channels in constructors. No module is registered by passing `ExtensionState` to a module method. Module-local event bundles use the same shared `Event<T>` primitive; Herdr's custom `.on/.emit` event API is migrated too.
 
 ### Lifecycle sequence
 
@@ -259,7 +277,7 @@ git diff --check
 - No `src/application/` directory remains.
 - No `ActiveSession`, `ExtensionRuntime`, `SessionContext`, or `ApplicationContext` compatibility type remains.
 - No scoped module imports `ExtensionState` or root application helpers.
-- Modules receive shared dependencies through constructors and register listeners with `setupListener`.
+- Modules receive shared dependencies through constructors and subscribe to typed `Event<T>` channels.
 - Root applies module updates and emits complete general state-change events.
 - PR owns remote-origin discovery and merge guards.
 - Worktree owns Git status refresh.
