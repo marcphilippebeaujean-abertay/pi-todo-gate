@@ -17,16 +17,6 @@ export interface WorktreeCurrentState {
 export interface WorktreeModuleDependencies {
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
-	formatPrStatus?: (
-		url: string | undefined,
-		theme: { fg(color: string, text: string): string } | undefined,
-		hasUncommittedChanges: boolean,
-	) => string;
-	formatTaskStatus?: (
-		url: string | undefined,
-		theme: { fg(color: string, text: string): string } | undefined,
-		name?: string,
-	) => string;
 }
 
 export interface WorktreeModuleOptions {

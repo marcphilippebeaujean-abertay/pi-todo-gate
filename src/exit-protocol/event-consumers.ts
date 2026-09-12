@@ -26,7 +26,6 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		this.eventHandler = options.eventHandler;
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
-		this.eventHandler.sessionResetEvent.subscribe(() => this.deactivate());
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);

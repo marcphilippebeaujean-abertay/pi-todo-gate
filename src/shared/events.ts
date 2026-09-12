@@ -75,6 +75,11 @@ export interface ModuleStateChangedEvent {
 	gitStatePatch?: Partial<GitState>;
 }
 
+export interface WorktreeStatusEvent {
+	context: ExtensionContext;
+	hasUncommittedChanges: boolean;
+}
+
 export interface FooterUpdateEvent {
 	footerType: string;
 	isLoading: boolean;
@@ -109,6 +114,7 @@ export interface EventHandler {
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
 	footerUpdateEvent: Event<FooterUpdateEvent>;
+	worktreeStatusEvent: Event<WorktreeStatusEvent>;
 }
 
 export function createSharedEvents(): EventHandler {
@@ -125,6 +131,7 @@ export function createSharedEvents(): EventHandler {
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
 		footerUpdateEvent: event<FooterUpdateEvent>(),
+		worktreeStatusEvent: event<WorktreeStatusEvent>(),
 	};
 }
 

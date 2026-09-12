@@ -108,7 +108,7 @@ describe("worktree event actions", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
-		events.footerUpdateEvent.subscribe((update) => {
+		events.worktreeStatusEvent.subscribe((update) => {
 			footerUpdates.push(update);
 		});
 		let dirty = false;
@@ -128,11 +128,7 @@ describe("worktree event actions", () => {
 		const module = createWorktreeModule({
 			eventHandler: events,
 			sessionState,
-			dependencies: {
-				exec,
-				formatPrStatus: (_url, _theme, hasChanges) =>
-					hasChanges ? "dirty" : "clean",
-			},
+			dependencies: { exec },
 		});
 		await module.sessionStart(ctx);
 		dirty = true;
@@ -141,7 +137,9 @@ describe("worktree event actions", () => {
 			context: ctx,
 		});
 
-		expect(footerUpdates.at(-1)).toMatchObject({ text: "dirty" });
+		expect(footerUpdates.at(-1)).toMatchObject({
+			hasUncommittedChanges: true,
+		});
 		expect(updates.at(-1)).toMatchObject({
 			moduleId: "worktree",
 			gitStatePatch: { hasUncommittedChanges: true },

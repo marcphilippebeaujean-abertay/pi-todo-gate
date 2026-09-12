@@ -7,12 +7,7 @@ import {
 } from "./event-consumer.ts";
 import { RootEventPublisher } from "./event-publishers.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
-import {
-	createFooterModule,
-	refreshFooterStatuses,
-	renderPrStatus,
-	renderTaskStatusCompact,
-} from "./footer/module.ts";
+import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import type { PrSession } from "./pr/state.ts";
 import { installStateTool } from "./pr/state-tool.ts";
@@ -51,11 +46,7 @@ export function createExtensionState(
 	const worktree = createWorktreeModule({
 		eventHandler,
 		sessionState,
-		dependencies: {
-			exec: dependencies.exec,
-			formatPrStatus: renderPrStatus,
-			formatTaskStatus: renderTaskStatusCompact,
-		},
+		dependencies: { exec: dependencies.exec },
 	});
 	const pr = createRootPrModule(
 		promptQueue,
@@ -131,6 +122,7 @@ export function createExtensionState(
 			extensionState.registered = true;
 		},
 		publisher: new RootEventPublisher(eventHandler),
+		lifecycleEpoch: { value: 0 },
 	};
 	return Object.assign(extensionState, { root });
 }
@@ -148,6 +140,7 @@ function startExtensions(
 	registerModuleStateConsumer(
 		extensionState.eventHandler,
 		extensionState.sessionState,
+		() => root.getSession() !== null,
 	);
 	registerExtensionEventConsumers(root);
 	extensionState.pr.register(pi);

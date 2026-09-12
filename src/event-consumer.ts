@@ -48,13 +48,17 @@ export interface RootComposition {
 	registered: () => boolean;
 	registerStateTool: (getSession: () => PrSession | null) => void;
 	publisher: RootEventPublisher;
+	lifecycleEpoch: { value: number };
 }
 
 const FUNCTION_TYPE = "function";
 
 type Root = RootComposition;
 
+const resetEpochs = new WeakMap<SessionState, number>();
+
 export function resetSessionState(state: SessionState): void {
+	resetEpochs.set(state, (resetEpochs.get(state) ?? 0) + 1);
 	state.sessionId = null;
 	state.gitState = {};
 	state.moduleState = {};
@@ -99,29 +103,15 @@ function deactivate(root: Root): void {
 	const hasSession = session !== null;
 	if (hasSession) session.operationGeneration += 1;
 	root.pr.deactivateSession();
+	root.setSession(null);
+	resetSessionState(root.sessionState);
 	void root.publisher.publishSessionDeactivated();
 	root.promptQueue.reset();
-	root.sessionState.sessionId = null;
-	root.sessionState.gitState = {};
-	root.sessionState.moduleState = {};
-	root.setSession(null);
-	root.footer.deactivate();
 	root.worktree.deactivate();
-	root.exitProtocol.deactivate();
-	queueMicrotask(() => resetSessionState(root.sessionState));
 }
 
 function deactivateUnconfigured(root: Root): void {
-	const hadSession = root.getSession() !== null;
-	if (hadSession) deactivate(root);
-	else {
-		void root.publisher.publishSessionDeactivated();
-		root.pr.deactivateSession();
-		root.footer.deactivate();
-		root.worktree.deactivate();
-		root.exitProtocol.deactivate();
-	}
-	resetSessionState(root.sessionState);
+	deactivate(root);
 	manageActiveTools(root, true);
 }
 
@@ -170,15 +160,21 @@ function manageActiveTools(root: Root, remove?: boolean): void {
 	root.pi.setActiveTools([...active, C.tool.state]);
 }
 
+function isCurrentEpoch(root: Root, epoch: number): boolean {
+	return root.lifecycleEpoch.value === epoch;
+}
+
 async function activateConfigured(
 	root: Root,
+	epoch: number,
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 	project: { codingRoot: string; todoistProjectRef: string },
 	config: TodoistProjectMapping,
-): Promise<{ session: PrSession; branch: readonly unknown[] }> {
+): Promise<{ session: PrSession; branch: readonly unknown[] } | null> {
 	root.exitProtocol.sessionStart(ctx);
 	await root.worktree.sessionStart(ctx);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -191,11 +187,13 @@ async function activateConfigured(
 		state,
 	);
 	state = await root.pr.initializeRemoteOrigin(ctx, inherited.state);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	const handoffContext = inherited.handoffContext;
 	await root.footer.sessionStart(
 		handoffContext ? event : { ...event, previousSessionFile: undefined },
 		ctx,
 	);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	const session: PrSession = {
 		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
@@ -218,17 +216,22 @@ async function activateConfigured(
 	root.setSession(session);
 	publishModuleState(root, C.module.work, { ...state });
 	await root.pr.activateSession(session);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	await root.publisher.publishSessionActivated({ context: ctx });
+	if (!isCurrentEpoch(root, epoch)) return null;
 	return { session, branch };
 }
 
 async function persistInitialPr(
 	root: Root,
+	epoch: number,
 	branch: readonly unknown[],
 ): Promise<void> {
 	const session = root.getSession();
-	if (session?.allowPrDiscovery !== true) return;
+	if (session?.allowPrDiscovery !== true || !isCurrentEpoch(root, epoch))
+		return;
 	await root.pr.persistInitialPr(branch);
+	if (!isCurrentEpoch(root, epoch)) return;
 }
 
 export async function handleSessionStart(
@@ -236,25 +239,34 @@ export async function handleSessionStart(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
+	const epoch = root.lifecycleEpoch.value + 1;
+	root.lifecycleEpoch.value = epoch;
 	deactivateUnconfigured(root);
 	await root.publisher.publishSessionReset();
+	if (!isCurrentEpoch(root, epoch)) return;
 	const config = await (root.dependencies.loadConfig ?? loadConfig)();
+	if (!isCurrentEpoch(root, epoch)) return;
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	if (project === null) {
-		deactivateUnconfigured(root);
+		resetSessionState(root.sessionState);
+		manageActiveTools(root, true);
 		return;
 	}
-	const { session, branch } = await activateConfigured(
+	const activated = await activateConfigured(
 		root,
+		epoch,
 		event,
 		ctx,
 		project,
 		config,
 	);
+	if (activated === null || !isCurrentEpoch(root, epoch)) return;
+	const { session, branch } = activated;
 	root.registerStateTool(() => root.getSession());
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
-	await persistInitialPr(root, branch);
+	await persistInitialPr(root, epoch, branch);
+	if (!isCurrentEpoch(root, epoch)) return;
 	session.hasUncommittedChanges = root.worktree.getHasUncommittedChanges();
 	refreshFooterStatuses(root.footer, session);
 }
@@ -294,6 +306,7 @@ export async function handleBeforeAgentStart(
 }
 
 export function handleSessionShutdown(root: Root): void {
+	root.lifecycleEpoch.value += 1;
 	deactivate(root);
 	resetSessionState(root.sessionState);
 }
@@ -320,10 +333,15 @@ export async function applyModuleStateChanged(
 export function registerModuleStateConsumer(
 	events: EventHandler,
 	state: SessionState,
+	acceptUpdate?: () => boolean,
 ): void {
 	let updateQueue = Promise.resolve();
 	events.moduleStateChangedEvent.subscribe((update) => {
+		const acceptedAtEmission = acceptUpdate?.() ?? true;
+		const updateEpoch = resetEpochs.get(state) ?? 0;
 		const queued = updateQueue.then(async () => {
+			if (!acceptedAtEmission || updateEpoch !== (resetEpochs.get(state) ?? 0))
+				return;
 			const previousState = structuredClone(state);
 			updateModuleState(state, update);
 			const currentState = structuredClone(state);
@@ -345,6 +363,15 @@ export function registerExtensionEventConsumers(root: Root): void {
 		C.event.toolResult,
 		(event: ToolResultEvent, context: ExtensionContext) =>
 			root.eventHandler.toolResultEvent.emit({ event, context }),
+	);
+	root.eventHandler.worktreeStatusEvent.subscribe(
+		({ context, hasUncommittedChanges }) => {
+			const session = root.getSession();
+			const isCurrent = session !== null && session.context === context;
+			if (!isCurrent || session === null) return;
+			session.hasUncommittedChanges = hasUncommittedChanges;
+			refreshFooterStatuses(root.footer, session);
+		},
 	);
 	root.pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, root));
 }

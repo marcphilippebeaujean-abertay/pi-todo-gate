@@ -18,7 +18,6 @@ import { notifyWorktree } from "./notifications.ts";
 import type {
 	WorktreeBaseline,
 	WorktreeModule,
-	WorktreeModuleDependencies,
 	WorktreeModuleOptions,
 } from "./state.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
@@ -28,12 +27,6 @@ class Worktree implements WorktreeModule {
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
-	private readonly formatPrStatus:
-		| NonNullable<WorktreeModuleDependencies["formatPrStatus"]>
-		| undefined;
-	private readonly formatTaskStatus:
-		| NonNullable<WorktreeModuleDependencies["formatTaskStatus"]>
-		| undefined;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private hasUncommittedChanges = false;
@@ -46,12 +39,9 @@ class Worktree implements WorktreeModule {
 		const dependencies = options.dependencies ?? {};
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		this.formatPrStatus = dependencies.formatPrStatus;
-		this.formatTaskStatus = dependencies.formatTaskStatus;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
-		this.eventHandler.sessionResetEvent.subscribe(() => this.deactivate());
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -99,35 +89,9 @@ class Worktree implements WorktreeModule {
 	}
 
 	private emitFooterStatus(context: ExtensionContext): void {
-		const formatPrStatus = this.formatPrStatus;
-		const hasFormatter = formatPrStatus !== undefined;
-		const shouldSkipStatus = !hasFormatter;
-		if (shouldSkipStatus) return;
-		const prState = this.sessionState.moduleState[C.module.pr];
-		const taskState = this.sessionState.moduleState[C.module.work];
-		const hasPrState = typeof prState === "object" && prState !== null;
-		const pr = hasPrState ? (prState as { prUrl?: string }) : undefined;
-		const hasTaskState = typeof taskState === "object" && taskState !== null;
-		const task = hasTaskState
-			? (taskState as { taskUrl?: string; taskName?: string })
-			: undefined;
-		void this.eventHandler.footerUpdateEvent.emit({
-			footerType: C.status.pr,
-			isLoading: false,
-			text: formatPrStatus(
-				pr?.prUrl,
-				context.ui.theme,
-				this.hasUncommittedChanges,
-			),
-			isVisible: true,
-		});
-		const formatTaskStatus = this.formatTaskStatus;
-		if (formatTaskStatus === undefined) return;
-		void this.eventHandler.footerUpdateEvent.emit({
-			footerType: C.status.task,
-			isLoading: false,
-			text: formatTaskStatus(task?.taskUrl, context.ui.theme, task?.taskName),
-			isVisible: true,
+		void this.eventHandler.worktreeStatusEvent.emit({
+			context,
+			hasUncommittedChanges: this.hasUncommittedChanges,
 		});
 	}
 

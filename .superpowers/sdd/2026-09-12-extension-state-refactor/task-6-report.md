@@ -26,6 +26,14 @@
 - `env -u PI_SUBAGENT_CHILD npm test` — passed: 51 files, 293 tests passed, 8 skipped.
 - Focused lifecycle/module/integration Vitest run — passed: 6 files, 53 tests passed, 8 skipped.
 
+## Review fixes
+
+- Added root lifecycle epoch guards around reset, config loading, worktree/PR/footer activation, lifecycle publication, and persisted PR discovery. Older starts cannot activate or persist after newer starts or shutdown.
+- Added reset epochs and active-update barriers to serialized module-state consumption. Stale fire-and-forget deactivation updates cannot repopulate cleared state.
+- Removed duplicate lifecycle deactivation paths: root directly deactivates Worktree; typed deactivation owns Footer/Exit; Todoist reset owns claim reset.
+- Replaced Worktree sibling module-state reads with typed `worktreeStatusEvent`; root formats footer state from active session.
+- Added concurrent start/shutdown and post-drain reset regression coverage.
+
 ## Residual risks
 
 - `PrRuntime` and `TodoistRuntime` remain internal module dependency bundles and can be further flattened in later cleanup if required; no root lifecycle code depends on compatibility state projection.
