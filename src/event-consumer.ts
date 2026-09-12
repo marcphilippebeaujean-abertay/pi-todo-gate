@@ -59,11 +59,12 @@ function cloneSessionState(state: SessionState): SessionState {
 	});
 }
 
-export function registerModuleStateConsumer(
+async function processModuleStateUpdate(
 	events: EventHandler,
 	state: SessionState,
-): void {
-	events.moduleStateChangedEvent.subscribe(async (update) => {
+	update: ModuleStateChangedEvent,
+): Promise<void> {
+	try {
 		const previousState = cloneSessionState(state);
 		await applyModuleStateChanged(state, update);
 		const currentState = cloneSessionState(state);
@@ -71,6 +72,22 @@ export function registerModuleStateConsumer(
 			previousState,
 			currentState,
 		});
+	} catch {
+		// Keep later module updates independent from one failed update.
+	}
+}
+
+export function registerModuleStateConsumer(
+	events: EventHandler,
+	state: SessionState,
+): void {
+	let updateQueue = Promise.resolve();
+	events.moduleStateChangedEvent.subscribe((update) => {
+		const queuedUpdate = updateQueue.then(
+			processModuleStateUpdate.bind(null, events, state, update),
+		);
+		updateQueue = queuedUpdate;
+		return queuedUpdate;
 	});
 }
 

@@ -81,6 +81,59 @@ describe("extension module state", () => {
 		});
 	});
 
+	it("serializes concurrent updates into isolated snapshots", async () => {
+		const state = createSessionState();
+		const events = createSharedEvents();
+		const snapshots: Array<{
+			previousState: SessionState;
+			currentState: SessionState;
+		}> = [];
+		events.sessionStateChangedEvent.subscribe((snapshot) => {
+			snapshots.push(snapshot);
+		});
+		registerModuleStateConsumer(events, state);
+
+		const firstUpdate = events.moduleStateChangedEvent.emit({
+			moduleId: "first",
+			moduleState: { nested: { value: "first" } },
+		});
+		const secondUpdate = events.moduleStateChangedEvent.emit({
+			moduleId: "second",
+			moduleState: { nested: { value: "second" } },
+			gitStatePatch: { branch: "second" },
+		});
+		await Promise.all([firstUpdate, secondUpdate]);
+
+		expect(snapshots).toHaveLength(2);
+		expect(snapshots[0]).toEqual({
+			previousState: {
+				sessionId: null,
+				gitState: {},
+				moduleState: {},
+			},
+			currentState: {
+				sessionId: null,
+				gitState: {},
+				moduleState: { first: { nested: { value: "first" } } },
+			},
+		});
+		expect(snapshots[1]).toEqual({
+			previousState: {
+				sessionId: null,
+				gitState: {},
+				moduleState: { first: { nested: { value: "first" } } },
+			},
+			currentState: {
+				sessionId: null,
+				gitState: { branch: "second" },
+				moduleState: {
+					first: { nested: { value: "first" } },
+					second: { nested: { value: "second" } },
+				},
+			},
+		});
+	});
+
 	it("emits snapshots without cloning transitional application state", async () => {
 		const state = createSessionState();
 		const applicationState = {
