@@ -1,7 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { createEventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import type { SessionContext } from "../state.ts";
+import { createSessionState } from "../state.ts";
 import "./commands.ts";
 import "./constants.ts";
 import "./state.ts";
@@ -13,7 +16,11 @@ import "./user-prompts.ts";
 import "./footer-rendering.ts";
 import { FooterEventConsumer } from "./event-consumers.ts";
 import { renderPrStatus, renderTaskStatusCompact } from "./footer-rendering.ts";
-import type { FooterModule, FooterModuleDependencies } from "./state.ts";
+import type {
+	FooterModule,
+	FooterModuleDependencies,
+	FooterModuleOptions,
+} from "./state.ts";
 
 export * from "./events.ts";
 export * from "./footer-rendering.ts";
@@ -57,10 +64,31 @@ export function updateWorkingTreeStatus(
 	if (hasStatusChanged) refreshFooterStatuses(footer, session);
 }
 
+export function createFooterModule(options: FooterModuleOptions): FooterModule;
 export function createFooterModule(
 	pi: ExtensionAPI,
 	dependencies?: FooterModuleDependencies,
 	moduleContext?: ModuleContext,
+): FooterModule;
+export function createFooterModule(
+	optionsOrPi: FooterModuleOptions | ExtensionAPI,
+	dependencies?: FooterModuleDependencies,
+	moduleContext?: ModuleContext,
 ): FooterModule {
-	return new FooterEventConsumer(pi, dependencies ?? {}, moduleContext);
+	if ("eventHandler" in optionsOrPi) {
+		return new FooterEventConsumer(optionsOrPi);
+	}
+	const moduleDependencies = dependencies ?? {};
+	const context = moduleContext ?? {
+		promptQueue: new PromptQueue(),
+		eventHandler: createEventHandler(),
+		sessionState: createSessionState(),
+	};
+	return new FooterEventConsumer({
+		promptQueue: context.promptQueue,
+		eventHandler: context.eventHandler,
+		sessionState: context.sessionState,
+		pi: optionsOrPi,
+		dependencies: moduleDependencies,
+	});
 }

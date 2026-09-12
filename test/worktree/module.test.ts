@@ -1,7 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { PromptQueue } from "../../src/prompt-queue.ts";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
 
 function ok(stdout: string): CommandResult {
@@ -96,6 +98,55 @@ describe("worktree event actions", () => {
 		expect(module.getWorktreeInfo()).toEqual({
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "later",
+		});
+	});
+
+	it("owns tool-result status refresh and emits typed updates", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		const updates: unknown[] = [];
+		const footerUpdates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		events.footerUpdateEvent.subscribe((update) => {
+			footerUpdates.push(update);
+		});
+		let dirty = false;
+		const exec: Exec = async (command, args) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return ok("/repo/.worktrees/feature\n");
+			if (key === "git branch --show-current") return ok("feature\n");
+			if (key === "git worktree list --porcelain")
+				return ok("worktree /repo\nHEAD abc\nbranch refs/heads/main\n");
+			if (key === "git rev-parse HEAD") return ok("def\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all")
+				return ok(dirty ? " M file\n" : "");
+			return ok("origin\n");
+		};
+		const ctx = context();
+		const module = createWorktreeModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			dependencies: {
+				exec,
+				formatPrStatus: (_url, _theme, hasChanges) =>
+					hasChanges ? "dirty" : "clean",
+			},
+		});
+		await module.sessionStart(ctx);
+		dirty = true;
+		await events.toolResultEvent.emit({
+			event: { toolName: "edit", isError: false } as never,
+			context: ctx,
+		});
+
+		expect(footerUpdates.at(-1)).toMatchObject({ text: "dirty" });
+		expect(updates.at(-1)).toMatchObject({
+			moduleId: "worktree",
+			gitStatePatch: { hasUncommittedChanges: true },
 		});
 	});
 

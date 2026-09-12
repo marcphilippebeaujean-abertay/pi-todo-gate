@@ -74,6 +74,13 @@ export interface ModuleStateChangedEvent {
 	gitStatePatch?: Partial<GitState>;
 }
 
+export interface FooterUpdateEvent {
+	footerType: string;
+	isLoading: boolean;
+	text: string;
+	isVisible: boolean;
+}
+
 export type UpdateModuleStateEvent = ModuleStateChangedEvent;
 
 export interface SessionStateChangedEvent {
@@ -100,6 +107,7 @@ export interface EventHandler {
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
+	footerUpdateEvent: Event<FooterUpdateEvent>;
 }
 
 export function createSharedEvents(): EventHandler {
@@ -115,6 +123,7 @@ export function createSharedEvents(): EventHandler {
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
+		footerUpdateEvent: event<FooterUpdateEvent>(),
 	};
 }
 

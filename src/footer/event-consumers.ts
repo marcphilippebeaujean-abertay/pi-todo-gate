@@ -4,13 +4,14 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { ModuleContext } from "../shared/module-context.ts";
+import type { EventHandler } from "../shared/events.ts";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import { FooterDisplay } from "./footer-rendering.ts";
 import type {
 	FooterModule,
 	FooterModuleDependencies,
+	FooterModuleOptions,
 	FooterState,
 } from "./state.ts";
 import {
@@ -48,16 +49,25 @@ function latestFooterState(entries: readonly unknown[]): FooterState | null {
 }
 
 export class FooterEventConsumer implements FooterModule {
+	private readonly eventHandler: EventHandler;
+	private readonly pi: ExtensionAPI;
+	private readonly dependencies: FooterModuleDependencies;
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private state = emptyFooterState();
 	private readonly display = new FooterDisplay();
 
-	constructor(
-		private readonly pi: ExtensionAPI,
-		private readonly dependencies: FooterModuleDependencies,
-		readonly _moduleContext?: ModuleContext,
-	) {}
+	constructor(options: FooterModuleOptions) {
+		this.eventHandler = options.eventHandler;
+		this.pi = options.pi;
+		this.dependencies = options.dependencies ?? {};
+		this.eventHandler.footerUpdateEvent.subscribe((event) =>
+			this.update(event),
+		);
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.deactivate(),
+		);
+	}
 
 	private appendState(): void {
 		this.pi.appendEntry(FOOTER_STATE_TYPE, serializeFooterState(this.state));
@@ -96,7 +106,7 @@ export class FooterEventConsumer implements FooterModule {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
 		this.state = applyFooterUpdate(this.state, parsed);
-		void this._moduleContext?.eventHandler.moduleStateChangedEvent.emit({
+		void this.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.footer,
 			moduleState: { ...this.getState() },
 		});

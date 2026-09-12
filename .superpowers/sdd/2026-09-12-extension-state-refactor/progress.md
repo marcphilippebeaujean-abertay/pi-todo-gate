@@ -36,8 +36,8 @@ Ruling: PR merge uses one `prMergedEvent: Event<PrMergedEvent>`; same-type reque
 - Task 1: complete — `c2a8fde`; review verdict OK; full verification 52 files / 283 passed / 8 skipped.
 - Task 2: complete — `e83887c`, `6d90633`, `9431ae1`; typed channels, direct merged payload, Exit Protocol-owned worktree action; focused review initially blocked obsolete request contract, resolved by removing `PrMergedRequest`; lint/typecheck/architecture pass; serial full suite 281 passed / 8 skipped.
 - Task 3: complete — `aa71adb`, `3b690ea`, `173acbf`, `ab0180d`; stable Git/session state, clone-safe and serialized snapshots, reset coverage; final re-review verdict OK; 286 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-3-report.md`
-- Task 4: complete — PR-owned discovery, eligibility, tested URLs, merge guards, operation generation, and merged metadata; one shared `prMergedEvent` preserved; focused/full tests, lint, typecheck, architecture pass; report at `task-4-report.md`
-- Task 5: pending
+- Task 4: complete — `f05b3a5`, `b9679c7`, `888fdcc`, `896a240`; PR ownership, complete facet snapshots, stale async guards, mid-session Git origin updates, and stale adapter removal; final re-review verdict OK; 290 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-4-report.md`
+- Task 5: complete — Worktree owns typed tool-result Git status/footer updates; Todoist owns claim state/reset; Footer and Exit Protocol use typed listeners and private state; 293 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-5-report.md`
 - Task 6: pending
 - Task 7: pending
 - Task 8: pending

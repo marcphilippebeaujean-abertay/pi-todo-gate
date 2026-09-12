@@ -4,9 +4,9 @@ import type { ExtensionState, SessionContext, SessionState } from "../state.ts";
 
 export function resetTemporarySessionState(runtime: ExtensionState): void {
 	runtime.promptQueue.reset();
-	runtime.todoist.taskClaim.pending = false;
-	runtime.todoist.taskClaim.completed = false;
-	runtime.todoist.taskClaim.session = undefined;
+	const resetEvent = runtime.eventHandler.sessionResetEvent;
+	const hasResetEvent = resetEvent !== undefined;
+	if (hasResetEvent) void resetEvent.emit(undefined);
 }
 
 export function replaceSessionState(

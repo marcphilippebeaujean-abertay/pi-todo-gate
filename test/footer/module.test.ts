@@ -10,6 +10,9 @@ import {
 import { createFooterModule } from "../../src/footer/module.ts";
 import type { FooterUpdate } from "../../src/footer/state.ts";
 import { restoreFooterState } from "../../src/footer/state.ts";
+import { PromptQueue } from "../../src/prompt-queue.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 
 function harness(branch: unknown[] = []) {
 	const appended: unknown[] = [];
@@ -252,6 +255,28 @@ describe("footer module", () => {
 				},
 			},
 		]);
+	});
+
+	it("consumes typed footer updates through shared event channel", async () => {
+		const h = harness();
+		const events = createSharedEvents();
+		const footer = createFooterModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState: createSessionState(),
+			pi: h.pi,
+		});
+		await footer.sessionStart({}, h.context());
+
+		await events.footerUpdateEvent.emit(update);
+
+		expect(footer.getState()).toEqual({
+			footers: { [update.footerType]: update },
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: update.footerType,
+			text: update.text,
+		});
 	});
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {

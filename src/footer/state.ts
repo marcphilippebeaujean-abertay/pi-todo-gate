@@ -2,7 +2,10 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { PromptQueue } from "../prompt-queue.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
+import type { SessionState } from "../state.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
@@ -43,6 +46,14 @@ export interface FooterSessionReader {
 }
 export interface FooterModuleDependencies {
 	openSession?: (path: string) => FooterSessionReader;
+}
+
+export interface FooterModuleOptions {
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	pi: ExtensionAPI;
+	dependencies?: FooterModuleDependencies;
 }
 export interface FooterModule {
 	sessionStart(

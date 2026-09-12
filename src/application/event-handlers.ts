@@ -1,19 +1,13 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { updateWorkingTreeStatus } from "../footer/module.ts";
-
-import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartResultEvent,
 	MessageEndEvent,
-	ToolResultEvent,
 } from "../shared/events.ts";
 import { textOf } from "../shared/extension-message.ts";
-import { hasUncommittedChanges } from "../shared/project.ts";
 import type { ExtensionState, SessionContext } from "../state.ts";
 import { currentSessionContext } from "../state.ts";
-import { maybeAnalyzeTaskClaim } from "../todoist/module.ts";
 
 export async function handleMessageEnd(
 	runtime: ExtensionState,
@@ -37,7 +31,7 @@ async function buildBeforeAgentMessages(
 		session.handoffContext = false;
 	}
 	if (session.state.taskRef === undefined)
-		maybeAnalyzeTaskClaim(runtime, session, event.prompt);
+		runtime.todoist.maybeAnalyzeTaskClaim(session, event.prompt);
 	const hasWorkChanged = session.workChanged;
 	if (hasWorkChanged) await runtime.pr.appendBeforeAgentPrompt(ctx, messages);
 	return messages;
@@ -61,29 +55,4 @@ export async function handleBeforeAgentStart(
 			display: false,
 		},
 	};
-}
-
-export async function handleToolResult(
-	runtime: ExtensionState,
-	event: ToolResultEvent,
-	ctx: ExtensionContext,
-): Promise<void> {
-	const session = currentSessionContext(runtime.sessionState);
-	const shouldIgnoreToolResult = session === null || event.isError;
-	if (shouldIgnoreToolResult) return;
-	if (session === null) return;
-	const toolName = event.toolName;
-	const isEditTool = toolName === C.tool.edit;
-	const isWriteTool = toolName === C.tool.write;
-	const isFileMutation = isEditTool || isWriteTool;
-	if (isFileMutation) session.workChanged = true;
-	const isBashTool = toolName === C.tool.bash;
-	const shouldRefreshWorkingTreeStatus = isFileMutation || isBashTool;
-	if (!shouldRefreshWorkingTreeStatus) return;
-	const workingTreeStatus = await hasUncommittedChanges(
-		runtime.dependencies.exec ?? spawnExec,
-		ctx.cwd,
-	);
-	if (workingTreeStatus === null) return;
-	updateWorkingTreeStatus(runtime.footer, session, workingTreeStatus);
 }

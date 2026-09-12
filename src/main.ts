@@ -9,7 +9,12 @@ import {
 	registerModuleStateConsumer,
 } from "./event-consumer.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
-import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
+import {
+	createFooterModule,
+	refreshFooterStatuses,
+	renderPrStatus,
+	renderTaskStatusCompact,
+} from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import { createRootPrModule } from "./pr-root.ts";
 import { PromptQueue } from "./prompt-queue.ts";
@@ -60,25 +65,91 @@ function attachApplicationOperations(extensionState: ExtensionState): void {
 	extensionState.enqueueSessionOperation = enqueueSessionOperation;
 }
 
+function createWorktreeAndExitModules(
+	promptQueue: PromptQueue,
+	eventHandler: ReturnType<typeof createEventHandler>,
+	sessionState: ReturnType<typeof createSessionState>,
+	dependencies: ExtensionDependencies,
+): Pick<ExtensionState, "worktree" | "exitProtocol"> {
+	const worktree = createWorktreeModule({
+		promptQueue,
+		eventHandler,
+		sessionState,
+		dependencies: {
+			exec: dependencies.exec,
+			formatPrStatus: renderPrStatus,
+			formatTaskStatus: renderTaskStatusCompact,
+		},
+	});
+	return {
+		worktree,
+		exitProtocol: createExitProtocolModule({
+			promptQueue,
+			eventHandler,
+			sessionState,
+			worktree,
+		}),
+	};
+}
+
+function createScopedModules(
+	pi: ExtensionAPI,
+	dependencies: ExtensionDependencies,
+	eventHandler: ReturnType<typeof createEventHandler>,
+	promptQueue: PromptQueue,
+	sessionState: ReturnType<typeof createSessionState>,
+	stateRef: { current: ExtensionState | null },
+): Pick<
+	ExtensionState,
+	"footer" | "pr" | "todoist" | "worktree" | "exitProtocol"
+> {
+	const worktreeAndExit = createWorktreeAndExitModules(
+		promptQueue,
+		eventHandler,
+		sessionState,
+		dependencies,
+	);
+	return {
+		footer: createFooterModule({
+			promptQueue,
+			eventHandler,
+			sessionState,
+			pi,
+			dependencies: { openSession: dependencies.openSession },
+		}),
+		pr: createRootPrModule(
+			promptQueue,
+			eventHandler,
+			sessionState,
+			dependencies.exec,
+			stateRef,
+		),
+		todoist: createTodoistModule({
+			promptQueue,
+			eventHandler,
+			sessionState,
+			stateRef,
+			dependencies,
+		}),
+		...worktreeAndExit,
+	};
+}
+
 export function createExtensionState(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
 ): ExtensionState {
-	const eventHandler = createEventHandler();
-	const promptQueue = new PromptQueue();
-	const sessionState = createSessionState();
-	const extensionRef: { current: ExtensionState | null } = { current: null };
-	const moduleContext = { promptQueue, eventHandler, sessionState };
-	const worktree = createWorktreeModule(
-		eventHandler,
-		{ exec: dependencies.exec },
-		moduleContext,
-	);
-	const exitProtocol = createExitProtocolModule(
+	const eventHandler = createEventHandler(),
+		promptQueue = new PromptQueue();
+	const sessionState = createSessionState(),
+		extensionRef: { current: ExtensionState | null } = { current: null };
+	const modules = createScopedModules(
+		pi,
+		dependencies,
 		eventHandler,
 		promptQueue,
-		moduleContext,
-		worktree,
+		sessionState,
+		extensionRef,
 	);
 	const extensionState = {
 		pi,
@@ -86,21 +157,7 @@ export function createExtensionState(
 		sessionState,
 		promptQueue,
 		eventHandler,
-		footer: createFooterModule(
-			pi,
-			{ openSession: dependencies.openSession },
-			moduleContext,
-		),
-		pr: createRootPrModule(
-			promptQueue,
-			eventHandler,
-			sessionState,
-			dependencies.exec,
-			extensionRef,
-		),
-		todoist: createTodoistModule(eventHandler, sessionState, extensionRef),
-		worktree,
-		exitProtocol,
+		...modules,
 		registered: false,
 	} as ExtensionState;
 	attachApplicationOperations(extensionState);

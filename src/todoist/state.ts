@@ -108,6 +108,30 @@ export interface TodoistModule {
 		completed: boolean;
 		session?: TodoistSession;
 	};
+	maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void;
+}
+
+export interface TodoistModuleOptions {
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	stateRef?: { readonly current: TodoistRuntime | null };
+	getSession?: () => TodoistSession | null;
+	dependencies?: {
+		exec?: Exec;
+		taskClaimWorker?: TaskClaimWorker;
+		createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	};
+	appendState?(state: WorkState, prDiscoveryDisabled?: boolean): void;
+	refreshFooterStatuses?(session: TodoistSession): void;
+	replaceSessionState?(session: TodoistSession, state: WorkState): void;
+	completeMergedTask?(
+		session: TodoistSession,
+		taskRef: string,
+		stateSnapshot: WorkState,
+		workRevision: number,
+		operationGeneration: number,
+	): Promise<ExitActionResult>;
 }
 
 export interface TodoistSession {
@@ -124,7 +148,7 @@ export interface TodoistRuntime {
 	sessionState: SessionState;
 	todoist: TodoistModule;
 	promptQueue: PromptQueue;
-	dependencies: { exec?: Exec; taskClaimWorker?: TaskClaimWorker };
+	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;
 	eventHandler: EventHandler;
 	appendState(state: WorkState, prDiscoveryDisabled?: boolean): void;
 	refreshFooterStatuses(session: TodoistSession): void;

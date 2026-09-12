@@ -3,6 +3,7 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
+import type { SessionState } from "../state.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
 	EXIT_ACTION_KEY,
@@ -24,6 +25,13 @@ export type {
 export interface ExitProtocolModule {
 	sessionStart(ctx: ExtensionContext): void;
 	deactivate(): void;
+}
+
+export interface ExitProtocolModuleOptions {
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	worktree?: WorktreeModule;
 }
 
 export type ExitProtocolFactory = (

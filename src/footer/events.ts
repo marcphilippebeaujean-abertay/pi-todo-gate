@@ -1,9 +1,6 @@
-export interface FooterUpdateEvent {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}
+import type { FooterUpdateEvent } from "../shared/events.ts";
+
+export type { FooterUpdateEvent } from "../shared/events.ts";
 
 export interface FooterSessionStartEvent {
 	previousSessionFile?: string;

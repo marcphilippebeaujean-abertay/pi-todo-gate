@@ -2,7 +2,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	handleBeforeAgentStart,
 	handleMessageEnd,
-	handleToolResult,
 } from "./application/event-handlers.ts";
 import {
 	handleSessionShutdown,
@@ -98,9 +97,6 @@ export function registerExtensionEventConsumers(
 	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
 	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));
 	pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, runtime));
-	runtime.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
-		handleToolResult(runtime, event, context),
-	);
 	pi.on(
 		C.event.toolResult,
 		(event: ToolResultEvent, context: ExtensionContext) =>
