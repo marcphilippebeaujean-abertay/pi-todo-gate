@@ -8,21 +8,19 @@ import type {
 
 export type {
 	BeforeAgentStartEvent,
-	BeforeAgentStartEventResult,
 	MessageEndEvent,
 	SessionStartEvent,
 	ToolResultEvent,
 };
 
+export type BeforeAgentStartResultEvent = BeforeAgentStartEventResult;
 export type ExtensionBeforeAgentStartEvent = BeforeAgentStartEvent;
-export type ExtensionBeforeAgentStartEventResult = BeforeAgentStartEventResult;
+export type ExtensionBeforeAgentStartResultEvent = BeforeAgentStartEventResult;
 export type ExtensionMessageEndEvent = MessageEndEvent;
 export type ExtensionSessionStartEvent = SessionStartEvent;
 export type ExtensionToolResultEvent = ToolResultEvent;
 
-export type ClaimJobType = "Herdr" | "Todoist";
-
 export interface ClaimErrorEvent {
-	jobType: ClaimJobType;
+	jobType: "Herdr" | "Todoist";
 	error: string;
 }

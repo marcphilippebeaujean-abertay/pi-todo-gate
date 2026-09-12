@@ -6,8 +6,8 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { SharedEvents } from "../shared/events.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
+import type { SharedEvents } from "../shared/state.ts";
 import { ExitProtocolConsumer } from "./event-consumers.ts";
 import type { ExitProtocolModule } from "./state.ts";
 

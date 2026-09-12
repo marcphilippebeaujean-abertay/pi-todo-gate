@@ -7,7 +7,8 @@ const EVENTS_FILE_NAME = "events.ts";
 const EVENT_FILE_PATH =
 	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/](event-consumers|event-publishers)\.ts$/;
 const RULE_ID = "event-types-outside-events" as const;
-const MESSAGE = "Event boundary types must live in events.ts";
+const MESSAGE =
+	"Event payload types must live in events.ts; request and options contracts may live in state.ts";
 
 function isEventFile(sourceFile: ts.SourceFile): boolean {
 	return EVENT_FILE_PATH.test(sourceFile.fileName);
@@ -166,10 +167,18 @@ function hasTypeOutsideEvents(
 			const isOutsideEvents = resolved?.declarations?.some((candidate) => {
 				const fileName = candidate.getSourceFile().fileName;
 				const relativePath = relative(modulePath, fileName);
+				const declarationName = (
+					candidate as ts.Declaration & { name?: ts.Node }
+				).name?.getText();
+				const isStateSupportContract =
+					basename(fileName) === "state.ts" &&
+					(declarationName?.endsWith("Request") === true ||
+						declarationName?.endsWith("Options") === true);
 				return (
 					relativePath !== "" &&
 					!relativePath.startsWith("..") &&
-					basename(fileName) !== EVENTS_FILE_NAME
+					basename(fileName) !== EVENTS_FILE_NAME &&
+					!isStateSupportContract
 				);
 			});
 			if (isOutsideEvents) {

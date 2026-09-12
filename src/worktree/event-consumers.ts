@@ -1,9 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
-import type { SharedEvents } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { inspectProject } from "../shared/project.ts";
+import type { SharedEvents } from "../shared/state.ts";
 import {
 	cleanupWorktree,
 	currentWorktreeState,
@@ -11,9 +11,9 @@ import {
 } from "./commands.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import { createCleanupAction } from "./event-publishers.ts";
-import type { MergeRequest } from "./events.ts";
 import { notifyWorktree } from "./notifications.ts";
 import type {
+	MergeRequest,
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,

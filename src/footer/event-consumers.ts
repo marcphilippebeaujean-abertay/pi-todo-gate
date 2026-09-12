@@ -4,7 +4,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
-import type { FooterSessionStartEvent, FooterUpdate } from "./events.ts";
+import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import { FooterDisplay } from "./footer-rendering.ts";
 import type {
 	FooterModule,
@@ -89,7 +89,7 @@ export class FooterEventConsumer implements FooterModule {
 		this.display.start(nextContext, this.state);
 	}
 
-	update(event: FooterUpdate): void {
+	update(event: FooterUpdateEvent): void {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
 		this.state = applyFooterUpdate(this.state, parsed);

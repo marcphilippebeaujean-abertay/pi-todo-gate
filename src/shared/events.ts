@@ -1,38 +1,19 @@
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitAction } from "../shared/exit-actions.ts";
+import type { ExitAction } from "./exit-actions.ts";
+import type {
+	AnyListener,
+	AnyRequest,
+	EventListener,
+	EventName,
+	EventPhase,
+	ListenerMap,
+	SharedEventPayloads,
+	SharedEvents,
+} from "./state.ts";
 
-export interface SharedEventPayloads {
-	prMerged: { prUrl: string; taskMarkedAsCompleted: boolean };
-}
-
-export interface EventRequest<T> {
-	payload: T;
-	readonly actions: readonly ExitAction[];
-	addAction(action: ExitAction): void;
-}
-
-export type EventListener<T> = (
-	request: EventRequest<T>,
-) => void | Promise<void>;
-
-type EventName = keyof SharedEventPayloads;
-type EventPhase = "collect" | "present";
-type Listener<T> = { listener: EventListener<T>; phase: EventPhase };
-type AnyListener = Listener<SharedEventPayloads[EventName]>;
-type ListenerMap = Map<EventName, AnyListener[]>;
-
-type AnyRequest = EventRequest<SharedEventPayloads[EventName]>;
-
-export interface SharedEvents {
-	on<K extends EventName>(
-		event: K,
-		listener: EventListener<SharedEventPayloads[K]>,
-		phase?: EventPhase,
-	): () => void;
-	emit<K extends EventName>(
-		event: K,
-		payload: SharedEventPayloads[K],
-	): Promise<void>;
+export interface PrMergedEvent {
+	prUrl: string;
+	taskMarkedAsCompleted: boolean;
 }
 
 function addUniqueAction(actions: ExitAction[], action: ExitAction): void {

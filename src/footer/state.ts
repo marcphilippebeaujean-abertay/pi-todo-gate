@@ -2,9 +2,10 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import type { FooterSessionStartEvent, FooterUpdate } from "./events.ts";
+import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
-export type { FooterUpdate } from "./events.ts";
+export type FooterUpdate = FooterUpdateEvent;
+export type FooterEventSink = (event: FooterUpdateEvent) => void;
 
 import {
 	requireBoolean,

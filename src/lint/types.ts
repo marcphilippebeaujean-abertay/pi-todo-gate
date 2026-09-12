@@ -16,6 +16,7 @@ export type LintRuleId =
 	| "prefer-switch-dispatch"
 	| "domain-types-outside-state"
 	| "event-types-outside-events"
+	| "event-types-suffix"
 	| "no-functions-in-data";
 export interface LintDiagnostic {
 	filePath: string;

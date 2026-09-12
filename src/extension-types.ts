@@ -9,9 +9,9 @@ import type {
 	StartBackgroundWorker,
 } from "./herdr/module.ts";
 import type { Exec } from "./shared/command.ts";
-import type { SharedEvents } from "./shared/events.ts";
 import type { ExitActionResult } from "./shared/exit-actions.ts";
 import type { PromptQueue } from "./shared/prompt-queue.ts";
+import type { SharedEvents } from "./shared/state.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,

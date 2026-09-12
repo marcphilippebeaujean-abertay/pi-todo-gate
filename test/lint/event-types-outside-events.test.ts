@@ -30,7 +30,7 @@ async function lintModule(
 		),
 		writeFile(
 			join(directory, "state.ts"),
-			"export interface StatePayload { value: string; }\n",
+			"export interface StatePayload { value: string; }\nexport type StateRequest = { value: string };\n",
 		),
 		writeFile(filePath, source),
 	]);
@@ -153,6 +153,20 @@ export function publish(payload: StatePayload): void { events.emit("event", payl
 		);
 
 		expect(ruleDiagnostics(diagnostics)).toHaveLength(1);
+	});
+
+	it("allows request contracts from state", async () => {
+		const diagnostics = await lintModule(
+			"event-consumers.ts",
+			`import type { StateRequest } from "./state.ts";
+declare const events: {
+	on(name: string, listener: (request: StateRequest) => void): void;
+};
+events.on("event", (request: StateRequest) => {});
+`,
+		);
+
+		expect(ruleDiagnostics(diagnostics)).toEqual([]);
 	});
 
 	it("allows event types on event publishers", async () => {

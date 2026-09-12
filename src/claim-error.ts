@@ -2,7 +2,8 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import type { ClaimErrorEvent } from "./events.ts";
 
-export type { ClaimErrorEvent, ClaimJobType } from "./events.ts";
+export type { ClaimErrorEvent } from "./events.ts";
+export type ClaimJobType = "Herdr" | "Todoist";
 
 export function handleClaimError(
 	context: Pick<ExtensionContext, "ui">,

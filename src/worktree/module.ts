@@ -6,12 +6,13 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { SharedEvents } from "../shared/events.ts";
+import type { SharedEvents } from "../shared/state.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type { WorktreeModule, WorktreeModuleDependencies } from "./state.ts";
 
 export * from "./events.ts";
 export type {
+	MergeRequest,
 	WorktreeBaseline,
 	WorktreeCurrentState,
 	WorktreeModule,

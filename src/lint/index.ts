@@ -3,6 +3,7 @@ import { DEFAULT_LINT_CONFIG } from "../lint-config.ts";
 import { compareDiagnostics } from "./diagnostic.ts";
 import { cyclomaticComplexity } from "./rules/cyclomatic-complexity.ts";
 import { eventTypesOutsideEvents } from "./rules/event-types-outside-events.ts";
+import { eventTypesSuffix } from "./rules/event-types-suffix.ts";
 import { functionLength } from "./rules/function-length.ts";
 import { functionsPerFile } from "./rules/functions-per-file.ts";
 import { namedIfCondition } from "./rules/named-if-condition.ts";
@@ -30,6 +31,7 @@ const RULES: readonly LintRule[] = [
 	similarStringLiterals,
 	namedIfCondition,
 	eventTypesOutsideEvents,
+	eventTypesSuffix,
 	noDomainTypesOutsideState,
 	noFunctionsInData,
 	repeatedFieldChecks,
