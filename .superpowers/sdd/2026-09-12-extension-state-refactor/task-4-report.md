@@ -54,8 +54,22 @@ Task 4 plan wording about separate PR merge channels conflicts with authoritativ
 - `npm run architecture` — passed dependency and module checks.
 - `git diff --check` — passed.
 
+## Final P1 cleanup
+
+- Removed `src/shared/work-state.ts` root-coupled `isCurrentMerge`/`matchesWorkState` adapter and `test/shared/work-state.test.ts`.
+- Confirmed PR-owned `src/pr/event-consumers.ts` guard is sole source merge guard.
+- Preserved persisted WorkState parsing/projection in `src/state.ts` and shared extension-message consumers.
+
+## Final validation
+
+- `env -u PI_SUBAGENT_CHILD npx vitest run test/pr test/extensions/pi-todo-gate.test.ts` — passed, 92 tests / 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed architecture plus 290 tests / 8 skipped.
+- `npm run lint` — passed Biome and strict lint.
+- `npm run typecheck -- --pretty false` — passed.
+- `npm run architecture` — passed dependency and module checks.
+- `git diff --check` — passed.
+
 ## Residual risks
 
 - Transitional `SessionContext` and `src/application/` remain by design for Tasks 5–6.
-- Legacy compatibility `isCurrentMerge` remains exported from `src/shared/work-state.ts` for existing tests; PR runtime uses PR-owned guard in `src/pr/event-consumers.ts`.
 - PR module state metadata is runtime module state; legacy persisted WorkState entry shape remains unchanged for compatibility.
