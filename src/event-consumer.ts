@@ -50,7 +50,13 @@ export async function applyModuleStateChanged(
 }
 
 function cloneSessionState(state: SessionState): SessionState {
-	return structuredClone(state);
+	const moduleState = { ...state.moduleState };
+	delete moduleState[C.module.application];
+	return structuredClone({
+		sessionId: state.sessionId,
+		gitState: state.gitState,
+		moduleState,
+	});
 }
 
 export function registerModuleStateConsumer(

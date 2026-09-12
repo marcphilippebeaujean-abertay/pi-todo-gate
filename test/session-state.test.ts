@@ -26,6 +26,7 @@ const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const HTTPS_GITHUB_COM_A_B_PULL_1 = "https://github.com/a/b/pull/1";
 
 import { describe, expect, it } from "vitest";
+import { resetSessionState } from "../src/application/lifecycle.ts";
 import {
 	applyStatePatch,
 	createSessionState,
@@ -35,6 +36,23 @@ import {
 } from "../src/state.ts";
 
 describe("session state", () => {
+	it("clears Git and module state while preserving session object", () => {
+		const state = createSessionState();
+		state.sessionId = SESSION_123;
+		state.gitState = { remoteOrigin: REMOTE_ORIGIN };
+		state.moduleState = { footer: { active: true } };
+		const stateReference = state;
+
+		resetSessionState(state);
+
+		expect(state).toBe(stateReference);
+		expect(state).toEqual({
+			sessionId: null,
+			gitState: {},
+			moduleState: {},
+		});
+	});
+
 	it("creates stable shared state with empty Git state", () => {
 		expect(createSessionState()).toEqual({
 			sessionId: null,

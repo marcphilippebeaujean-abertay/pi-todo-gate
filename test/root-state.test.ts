@@ -3,6 +3,7 @@ import {
 	registerModuleStateConsumer,
 	updateModuleState,
 } from "../src/event-consumer.ts";
+import { EXTENSION_CONSTANTS as C } from "../src/shared/constants.ts";
 import { createSharedEvents } from "../src/shared/events.ts";
 import { createSessionState, type SessionState } from "../src/state.ts";
 
@@ -78,6 +79,36 @@ describe("extension module state", () => {
 				footer: { nested: { value: "current callback" } },
 			},
 		});
+	});
+
+	it("emits snapshots without cloning transitional application state", async () => {
+		const state = createSessionState();
+		const applicationState = {
+			operationQueue: Promise.resolve(),
+			nested: { value: "preserved" },
+		};
+		state.moduleState[C.module.application] = applicationState;
+		const events = createSharedEvents();
+		const snapshots: Array<{
+			previousState: SessionState;
+			currentState: SessionState;
+		}> = [];
+		events.sessionStateChangedEvent.subscribe((snapshot) => {
+			snapshots.push(snapshot);
+		});
+		registerModuleStateConsumer(events, state);
+
+		await events.moduleStateChangedEvent.emit({
+			moduleId: C.module.footer,
+			moduleState: { active: true },
+		});
+
+		expect(snapshots).toHaveLength(1);
+		expect(snapshots[0]?.previousState.moduleState).toEqual({});
+		expect(snapshots[0]?.currentState.moduleState).toEqual({
+			footer: { active: true },
+		});
+		expect(state.moduleState[C.module.application]).toBe(applicationState);
 	});
 
 	it("consumes published module state updates", async () => {

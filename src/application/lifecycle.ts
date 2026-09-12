@@ -66,6 +66,7 @@ export async function initializeRemoteOrigin(
 
 export function resetSessionState(sessionState: SessionState): void {
 	sessionState.sessionId = null;
+	sessionState.gitState = {};
 	for (const moduleId of Object.keys(sessionState.moduleState)) {
 		delete sessionState.moduleState[moduleId];
 	}
