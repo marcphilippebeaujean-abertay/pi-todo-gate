@@ -31,6 +31,8 @@ Ruling: `Event<T>` implementation lives in `src/shared/events.ts`; named payload
 
 Ruling: PR merge uses one `prMergedEvent: Event<PrMergedEvent>`; same-type requested/merged channels were rejected as duplicate lifecycle signals. Exit Protocol owns action descriptors and calls Worktree directly after submit.
 
+Ruling: continue one additional Task 6 fix pass beyond the nominal review loop because the remaining handoff persistence race is concrete and load-bearing; defer final inherited-state persistence until the post-activation projected state is authoritative.
+
 ## Progress
 
 - Task 1: complete — `c2a8fde`; review verdict OK; full verification 52 files / 283 passed / 8 skipped.

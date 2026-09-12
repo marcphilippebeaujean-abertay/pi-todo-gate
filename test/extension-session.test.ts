@@ -165,6 +165,12 @@ describe("session shutdown", () => {
 						stderr: "",
 						code: 0,
 					};
+				if (key === "git remote get-url origin")
+					return {
+						stdout: "https://current.example/repo.git\n",
+						stderr: "",
+						code: 0,
+					};
 				return { stdout: "", stderr: "", code: 0 };
 			},
 			() => ({
@@ -174,9 +180,7 @@ describe("session shutdown", () => {
 					{
 						type: "custom",
 						customType: "pi-todo-gate-state",
-						data: {
-							remoteOrigin: "https://persisted.example/repo.git",
-						},
+						data: { taskRef: "TASK-123" },
 					},
 				],
 			}),
@@ -190,15 +194,21 @@ describe("session shutdown", () => {
 			context("/repo"),
 		);
 		expect(root.sessionState.gitState.remoteOrigin).toBe(
-			"https://persisted.example/repo.git",
+			"https://current.example/repo.git",
 		);
-		expect(root.pi.appendEntry).toHaveBeenCalledWith(
+		const appendEntry = (
+			root.pi as never as { appendEntry: ReturnType<typeof vi.fn> }
+		).appendEntry;
+		const stateEntries = appendEntry.mock.calls.filter(
+			(call: unknown[]) => call[0] === "pi-todo-gate-state",
+		);
+		expect(stateEntries.at(-1)).toEqual([
 			"pi-todo-gate-state",
 			expect.objectContaining({
-				remoteOrigin: "https://persisted.example/repo.git",
+				remoteOrigin: "https://current.example/repo.git",
 				inheritedFrom: "previous-session",
 			}),
-		);
+		]);
 	});
 
 	it("does not append origin after concurrent shutdown", async () => {

@@ -36,7 +36,8 @@
 - Added Todoist terminal deactivation claim-reset coverage.
 - Startup establishes active-session acceptance before PR remote-origin discovery and Worktree initialization, then drains root module updates before initial persistence and footer projection.
 - Startup regression asserts retained `sessionState.gitState.remoteOrigin` alongside Worktree Git fields, including persisted-origin startup without rediscovery.
-- Deferred inherited handoff persistence until after active-session PR/Git projection; inherited remoteOrigin remains visible before final persistence/footer projection.
+- Deferred inherited handoff persistence until after active-session PR/Git projection; merge final projected remoteOrigin into inherited state so discovered origin cannot be overwritten.
+- Handoff regression covers inherited state without remoteOrigin and verifies final persisted state retains current Git origin.
 - PR origin requests carry lifecycle epoch identity; stale discovery cannot append state or mutate PR module state after shutdown. Concurrent shutdown regression covers this barrier.
 
 ## Residual risks

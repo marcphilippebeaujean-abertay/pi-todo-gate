@@ -243,7 +243,12 @@ async function persistInheritedState(
 ): Promise<boolean> {
 	if (inheritedState === undefined) return true;
 	if (!isCurrentEpoch(root, epoch)) return false;
-	appendState(root, inheritedState);
+	const remoteOrigin = root.sessionState.gitState.remoteOrigin;
+	const finalState =
+		remoteOrigin === undefined
+			? inheritedState
+			: { ...inheritedState, remoteOrigin };
+	appendState(root, finalState);
 	await root.stateUpdatesDrained();
 	return isCurrentEpoch(root, epoch);
 }
