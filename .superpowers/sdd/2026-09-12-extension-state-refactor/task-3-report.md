@@ -8,14 +8,15 @@
 - Root module-state consumer now preserves stable `SessionState` identity, deep-copies pre/post snapshots, applies module and Git updates together, and emits typed `sessionStateChangedEvent`.
 - Snapshot projection excludes transitional `moduleState.application` before `structuredClone`, preserving runtime compatibility while avoiding its non-cloneable `operationQueue`.
 - Session reset now clears `gitState`.
+- Root module updates are serialized, so concurrent emissions produce ordered, uncontaminated previous/current snapshots.
 - Updated SessionState fixtures for existing merge/work-state tests.
 
-Implementation commits: `aa71adb` (`feat: emit typed session state snapshots`), `3b690ea` (`fix: apply session state updates atomically`), and `173acbf` (`fix: preserve state snapshots across session transitions`).
+Implementation commits: `aa71adb` (`feat: emit typed session state snapshots`), `3b690ea` (`fix: apply session state updates atomically`), `173acbf` (`fix: preserve state snapshots across session transitions`), and `ab0180d` (`fix: serialize session state snapshots`).
 
 ## Validation
 
-- `env -u PI_SUBAGENT_CHILD npx vitest run test/root-state.test.ts test/session-state.test.ts test/events.test.ts` — passed, 18 tests.
-- `env -u PI_SUBAGENT_CHILD npm test` — passed, architecture checks plus 285 tests; 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npx vitest run test/root-state.test.ts test/session-state.test.ts test/events.test.ts` — passed, 19 tests.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed, architecture checks plus 286 tests; 8 skipped.
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
