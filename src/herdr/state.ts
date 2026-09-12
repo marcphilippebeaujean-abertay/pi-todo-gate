@@ -37,6 +37,7 @@ export interface CwdReference {
 export interface TabClaimAttempt {
 	attemptId: number;
 	initialLabel: string | undefined;
+	tabId: string | undefined;
 	paneId: string | undefined;
 	context: ExtensionContext;
 }

@@ -20,7 +20,12 @@ export const SIGTERM = "SIGTERM";
 export const UTF8_ENCODING = "utf8";
 export const TAB_GET_COMMAND = ["tab", "get"] as const;
 export const TAB_GET_ARGS = ["tab", "get"] as const;
+export const TAB_RENAME_ARGS = ["tab", "rename"] as const;
 export const PANE_GET_ARGS = ["pane", "get"] as const;
+export const PANE_MOVE_ARGS = ["pane", "move"] as const;
+export const NEW_TAB_FLAG = "--new-tab";
+export const LABEL_FLAG = "--label";
+export const NO_FOCUS_FLAG = "--no-focus";
 export const STRING_TYPE = "string";
 export const NUMERIC_LABEL = /^\d+$/;
 export const HERDR_ENVIRONMENT = "HERDR_ENV";
@@ -33,12 +38,12 @@ export const CLAIM_COMPLETED_EVENT = "claimCompleted";
 export const CLAIM_FAILED_EVENT = "claimFailed";
 export const HERDR = "Herdr";
 export const TAB_CLAIM_FAILED = "completed without claim evidence";
+export const TAB_CLAIM_ACTION_FAILED = "action failed";
 export const TAB_CLAIM_START_FAILED = "failed to start";
-export const TAB_CLAIM_INSTRUCTIONS = `Rename current Herdr tab for task in parent prompt.
-Use bash. First run \`herdr pane current\`, then \`herdr tab get <tab-id>\`.
-If current label clearly describes task, leave tab unchanged. Otherwise inspect current tab panes and
-\`herdr agent list\`; rename current tab when no other agent shares it, or move current pane to a new
-labeled tab when another agent shares it. Derive short lowercase concrete label from task prompt.
-After success or valid unchanged label, output only JSON:
-\`${JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE)}\` or null when no changes are needed.
-Exit nonzero if claim cannot complete.`;
+export const TAB_CLAIM_INSTRUCTIONS = `Inspect current Herdr tab and panes for task in parent prompt.
+Use bash. Run \`herdr pane current\`, \`herdr tab get <tab-id>\`, and \`herdr agent list\` as needed.
+If current label clearly describes task, return null. Otherwise derive short lowercase concrete label
+from task prompt and return \`${JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE)}\` or null when no changes
+are needed, setting shouldMoveToNewTab to true when another agent shares current tab and current pane
+should move.
+Do not rename or move any Herdr tab or pane. Output only JSON. Exit nonzero if inspection cannot complete.`;
