@@ -97,6 +97,7 @@ git commit -m "refactor: move prompt queue to root infrastructure"
   ```ts
   moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
   sessionStateChangedEvent: Event<SessionStateChangedEvent>;
+  toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
   sessionResetEvent: Event<SessionResetEvent>;
   sessionActivatedEvent: Event<SessionActivatedEvent>;
   sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
@@ -348,14 +349,22 @@ git commit -m "refactor: isolate module state and lifecycle listeners"
 
 **Interfaces:**
 - Root consumer accepts a narrow composition object assembled only in `main.ts`; it does not import `ExtensionState`.
-- Root publishers expose typed functions such as:
+- Root publisher is a stateful class:
   ```ts
-  publishSessionReset(events: EventHandler): Promise<void>;
-  publishSessionActivated(events: EventHandler, payload: SessionActivatedEvent): Promise<void>;
-  publishSessionDeactivated(events: EventHandler): Promise<void>;
-  publishWorkingTreeRefresh(events: EventHandler, payload: RefreshWorkingTreeEvent): Promise<void>;
+  class RootEventPublisher {
+    constructor(private readonly eventHandler: EventHandler) {}
+    publishSessionReset(): Promise<void>;
+    publishSessionActivated(payload: SessionActivatedEvent): Promise<void>;
+    publishSessionDeactivated(): Promise<void>;
+  }
   ```
-- Root owns PromptQueue reset and complete SessionState clearing.
+- Root native-event bridge forwards native tool results without interpreting them:
+  ```ts
+  pi.on("tool_result", (event, context) =>
+    eventHandler.toolResultEvent.emit({ event, context }),
+  );
+  ```
+- Root owns PromptQueue reset and complete SessionState clearing. Worktree status refresh is not a root publisher action; Worktree subscribes directly to `toolResultEvent`.
 
 - [ ] **Step 1: Add failing lifecycle tests**
 
@@ -369,11 +378,11 @@ Expected: FAIL because lifecycle still lives in `src/application/` and state ada
 
 - [ ] **Step 3: Move session start/shutdown orchestration**
 
-Move config loading, persisted-state loading, handoff handling, native tool registration, and shutdown sequencing into root `event-consumer.ts`. Root emits typed lifecycle commands; modules respond through subscriptions.
+Move config loading, persisted-state loading, handoff handling, native tool registration, and shutdown sequencing into root `event-consumer.ts`. Root emits typed lifecycle commands through `RootEventPublisher`; modules respond through subscriptions. The native `tool_result` handler only forwards `{ event, context }` through `toolResultEvent`; Worktree and PR independently decide whether the result matters.
 
 - [ ] **Step 4: Move root publishers**
 
-Create `src/event-publishers.ts` for typed lifecycle/action events. Keep PR discovery, Worktree status, and Todoist reset inside their modules.
+Create `src/event-publishers.ts` containing `RootEventPublisher`, which stores `EventHandler` in its constructor and exposes no per-call handler parameter. Do not add a Worktree refresh method. Keep PR discovery, Worktree status, and Todoist reset inside their modules.
 
 - [ ] **Step 5: Remove compatibility state**
 

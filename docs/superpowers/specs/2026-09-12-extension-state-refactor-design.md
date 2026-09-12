@@ -107,7 +107,7 @@ Worktree module owns:
 - footer status events derived from Git state;
 - worktree cleanup actions.
 
-Working-tree refresh runs in Worktree code. Worktree may consume `sessionStateChanged` when shared Git state is relevant, but never reads PR or Todoist module entries.
+Working-tree refresh runs in Worktree code after Worktree consumes typed `toolResultEvent`. Worktree may consume `sessionStateChanged` when shared Git state is relevant, but never reads PR or Todoist module entries.
 
 ### Todoist module
 
@@ -175,6 +175,7 @@ interface SessionStateChangedEvent {
 interface EventHandler {
   moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
   sessionStateChangedEvent: Event<SessionStateChangedEvent>;
+  toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
   // other named typed channels
 }
 ```
@@ -185,15 +186,34 @@ The stable `SessionState` reference remains unchanged. The event communicates th
 
 ### Root-to-module action flow
 
+`src/event-publishers.ts` contains `RootEventPublisher`, which stores `EventHandler` in its constructor. Its methods emit typed lifecycle actions without receiving `EventHandler` at each call:
+
+```ts
+class RootEventPublisher {
+  constructor(private readonly eventHandler: EventHandler) {}
+  publishSessionReset(): Promise<void>;
+  publishSessionActivated(payload: SessionActivatedEvent): Promise<void>;
+  publishSessionDeactivated(): Promise<void>;
+}
+```
+
 Root publishers emit typed actions through named event channels for:
 
 - `sessionActivated` with session identity and lifecycle context data needed by modules;
 - `sessionDeactivated`;
 - `sessionReset`;
-- `refreshWorkingTree` when root receives a relevant native tool result;
+- native PI event bridges that forward `tool_result` without module-specific interpretation;
 - other explicit orchestration requests that cannot be handled by a module-native listener.
 
-Modules subscribe to typed channels in constructors. No module is registered by passing `ExtensionState` to a module method. Module-local event bundles use the same shared `Event<T>` primitive; Herdr's custom `.on/.emit` event API is migrated too.
+The root native bridge forwards `tool_result` unchanged through a typed channel:
+
+```ts
+pi.on("tool_result", (event, context) =>
+  eventHandler.toolResultEvent.emit({ event, context }),
+);
+```
+
+Worktree subscribes to `toolResultEvent` and decides whether Git status needs refreshing. PR subscribes independently for merge detection. No root Worktree-refresh publisher exists. Modules subscribe to typed channels in constructors. No module is registered by passing `ExtensionState` to a module method. Module-local event bundles use the same shared `Event<T>` primitive; Herdr's custom `.on/.emit` event API is migrated too.
 
 ### Lifecycle sequence
 
@@ -218,12 +238,13 @@ Remote-origin discovery:
 3. Root applies both and emits complete `sessionStateChanged`.
 4. Worktree or other modules may consume the general event if needed.
 
-Working-tree refresh:
+Native tool-result flow:
 
-1. Worktree module inspects Git status.
-2. Worktree updates its own state and shared Git state.
-3. Worktree emits footer/status events and `moduleStateChanged`.
-4. Root applies the update and emits complete `sessionStateChanged`.
+1. PI sends native `tool_result` to the root bridge.
+2. Root emits typed `toolResultEvent` without interpreting the result.
+3. Worktree module subscribes and decides whether Git status must be refreshed.
+4. PR module subscribes independently when merge detection needs the result.
+5. Each module emits its own state/footer events; root applies state updates and emits complete `sessionStateChanged`.
 
 ## File migration
 
