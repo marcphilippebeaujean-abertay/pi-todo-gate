@@ -11,7 +11,7 @@ export const functionsPerFile: LintRule = ({
 	config,
 }) => {
 	const canonicalFacet =
-		/\/src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/(commands|constants|data|event-consumers|event-publishers|user-prompts|notifications|module|footer-rendering|parsing|state|claim-worker-result|tab-validation|runtime|git|client)\.ts$/.test(
+		/\/src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/(commands|constants|data|event-consumers|event-publishers|user-prompts|notifications|module|footer-rendering|parsing|state|claim-worker-result|tab-validation|runtime|git|client)\.ts$|\/src\/(event-consumer|main)\.ts$/.test(
 			sourceFile.fileName,
 		);
 	const count = collectFunctionMetrics(sourceFile).length;

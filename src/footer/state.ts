@@ -66,7 +66,7 @@ export type FooterModuleFactory = (
 	moduleContext?: ModuleContext,
 ) => FooterModule;
 
-export type FooterSessionContext = {
+export type FooterSessionRecord = {
 	ui: {
 		setStatus(key: string, text: string | undefined): void;
 	};

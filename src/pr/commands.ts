@@ -24,14 +24,14 @@ function currentSession(
 	session: PrSession,
 	generation: number,
 ): boolean {
-	const activeSession =
-		runtime.getSession?.() ??
-		(runtime.sessionState.moduleState.application as PrSession | null);
-	const current =
-		runtime.isCurrentOperation?.(session, generation) ??
-		(activeSession?.sessionId === session.sessionId &&
+	const activeSession = runtime.getSession();
+	const operationGuard = runtime.isCurrentOperation;
+	const hasModuleGuard = operationGuard !== undefined;
+	const current = hasModuleGuard
+		? operationGuard(session, generation)
+		: activeSession?.sessionId === session.sessionId &&
 			(runtime.prState?.().operationGeneration ??
-				session.operationGeneration) === generation);
+				session.operationGeneration) === generation;
 	return runtime.sessionState.sessionId === session.sessionId && current;
 }
 
@@ -102,9 +102,7 @@ async function runMergeProtocol(
 	runtime: PrRuntime,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
-	const session =
-		runtime.getSession?.() ??
-		(runtime.sessionState.moduleState.application as PrSession | null);
+	const session = runtime.getSession();
 	const hasSession = session !== null;
 	if (!hasSession) {
 		notifyInactive(ctx);

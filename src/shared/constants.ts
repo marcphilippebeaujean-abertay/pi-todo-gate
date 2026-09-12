@@ -19,7 +19,6 @@ export const EXTENSION_CONSTANTS = {
 		task: "pi-todo-gate-task",
 	},
 	module: {
-		application: "application",
 		footer: "footer",
 		worktree: "worktree",
 		exitProtocol: "exit-protocol",

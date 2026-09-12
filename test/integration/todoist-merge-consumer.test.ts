@@ -9,12 +9,9 @@ import { register } from "../../src/pr/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
-import {
-	currentSessionContext,
-	type ExtensionState,
-	type SessionContext,
-} from "../../src/state.ts";
+import type { SessionRecord } from "../../src/state.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
+import type { TodoistRuntime } from "../../src/todoist/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 
@@ -46,7 +43,8 @@ function setup(overrides: Record<string, unknown> = {}) {
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 		...sessionOverrides,
-	} as unknown as SessionContext;
+	} as unknown as SessionRecord;
+	const activeSession: SessionRecord | null = session;
 	const sessionState = {
 		sessionId: session.sessionId,
 		gitState: {},
@@ -58,6 +56,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 			taskClaim: { pending: false, completed: false, session: undefined },
 		},
 		eventHandler: createSharedEvents(),
+		getSession: () => activeSession,
 		promptQueue:
 			(promptQueueOverride as PromptQueue | undefined) ?? new PromptQueue(),
 		dependencies: {
@@ -73,7 +72,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 			generation: number,
 		) => {
 			const isCurrent = () =>
-				currentSessionContext(runtime.sessionState) === targetSession &&
+				runtime.getSession() === targetSession &&
 				targetSession.operationGeneration === generation;
 			if (!isCurrent()) return "failed" as const;
 			try {
@@ -84,12 +83,12 @@ function setup(overrides: Record<string, unknown> = {}) {
 			}
 			return isCurrent() ? ("completed" as const) : ("failed" as const);
 		},
-	} as unknown as ExtensionState;
-	currentSessionContext(sessionState, session);
+	} as unknown as TodoistRuntime;
+
 	return { runtime, session, confirm, notify, completeTask };
 }
 
-async function emit(runtime: ExtensionState) {
+async function emit(runtime: TodoistRuntime) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
@@ -97,7 +96,7 @@ async function emit(runtime: ExtensionState) {
 }
 
 async function runMergeCommand(
-	runtime: ExtensionState,
+	runtime: TodoistRuntime,
 	context: ExtensionCommandContext,
 ): Promise<void> {
 	let handler:
@@ -216,7 +215,7 @@ describe("Todoist merge consumer", () => {
 	it("does not complete a task after the session becomes stale", async () => {
 		const setupResult = setup();
 		setupResult.confirm.mockImplementation(async () => {
-			currentSessionContext(setupResult.runtime.sessionState, null);
+			setupResult.runtime.getSession = () => null;
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
@@ -268,7 +267,7 @@ describe("Todoist merge consumer", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as SessionContext;
+		} as unknown as SessionRecord;
 		const sessionState = {
 			sessionId: session.sessionId,
 			gitState: {},
@@ -285,6 +284,7 @@ describe("Todoist merge consumer", () => {
 				createTodoistClient: () => ({ completeTask }),
 			},
 			eventHandler: createSharedEvents(),
+			getSession: () => session,
 			pi: { appendEntry: vi.fn() },
 			footer: { update: vi.fn() },
 			completeMergedTask: async (
@@ -295,14 +295,14 @@ describe("Todoist merge consumer", () => {
 				generation: number,
 			) => {
 				const isCurrent = () =>
-					currentSessionContext(runtime.sessionState) === targetSession &&
+					runtime.getSession() === targetSession &&
 					targetSession.operationGeneration === generation;
 				if (!isCurrent()) return "failed" as const;
 				await completeTask(taskRef, isCurrent);
 				return isCurrent() ? ("completed" as const) : ("failed" as const);
 			},
-		} as unknown as ExtensionState;
-		currentSessionContext(sessionState, session);
+		} as unknown as TodoistRuntime;
+
 		registerTodoistMergeConsumer(runtime);
 
 		await runMergeCommand(runtime, context);

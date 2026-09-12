@@ -3,7 +3,7 @@ import { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { createEventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import type { SessionContext } from "../state.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
 import { createSessionState } from "../state.ts";
 import "./commands.ts";
 import "./constants.ts";
@@ -29,7 +29,7 @@ export { renderPrStatus, renderTaskStatusCompact as renderTodoistTaskStatus };
 
 export function refreshFooterStatuses(
 	footer: FooterModule,
-	session: SessionContext,
+	session: SessionRecord,
 ): void {
 	footer.update({
 		footerType: C.status.pr,
@@ -55,7 +55,7 @@ export function refreshFooterStatuses(
 
 export function updateWorkingTreeStatus(
 	footer: FooterModule,
-	session: SessionContext,
+	session: SessionRecord,
 	hasUncommittedChanges: boolean,
 ): void {
 	const hasStatusChanged =

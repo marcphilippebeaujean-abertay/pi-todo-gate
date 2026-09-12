@@ -63,6 +63,15 @@ export async function checkModuleStructure(
 	root = process.cwd(),
 ): Promise<StructureIssue[]> {
 	const issues: StructureIssue[] = [];
+	const applicationPath = join(root, "src", "application");
+	if (await isDirectory(applicationPath)) {
+		issues.push({
+			domain: "root",
+			path: relative(root, applicationPath),
+			message: "legacy application directory is not allowed",
+			correction: `delete ${relative(root, applicationPath)}`,
+		});
+	}
 	for (const domain of SCOPED_DOMAINS) {
 		const domainPath = join(root, "src", domain);
 		const hasDomain = await isDirectory(domainPath);

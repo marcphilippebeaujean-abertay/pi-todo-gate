@@ -32,7 +32,7 @@ import type {
 	FooterState,
 	FooterTheme,
 	FooterTui,
-	FooterSessionContext as SessionContext,
+	FooterSessionRecord as SessionRecord,
 	TodoistFooterTheme,
 } from "./state.ts";
 
@@ -73,13 +73,13 @@ function loadingText(text: string, frame: string): string {
 }
 
 export class FooterDisplay {
-	private context: SessionContext | null = null;
+	private context: SessionRecord | null = null;
 	private state: FooterState = { footers: {} };
 	private renderedFooterTypes = new Set<string>();
 	private animations = new Map<string, Animation>();
 	private readonly footers = new Map<string, Footer>();
 
-	start(context: SessionContext, state: FooterState): void {
+	start(context: SessionRecord, state: FooterState): void {
 		this.clear();
 		this.context = context;
 		this.state = state;
@@ -137,7 +137,7 @@ export class FooterDisplay {
 		}
 	}
 
-	private syncEvent(context: SessionContext, event: FooterUpdateEvent): void {
+	private syncEvent(context: SessionRecord, event: FooterUpdateEvent): void {
 		this.stopAnimation(event.footerType);
 		this.renderedFooterTypes.add(event.footerType);
 		const footer = this.footer(event.footerType);
@@ -159,10 +159,7 @@ export class FooterDisplay {
 		this.animations.set(event.footerType, animation);
 	}
 
-	private advanceAnimation(
-		animation: Animation,
-		context: SessionContext,
-	): void {
+	private advanceAnimation(animation: Animation, context: SessionRecord): void {
 		const current = this.state.footers[animation.event.footerType];
 		const isCurrent = current === animation.event;
 		const isLoading = current.isLoading;

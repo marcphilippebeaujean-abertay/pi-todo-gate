@@ -26,7 +26,7 @@ const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const HTTPS_GITHUB_COM_A_B_PULL_1 = "https://github.com/a/b/pull/1";
 
 import { describe, expect, it } from "vitest";
-import { resetSessionState } from "../src/application/lifecycle.ts";
+import { resetSessionState } from "../src/event-consumer.ts";
 import {
 	applyStatePatch,
 	createSessionState,

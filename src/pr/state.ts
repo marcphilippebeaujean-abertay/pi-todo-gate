@@ -5,6 +5,7 @@ import type {
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 
 export interface PrWorkState {
@@ -18,27 +19,13 @@ export interface PrWorkState {
 	todoistCompletionAttemptedAt?: string;
 }
 
-/** Session-shaped data PR facets need; root application adapters stay outside PR. */
-export interface PrSession {
-	sessionId: string;
-	context: ExtensionContext;
-	project: { codingRoot: string };
-	state: PrWorkState;
-	allowPrDiscovery: boolean;
-	prDiscoveryTestedUrls: Set<string>;
-	handoffContext: boolean;
-	workChanged: boolean;
-	hasUncommittedChanges: boolean;
-	workRevision: number;
-	operationGeneration: number;
-	operationQueue: Promise<void>;
-}
+export type PrSession = SessionRecord;
 
 export interface PrRuntime {
 	sessionState: SessionState;
 	eventHandler: EventHandler;
 	dependencies: { exec?: Exec };
-	getSession?: () => PrSession | null;
+	getSession: () => PrSession | null;
 	prState?: () => PrState;
 	isCurrentOperation?(session: PrSession, generation: number): boolean;
 	enqueueSessionOperation?<T>(

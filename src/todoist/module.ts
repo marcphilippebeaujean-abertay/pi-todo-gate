@@ -17,9 +17,7 @@ export * from "./events.ts";
 export * from "./parsing.ts";
 export * from "./state.ts";
 
-import { PromptQueue } from "../prompt-queue.ts";
-import type { EventHandler } from "../shared/events.ts";
-import { createSessionState, type SessionState } from "../state.ts";
+import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
 	registerTodoistMergeConsumer,
@@ -55,18 +53,11 @@ class TodoistModuleImpl implements TodoistModule {
 	}
 
 	private runtime(): TodoistRuntime | null {
-		const current = this.options.stateRef?.current;
-		const hasCurrentRuntime = current !== undefined && current !== null;
-		if (hasCurrentRuntime)
-			return {
-				...current,
-				todoist: this,
-				eventHandler: this.options.eventHandler,
-			};
 		const dependencies = this.options.dependencies ?? {};
 		const sessionState = this.options.sessionState;
 		const runtime = {
 			sessionState,
+			getSession: this.options.getSession ?? (() => null),
 			todoist: this,
 			promptQueue: this.options.promptQueue,
 			dependencies,
@@ -79,9 +70,25 @@ class TodoistModuleImpl implements TodoistModule {
 				((session, state) => {
 					session.state = state;
 				}),
-			completeMergedTask:
-				this.options.completeMergedTask ?? (async () => "failed" as const),
-		} satisfies TodoistRuntime;
+			completeMergedTask: this.options.completeMergedTask,
+		} as TodoistRuntime;
+		if (runtime.completeMergedTask === undefined)
+			runtime.completeMergedTask = (
+				session,
+				taskRef,
+				snapshot,
+				revision,
+				generation,
+			) =>
+				completeMergedTask(
+					runtime,
+					session,
+					session.context,
+					taskRef,
+					snapshot,
+					revision,
+					generation,
+				);
 		return runtime;
 	}
 
@@ -108,22 +115,7 @@ export function createTodoistModule(
 	options: TodoistModuleOptions,
 ): TodoistModule;
 export function createTodoistModule(
-	eventHandler: EventHandler,
-	sessionState: SessionState,
-	stateRef: { readonly current: TodoistRuntime | null },
-): TodoistModule;
-export function createTodoistModule(
-	optionsOrEvents: TodoistModuleOptions | EventHandler,
-	sessionState?: SessionState,
-	stateRef?: { readonly current: TodoistRuntime | null },
+	options: TodoistModuleOptions,
 ): TodoistModule {
-	if ("moduleStateChangedEvent" in optionsOrEvents) {
-		return new TodoistModuleImpl({
-			promptQueue: stateRef?.current?.promptQueue ?? new PromptQueue(),
-			eventHandler: optionsOrEvents,
-			sessionState: sessionState ?? createSessionState(),
-			stateRef,
-		});
-	}
-	return new TodoistModuleImpl(optionsOrEvents);
+	return new TodoistModuleImpl(options);
 }

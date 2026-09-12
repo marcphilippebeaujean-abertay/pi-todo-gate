@@ -2,8 +2,8 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { enqueueSessionOperation } from "../shared/session-operations.ts";
-import type { SessionContext } from "../state.ts";
-import { applyStatePatch, currentSessionContext } from "../state.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
+import { applyStatePatch } from "../state.ts";
 import { createClient } from "./client.ts";
 import {
 	notifyCompletionFailure,
@@ -13,13 +13,12 @@ import type { TodoistRuntime } from "./state.ts";
 
 function isCurrentCompletion(
 	runtime: TodoistRuntime,
-	session: SessionContext,
-	stateSnapshot: SessionContext["state"],
+	session: SessionRecord,
+	stateSnapshot: SessionRecord["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): boolean {
-	const isCurrentSession =
-		currentSessionContext(runtime.sessionState) === session;
+	const isCurrentSession = runtime.getSession() === session;
 	const isCurrentGeneration =
 		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
@@ -34,7 +33,7 @@ function isCurrentCompletion(
 
 function recordSuccessfulCompletion(
 	runtime: TodoistRuntime,
-	session: SessionContext,
+	session: SessionRecord,
 	ctx: ExtensionContext,
 ): void {
 	runtime.replaceSessionState(
@@ -58,10 +57,10 @@ function recordFailedCompletion(ctx: ExtensionContext): void {
 
 async function completeMergedTaskNow(
 	runtime: TodoistRuntime,
-	session: SessionContext,
+	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: SessionContext["state"],
+	stateSnapshot: SessionRecord["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {
@@ -95,10 +94,10 @@ async function completeMergedTaskNow(
 
 export async function completeMergedTask(
 	runtime: TodoistRuntime,
-	session: SessionContext,
+	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: SessionContext["state"],
+	stateSnapshot: SessionRecord["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {

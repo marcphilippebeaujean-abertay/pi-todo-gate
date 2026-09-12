@@ -103,19 +103,19 @@ class Worktree implements WorktreeModule {
 		const hasFormatter = formatPrStatus !== undefined;
 		const shouldSkipStatus = !hasFormatter;
 		if (shouldSkipStatus) return;
-		const application = this.sessionState.moduleState[C.module.application];
-		const isApplicationRecord =
-			typeof application === "object" && application !== null;
-		const session = isApplicationRecord
-			? (application as {
-					state?: { prUrl?: string; taskUrl?: string; taskName?: string };
-				})
+		const prState = this.sessionState.moduleState[C.module.pr];
+		const taskState = this.sessionState.moduleState[C.module.work];
+		const hasPrState = typeof prState === "object" && prState !== null;
+		const pr = hasPrState ? (prState as { prUrl?: string }) : undefined;
+		const hasTaskState = typeof taskState === "object" && taskState !== null;
+		const task = hasTaskState
+			? (taskState as { taskUrl?: string; taskName?: string })
 			: undefined;
 		void this.eventHandler.footerUpdateEvent.emit({
 			footerType: C.status.pr,
 			isLoading: false,
 			text: formatPrStatus(
-				session?.state?.prUrl,
+				pr?.prUrl,
 				context.ui.theme,
 				this.hasUncommittedChanges,
 			),
@@ -126,11 +126,7 @@ class Worktree implements WorktreeModule {
 		void this.eventHandler.footerUpdateEvent.emit({
 			footerType: C.status.task,
 			isLoading: false,
-			text: formatTaskStatus(
-				session?.state?.taskUrl,
-				context.ui.theme,
-				session?.state?.taskName,
-			),
+			text: formatTaskStatus(task?.taskUrl, context.ui.theme, task?.taskName),
 			isVisible: true,
 		});
 	}
@@ -148,18 +144,8 @@ class Worktree implements WorktreeModule {
 		const shouldSkipStatus = !isCurrentAndHasStatus || !isLatestRequest;
 		if (shouldSkipStatus) return;
 		this.hasUncommittedChanges = dirtyStatus;
-		this.updateApplicationSessionStatus();
 		this.emitState({ hasUncommittedChanges: this.hasUncommittedChanges });
 		this.emitFooterStatus(context);
-	}
-
-	private updateApplicationSessionStatus(): void {
-		const application = this.sessionState.moduleState[C.module.application];
-		const isApplicationRecord =
-			typeof application === "object" && application !== null;
-		if (!isApplicationRecord) return;
-		const session = application as { hasUncommittedChanges?: boolean };
-		session.hasUncommittedChanges = this.hasUncommittedChanges;
 	}
 
 	private async initializeSession(
@@ -177,7 +163,6 @@ class Worktree implements WorktreeModule {
 			const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
 			if (shouldSkipDirtyStatus) return;
 			this.hasUncommittedChanges = dirtyStatus;
-			this.updateApplicationSessionStatus();
 			this.emitState({ hasUncommittedChanges: dirtyStatus });
 			return;
 		}
@@ -196,7 +181,6 @@ class Worktree implements WorktreeModule {
 			initialStatus: state.currentStatus,
 		};
 		this.hasUncommittedChanges = state.currentStatus !== EMPTY;
-		this.updateApplicationSessionStatus();
 		this.emitState({
 			branch: project.branch,
 			isWorktree: project.isWorktree,

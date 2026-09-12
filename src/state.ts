@@ -11,29 +11,27 @@ import type {
 import type { PrModule } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { Exec } from "./shared/command.ts";
-import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
-import type { ExitActionResult } from "./shared/exit-actions.ts";
-import type { GitState } from "./shared/session-state.ts";
 import type {
-	ResolvedProject,
+	GitState,
+	SessionReader,
+	WorkState,
+} from "./shared/session-state.ts";
+
+export type {
+	SessionReader,
+	SessionRecord,
+	SessionStateSnapshot,
+	WorkState,
+} from "./shared/session-state.ts";
+
+import type {
 	TaskClaimWorker,
 	TodoistClientLike,
 	TodoistModule,
 	TodoistProjectMapping,
 } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
-
-export interface WorkState {
-	remoteOrigin?: string;
-	prUrl?: string;
-	taskUrl?: string;
-	taskRef?: string;
-	taskName?: string;
-	inheritedFrom?: string;
-	mergeCompletedAt?: string;
-	todoistCompletionAttemptedAt?: string;
-}
 
 export type ModuleState = Record<string, unknown>;
 
@@ -45,24 +43,6 @@ export interface SessionState {
 
 export function createSessionState(): SessionState {
 	return { sessionId: null, gitState: {}, moduleState: {} };
-}
-
-const APPLICATION_STATE_MODULE = C.module.application;
-
-export function currentSessionContext(
-	sessionState: SessionState,
-	session?: SessionContext | null,
-): SessionContext | null {
-	const hasUpdate = session !== undefined;
-	if (hasUpdate) {
-		const shouldClear = session === null;
-		if (shouldClear) delete sessionState.moduleState[APPLICATION_STATE_MODULE];
-		else sessionState.moduleState[APPLICATION_STATE_MODULE] = session;
-	}
-	return (
-		(sessionState.moduleState[APPLICATION_STATE_MODULE] as SessionContext) ??
-		null
-	);
 }
 
 const CUSTOM = "custom";
@@ -174,27 +154,6 @@ export interface ExtensionDependencies {
 	herdrStartBackgroundWorker?: StartBackgroundWorker;
 }
 
-export type SessionReader = {
-	getBranch(): unknown[];
-	getSessionId(): string;
-	getCwd(): string;
-};
-
-export interface SessionContext {
-	sessionId: string;
-	context: ExtensionContext;
-	project: ResolvedProject;
-	state: WorkState;
-	allowPrDiscovery: boolean;
-	prDiscoveryTestedUrls: Set<string>;
-	handoffContext: boolean;
-	workChanged: boolean;
-	hasUncommittedChanges: boolean;
-	workRevision: number;
-	operationGeneration: number;
-	operationQueue: Promise<void>;
-}
-
 export interface ExtensionState {
 	pi: ExtensionAPI;
 	dependencies: ExtensionDependencies;
@@ -207,25 +166,4 @@ export interface ExtensionState {
 	worktree: WorktreeModule;
 	exitProtocol: ExitProtocolModule;
 	registered: boolean;
-	appendState(
-		state: SessionContext["state"],
-		prDiscoveryDisabled?: boolean,
-	): void;
-	refreshFooterStatuses(session: SessionContext): void;
-	replaceSessionState(
-		session: SessionContext,
-		nextState: SessionContext["state"],
-	): void;
-	completeMergedTask(
-		session: SessionContext,
-		taskRef: string,
-		stateSnapshot: SessionContext["state"],
-		workRevision: number,
-		operationGeneration: number,
-	): Promise<ExitActionResult>;
-	isCurrentOperation(session: SessionContext, generation: number): boolean;
-	enqueueSessionOperation<T>(
-		session: SessionContext,
-		operation: () => Promise<T>,
-	): Promise<T>;
 }

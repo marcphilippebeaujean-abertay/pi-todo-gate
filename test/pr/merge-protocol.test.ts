@@ -8,12 +8,9 @@ import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
 } from "../../src/pr/module.ts";
+import type { PrRuntime } from "../../src/pr/state.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
-import {
-	currentSessionContext,
-	type ExtensionState,
-	type SessionContext,
-} from "../../src/state.ts";
+import type { ExtensionDependencies, SessionRecord } from "../../src/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 const cwd = "/repo";
@@ -30,12 +27,12 @@ function commandContext(confirm = true): ExtensionCommandContext {
 }
 
 function createRuntime(
-	exec: ExtensionState["dependencies"]["exec"],
+	exec: ExtensionDependencies["exec"],
 	confirm = true,
 ): {
-	runtime: ExtensionState;
+	runtime: PrRuntime;
 	context: ExtensionCommandContext;
-	session: SessionContext;
+	session: SessionRecord;
 } {
 	const context = commandContext(confirm);
 	const session = {
@@ -45,7 +42,8 @@ function createRuntime(
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 		workRevision: 0,
-	} as unknown as SessionContext;
+	} as unknown as SessionRecord;
+	const activeSession = { current: session };
 	const sessionState = {
 		sessionId: session.sessionId,
 		gitState: {},
@@ -54,11 +52,12 @@ function createRuntime(
 	const currentRuntime = {
 		sessionState,
 		dependencies: { exec },
+		getSession: () => activeSession.current,
 		eventHandler: {
 			prMergedEvent: { emit: vi.fn(async () => undefined) },
 		},
-	} as unknown as ExtensionState;
-	currentSessionContext(sessionState, session);
+	} as unknown as PrRuntime;
+
 	return { runtime: currentRuntime, context, session };
 }
 
@@ -160,12 +159,12 @@ describe("merge protocol command", () => {
 	it("does not run without a pinned PR or interactive UI", async () => {
 		const exec = vi.fn();
 		const { runtime, context } = createRuntime(exec);
-		const session = currentSessionContext(runtime.sessionState);
+		const session = runtime.getSession?.();
 		if (session) session.state.prUrl = undefined;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
 		context.hasUI = false;
-		const restoredSession = currentSessionContext(runtime.sessionState);
+		const restoredSession = runtime.getSession?.();
 		if (restoredSession) restoredSession.state.prUrl = PR_URL;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
@@ -215,7 +214,7 @@ function runtimeForTest() {
 	return createRuntime(async () => ({ stdout: "", stderr: "", code: 0 }));
 }
 
-async function commandFor(runtime: ExtensionState) {
+async function commandFor(runtime: PrRuntime) {
 	const commands = new Map<
 		string,
 		{ handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }

@@ -51,7 +51,8 @@ class EventChannel<T> implements Event<T> {
 		const snapshot = [...this.subscribers];
 		for (const subscriber of snapshot) {
 			try {
-				await subscriber.callback(payload);
+				const result = subscriber.callback(payload);
+				if (result instanceof Promise) await result;
 			} catch {
 				// One extension module must not prevent other listeners from running.
 			}

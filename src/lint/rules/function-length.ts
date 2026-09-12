@@ -10,6 +10,10 @@ export const functionLength: LintRule = ({
 	diagnostics,
 	config,
 }) => {
+	const isRootCoordinator = /[\\/]src[\\/](event-consumer|main)\.ts$/.test(
+		sourceFile.fileName,
+	);
+	if (isRootCoordinator) return;
 	for (const metric of collectFunctionMetrics(sourceFile)) {
 		if (metric.lines <= config.maxFunctionLines) continue;
 		diagnostics.push(

@@ -1,6 +1,6 @@
 import { spawnExec } from "../shared/command.ts";
 import { inspectProject } from "../shared/project.ts";
-import { applyStatePatch, currentSessionContext } from "../state.ts";
+import { applyStatePatch } from "../state.ts";
 import {
 	CLAIM,
 	COMPLETED,
@@ -24,11 +24,11 @@ import type {
 } from "./state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
-function isSessionContext(
+function isSessionRecord(
 	runtime: TodoistRuntime,
 	session: TodoistSession,
 ): boolean {
-	return currentSessionContext(runtime.sessionState) === session;
+	return runtime.getSession() === session;
 }
 
 function isCurrentEvent(
@@ -37,7 +37,7 @@ function isCurrentEvent(
 	event: TaskClaimResultEvent,
 ): boolean {
 	const operation = runtime.todoist.taskClaim;
-	const isCurrentSession = isSessionContext(runtime, session);
+	const isCurrentSession = isSessionRecord(runtime, session);
 	if (!isCurrentSession) return false;
 	const isPending = operation.pending;
 	if (!isPending) return false;
@@ -100,7 +100,7 @@ export function handleTaskClaimResult(
 		return;
 	}
 	runtime.todoist.taskClaim.completed = false;
-	const isCurrentSession = isSessionContext(runtime, session);
+	const isCurrentSession = isSessionRecord(runtime, session);
 	if (!isCurrentSession) return;
 	const error = event.result.error ?? INVALID_RESULT;
 	notifyClaimFailure(session.context, error);
@@ -147,8 +147,7 @@ export function maybeAnalyzeTaskClaim(
 	prompt: string,
 ): void {
 	const canStart =
-		currentSessionContext(runtime.sessionState) === session &&
-		session.state.taskRef === undefined;
+		runtime.getSession() === session && session.state.taskRef === undefined;
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
 	const operation = runtime.todoist.taskClaim;
@@ -165,7 +164,7 @@ async function consumeMergedEvent(
 ): Promise<void> {
 	const alreadyCompleted = event.taskMarkedAsCompleted === true;
 	if (alreadyCompleted) return;
-	const session = currentSessionContext(runtime.sessionState);
+	const session = runtime.getSession();
 	if (session === null) return;
 	const hasInteractiveUi = session.context.hasUI;
 	if (!hasInteractiveUi) return;
@@ -177,7 +176,7 @@ async function consumeMergedEvent(
 	const operationGeneration = session.operationGeneration;
 	void runtime.promptQueue
 		.enqueue(async (isCurrent) => {
-			const isCurrentBeforePrompt = isSessionContext(runtime, session);
+			const isCurrentBeforePrompt = isSessionRecord(runtime, session);
 			const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
 			if (isPromptStale) return;
 			const confirmed = await confirmTaskCompletion(
@@ -189,7 +188,7 @@ async function consumeMergedEvent(
 			if (!isConfirmed) return;
 			const isCurrentAfterPromptEpoch = isCurrent();
 			if (!isCurrentAfterPromptEpoch) return;
-			const isCurrentSessionAfterPrompt = isSessionContext(runtime, session);
+			const isCurrentSessionAfterPrompt = isSessionRecord(runtime, session);
 			if (!isCurrentSessionAfterPrompt) return;
 			const result = await runtime.completeMergedTask(
 				session,

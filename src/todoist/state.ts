@@ -4,7 +4,8 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
-import type { SessionState, WorkState } from "../state.ts";
+import type { SessionRecord, WorkState } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 
 export type MergeRequest = PrMergedEvent;
 
@@ -115,7 +116,6 @@ export interface TodoistModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	stateRef?: { readonly current: TodoistRuntime | null };
 	getSession?: () => TodoistSession | null;
 	dependencies?: {
 		exec?: Exec;
@@ -134,18 +134,11 @@ export interface TodoistModuleOptions {
 	): Promise<ExitActionResult>;
 }
 
-export interface TodoistSession {
-	sessionId: string;
-	context: ExtensionContext;
-	project: { todoistProjectRef: string };
-	state: WorkState;
-	allowPrDiscovery: boolean;
-	workRevision: number;
-	operationGeneration: number;
-}
+export type TodoistSession = SessionRecord;
 
 export interface TodoistRuntime {
 	sessionState: SessionState;
+	getSession: () => TodoistSession | null;
 	todoist: TodoistModule;
 	promptQueue: PromptQueue;
 	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;

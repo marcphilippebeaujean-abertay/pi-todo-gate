@@ -1,42 +1,30 @@
 import { createPrModule } from "./pr/module.ts";
-import type { PrSession } from "./pr/state.ts";
+import type { PrSession, PrWorkState } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { EventHandler } from "./shared/events.ts";
-import {
-	currentSessionContext,
-	type ExtensionState,
-	type SessionState,
-} from "./state.ts";
+import type { SessionState } from "./state.ts";
+
+export interface PrRootDependencies {
+	exec?: import("./shared/command.ts").Exec;
+	appendState?: (state: PrWorkState, prDiscoveryDisabled?: boolean) => void;
+	replaceSessionState?: (session: PrSession, state: PrWorkState) => void;
+	refreshFooterStatuses?: (session: PrSession) => void;
+}
 
 export function createRootPrModule(
 	promptQueue: PromptQueue,
 	eventHandler: EventHandler,
 	sessionState: SessionState,
-	exec: ExtensionState["dependencies"]["exec"],
-	extensionRef: { current: ExtensionState | null },
+	exec: PrRootDependencies["exec"],
+	getSession: () => PrSession | null,
+	dependencies?: Omit<PrRootDependencies, "exec">,
 ) {
+	const moduleDependencies = dependencies ?? {};
 	return createPrModule({
 		promptQueue,
 		eventHandler,
 		sessionState,
-		getSession: () =>
-			currentSessionContext(sessionState) as unknown as PrSession | null,
-		dependencies: {
-			exec,
-			appendState: (state, prDiscoveryDisabled) =>
-				extensionRef.current?.appendState(
-					state as Parameters<ExtensionState["appendState"]>[0],
-					prDiscoveryDisabled,
-				),
-			replaceSessionState: (session, nextState) =>
-				extensionRef.current?.replaceSessionState(
-					session as Parameters<ExtensionState["replaceSessionState"]>[0],
-					nextState as Parameters<ExtensionState["replaceSessionState"]>[1],
-				),
-			refreshFooterStatuses: (session) =>
-				extensionRef.current?.refreshFooterStatuses(
-					session as Parameters<ExtensionState["refreshFooterStatuses"]>[0],
-				),
-		},
+		getSession,
+		dependencies: { exec, ...moduleDependencies },
 	});
 }
