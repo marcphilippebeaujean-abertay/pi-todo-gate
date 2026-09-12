@@ -17,19 +17,49 @@ import type {
 } from "./shared/events.ts";
 import type { ExtensionState, SessionState } from "./state.ts";
 
+function applyModuleState(
+	state: SessionState,
+	update: ModuleStateChangedEvent,
+): void {
+	state.moduleState[update.moduleId] = structuredClone(update.moduleState);
+	const hasGitStatePatch = update.gitStatePatch !== undefined;
+	if (!hasGitStatePatch) return;
+	state.gitState = {
+		...state.gitState,
+		...structuredClone(update.gitStatePatch),
+	};
+}
+
 export function updateModuleState(
 	state: SessionState,
-	event: ModuleStateChangedEvent,
+	update: ModuleStateChangedEvent,
 ): void {
-	state.moduleState[event.moduleId] = event.moduleState;
+	applyModuleState(state, update);
+}
+
+export async function applyModuleStateChanged(
+	state: SessionState,
+	update: ModuleStateChangedEvent,
+): Promise<void> {
+	applyModuleState(state, update);
+}
+
+function cloneSessionState(state: SessionState): SessionState {
+	return structuredClone(state);
 }
 
 export function registerModuleStateConsumer(
 	events: EventHandler,
 	state: SessionState,
 ): void {
-	events.moduleStateChangedEvent.subscribe((event) => {
-		updateModuleState(state, event);
+	events.moduleStateChangedEvent.subscribe(async (update) => {
+		const previousState = cloneSessionState(state);
+		await applyModuleStateChanged(state, update);
+		const currentState = cloneSessionState(state);
+		await events.sessionStateChangedEvent.emit({
+			previousState,
+			currentState,
+		});
 	});
 }
 

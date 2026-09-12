@@ -14,6 +14,7 @@ import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import type { ExitActionResult } from "./shared/exit-actions.ts";
+import type { GitState } from "./shared/session-state.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
@@ -38,11 +39,12 @@ export type ModuleState = Record<string, unknown>;
 
 export interface SessionState {
 	sessionId: string | null;
+	gitState: GitState;
 	moduleState: Record<string, unknown>;
 }
 
 export function createSessionState(): SessionState {
-	return { sessionId: null, moduleState: {} };
+	return { sessionId: null, gitState: {}, moduleState: {} };
 }
 
 const APPLICATION_STATE_MODULE = C.module.application;

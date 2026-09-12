@@ -47,7 +47,11 @@ function setup(overrides: Record<string, unknown> = {}) {
 		operationQueue: Promise.resolve(),
 		...sessionOverrides,
 	} as unknown as SessionContext;
-	const sessionState = { sessionId: session.sessionId, moduleState: {} };
+	const sessionState = {
+		sessionId: session.sessionId,
+		gitState: {},
+		moduleState: {},
+	};
 	const runtime = {
 		sessionState,
 		todoist: {
@@ -265,7 +269,11 @@ describe("Todoist merge consumer", () => {
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as SessionContext;
-		const sessionState = { sessionId: session.sessionId, moduleState: {} };
+		const sessionState = {
+			sessionId: session.sessionId,
+			gitState: {},
+			moduleState: {},
+		};
 		const runtime = {
 			sessionState,
 			todoist: {

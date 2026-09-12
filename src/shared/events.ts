@@ -6,6 +6,7 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
+import type { GitState, SessionStateSnapshot } from "./session-state.ts";
 
 export type {
 	BeforeAgentStartEvent,
@@ -70,19 +71,14 @@ export interface ClaimErrorEvent {
 export interface ModuleStateChangedEvent {
 	moduleId: string;
 	moduleState: Record<string, unknown>;
+	gitStatePatch?: Partial<GitState>;
 }
 
 export type UpdateModuleStateEvent = ModuleStateChangedEvent;
 
 export interface SessionStateChangedEvent {
-	previousState: {
-		sessionId: string | null;
-		moduleState: Record<string, unknown>;
-	};
-	currentState: {
-		sessionId: string | null;
-		moduleState: Record<string, unknown>;
-	};
+	previousState: SessionStateSnapshot;
+	currentState: SessionStateSnapshot;
 }
 
 export type SessionResetEvent = undefined;

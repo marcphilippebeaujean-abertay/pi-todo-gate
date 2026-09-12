@@ -29,7 +29,11 @@ function session(): SessionContext {
 describe("isCurrentMerge", () => {
 	it("rejects a merge result from an invalidated operation", () => {
 		const active = session();
-		const sessionState = { sessionId: active.sessionId, moduleState: {} };
+		const sessionState = {
+			sessionId: active.sessionId,
+			gitState: {},
+			moduleState: {},
+		};
 		const runtime = { sessionState } as unknown as ExtensionState;
 		currentSessionContext(sessionState, active);
 
@@ -38,7 +42,11 @@ describe("isCurrentMerge", () => {
 
 	it("accepts a merge result from the current operation and work identity", () => {
 		const active = session();
-		const sessionState = { sessionId: active.sessionId, moduleState: {} };
+		const sessionState = {
+			sessionId: active.sessionId,
+			gitState: {},
+			moduleState: {},
+		};
 		const runtime = { sessionState } as unknown as ExtensionState;
 		currentSessionContext(sessionState, active);
 

@@ -27,6 +27,59 @@ describe("extension module state", () => {
 		});
 	});
 
+	it("applies module and Git updates as isolated state snapshots", async () => {
+		const state = createSessionState();
+		state.moduleState.sibling = { nested: { value: "original" } };
+		const stateReference = state;
+		const events = createSharedEvents();
+		const snapshots: Array<{
+			previousState: SessionState;
+			currentState: SessionState;
+		}> = [];
+		events.sessionStateChangedEvent.subscribe(
+			({ previousState, currentState }) => {
+				snapshots.push({ previousState, currentState });
+				currentState.moduleState.sibling = {
+					nested: { value: "current callback" },
+				};
+				currentState.moduleState.footer = {
+					nested: { value: "current callback" },
+				};
+				currentState.gitState.remoteOrigin = "callback origin";
+			},
+		);
+		registerModuleStateConsumer(events, state);
+
+		await events.moduleStateChangedEvent.emit({
+			moduleId: "footer",
+			moduleState: { nested: { value: "updated" } },
+			gitStatePatch: { remoteOrigin: "https://github.com/o/r.git" },
+		});
+
+		expect(state).toBe(stateReference);
+		expect(state.moduleState).toEqual({
+			sibling: { nested: { value: "original" } },
+			footer: { nested: { value: "updated" } },
+		});
+		expect(state.gitState).toEqual({
+			remoteOrigin: "https://github.com/o/r.git",
+		});
+		expect(snapshots).toHaveLength(1);
+		expect(snapshots[0]?.previousState).toEqual({
+			sessionId: null,
+			gitState: {},
+			moduleState: { sibling: { nested: { value: "original" } } },
+		});
+		expect(snapshots[0]?.currentState).toEqual({
+			sessionId: null,
+			gitState: { remoteOrigin: "callback origin" },
+			moduleState: {
+				sibling: { nested: { value: "current callback" } },
+				footer: { nested: { value: "current callback" } },
+			},
+		});
+	});
+
 	it("consumes published module state updates", async () => {
 		const state = createSessionState();
 		const events = createSharedEvents();
@@ -48,6 +101,7 @@ describe("extension module state", () => {
 	it("starts with null session id", () => {
 		expect(createSessionState()).toEqual({
 			sessionId: null,
+			gitState: {},
 			moduleState: {},
 		});
 	});

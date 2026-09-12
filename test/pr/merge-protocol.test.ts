@@ -46,7 +46,11 @@ function createRuntime(
 		operationQueue: Promise.resolve(),
 		workRevision: 0,
 	} as unknown as SessionContext;
-	const sessionState = { sessionId: session.sessionId, moduleState: {} };
+	const sessionState = {
+		sessionId: session.sessionId,
+		gitState: {},
+		moduleState: {},
+	};
 	const currentRuntime = {
 		sessionState,
 		dependencies: { exec },

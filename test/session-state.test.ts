@@ -28,12 +28,21 @@ const HTTPS_GITHUB_COM_A_B_PULL_1 = "https://github.com/a/b/pull/1";
 import { describe, expect, it } from "vitest";
 import {
 	applyStatePatch,
+	createSessionState,
 	emptyWorkState,
 	extractInheritedState,
 	latestState,
 } from "../src/state.ts";
 
 describe("session state", () => {
+	it("creates stable shared state with empty Git state", () => {
+		expect(createSessionState()).toEqual({
+			sessionId: null,
+			gitState: {},
+			moduleState: {},
+		});
+	});
+
 	it(STARTS_EMPTY, () => {
 		expect(emptyWorkState()).toEqual({});
 	});
