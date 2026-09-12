@@ -15,6 +15,7 @@ import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 const PR_URL = "https://github.com/o/r/pull/42";
 
 function setup(overrides: Record<string, unknown> = {}) {
+	const { promptQueue: promptQueueOverride, ...sessionOverrides } = overrides;
 	const confirm = vi.fn(async (_title: string) => true);
 	const notify = vi.fn();
 	const completeTask = vi.fn(
@@ -40,12 +41,13 @@ function setup(overrides: Record<string, unknown> = {}) {
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
-		...overrides,
+		...sessionOverrides,
 	};
 	const runtime = {
 		active: session,
 		events: createSharedEvents(),
-		promptQueue: new PromptQueue(),
+		promptQueue:
+			(promptQueueOverride as PromptQueue | undefined) ?? new PromptQueue(),
 		dependencies: {
 			createTodoistClient: () => ({ completeTask }),
 		},
@@ -104,6 +106,20 @@ async function runMergeCommand(
 }
 
 describe("Todoist merge consumer", () => {
+	it("consumes rejected completion prompt queue tasks", async () => {
+		const catchFailure = vi.fn();
+		const promptQueue = {
+			enqueue: vi.fn(() => ({ catch: catchFailure })),
+			drain: vi.fn(async () => undefined),
+		} as unknown as PromptQueue;
+		const setupResult = setup({ promptQueue });
+		registerTodoistMergeConsumer(setupResult.runtime);
+
+		await emit(setupResult.runtime);
+
+		expect(catchFailure).toHaveBeenCalledOnce();
+	});
+
 	it("prompts only for an assigned task and marks confirmed completion", async () => {
 		const setupResult = setup();
 		registerTodoistMergeConsumer(setupResult.runtime);

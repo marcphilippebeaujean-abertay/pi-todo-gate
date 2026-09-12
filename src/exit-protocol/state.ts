@@ -28,7 +28,7 @@ export interface ExitProtocolModule {
 
 export type ExitProtocolFactory = (
 	events: SharedEvents,
-	promptQueue: PromptQueue,
+	promptQueue?: PromptQueue,
 ) => ExitProtocolModule;
 
 export type PickerFocus =

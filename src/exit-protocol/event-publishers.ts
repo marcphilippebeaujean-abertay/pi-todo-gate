@@ -9,11 +9,13 @@ export function enqueueExitActions(
 	request: ExitRequest,
 	isCurrentContext: () => boolean,
 ): void {
-	void promptQueue.enqueue(async (isCurrent) => {
-		const hasCurrentContext = isCurrentContext();
-		if (!hasCurrentContext) return;
-		const hasNoActions = request.actions.length === 0;
-		if (hasNoActions) return;
-		await presentExitActions(context, request.actions, isCurrent);
-	});
+	void promptQueue
+		.enqueue(async (isCurrent) => {
+			const hasCurrentContext = isCurrentContext();
+			if (!hasCurrentContext) return;
+			const hasNoActions = request.actions.length === 0;
+			if (hasNoActions) return;
+			await presentExitActions(context, request.actions, isCurrent);
+		})
+		.catch(() => undefined);
 }

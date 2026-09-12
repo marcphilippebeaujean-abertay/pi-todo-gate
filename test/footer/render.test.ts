@@ -91,6 +91,18 @@ describe("Footer entries", () => {
 });
 
 describe("renderFooterLine", () => {
+	it("preserves spaced separators between footer values", () => {
+		const line = renderFooterLine(
+			{ branch: "feature/auth" },
+			80,
+			theme,
+			new Map([["status", "Caveman: ready"]]),
+		);
+
+		expect(line).toBe(
+			"PR: none | Todoist Task: none | branch: feature/auth | Caveman: ready",
+		);
+	});
 	it(STYLES_FOOTER_LABELS_SEPARATELY_FROM_CLICKABLE_VALUES, () => {
 		const pr = renderPrStatus(HTTPS_GITHUB_COM_OWNER_REPO_PULL_42, styledTheme);
 		const task = renderTaskStatus(

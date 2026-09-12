@@ -175,31 +175,33 @@ async function consumeMergedEvent(
 	const stateSnapshot = structuredClone(session.state);
 	const workRevision = session.workRevision;
 	const operationGeneration = session.operationGeneration;
-	void runtime.promptQueue.enqueue(async (isCurrent) => {
-		const isCurrentBeforePrompt = isActiveSession(runtime, session);
-		const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
-		if (isPromptStale) return;
-		const confirmed = await confirmTaskCompletion(
-			session.context,
-			taskName,
-			taskRef,
-		);
-		const isConfirmed = confirmed === true;
-		if (!isConfirmed) return;
-		const isCurrentAfterPromptEpoch = isCurrent();
-		if (!isCurrentAfterPromptEpoch) return;
-		const isCurrentSessionAfterPrompt = isActiveSession(runtime, session);
-		if (!isCurrentSessionAfterPrompt) return;
-		const result = await runtime.completeMergedTask(
-			session,
-			taskRef,
-			stateSnapshot,
-			workRevision,
-			operationGeneration,
-		);
-		const completed = result === COMPLETED;
-		if (completed) request.payload.taskMarkedAsCompleted = true;
-	});
+	void runtime.promptQueue
+		.enqueue(async (isCurrent) => {
+			const isCurrentBeforePrompt = isActiveSession(runtime, session);
+			const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
+			if (isPromptStale) return;
+			const confirmed = await confirmTaskCompletion(
+				session.context,
+				taskName,
+				taskRef,
+			);
+			const isConfirmed = confirmed === true;
+			if (!isConfirmed) return;
+			const isCurrentAfterPromptEpoch = isCurrent();
+			if (!isCurrentAfterPromptEpoch) return;
+			const isCurrentSessionAfterPrompt = isActiveSession(runtime, session);
+			if (!isCurrentSessionAfterPrompt) return;
+			const result = await runtime.completeMergedTask(
+				session,
+				taskRef,
+				stateSnapshot,
+				workRevision,
+				operationGeneration,
+			);
+			const completed = result === COMPLETED;
+			if (completed) request.payload.taskMarkedAsCompleted = true;
+		})
+		.catch(() => undefined);
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {

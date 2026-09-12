@@ -55,6 +55,61 @@ function context(cwd = "/repo/.worktrees/feature") {
 }
 
 describe("worktree event actions", () => {
+	it("does not let an earlier start overwrite a later start", async () => {
+		const events = createSharedEvents();
+		let releaseFirstInspection!: () => void;
+		const firstInspectionReleased = new Promise<void>((resolve) => {
+			releaseFirstInspection = resolve;
+		});
+		let remoteCalls = 0;
+		let branchCalls = 0;
+		const exec: Exec = async (command, args) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git remote get-url origin") {
+				remoteCalls += 1;
+				if (remoteCalls === 1) await firstInspectionReleased;
+				return ok("origin");
+			}
+			if (key === "git rev-parse --show-toplevel")
+				return ok("/repo/.worktrees/feature\n");
+			if (key === "git branch --show-current") {
+				branchCalls += 1;
+				return ok(branchCalls === 1 ? "later\n" : "earlier\n");
+			}
+			if (key === "git worktree list --porcelain")
+				return ok(
+					"worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.worktrees/feature\nHEAD def\nbranch refs/heads/feature\n",
+				);
+			if (key === "git rev-parse HEAD") return ok("def\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all")
+				return ok("\n");
+			return ok("");
+		};
+		const module = createWorktreeModule(events, { exec });
+		const sharedContext = context();
+		const firstStart = module.sessionStart(sharedContext);
+		await Promise.resolve();
+		const secondStart = module.sessionStart(sharedContext);
+		await secondStart;
+		releaseFirstInspection();
+		await firstStart;
+
+		let mergeAction: ExitAction | undefined;
+		events.on(
+			"prMerged",
+			(request) => {
+				mergeAction = request.actions[0];
+			},
+			"present",
+		);
+		await events.emit("prMerged", {
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
+
+		expect(mergeAction?.label).toContain('"later"');
+	});
+
 	it("executes cleanup immediately after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =

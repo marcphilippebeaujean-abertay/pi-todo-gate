@@ -25,6 +25,7 @@ class Worktree implements WorktreeModule {
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
+	private sessionGeneration = 0;
 
 	constructor(events: SharedEvents, dependencies: WorktreeModuleDependencies) {
 		this.exec = dependencies.exec ?? spawnExec;
@@ -33,18 +34,22 @@ class Worktree implements WorktreeModule {
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
+		const generation = ++this.sessionGeneration;
 		this.context = nextContext;
 		this.baseline = null;
-		await this.initializeSession(nextContext);
+		await this.initializeSession(nextContext, generation);
 	}
 
-	private isCurrentContext(ctx: ExtensionContext): boolean {
-		return this.context === ctx;
+	private isCurrentSession(ctx: ExtensionContext, generation: number): boolean {
+		return this.context === ctx && this.sessionGeneration === generation;
 	}
 
-	private async initializeSession(ctx: ExtensionContext): Promise<void> {
+	private async initializeSession(
+		ctx: ExtensionContext,
+		generation: number,
+	): Promise<void> {
 		const project = await inspectProject(this.exec, ctx.cwd);
-		const isCurrentContextAfterProject = this.isCurrentContext(ctx);
+		const isCurrentContextAfterProject = this.isCurrentSession(ctx, generation);
 		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
 		if (isNotWorktree) return;
@@ -53,7 +58,7 @@ class Worktree implements WorktreeModule {
 		if (project.mainRoot === null) return;
 		const state = await currentWorktreeState(this.exec, ctx.cwd);
 		if (state === null) return;
-		const isCurrentContextAfterState = this.isCurrentContext(ctx);
+		const isCurrentContextAfterState = this.isCurrentSession(ctx, generation);
 		if (!isCurrentContextAfterState) return;
 		this.baseline = {
 			worktreePath: project.root,
@@ -65,6 +70,7 @@ class Worktree implements WorktreeModule {
 	}
 
 	deactivate(): void {
+		this.sessionGeneration += 1;
 		this.context = null;
 		this.baseline = null;
 	}

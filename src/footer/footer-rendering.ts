@@ -16,6 +16,7 @@ import {
 	FOOTER_PR_SEPARATOR,
 	FOOTER_SPINNER_FRAMES,
 	FOOTER_SPINNER_INTERVAL_MS,
+	FOOTER_STATUS_SEPARATOR,
 	FOOTER_TASK_NONE_LABEL,
 	FOOTER_TASK_SEPARATOR,
 	FOOTER_TEXT_COLOR,
@@ -357,17 +358,7 @@ export function renderFooterLine(
 		const hasStatus: boolean = !!status;
 		if (hasStatus) parts.push(status);
 	}
-	const footers = parts.map((text, index) => {
-		const footer = new Footer(String(index), "");
-		footer.update({
-			footerType: String(index),
-			isLoading: false,
-			text,
-			isVisible: true,
-		});
-		return footer;
-	});
-	const line = theme.fg(FOOTER_DIM, renderFooter(footers));
+	const line = theme.fg(FOOTER_DIM, parts.join(FOOTER_STATUS_SEPARATOR));
 	const fitsWidth: boolean = !!(visibleWidth(line) <= width);
 	if (fitsWidth) return line;
 	return truncateToWidth(line, width, "", false);
