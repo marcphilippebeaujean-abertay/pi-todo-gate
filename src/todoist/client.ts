@@ -1,3 +1,6 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import {
 	ADD,
 	COMPLETE,
@@ -28,7 +31,13 @@ import {
 	TodoistOperationCancelled,
 	taskFromPayload,
 } from "./parsing.ts";
-import type { IsCurrentOperation, TodoistExec, TodoistTask } from "./state.ts";
+import type {
+	IsCurrentOperation,
+	TodoistClientFactoryDependencies,
+	TodoistClientLike,
+	TodoistExec,
+	TodoistTask,
+} from "./state.ts";
 
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}
@@ -201,4 +210,17 @@ export class TodoistClient {
 	): Promise<void> {
 		await this.run([TASK, COMPLETE, ref], false, isCurrent);
 	}
+}
+
+export function createClient(
+	ctx: ExtensionContext,
+	dependencies: TodoistClientFactoryDependencies,
+): TodoistClientLike {
+	const exec = dependencies.exec ?? spawnExec;
+	return (
+		dependencies.createTodoistClient?.(ctx, exec) ??
+		new TodoistClient({
+			run: (args) => exec(C.command.todoist, [...args], { cwd: ctx.cwd }),
+		})
+	);
 }

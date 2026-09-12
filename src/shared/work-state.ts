@@ -1,5 +1,6 @@
-import type { ActiveSession, ExtensionRuntime } from "../extension-types.ts";
-import type { WorkState } from "../types.ts";
+import type { ActiveSession, ExtensionRuntime, WorkState } from "../state.ts";
+
+export type { WorkState } from "../state.ts";
 
 export function isCurrentMerge(
 	runtime: ExtensionRuntime,

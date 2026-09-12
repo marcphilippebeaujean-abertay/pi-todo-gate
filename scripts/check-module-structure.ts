@@ -24,8 +24,8 @@ export const CANONICAL_FACETS = [
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
 	herdr: ["claim-worker-result.ts", "runtime.ts", "tab-validation.ts"],
-	pr: ["git.ts", "parsing.ts"],
-	todoist: ["client.ts", "parsing.ts"],
+	pr: ["git.ts", "parsing.ts", "state-tool.ts"],
+	todoist: ["client.ts", "completion.ts", "config.ts", "parsing.ts"],
 	worktree: ["git.ts"],
 };
 

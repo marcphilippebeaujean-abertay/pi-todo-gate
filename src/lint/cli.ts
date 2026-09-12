@@ -2,14 +2,14 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { loadLintConfig } from "../lint-config.ts";
 import { formatLintDiagnostic, lintProgram } from "./index.ts";
+import { loadLintConfig } from "./state.ts";
 
 const LINT_DIRECTORIES = ["extensions", "src", "test"];
 const TEST_DIRECTORY = "test";
 const LINT_INFRASTRUCTURE_PATHS = new Set([
 	"src/lint.ts",
-	"src/lint-config.ts",
+	"src/lint/state.ts",
 	"src/lint/",
 	"src/lint-cli.ts",
 ]);

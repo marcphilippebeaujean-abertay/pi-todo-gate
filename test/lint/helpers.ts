@@ -13,7 +13,7 @@ export function ruleIds(diagnostics: readonly LintDiagnostic[]): string[] {
 
 export async function lintFixture(
 	source: string,
-	config: Partial<import("../../src/lint-config.ts").LintConfig> = {},
+	config: Partial<import("../../src/lint/state.ts").LintConfig> = {},
 ): Promise<LintDiagnostic[]> {
 	const root = await mkdtemp(join(tmpdir(), TEMP_PREFIX));
 	const filePath = join(root, FIXTURE_NAME);

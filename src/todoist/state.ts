@@ -8,7 +8,7 @@ import type {
 } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
-import type { WorkState } from "../types.ts";
+import type { WorkState } from "../state.ts";
 
 export type MergeRequest = EventRequest<SharedEventPayloads["prMerged"]>;
 
@@ -16,6 +16,18 @@ export interface TodoistExec {
 	run(
 		args: readonly string[],
 	): Promise<import("../shared/command.ts").CommandResult>;
+}
+
+export interface TodoistClientLike {
+	completeTask(ref: string, isCurrent?: () => boolean): Promise<void>;
+}
+
+export interface TodoistClientFactoryDependencies {
+	exec?: Exec;
+	createTodoistClient?: (
+		ctx: ExtensionContext,
+		exec: Exec,
+	) => TodoistClientLike;
 }
 
 export type IsCurrentOperation = () => boolean;

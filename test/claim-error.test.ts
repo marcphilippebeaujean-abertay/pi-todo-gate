@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { handleClaimError } from "../src/claim-error.ts";
+import { handleClaimError } from "../src/shared/claim-error.ts";
 
 const HERDR = "Herdr";
 const TODOIST = "Todoist";

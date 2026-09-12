@@ -1,5 +1,36 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import type {
+	BeforeAgentStartEvent,
+	BeforeAgentStartEventResult,
+	MessageEndEvent,
+	SessionStartEvent,
+	ToolResultEvent,
+} from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 import type { ExitAction } from "./exit-actions.ts";
+
+export type {
+	BeforeAgentStartEvent,
+	MessageEndEvent,
+	SessionStartEvent,
+	ToolResultEvent,
+};
+
+export type BeforeAgentStartResultEvent = BeforeAgentStartEventResult;
+export type ExtensionBeforeAgentStartEvent = BeforeAgentStartEvent;
+export type ExtensionBeforeAgentStartResultEvent = BeforeAgentStartEventResult;
+export type ExtensionMessageEndEvent = MessageEndEvent;
+export type ExtensionSessionStartEvent = SessionStartEvent;
+export type ExtensionToolResultEvent = ToolResultEvent;
+
+export interface ClaimErrorEvent {
+	jobType: "Herdr" | "Todoist";
+	error: string;
+}
+
+export interface UpdateModuleStateEvent {
+	moduleId: string;
+	moduleState: Record<string, unknown>;
+}
 export interface PrMergedEvent {
 	prUrl: string | null;
 	taskMarkedAsCompleted: boolean;
@@ -7,6 +38,7 @@ export interface PrMergedEvent {
 
 export type SharedEventPayloads = {
 	prMerged: PrMergedEvent;
+	updateModuleState: UpdateModuleStateEvent;
 };
 
 export interface EventRequest<T> {

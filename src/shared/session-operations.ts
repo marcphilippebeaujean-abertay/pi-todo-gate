@@ -1,4 +1,4 @@
-import type { ActiveSession } from "./extension-types.ts";
+import type { ActiveSession } from "../state.ts";
 
 export function getOperationGeneration(session: ActiveSession): number {
 	return session.operationGeneration;

@@ -1,5 +1,4 @@
 import ts from "typescript";
-import { DEFAULT_LINT_CONFIG } from "../lint-config.ts";
 import { compareDiagnostics } from "./diagnostic.ts";
 import { commandsOnlyRegister } from "./rules/commands-only-register.ts";
 import { cyclomaticComplexity } from "./rules/cyclomatic-complexity.ts";
@@ -19,6 +18,7 @@ import { noWorkerConsumerCallbacks } from "./rules/no-worker-consumer-callbacks.
 import { preferSwitchDispatch } from "./rules/prefer-switch-dispatch.ts";
 import { repeatedFieldChecks } from "./rules/repeated-field-checks.ts";
 import { similarStringLiterals } from "./rules/similar-string-literals.ts";
+import { DEFAULT_LINT_CONFIG } from "./state.ts";
 import type { LintContext, LintDiagnostic, LintRule } from "./types.ts";
 
 export { formatLintDiagnostic } from "./diagnostic.ts";
@@ -47,7 +47,7 @@ const RULES: readonly LintRule[] = [
 
 export function lintProgram(
 	program: ts.Program,
-	config?: Partial<import("../lint-config.ts").LintConfig>,
+	config?: Partial<import("./state.ts").LintConfig>,
 	lintRoots?: readonly string[],
 ): LintDiagnostic[] {
 	const resolvedConfig = { ...DEFAULT_LINT_CONFIG, ...(config ?? {}) };

@@ -1,48 +1,5 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../src/constants.ts";
-import {
-	handleBeforeAgentStart,
-	handleMessageEnd,
-	handleToolResult,
-} from "../src/extension-events.ts";
-import { createExtensionRuntime } from "../src/extension-runtime.ts";
-import {
-	handleSessionShutdown,
-	handleSessionStart,
-} from "../src/extension-session.ts";
-import type { ExtensionDependencies } from "../src/extension-types.ts";
-import { installHerdrTabClaim } from "../src/herdr/module.ts";
-import { register } from "../src/pr/module.ts";
-import { isSubagent } from "../src/session.ts";
-
+export { default } from "../src/main.ts";
 export type {
 	ExtensionDependencies,
 	WorkStateAction,
-} from "../src/extension-types.ts";
-
-function startExtensions(
-	pi: ExtensionAPI,
-	dependencies: ExtensionDependencies,
-): void {
-	const runtime = createExtensionRuntime(pi, dependencies);
-	pi.on(C.event.sessionStart, handleSessionStart.bind(null, runtime));
-	pi.on(C.event.messageEnd, handleMessageEnd.bind(null, runtime));
-	pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, runtime));
-	pi.on(C.event.toolResult, handleToolResult.bind(null, runtime));
-	pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, runtime));
-	register(pi, runtime);
-	installHerdrTabClaim(pi, {
-		commandRunner: dependencies.herdrCommandRunner,
-		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
-		onFooterUpdate: runtime.footer.update.bind(runtime.footer),
-	});
-}
-
-export default function extension(
-	pi: ExtensionAPI,
-	dependencies?: ExtensionDependencies,
-): void {
-	const shouldSkipSubagent = isSubagent();
-	if (shouldSkipSubagent) return;
-	startExtensions(pi, dependencies ?? {});
-}
+} from "../src/state.ts";

@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LINT_CONFIG, loadLintConfig } from "../src/lint-config.ts";
+import { DEFAULT_LINT_CONFIG, loadLintConfig } from "../src/lint/state.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-lint-config-";
 const CONFIG_NAME = "lint.config.json";

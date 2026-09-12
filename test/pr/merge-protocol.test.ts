@@ -4,12 +4,12 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import type { ExtensionRuntime } from "../../src/extension-types.ts";
 import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
 } from "../../src/pr/module.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
+import type { ExtensionRuntime } from "../../src/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 const cwd = "/repo";

@@ -1,5 +1,5 @@
 import type ts from "typescript";
-import type { LintConfig } from "../lint-config.ts";
+import type { LintConfig } from "./state.ts";
 export type LintRuleId =
 	| "commands-only-register"
 	| "no-worker-consumer-callbacks"
