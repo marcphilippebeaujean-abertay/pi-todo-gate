@@ -23,8 +23,8 @@
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
-- `env -u PI_SUBAGENT_CHILD npm test` — passed: 51 files, 293 tests passed, 8 skipped.
-- Focused lifecycle/module/integration Vitest run — passed: 6 files, 53 tests passed, 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed: 51 files, 296 tests passed, 8 skipped.
+- Focused lifecycle/module/integration Vitest run — passed: 5 files, 48 tests passed, 8 skipped.
 
 ## Review fixes
 
@@ -32,7 +32,9 @@
 - Added reset epochs and active-update barriers to serialized module-state consumption. Stale fire-and-forget deactivation updates cannot repopulate cleared state.
 - Removed duplicate lifecycle deactivation paths: root directly deactivates Worktree; typed deactivation owns Footer/Exit; Todoist reset owns claim reset.
 - Replaced Worktree sibling module-state reads with typed `worktreeStatusEvent`; root formats footer state from active session.
-- Added concurrent start/shutdown and post-drain reset regression coverage.
+- Added concurrent start/shutdown, startup module snapshot, and post-drain reset regression coverage.
+- Added Todoist terminal deactivation claim-reset coverage.
+- Startup establishes active-session acceptance before Worktree/PR initialization, then drains root module updates before initial persistence and footer projection.
 
 ## Residual risks
 

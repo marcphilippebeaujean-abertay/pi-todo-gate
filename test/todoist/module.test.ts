@@ -18,6 +18,9 @@ describe("Todoist module ownership", () => {
 		module.taskClaim.pending = true;
 		module.taskClaim.completed = true;
 		await events.sessionResetEvent.emit(undefined);
+		module.taskClaim.pending = true;
+		module.taskClaim.completed = true;
+		await events.sessionDeactivatedEvent.emit(undefined);
 
 		expect(module.taskClaim).toEqual({
 			pending: false,

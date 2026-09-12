@@ -123,6 +123,7 @@ export function createExtensionState(
 		},
 		publisher: new RootEventPublisher(eventHandler),
 		lifecycleEpoch: { value: 0 },
+		stateUpdatesDrained: async () => undefined,
 	};
 	return Object.assign(extensionState, { root });
 }
@@ -137,7 +138,7 @@ function startExtensions(
 			root: Parameters<typeof registerExtensionEventConsumers>[0];
 		}
 	).root;
-	registerModuleStateConsumer(
+	root.stateUpdatesDrained = registerModuleStateConsumer(
 		extensionState.eventHandler,
 		extensionState.sessionState,
 		() => root.getSession() !== null,

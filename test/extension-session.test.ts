@@ -23,19 +23,30 @@ function context(cwd: string) {
 
 function rootWithConfig(
 	loadConfig: () => Promise<{ projects: Record<string, string> }>,
+	exec: (
+		command: string,
+		args: string[],
+	) => Promise<{
+		stdout: string;
+		stderr: string;
+		code: number;
+	}> = async () => ({ stdout: "", stderr: "", code: 1 }),
 ) {
 	const pi = {
 		appendEntry: vi.fn(),
 		on: vi.fn(),
 		registerTool: vi.fn(),
 	} as never;
-	const state = createExtensionState(pi, {
-		loadConfig,
-		exec: async () => ({ stdout: "", stderr: "", code: 1 }),
-	});
-	return (
+	const state = createExtensionState(pi, { loadConfig, exec });
+	const root = (
 		state as typeof state & { root: Parameters<typeof handleSessionStart>[0] }
 	).root;
+	registerModuleStateConsumer(
+		root.eventHandler,
+		root.sessionState,
+		() => root.getSession() !== null,
+	);
+	return root;
 }
 
 describe("session shutdown", () => {
@@ -87,6 +98,45 @@ describe("session shutdown", () => {
 		expect(runtime.exitProtocol.deactivate).toHaveBeenCalledOnce();
 	});
 
+	it("retains startup module snapshots after activation", async () => {
+		const updates: Array<{ moduleId: string }> = [];
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout:
+							"worktree /main\nHEAD main\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				if (key === "git rev-parse HEAD")
+					return { stdout: "abc\n", stderr: "", code: 0 };
+				return { stdout: "", stderr: "", code: 0 };
+			},
+		);
+		root.eventHandler.moduleStateChangedEvent.subscribe(({ moduleId }) => {
+			updates.push({ moduleId });
+		});
+		await handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo"),
+		);
+		expect(updates.map(({ moduleId }) => moduleId)).toEqual(
+			expect.arrayContaining(["worktree", "pr", "exit-protocol"]),
+		);
+		expect(root.sessionState.gitState).toMatchObject({
+			isWorktree: true,
+			branch: "feature",
+		});
+	});
+
 	it("does not activate stale concurrent starts", async () => {
 		let releaseFirst!: (config: { projects: Record<string, string> }) => void;
 		let calls = 0;
@@ -128,11 +178,6 @@ describe("session shutdown", () => {
 				}),
 		);
 		const stateReference = root.sessionState;
-		registerModuleStateConsumer(
-			root.eventHandler,
-			root.sessionState,
-			() => root.getSession() !== null,
-		);
 		const start = handleSessionStart(
 			root,
 			{ type: "session_start" } as never,

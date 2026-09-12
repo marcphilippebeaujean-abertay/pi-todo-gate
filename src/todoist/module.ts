@@ -41,6 +41,9 @@ class TodoistModuleImpl implements TodoistModule {
 		this.options.eventHandler.sessionResetEvent.subscribe(() =>
 			this.resetTaskClaim(),
 		);
+		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.resetTaskClaim(),
+		);
 	}
 
 	private resetTaskClaim(): void {

@@ -49,6 +49,7 @@ export interface RootComposition {
 	registerStateTool: (getSession: () => PrSession | null) => void;
 	publisher: RootEventPublisher;
 	lifecycleEpoch: { value: number };
+	stateUpdatesDrained: () => Promise<void>;
 }
 
 const FUNCTION_TYPE = "function";
@@ -172,9 +173,6 @@ async function activateConfigured(
 	project: { codingRoot: string; todoistProjectRef: string },
 	config: TodoistProjectMapping,
 ): Promise<{ session: PrSession; branch: readonly unknown[] } | null> {
-	root.exitProtocol.sessionStart(ctx);
-	await root.worktree.sessionStart(ctx);
-	if (!isCurrentEpoch(root, epoch)) return null;
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -214,6 +212,9 @@ async function activateConfigured(
 	};
 	root.sessionState.sessionId = session.sessionId;
 	root.setSession(session);
+	root.exitProtocol.sessionStart(ctx);
+	await root.worktree.sessionStart(ctx);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	publishModuleState(root, C.module.work, { ...state });
 	await root.pr.activateSession(session);
 	if (!isCurrentEpoch(root, epoch)) return null;
@@ -262,6 +263,8 @@ export async function handleSessionStart(
 	);
 	if (activated === null || !isCurrentEpoch(root, epoch)) return;
 	const { session, branch } = activated;
+	await root.stateUpdatesDrained();
+	if (!isCurrentEpoch(root, epoch)) return;
 	root.registerStateTool(() => root.getSession());
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
@@ -334,7 +337,7 @@ export function registerModuleStateConsumer(
 	events: EventHandler,
 	state: SessionState,
 	acceptUpdate?: () => boolean,
-): void {
+): () => Promise<void> {
 	let updateQueue = Promise.resolve();
 	events.moduleStateChangedEvent.subscribe((update) => {
 		const acceptedAtEmission = acceptUpdate?.() ?? true;
@@ -353,6 +356,7 @@ export function registerModuleStateConsumer(
 		updateQueue = queued.catch(() => undefined);
 		return queued;
 	});
+	return () => updateQueue;
 }
 
 export function registerExtensionEventConsumers(root: Root): void {
