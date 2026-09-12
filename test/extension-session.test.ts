@@ -8,14 +8,14 @@ import { RootEventPublisher } from "../src/event-publishers.ts";
 import { createExtensionState } from "../src/main.ts";
 import { type EventHandler, event } from "../src/shared/events.ts";
 
-function context(cwd: string) {
+function context(cwd: string, branch: unknown[] = []) {
 	return {
 		cwd,
 		mode: "print",
 		hasUI: false,
 		ui: { setFooter: vi.fn(), theme: { fg: vi.fn() } },
 		sessionManager: {
-			getBranch: () => [],
+			getBranch: () => branch,
 			getSessionId: () => "session",
 		},
 	} as never;
@@ -117,12 +117,6 @@ describe("session shutdown", () => {
 					};
 				if (key === "git rev-parse HEAD")
 					return { stdout: "abc\n", stderr: "", code: 0 };
-				if (key === "git remote get-url origin")
-					return {
-						stdout: "https://github.com/o/r.git\n",
-						stderr: "",
-						code: 0,
-					};
 				return { stdout: "", stderr: "", code: 0 };
 			},
 		);
@@ -132,7 +126,13 @@ describe("session shutdown", () => {
 		await handleSessionStart(
 			root,
 			{ type: "session_start" } as never,
-			context("/repo"),
+			context("/repo", [
+				{
+					type: "custom",
+					customType: "pi-todo-gate-state",
+					data: { remoteOrigin: "https://persisted.example/repo.git" },
+				},
+			]),
 		);
 		expect(updates.map(({ moduleId }) => moduleId)).toEqual(
 			expect.arrayContaining(["worktree", "pr", "exit-protocol"]),
@@ -140,7 +140,61 @@ describe("session shutdown", () => {
 		expect(root.sessionState.gitState).toMatchObject({
 			isWorktree: true,
 			branch: "feature",
-			remoteOrigin: "https://github.com/o/r.git",
+			remoteOrigin: "https://persisted.example/repo.git",
+		});
+	});
+
+	it("does not append origin after concurrent shutdown", async () => {
+		let originStarted = false;
+		let releaseOrigin!: () => void;
+		const originBlocked = new Promise<void>((resolve) => {
+			releaseOrigin = resolve;
+		});
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git remote get-url origin") {
+					originStarted = true;
+					await originBlocked;
+					return {
+						stdout: "https://github.com/o/r.git\n",
+						stderr: "",
+						code: 0,
+					};
+				}
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				return { stdout: "", stderr: "", code: 0 };
+			},
+		);
+		const start = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo"),
+		);
+		for (let attempt = 0; attempt < 20 && !originStarted; attempt += 1)
+			await Promise.resolve();
+		expect(originStarted).toBe(true);
+		handleSessionShutdown(root);
+		releaseOrigin();
+		await start;
+		const appendEntry = (
+			root.pi as never as { appendEntry: ReturnType<typeof vi.fn> }
+		).appendEntry;
+		expect(appendEntry).not.toHaveBeenCalled();
+		expect(root.sessionState).toMatchObject({
+			sessionId: null,
+			gitState: {},
+			moduleState: {},
 		});
 	});
 

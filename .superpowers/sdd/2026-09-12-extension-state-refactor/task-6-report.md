@@ -23,8 +23,8 @@
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
-- `env -u PI_SUBAGENT_CHILD npm test` — passed: 51 files, 296 tests passed, 8 skipped.
-- Focused lifecycle/module/integration Vitest run — passed: 5 files, 48 tests passed, 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed: 51 files, 297 tests passed, 8 skipped.
+- Focused lifecycle/module/integration Vitest run — passed: 11 files, 107 tests passed, 8 skipped.
 
 ## Review fixes
 
@@ -35,7 +35,8 @@
 - Added concurrent start/shutdown, startup module snapshot, and post-drain reset regression coverage.
 - Added Todoist terminal deactivation claim-reset coverage.
 - Startup establishes active-session acceptance before PR remote-origin discovery and Worktree initialization, then drains root module updates before initial persistence and footer projection.
-- Startup regression asserts retained `sessionState.gitState.remoteOrigin` alongside Worktree Git fields.
+- Startup regression asserts retained `sessionState.gitState.remoteOrigin` alongside Worktree Git fields, including persisted-origin startup without rediscovery.
+- PR origin requests carry lifecycle epoch identity; stale discovery cannot append state or mutate PR module state after shutdown. Concurrent shutdown regression covers this barrier.
 
 ## Residual risks
 

@@ -32,6 +32,7 @@ export function createExtensionState(
 	const eventHandler = createEventHandler();
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
+	const lifecycleEpoch = { value: 0 };
 	let activeSession: PrSession | null = null;
 	let stateToolRegistered = false;
 	const getSession = (): PrSession | null => activeSession;
@@ -59,6 +60,7 @@ export function createExtensionState(
 			replaceSessionState,
 			refreshFooterStatuses: (session) =>
 				refreshFooterStatuses(footer, session),
+			getLifecycleEpoch: () => lifecycleEpoch.value,
 		},
 	);
 	const todoist = createTodoistModule({
@@ -122,7 +124,7 @@ export function createExtensionState(
 			extensionState.registered = true;
 		},
 		publisher: new RootEventPublisher(eventHandler),
-		lifecycleEpoch: { value: 0 },
+		lifecycleEpoch,
 		stateUpdatesDrained: async () => undefined,
 	};
 	return Object.assign(extensionState, { root });

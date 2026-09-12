@@ -68,6 +68,7 @@ class PrModuleImpl implements PrModule {
 	private readonly sessionState: SessionState;
 	private readonly getSession: () => PrSession | null;
 	private readonly dependencies: PrModuleDependencies;
+	private readonly getLifecycleEpoch: () => number;
 	private state: PrState = {};
 	private generation = -1;
 
@@ -76,6 +77,7 @@ class PrModuleImpl implements PrModule {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
 		this.getSession = options.getSession;
+		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.dependencies = options.dependencies ?? {};
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
@@ -132,17 +134,35 @@ class PrModuleImpl implements PrModule {
 		state: PrWorkState,
 	): Promise<PrWorkState> {
 		const hasRemoteOrigin = state.remoteOrigin !== undefined;
+		const operationGeneration =
+			this.state.operationGeneration ?? this.generation;
+		const request: OriginRequest = {
+			operationGeneration,
+			lifecycleEpoch: this.getLifecycleEpoch(),
+			sessionId: this.sessionState.sessionId,
+		};
 		if (hasRemoteOrigin) {
-			this.state = {
+			const nextState = {
 				...this.state,
 				...stateFromWorkState(state),
-				operationGeneration: this.state.operationGeneration ?? this.generation,
+				operationGeneration,
 			};
+			const isCurrentBeforeEmission = this.isCurrentOriginRequest(request);
+			if (!isCurrentBeforeEmission) return state;
+			await this.emitState(nextState, {
+				remoteOrigin: state.remoteOrigin,
+				operationGeneration,
+				sessionId: request.sessionId,
+			});
+			const isCurrentAfterEmission = this.isCurrentOriginRequest(request);
+			if (!isCurrentAfterEmission) return state;
+			this.state = nextState;
 			return state;
 		}
 		return this.discoverRemoteOrigin(ctx, state, {
 			operationGeneration: this.state.operationGeneration ?? this.generation,
 			sessionId: this.sessionState.sessionId,
+			lifecycleEpoch: this.getLifecycleEpoch(),
 		});
 	}
 
@@ -159,24 +179,30 @@ class PrModuleImpl implements PrModule {
 		if (shouldRejectRequest) return state;
 		const remoteOrigin = project.remoteOrigin ?? undefined;
 		const previousOrigin = state.remoteOrigin;
-		const nextState = { ...state, remoteOrigin };
-		this.state = {
+		const nextWorkState = { ...state, remoteOrigin };
+		const nextState = {
 			...this.state,
-			...stateFromWorkState(nextState),
+			...stateFromWorkState(nextWorkState),
 			operationGeneration: request.operationGeneration,
 		};
 		const originChanged = previousOrigin !== remoteOrigin;
 		const shouldSkipEmission = !originChanged;
-		if (shouldSkipEmission) return nextState;
-		await this.emitState(this.state, {
+		if (shouldSkipEmission) {
+			const isCurrentBeforeMutation = this.isCurrentOriginRequest(request);
+			if (!isCurrentBeforeMutation) return state;
+			this.state = nextState;
+			return nextWorkState;
+		}
+		await this.emitState(nextState, {
 			remoteOrigin,
 			operationGeneration: request.operationGeneration,
 			sessionId: request.sessionId,
 		});
 		const staleAfterEmission = this.isStaleOriginRequest(request);
 		if (staleAfterEmission) return state;
-		this.dependencies.appendState?.(nextState);
-		return nextState;
+		this.state = nextState;
+		this.dependencies.appendState?.(nextWorkState);
+		return nextWorkState;
 	}
 
 	async persistPrIfAvailable(text: string): Promise<void> {
@@ -221,6 +247,7 @@ class PrModuleImpl implements PrModule {
 			session.state,
 			{
 				operationGeneration,
+				lifecycleEpoch: this.getLifecycleEpoch(),
 				sessionId: session.sessionId,
 				session,
 				identity,
@@ -431,6 +458,8 @@ class PrModuleImpl implements PrModule {
 	}
 
 	private isCurrentOriginRequest(request: OriginRequest): boolean {
+		const isCurrentLifecycle =
+			this.getLifecycleEpoch() === request.lifecycleEpoch;
 		const isCurrentGeneration = this.generation === request.operationGeneration;
 		const isCurrentRootSession =
 			this.sessionState.sessionId === request.sessionId;
@@ -446,23 +475,15 @@ class PrModuleImpl implements PrModule {
 					guardedSession as PrSession,
 					guardedIdentity as PrSessionIdentity,
 				);
-		const currentGenerationAndRoot =
-			isCurrentGeneration && isCurrentRootSession;
-		return currentGenerationAndRoot && isCurrentSession;
+		const currentLifecycleAndGeneration =
+			isCurrentLifecycle && isCurrentGeneration;
+		const currentRequest =
+			currentLifecycleAndGeneration && isCurrentRootSession;
+		return currentRequest && isCurrentSession;
 	}
 
 	private isStaleOriginRequest(request: OriginRequest): boolean {
-		const guardedSession = request.session;
-		const guardedIdentity = request.identity;
-		const hasSessionIdentity =
-			guardedSession !== undefined && guardedIdentity !== undefined;
-		const hasStaleIdentity =
-			hasSessionIdentity &&
-			!this.isSameSessionIdentity(
-				guardedSession as PrSession,
-				guardedIdentity as PrSessionIdentity,
-			);
-		return hasStaleIdentity;
+		return !this.isCurrentOriginRequest(request);
 	}
 
 	private captureSessionIdentity(
@@ -522,7 +543,7 @@ class PrModuleImpl implements PrModule {
 			optionGeneration ?? stateGeneration ?? this.generation;
 		const sessionId = options?.sessionId ?? this.sessionState.sessionId;
 		const sameGeneration =
-			this.state.operationGeneration === operationGeneration;
+			(stateGeneration ?? this.generation) === operationGeneration;
 		const sameSession = this.sessionState.sessionId === sessionId;
 		const currentEmission = sameGeneration && sameSession;
 		if (!currentEmission) return;

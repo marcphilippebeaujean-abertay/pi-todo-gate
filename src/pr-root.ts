@@ -9,6 +9,7 @@ export interface PrRootDependencies {
 	appendState?: (state: PrWorkState, prDiscoveryDisabled?: boolean) => void;
 	replaceSessionState?: (session: PrSession, state: PrWorkState) => void;
 	refreshFooterStatuses?: (session: PrSession) => void;
+	getLifecycleEpoch?: () => number;
 }
 
 export function createRootPrModule(
@@ -19,12 +20,13 @@ export function createRootPrModule(
 	getSession: () => PrSession | null,
 	dependencies?: Omit<PrRootDependencies, "exec">,
 ) {
-	const moduleDependencies = dependencies ?? {};
+	const { getLifecycleEpoch, ...moduleDependencies } = dependencies ?? {};
 	return createPrModule({
 		promptQueue,
 		eventHandler,
 		sessionState,
 		getSession,
 		dependencies: { exec, ...moduleDependencies },
+		getLifecycleEpoch,
 	});
 }

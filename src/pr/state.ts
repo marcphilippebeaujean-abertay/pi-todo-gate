@@ -62,6 +62,7 @@ export interface PrModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	getSession: () => PrSession | null;
+	getLifecycleEpoch?: () => number;
 	dependencies?: PrModuleDependencies;
 }
 
@@ -113,6 +114,7 @@ export interface PrSessionIdentity {
 
 export interface OriginRequest {
 	operationGeneration: number;
+	lifecycleEpoch: number;
 	sessionId: string | null;
 	session?: PrSession;
 	identity?: PrSessionIdentity;
