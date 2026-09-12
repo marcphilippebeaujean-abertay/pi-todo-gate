@@ -9,10 +9,7 @@ import {
 	toggleAction,
 } from "../../src/exit-protocol/state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
-import {
-	createPrMergedRequest,
-	createSharedEvents,
-} from "../../src/shared/events.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
 
 const actions: ExitAction[] = [
@@ -23,6 +20,13 @@ const actions: ExitAction[] = [
 		execute: vi.fn(async () => "completed" as const),
 	},
 ];
+
+function worktree(): never {
+	return {
+		getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),
+		removeWorktree: () => actions[0].execute(),
+	} as never;
+}
 
 function context(overrides: Record<string, unknown> = {}) {
 	return {
@@ -111,11 +115,7 @@ describe("exit protocol presenter", () => {
 		enqueueExitActions(
 			promptQueue,
 			context(),
-			{
-				actions: [],
-				payload: { prUrl: "pr", taskMarkedAsCompleted: false },
-				addAction: vi.fn(),
-			},
+			{ actions: [], addAction: vi.fn() },
 			() => true,
 		);
 
@@ -125,18 +125,18 @@ describe("exit protocol presenter", () => {
 	it("supports the legacy factory call without a prompt queue", async () => {
 		const events = createSharedEvents();
 		const ctx = context();
-		const module = createExitProtocolModule(events);
-		module.sessionStart(ctx);
-		events.prMergeRequestedEvent.subscribe((request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
+		const module = createExitProtocolModule(
+			events,
+			undefined,
+			undefined,
+			worktree(),
 		);
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
@@ -146,18 +146,18 @@ describe("exit protocol presenter", () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(events, queue);
-		module.sessionStart(ctx);
-		events.prMergeRequestedEvent.subscribe((request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
+		const module = createExitProtocolModule(
+			events,
+			queue,
+			undefined,
+			worktree(),
 		);
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 		await queue.drain();
 
 		expect(ctx.ui.custom).toHaveBeenCalledOnce();
@@ -171,12 +171,10 @@ describe("exit protocol presenter", () => {
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
-		);
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 		await queue.drain();
 
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
@@ -192,18 +190,18 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const custom = vi.fn(() => prompt);
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
-		const module = createExitProtocolModule(events, queue);
-		module.sessionStart(ctx);
-		events.prMergeRequestedEvent.subscribe((request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
+		const module = createExitProtocolModule(
+			events,
+			queue,
+			undefined,
+			worktree(),
 		);
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 		await Promise.resolve();
 		queue.reset();
 		resolvePrompt(["remove-worktree"]);
@@ -223,18 +221,18 @@ describe("exit protocol presenter", () => {
 				notify: vi.fn(),
 			},
 		});
-		const module = createExitProtocolModule(events, queue);
-		module.sessionStart(ctx);
-		events.prMergeRequestedEvent.subscribe((request) => {
-			for (const action of actions) request.addAction(action);
-		});
-
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
+		const module = createExitProtocolModule(
+			events,
+			queue,
+			undefined,
+			worktree(),
 		);
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+		});
 		await queue.drain();
 
 		expect(confirm).toHaveBeenCalledOnce();

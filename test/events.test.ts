@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	createPrMergedRequest,
-	createSharedEvents,
-	event,
-} from "../src/shared/events.ts";
-import type { ExitAction } from "../src/shared/exit-actions.ts";
-
-const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
-	id,
-	label: id,
-	execute: async () => "completed",
-});
+import { createSharedEvents, event } from "../src/shared/events.ts";
 
 describe("shared events", () => {
 	it("delivers typed payloads and supports unsubscribe", async () => {
@@ -62,24 +51,21 @@ describe("shared events", () => {
 		expect(order).toEqual(["first", "second", "third"]);
 	});
 
-	it("preserves merge action collection before later subscribers", async () => {
+	it("delivers merge payload to subscribers in registration order", async () => {
 		const events = createSharedEvents();
 		const order: string[] = [];
-		events.prMergeRequestedEvent.subscribe((request) => {
-			order.push("todoist");
-			request.addAction(action());
+		events.prMergedEvent.subscribe(() => {
+			order.push("first");
 		});
-		events.prMergedEvent.subscribe((request) => {
-			order.push(`present:${request.actions.length}`);
+		events.prMergedEvent.subscribe(() => {
+			order.push("second");
 		});
 
-		await events.prMergeRequestedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "https://github.com/o/r/pull/1",
-				taskMarkedAsCompleted: false,
-			}),
-		);
+		await events.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+		});
 
-		expect(order).toEqual(["todoist", "present:1"]);
+		expect(order).toEqual(["first", "second"]);
 	});
 });

@@ -6,7 +6,6 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { ExitAction } from "./exit-actions.ts";
 
 export type {
 	BeforeAgentStartEvent,
@@ -97,14 +96,6 @@ export interface PrMergedEvent {
 	taskMarkedAsCompleted: boolean;
 }
 
-export interface EventRequest<T> {
-	payload: T;
-	readonly actions: readonly ExitAction[];
-	addAction(action: ExitAction): void;
-}
-
-export type PrMergedRequest = EventRequest<PrMergedEvent>;
-
 export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
@@ -112,27 +103,11 @@ export interface EventHandler {
 	sessionResetEvent: Event<SessionResetEvent>;
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
-	prMergeRequestedEvent: Event<PrMergedRequest>;
-	prMergedEvent: Event<PrMergedRequest>;
-}
-
-function addAction(actions: ExitAction[], action: ExitAction): void {
-	const alreadyAdded = actions.some((existing) => existing.id === action.id);
-	if (!alreadyAdded) actions.push(action);
-}
-
-export function createPrMergedRequest(payload: PrMergedEvent): PrMergedRequest {
-	const actions: ExitAction[] = [];
-	return {
-		payload,
-		actions,
-		addAction: addAction.bind(null, actions),
-	};
+	prMergedEvent: Event<PrMergedEvent>;
 }
 
 export function createSharedEvents(): EventHandler {
-	const prMergeRequestedEvent = event<PrMergedRequest>();
-	const prMergedEvent = event<PrMergedRequest>();
+	const prMergedEvent = event<PrMergedEvent>();
 	return {
 		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
 		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
@@ -143,13 +118,6 @@ export function createSharedEvents(): EventHandler {
 		sessionResetEvent: event<SessionResetEvent>(),
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
-		prMergeRequestedEvent: {
-			subscribe: prMergeRequestedEvent.subscribe.bind(prMergeRequestedEvent),
-			emit: async (request) => {
-				await prMergeRequestedEvent.emit(request);
-				await prMergedEvent.emit(request);
-			},
-		},
 		prMergedEvent,
 	};
 }

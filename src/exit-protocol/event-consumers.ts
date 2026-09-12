@@ -1,11 +1,12 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { EventHandler } from "../shared/events.ts";
+import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
 	addWorktreeExitAction,
+	createExitRequest,
 	enqueueExitActions,
 } from "./event-publishers.ts";
 import type { ExitProtocolModule, ExitRequest } from "./state.ts";
@@ -42,9 +43,10 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		});
 	}
 
-	private onPrMerged(request: ExitRequest): void {
+	private onPrMerged(_event: PrMergedEvent): void {
 		const context = this.context;
 		if (context === null) return;
+		const request: ExitRequest = createExitRequest();
 		addWorktreeExitAction(request, this.worktree);
 		enqueueExitActions(
 			this.promptQueue,

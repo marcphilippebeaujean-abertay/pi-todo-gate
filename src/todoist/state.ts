@@ -2,11 +2,11 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
-import type { EventHandler, PrMergedRequest } from "../shared/events.ts";
+import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { SessionState, WorkState } from "../state.ts";
 
-export type MergeRequest = PrMergedRequest;
+export type MergeRequest = PrMergedEvent;
 
 export interface TodoistExec {
 	run(

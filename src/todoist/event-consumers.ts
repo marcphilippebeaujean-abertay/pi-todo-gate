@@ -161,9 +161,9 @@ export function maybeAnalyzeTaskClaim(
 
 async function consumeMergedEvent(
 	runtime: TodoistRuntime,
-	request: MergeRequest,
+	event: MergeRequest,
 ): Promise<void> {
-	const alreadyCompleted = request.payload.taskMarkedAsCompleted === true;
+	const alreadyCompleted = event.taskMarkedAsCompleted === true;
 	if (alreadyCompleted) return;
 	const session = currentSessionContext(runtime.sessionState);
 	if (session === null) return;
@@ -199,13 +199,13 @@ async function consumeMergedEvent(
 				operationGeneration,
 			);
 			const completed = result === COMPLETED;
-			if (completed) request.payload.taskMarkedAsCompleted = true;
+			if (completed) event.taskMarkedAsCompleted = true;
 		})
 		.catch(() => undefined);
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
-	runtime.eventHandler.prMergeRequestedEvent.subscribe(
+	runtime.eventHandler.prMergedEvent.subscribe(
 		consumeMergedEvent.bind(null, runtime),
 	);
 }

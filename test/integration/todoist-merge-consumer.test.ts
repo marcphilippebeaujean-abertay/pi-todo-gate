@@ -8,10 +8,7 @@ import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { register } from "../../src/pr/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
-import {
-	createPrMergedRequest,
-	createSharedEvents,
-} from "../../src/shared/events.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
 import {
 	currentSessionContext,
 	type ExtensionState,
@@ -90,9 +87,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 
 async function emit(runtime: ExtensionState) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
-	await runtime.eventHandler.prMergeRequestedEvent.emit(
-		createPrMergedRequest(payload),
-	);
+	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
 	return payload;
 }
@@ -162,23 +157,18 @@ describe("Todoist merge consumer", () => {
 		const exitModule = createExitProtocolModule(
 			setupResult.runtime.eventHandler,
 			setupResult.runtime.promptQueue,
+			undefined,
+			{
+				getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),
+				removeWorktree: async () => {
+					order.push("exit");
+					return "completed";
+				},
+			} as never,
 		);
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
 		);
-		setupResult.runtime.eventHandler.prMergeRequestedEvent.subscribe(
-			(request) => {
-				request.addAction({
-					id: "remove-worktree",
-					label: "Run exit action",
-					execute: async () => {
-						order.push("exit");
-						return "completed";
-					},
-				});
-			},
-		);
-
 		await emit(setupResult.runtime);
 
 		expect(order).toEqual(["todoist", "exit-prompt", "exit"]);

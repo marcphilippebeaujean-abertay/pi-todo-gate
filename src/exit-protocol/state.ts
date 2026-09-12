@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
-import type { EventHandler, PrMergedRequest } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { ExitAction } from "../shared/exit-actions.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
@@ -9,7 +10,10 @@ import {
 	EXIT_SUBMIT_KEY,
 } from "./constants.ts";
 
-export type ExitRequest = PrMergedRequest;
+export interface ExitRequest {
+	readonly actions: readonly ExitAction[];
+	addAction(action: ExitAction): void;
+}
 
 export type {
 	ExitAction,
