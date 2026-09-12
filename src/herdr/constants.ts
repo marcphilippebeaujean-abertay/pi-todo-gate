@@ -1,3 +1,5 @@
+import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./state.ts";
+
 export const MAX_DIAGNOSTIC_BYTES = 500;
 export const HERDR_MAX_CLAIM_ATTEMPTS = 3;
 export const HERDR_OBJECT_TYPE = "object";
@@ -38,5 +40,5 @@ If current label clearly describes task, leave tab unchanged. Otherwise inspect 
 \`herdr agent list\`; rename current tab when no other agent shares it, or move current pane to a new
 labeled tab when another agent shares it. Derive short lowercase concrete label from task prompt.
 After success or valid unchanged label, output only JSON:
-\`{"status":"claimed","tabId":"<current-tab-id>","label":"<current-tab-label>"}\`.
+\`${JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE)}\`.
 Exit nonzero if claim cannot complete.`;

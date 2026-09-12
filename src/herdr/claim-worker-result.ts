@@ -5,7 +5,7 @@ import {
 	MAX_DIAGNOSTIC_BYTES,
 } from "./constants.ts";
 
-import type { ClaimWorkerResult } from "./state.ts";
+import type { ClaimWorkerResponse, ClaimWorkerResult } from "./state.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;
@@ -18,11 +18,7 @@ function claimResult(value: unknown): ClaimWorkerResult | undefined {
 	const isNull = value === null;
 	const isInvalidValue = !isObject || isNull;
 	if (isInvalidValue) return undefined;
-	const result = value as {
-		status?: unknown;
-		tabId?: unknown;
-		label?: unknown;
-	};
+	const result = value as Partial<ClaimWorkerResponse>;
 	const hasClaimedStatus = result.status === CLAIMED_STATUS;
 	const hasTabId = typeof result.tabId === "string";
 	const hasNonEmptyTabId = hasTabId && (result.tabId as string).trim() !== "";

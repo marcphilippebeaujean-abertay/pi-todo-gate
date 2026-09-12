@@ -5,6 +5,18 @@ import type {
 } from "../shared/pi-worker-data.ts";
 import type { ClaimCompletedEvent, ClaimFailedEvent } from "./events.ts";
 
+export interface ClaimWorkerResponse {
+	status: "claimed";
+	tabId: string;
+	label: string;
+}
+
+export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponse = {
+	status: "claimed",
+	tabId: "<current-tab-id>",
+	label: "<current-tab-label>",
+};
+
 export interface ClaimWorkerResult {
 	tabId: string;
 	label: string;

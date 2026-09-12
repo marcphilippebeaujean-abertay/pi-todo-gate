@@ -1,8 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr/constants.ts";
 
 import type { ClaimWorkerRequest } from "../../src/herdr/module.ts";
 import {
+	CLAIM_WORKER_RESPONSE_TEMPLATE,
 	type CommandRunner,
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
@@ -117,6 +119,12 @@ function emitFailure(
 }
 
 describe("background Herdr tab claim", () => {
+	it("derives worker response instructions from typed response template", () => {
+		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
+			JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE),
+		);
+	});
+
 	it("leaves worktree tab naming to the launcher", async () => {
 		const restore = herdrEnvironment();
 		try {

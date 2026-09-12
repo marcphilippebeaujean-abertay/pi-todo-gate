@@ -1,4 +1,5 @@
 import type { Exec } from "../shared/command.ts";
+import type { PrMergedEvent } from "../shared/events.ts";
 
 export interface PrSession {
 	context: { cwd: string; hasUI: boolean };
@@ -11,10 +12,7 @@ export interface PrRuntime {
 	active: PrSession | null;
 	dependencies: { exec?: Exec };
 	events: {
-		emit(
-			event: string,
-			payload: { prUrl: string; taskMarkedAsCompleted: boolean },
-		): Promise<void>;
+		emit(event: string, payload: PrMergedEvent): Promise<void>;
 	};
 	isCurrentOperation?(session: PrSession, generation: number): boolean;
 	enqueueSessionOperation?<T>(

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	isEmptyString,
 	requireBoolean,
 	requireNonEmptyString,
 	requireRecord,
@@ -7,6 +8,11 @@ import {
 } from "../../src/shared/validation.ts";
 
 describe("shared validation", () => {
+	it("detects empty strings", () => {
+		expect(isEmptyString("")).toBe(true);
+		expect(isEmptyString("value")).toBe(false);
+	});
+
 	it("preserves required value validation and error messages", () => {
 		expect(requireRecord({ value: 1 }, "record")).toEqual({ value: 1 });
 		expect(requireString("value", "string")).toBe("value");

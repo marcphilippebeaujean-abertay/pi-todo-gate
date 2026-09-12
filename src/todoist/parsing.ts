@@ -5,6 +5,7 @@ import { Value } from "typebox/value";
 import { isPathAtOrBelow, normalizedPath } from "../shared/path.ts";
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
 import { isRecord } from "../shared/records.ts";
+import { isEmptyString } from "../shared/validation.ts";
 import {
 	CLAIM,
 	CONFIG_FILE_NAME,
@@ -314,8 +315,6 @@ export function applyTodoistStatePatch(
 	return next;
 }
 
-const EMPTY = String();
-
 function invalidResult(sessionId: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error: INVALID_RESULT };
 }
@@ -361,8 +360,8 @@ function assistantTexts(stdout: string): string[] {
 	for (const line of stdout.split(/\r?\n/)) {
 		try {
 			const event = JSON.parse(line) as { message?: unknown };
-			const text = textFromAssistantMessage(event.message, EMPTY);
-			const hasText = text !== EMPTY;
+			const text = textFromAssistantMessage(event.message, "");
+			const hasText = !isEmptyString(text);
 			if (hasText) texts.push(text);
 		} catch {
 			// Ignore non-JSON process output.
@@ -375,7 +374,7 @@ export function parseResult(
 	stdout: string,
 	sessionId?: string,
 ): TaskClaimWorkerResult {
-	const resolvedSessionId = sessionId ?? EMPTY;
+	const resolvedSessionId = sessionId ?? "";
 	const texts = assistantTexts(stdout);
 	for (let index = texts.length - 1; index >= 0; index -= 1) {
 		const result = parseCandidate(texts[index].trim());

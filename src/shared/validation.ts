@@ -1,5 +1,9 @@
 export type UnknownRecord = Record<string, unknown>;
 
+export function isEmptyString(value: string): boolean {
+	return value.length === 0;
+}
+
 export function requireRecord(value: unknown, field: string): UnknownRecord {
 	if (typeof value !== "object")
 		throw new TypeError(`${field} must be an object`);

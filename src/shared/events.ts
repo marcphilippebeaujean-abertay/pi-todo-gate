@@ -12,7 +12,7 @@ import type {
 } from "./state.ts";
 
 export interface PrMergedEvent {
-	prUrl: string;
+	prUrl: string | null;
 	taskMarkedAsCompleted: boolean;
 }
 
