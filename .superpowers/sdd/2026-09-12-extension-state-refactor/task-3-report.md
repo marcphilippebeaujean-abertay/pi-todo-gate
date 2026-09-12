@@ -8,7 +8,7 @@
 - Root module-state consumer now preserves stable `SessionState` identity, deep-copies pre/post snapshots, applies module and Git updates together, and emits typed `sessionStateChangedEvent`.
 - Updated SessionState fixtures for existing merge/work-state tests.
 
-Implementation commit: `aa71adb` (`feat: emit typed session state snapshots`).
+Implementation commits: `aa71adb` (`feat: emit typed session state snapshots`) and `3b690ea` (`fix: apply session state updates atomically`).
 
 ## Validation
 
