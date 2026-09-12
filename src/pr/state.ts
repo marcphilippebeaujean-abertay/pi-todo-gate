@@ -60,6 +60,7 @@ export interface StateToolRuntime {
 	appendState(state: PrWorkState, prDiscoveryDisabled?: boolean): void;
 	replaceSessionState(session: PrSession, state: PrWorkState): void;
 	refreshFooterStatuses(session: PrSession): void;
+	syncPrState?: (session: PrSession) => Promise<void> | void;
 }
 
 export interface PrModuleDependencies {
@@ -79,8 +80,9 @@ export interface PrModuleOptions {
 
 export interface PrModule {
 	register(pi: ExtensionAPI): void;
-	activateSession(session: PrSession): void;
+	activateSession(session: PrSession): Promise<void>;
 	deactivateSession(): void;
+	syncSessionState(session: PrSession): Promise<void>;
 	initializeRemoteOrigin(
 		ctx: ExtensionContext,
 		state: PrWorkState,

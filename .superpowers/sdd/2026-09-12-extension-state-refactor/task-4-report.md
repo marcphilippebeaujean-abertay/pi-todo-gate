@@ -22,6 +22,23 @@ Task 4 plan wording about separate PR merge channels conflicts with authoritativ
 - `npm run typecheck -- --pretty false` — passed.
 - `git diff --check` — passed.
 
+## Review fixes
+
+- Session activation now emits complete PR facet snapshots; state-tool set/clear actions call PR sync and emit complete snapshots.
+- Origin updates always emit complete PR state, preventing root replacement from dropping pinned PR, generation, tested URLs, or merge metadata.
+- Origin and candidate discovery capture session/generation tokens; stale async completions cannot mutate session or facet state.
+- Before-agent prompt flow now uses guarded origin discovery, persists session origin, and emits `gitStatePatch.remoteOrigin`.
+- Added activation/sync, stale-origin, stale-candidate, and mid-session-origin regression tests.
+
+## Review-fix validation
+
+- `env -u PI_SUBAGENT_CHILD npx vitest run test/pr test/extensions/pi-todo-gate.test.ts` — passed, 91 tests / 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed architecture plus 291 tests / 8 skipped.
+- `npm run lint` — passed Biome and strict lint.
+- `npm run typecheck -- --pretty false` — passed.
+- `npm run architecture` — passed dependency and module checks.
+- `git diff --check` — passed.
+
 ## Residual risks
 
 - Transitional `SessionContext` and `src/application/` remain by design for Tasks 5–6.

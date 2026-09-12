@@ -48,7 +48,10 @@ function deactivateUnconfiguredSession(runtime: ExtensionState): void {
 			runtime.pi.setActiveTools(remainingTools);
 		}
 	}
-	if (!hasSession) runtime.footer.deactivate();
+	if (!hasSession) {
+		runtime.pr?.deactivateSession();
+		runtime.footer.deactivate();
+	}
 	runtime.worktree.deactivate();
 	runtime.exitProtocol.deactivate();
 	resetSessionState(runtime.sessionState);
@@ -85,14 +88,14 @@ function inheritPreviousState(
 	return { state: inheritedState, handoffContext: true };
 }
 
-function activateSession(
+async function activateSession(
 	runtime: ExtensionState,
 	ctx: ExtensionContext,
 	project: NonNullable<SessionContext["project"]>,
 	state: SessionContext["state"],
 	handoffContext: boolean,
 	allowPrDiscovery: boolean,
-): SessionContext {
+): Promise<SessionContext> {
 	const session: SessionContext = {
 		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
@@ -110,7 +113,7 @@ function activateSession(
 	runtime.sessionState.sessionId = session.sessionId;
 	publishModuleState(runtime, C.module.work, { ...state });
 	currentSessionContext(runtime.sessionState, session);
-	runtime.pr.activateSession(session);
+	await runtime.pr.activateSession(session);
 	return session;
 }
 
@@ -180,7 +183,7 @@ async function activateConfiguredSession(
 		state,
 		isHandoff,
 	);
-	const session = activateSession(
+	const session = await activateSession(
 		runtime,
 		ctx,
 		project,
@@ -218,6 +221,7 @@ export async function handleSessionStart(
 			null,
 			runtime.sessionState,
 		) as unknown as () => PrSession | null,
+		runtime.pr.syncSessionState.bind(runtime.pr),
 	);
 	manageActiveTools(runtime);
 	const isTuiMode = ctx.mode === C.value.tui;
@@ -244,6 +248,7 @@ export function handleSessionShutdown(runtime: ExtensionState): void {
 		deactivateSession(runtime, session);
 		currentSessionContext(runtime.sessionState, null);
 	} else {
+		runtime.pr?.deactivateSession();
 		runtime.footer.deactivate();
 	}
 	runtime.worktree.deactivate();

@@ -41,11 +41,11 @@ function statusAction(session: PrSession): AgentToolResult<undefined> {
 	);
 }
 
-function setPrAction(
+async function setPrAction(
 	runtime: StateToolRuntime,
 	session: PrSession,
 	params: StateToolParams,
-): AgentToolResult<undefined> {
+): Promise<AgentToolResult<undefined>> {
 	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
 	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
@@ -64,14 +64,15 @@ function setPrAction(
 	session.allowPrDiscovery = false;
 	runtime.appendState(session.state);
 	runtime.refreshFooterStatuses(session);
+	await runtime.syncPrState?.(session);
 	return extensionResult(`Pinned PR ${url}`);
 }
 
-function clearPrState(
+async function clearPrState(
 	runtime: StateToolRuntime,
 	session: PrSession,
 	message: string,
-): AgentToolResult<undefined> {
+): Promise<AgentToolResult<undefined>> {
 	runtime.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
@@ -83,6 +84,7 @@ function clearPrState(
 	session.allowPrDiscovery = false;
 	runtime.appendState(session.state, true);
 	runtime.refreshFooterStatuses(session);
+	await runtime.syncPrState?.(session);
 	return extensionResult(message);
 }
 
@@ -101,24 +103,32 @@ export async function executeStateTool(
 		case C.action.status:
 			return statusAction(session);
 		case C.action.setPr:
-			return setPrAction(runtime, session, params);
+			return await setPrAction(runtime, session, params);
 		case C.action.clearPr:
-			return clearPrState(runtime, session, C.message.prCleared);
+			return await clearPrState(runtime, session, C.message.prCleared);
 		default:
-			return clearPrState(runtime, session, C.message.stateCleared);
+			return await clearPrState(runtime, session, C.message.stateCleared);
 	}
 }
 
 export function installStateTool(
 	runtime: StateToolRuntime,
 	getSession?: () => PrSession | null,
+	syncPrState?: (session: PrSession) => Promise<void> | void,
 ): void {
 	const hasSessionGetter = getSession !== undefined;
-	const effectiveRuntime = hasSessionGetter
-		? { ...runtime, getSession }
+	const hasSync = syncPrState !== undefined;
+	const hasOverrides = hasSessionGetter || hasSync;
+	const effectiveRuntime = hasOverrides
+		? {
+				...runtime,
+				...(hasSessionGetter ? { getSession } : {}),
+				...(hasSync ? { syncPrState } : {}),
+			}
 		: runtime;
 	const isRegistered = effectiveRuntime.registered;
 	if (isRegistered) return;
+	runtime.registered = true;
 	effectiveRuntime.registered = true;
 	effectiveRuntime.pi.registerTool<typeof stateParameters>({
 		name: C.tool.state,
