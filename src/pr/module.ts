@@ -22,24 +22,20 @@ export * from "./state.ts";
 export * from "./user-prompts.ts";
 
 import type { EventHandler } from "../shared/events.ts";
-import type { ExtensionState, SessionState } from "../state.ts";
+import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
-import type { PrModule } from "./state.ts";
+import type { PrModule, PrRuntime } from "./state.ts";
 
 export function createPrModule(
 	eventHandler: EventHandler,
 	sessionState: SessionState,
-	stateRef: { current: ExtensionState | null },
+	stateRef: { readonly current: PrRuntime | null },
 ): PrModule {
 	return {
 		register(pi) {
-			const extensionState = stateRef.current;
-			if (extensionState === null) return;
-			registerMergeProtocol(pi, {
-				...extensionState,
-				eventHandler,
-				sessionState,
-			});
+			const runtime = stateRef.current;
+			if (runtime === null) return;
+			registerMergeProtocol(pi, { ...runtime, eventHandler, sessionState });
 		},
 	};
 }

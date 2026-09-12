@@ -18,22 +18,22 @@ export * from "./parsing.ts";
 export * from "./state.ts";
 
 import type { EventHandler } from "../shared/events.ts";
-import type { ExtensionState, SessionState } from "../state.ts";
+import type { SessionState } from "../state.ts";
 import { registerTodoistMergeConsumer } from "./event-consumers.ts";
-import type { TodoistModule } from "./state.ts";
+import type { TodoistModule, TodoistRuntime } from "./state.ts";
 
 export function createTodoistModule(
 	eventHandler: EventHandler,
 	sessionState: SessionState,
-	stateRef: { current: ExtensionState | null },
+	stateRef: { readonly current: TodoistRuntime | null },
 ): TodoistModule {
 	const module: TodoistModule = {
 		taskClaim: { pending: false, completed: false },
 		register() {
-			const extensionState = stateRef.current;
-			if (extensionState === null) return;
+			const runtime = stateRef.current;
+			if (runtime === null) return;
 			registerTodoistMergeConsumer({
-				...extensionState,
+				...runtime,
 				eventHandler,
 				sessionState,
 				todoist: module,

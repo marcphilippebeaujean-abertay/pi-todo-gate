@@ -16,6 +16,7 @@ export type LintRuleId =
 	| "repeated-field-checks"
 	| "prefer-switch-dispatch"
 	| "domain-types-outside-state"
+	| "no-extension-state-in-modules"
 	| "event-types-outside-events"
 	| "event-types-location"
 	| "no-functions-in-data";
