@@ -127,11 +127,11 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule(events);
 		module.sessionStart(ctx);
-		events.prMergedEvent.subscribe((request) => {
+		events.prMergeRequestedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "pr",
 				taskMarkedAsCompleted: false,
@@ -148,11 +148,11 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.prMergedEvent.subscribe((request) => {
+		events.prMergeRequestedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "pr",
 				taskMarkedAsCompleted: false,
@@ -171,7 +171,7 @@ describe("exit protocol presenter", () => {
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "pr",
 				taskMarkedAsCompleted: false,
@@ -194,11 +194,11 @@ describe("exit protocol presenter", () => {
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.prMergedEvent.subscribe((request) => {
+		events.prMergeRequestedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "pr",
 				taskMarkedAsCompleted: false,
@@ -225,11 +225,11 @@ describe("exit protocol presenter", () => {
 		});
 		const module = createExitProtocolModule(events, queue);
 		module.sessionStart(ctx);
-		events.prMergedEvent.subscribe((request) => {
+		events.prMergeRequestedEvent.subscribe((request) => {
 			for (const action of actions) request.addAction(action);
 		});
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "pr",
 				taskMarkedAsCompleted: false,

@@ -14,9 +14,9 @@ import type { WorktreeModule, WorktreeModuleDependencies } from "./state.ts";
 
 export * from "./events.ts";
 export type {
-	MergeRequest,
 	WorktreeBaseline,
 	WorktreeCurrentState,
+	WorktreeInfo,
 	WorktreeModule,
 	WorktreeModuleDependencies,
 } from "./state.ts";

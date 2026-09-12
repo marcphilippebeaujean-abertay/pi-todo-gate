@@ -216,7 +216,7 @@ async function handleBashResult(
 		claimedPrUrl,
 	);
 	if (!currentMerge) return;
-	await runtime.eventHandler.prMergedEvent.emit(
+	await runtime.eventHandler.prMergeRequestedEvent.emit(
 		createPrMergedRequest({
 			prUrl: claimedPrUrl,
 			taskMarkedAsCompleted: false,

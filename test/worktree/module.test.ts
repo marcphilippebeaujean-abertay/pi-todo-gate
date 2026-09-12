@@ -1,11 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
-import {
-	createPrMergedRequest,
-	createSharedEvents,
-} from "../../src/shared/events.ts";
-import type { ExitAction } from "../../src/shared/exit-actions.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
 
 function ok(stdout: string): CommandResult {
@@ -97,18 +93,10 @@ describe("worktree event actions", () => {
 		releaseFirstInspection();
 		await firstStart;
 
-		let mergeAction: ExitAction | undefined;
-		events.prMergedEvent.subscribe((request) => {
-			mergeAction = request.actions[0];
+		expect(module.getWorktreeInfo()).toEqual({
+			worktreePath: "/repo/.worktrees/feature",
+			branch: "later",
 		});
-		await events.prMergedEvent.emit(
-			createPrMergedRequest({
-				prUrl: "pr",
-				taskMarkedAsCompleted: false,
-			}),
-		);
-
-		expect(mergeAction?.label).toContain('"later"');
 	});
 
 	it("executes cleanup immediately after a merge", async () => {
@@ -121,17 +109,7 @@ describe("worktree event actions", () => {
 			changeDirectory,
 		});
 		await module.sessionStart(context());
-		let mergeAction: ExitAction | undefined;
-		events.prMergedEvent.subscribe((request) => {
-			mergeAction = request.actions[0];
-		});
-
-		const payload = { prUrl: "pr", taskMarkedAsCompleted: false };
-		await events.prMergedEvent.emit(createPrMergedRequest(payload));
-
-		expect(mergeAction?.id).toBe("remove-worktree");
-		expect(payload.taskMarkedAsCompleted).toBe(false);
-		await expect(mergeAction?.execute()).resolves.toBe("completed");
+		await expect(module.removeWorktree()).resolves.toBe("completed");
 		expect(changeDirectory).toHaveBeenCalledWith("/repo");
 		expect(commands.at(-2)).toEqual({
 			command: "git",

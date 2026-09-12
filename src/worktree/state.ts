@@ -1,8 +1,4 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PrMergedRequest } from "../shared/events.ts";
-
-export type MergeRequest = PrMergedRequest;
-
 export interface WorktreeBaseline {
 	worktreePath: string;
 	branch: string;
@@ -29,7 +25,16 @@ export interface CleanupOptions {
 	worktreeRemoved?: { value: boolean };
 }
 
+export interface WorktreeInfo {
+	worktreePath: string;
+	branch: string;
+}
+
 export interface WorktreeModule {
 	sessionStart(ctx: ExtensionContext): Promise<void>;
 	deactivate(): void;
+	getWorktreeInfo(): WorktreeInfo | null;
+	removeWorktree(): Promise<
+		import("../shared/exit-actions.ts").ExitActionResult
+	>;
 }

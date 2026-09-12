@@ -112,8 +112,8 @@ export interface EventHandler {
 	sessionResetEvent: Event<SessionResetEvent>;
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
+	prMergeRequestedEvent: Event<PrMergedRequest>;
 	prMergedEvent: Event<PrMergedRequest>;
-	prMergedPresentEvent: Event<PrMergedRequest>;
 }
 
 function addAction(actions: ExitAction[], action: ExitAction): void {
@@ -131,8 +131,8 @@ export function createPrMergedRequest(payload: PrMergedEvent): PrMergedRequest {
 }
 
 export function createSharedEvents(): EventHandler {
-	const prMergedCollectEvent = event<PrMergedRequest>();
-	const prMergedPresentEvent = event<PrMergedRequest>();
+	const prMergeRequestedEvent = event<PrMergedRequest>();
+	const prMergedEvent = event<PrMergedRequest>();
 	return {
 		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
 		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
@@ -143,14 +143,14 @@ export function createSharedEvents(): EventHandler {
 		sessionResetEvent: event<SessionResetEvent>(),
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
-		prMergedEvent: {
-			subscribe: prMergedCollectEvent.subscribe.bind(prMergedCollectEvent),
-			emit: async (payload) => {
-				await prMergedCollectEvent.emit(payload);
-				await prMergedPresentEvent.emit(payload);
+		prMergeRequestedEvent: {
+			subscribe: prMergeRequestedEvent.subscribe.bind(prMergeRequestedEvent),
+			emit: async (request) => {
+				await prMergeRequestedEvent.emit(request);
+				await prMergedEvent.emit(request);
 			},
 		},
-		prMergedPresentEvent,
+		prMergedEvent,
 	};
 }
 

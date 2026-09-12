@@ -6,7 +6,6 @@ import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import { inspectProject } from "../shared/project.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
-import { createCleanupAction } from "./event-publishers.ts";
 import {
 	cleanupWorktree,
 	currentWorktreeState,
@@ -14,7 +13,6 @@ import {
 } from "./git.ts";
 import { notifyWorktree } from "./notifications.ts";
 import type {
-	MergeRequest,
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleDependencies,
@@ -29,13 +27,12 @@ class Worktree implements WorktreeModule {
 	private sessionGeneration = 0;
 
 	constructor(
-		events: EventHandler,
+		_events: EventHandler,
 		dependencies: WorktreeModuleDependencies,
 		readonly _moduleContext?: ModuleContext,
 	) {
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
-		events.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -88,13 +85,19 @@ class Worktree implements WorktreeModule {
 		});
 	}
 
-	private onPrMerged(request: MergeRequest): void {
-		if (this.context === null) return;
-		if (this.baseline === null) return;
+	getWorktreeInfo(): { worktreePath: string; branch: string } | null {
+		if (this.baseline === null) return null;
+		return {
+			worktreePath: this.baseline.worktreePath,
+			branch: this.baseline.branch,
+		};
+	}
+
+	removeWorktree(): Promise<ExitActionResult> {
+		if (this.context === null) return Promise.resolve(FAILED);
 		const worktree = this.baseline;
-		request.addAction(
-			createCleanupAction(worktree, this.executeCleanup.bind(this, worktree)),
-		);
+		if (worktree === null) return Promise.resolve(FAILED);
+		return this.executeCleanup(worktree);
 	}
 
 	private async executeCleanup(

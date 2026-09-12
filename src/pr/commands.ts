@@ -125,7 +125,7 @@ async function runMergeProtocol(
 	const isCurrent = currentSession(runtime, session, generation);
 	const shouldStop = !isMerged || !isCurrent;
 	if (shouldStop) return;
-	await runtime.eventHandler.prMergedEvent.emit(
+	await runtime.eventHandler.prMergeRequestedEvent.emit(
 		createPrMergedRequest({
 			prUrl,
 			taskMarkedAsCompleted: false,

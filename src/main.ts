@@ -69,6 +69,17 @@ export function createExtensionState(
 	const sessionState = createSessionState();
 	const stateRef: { current: ExtensionState | null } = { current: null };
 	const moduleContext = { promptQueue, eventHandler, sessionState };
+	const worktree = createWorktreeModule(
+		eventHandler,
+		{ exec: dependencies.exec },
+		moduleContext,
+	);
+	const exitProtocol = createExitProtocolModule(
+		eventHandler,
+		promptQueue,
+		moduleContext,
+		worktree,
+	);
 	const extensionState = {
 		pi,
 		dependencies,
@@ -82,16 +93,8 @@ export function createExtensionState(
 		),
 		pr: createPrModule(eventHandler, sessionState, stateRef),
 		todoist: createTodoistModule(eventHandler, sessionState, stateRef),
-		worktree: createWorktreeModule(
-			eventHandler,
-			{ exec: dependencies.exec },
-			moduleContext,
-		),
-		exitProtocol: createExitProtocolModule(
-			eventHandler,
-			promptQueue,
-			moduleContext,
-		),
+		worktree,
+		exitProtocol,
 		registered: false,
 	} as ExtensionState;
 	attachApplicationOperations(extensionState);

@@ -90,7 +90,9 @@ function setup(overrides: Record<string, unknown> = {}) {
 
 async function emit(runtime: ExtensionState) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
-	await runtime.eventHandler.prMergedEvent.emit(createPrMergedRequest(payload));
+	await runtime.eventHandler.prMergeRequestedEvent.emit(
+		createPrMergedRequest(payload),
+	);
 	await runtime.promptQueue.drain();
 	return payload;
 }
@@ -164,16 +166,18 @@ describe("Todoist merge consumer", () => {
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
 		);
-		setupResult.runtime.eventHandler.prMergedEvent.subscribe((request) => {
-			request.addAction({
-				id: "remove-worktree",
-				label: "Run exit action",
-				execute: async () => {
-					order.push("exit");
-					return "completed";
-				},
-			});
-		});
+		setupResult.runtime.eventHandler.prMergeRequestedEvent.subscribe(
+			(request) => {
+				request.addAction({
+					id: "remove-worktree",
+					label: "Run exit action",
+					execute: async () => {
+						order.push("exit");
+						return "completed";
+					},
+				});
+			},
+		);
 
 		await emit(setupResult.runtime);
 

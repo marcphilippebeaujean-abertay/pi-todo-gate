@@ -205,7 +205,7 @@ async function consumeMergedEvent(
 }
 
 export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
-	runtime.eventHandler.prMergedEvent.subscribe(
+	runtime.eventHandler.prMergeRequestedEvent.subscribe(
 		consumeMergedEvent.bind(null, runtime),
 	);
 }

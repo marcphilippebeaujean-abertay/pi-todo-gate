@@ -25,7 +25,6 @@ module.exports = {
 		{ name: "no-exit-protocol-to-pr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/pr/" } },
 		{ name: "no-exit-protocol-to-todoist", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/todoist/" } },
 		{ name: "no-exit-protocol-to-herdr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/herdr/" } },
-		{ name: "no-exit-protocol-to-worktree", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/worktree/" } },
 		{ name: "no-exit-protocol-to-footer", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/footer/" } },
 		{ name: "no-footer-to-pr", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/pr/" } },
 		{ name: "no-footer-to-todoist", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/todoist/" } },
@@ -240,12 +239,6 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
 			to: { path: "^src/worktree/event-consumers\\.ts$" },
-		},
-		{
-			name: "worktree-module-requires-event-publishers",
-			severity: "error",
-			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/event-publishers\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-user-prompts",

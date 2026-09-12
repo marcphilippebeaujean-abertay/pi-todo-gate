@@ -65,7 +65,7 @@ describe("shared events", () => {
 	it("preserves merge action collection before later subscribers", async () => {
 		const events = createSharedEvents();
 		const order: string[] = [];
-		events.prMergedEvent.subscribe((request) => {
+		events.prMergeRequestedEvent.subscribe((request) => {
 			order.push("todoist");
 			request.addAction(action());
 		});
@@ -73,7 +73,7 @@ describe("shared events", () => {
 			order.push(`present:${request.actions.length}`);
 		});
 
-		await events.prMergedEvent.emit(
+		await events.prMergeRequestedEvent.emit(
 			createPrMergedRequest({
 				prUrl: "https://github.com/o/r/pull/1",
 				taskMarkedAsCompleted: false,

@@ -3,20 +3,27 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import { enqueueExitActions } from "./event-publishers.ts";
+import type { WorktreeModule } from "../worktree/state.ts";
+import {
+	addWorktreeExitAction,
+	enqueueExitActions,
+} from "./event-publishers.ts";
 import type { ExitProtocolModule, ExitRequest } from "./state.ts";
 
 export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;
 	private readonly promptQueue: PromptQueue;
+	private readonly worktree: WorktreeModule | undefined;
 
 	constructor(
 		events: EventHandler,
 		promptQueue: PromptQueue,
 		readonly _moduleContext?: ModuleContext,
+		worktree?: WorktreeModule,
 	) {
 		this.promptQueue = promptQueue;
-		events.prMergedPresentEvent.subscribe(this.onPrMerged.bind(this));
+		this.worktree = worktree;
+		events.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 	}
 
 	sessionStart(context: ExtensionContext): void {
@@ -38,6 +45,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private onPrMerged(request: ExitRequest): void {
 		const context = this.context;
 		if (context === null) return;
+		addWorktreeExitAction(request, this.worktree);
 		enqueueExitActions(
 			this.promptQueue,
 			context,
