@@ -1,11 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { PromptQueue } from "../prompt-queue.ts";
 import type {
 	EventRequest,
 	SharedEventPayloads,
 	SharedEvents,
 } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import type { PromptQueue } from "../shared/prompt-queue.ts";
 import {
 	EXIT_ACTION_KEY,
 	type EXIT_CANCEL_KEY,

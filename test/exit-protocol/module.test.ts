@@ -8,9 +8,9 @@ import {
 	initialPickerState,
 	toggleAction,
 } from "../../src/exit-protocol/state.ts";
+import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
-import { PromptQueue } from "../../src/shared/prompt-queue.ts";
 
 const actions: ExitAction[] = [
 	{

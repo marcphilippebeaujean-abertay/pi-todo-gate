@@ -12,9 +12,9 @@ import { createExitProtocolModule } from "./exit-protocol/module.ts";
 import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import { createPrModule } from "./pr/module.ts";
+import { PromptQueue } from "./prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import { createEventHandler } from "./shared/events.ts";
-import { PromptQueue } from "./shared/prompt-queue.ts";
 import { isSubagent } from "./shared/session.ts";
 import {
 	enqueueSessionOperation,

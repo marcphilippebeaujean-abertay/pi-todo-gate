@@ -6,9 +6,9 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { register } from "../../src/pr/module.ts";
+import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
-import { PromptQueue } from "../../src/shared/prompt-queue.ts";
 import {
 	currentSessionContext,
 	type ExtensionState,

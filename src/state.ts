@@ -9,11 +9,11 @@ import type {
 	StartBackgroundWorker,
 } from "./herdr/state.ts";
 import type { PrModule } from "./pr/state.ts";
+import type { PromptQueue } from "./prompt-queue.ts";
 import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import type { ExitActionResult } from "./shared/exit-actions.ts";
-import type { PromptQueue } from "./shared/prompt-queue.ts";
 import type {
 	ResolvedProject,
 	TaskClaimWorker,
