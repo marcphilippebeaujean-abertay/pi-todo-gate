@@ -31,13 +31,18 @@ function rootWithConfig(
 		stderr: string;
 		code: number;
 	}> = async () => ({ stdout: "", stderr: "", code: 1 }),
+	openSession?: (path: string) => {
+		getCwd: () => string;
+		getSessionId: () => string;
+		getBranch: () => unknown[];
+	},
 ) {
 	const pi = {
 		appendEntry: vi.fn(),
 		on: vi.fn(),
 		registerTool: vi.fn(),
 	} as never;
-	const state = createExtensionState(pi, { loadConfig, exec });
+	const state = createExtensionState(pi, { loadConfig, exec, openSession });
 	const root = (
 		state as typeof state & { root: Parameters<typeof handleSessionStart>[0] }
 	).root;
@@ -142,6 +147,58 @@ describe("session shutdown", () => {
 			branch: "feature",
 			remoteOrigin: "https://persisted.example/repo.git",
 		});
+	});
+
+	it("projects inherited handoff origin before persistence", async () => {
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout:
+							"worktree /main\nHEAD main\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				return { stdout: "", stderr: "", code: 0 };
+			},
+			() => ({
+				getCwd: () => "/repo",
+				getSessionId: () => "previous-session",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todo-gate-state",
+						data: {
+							remoteOrigin: "https://persisted.example/repo.git",
+						},
+					},
+				],
+			}),
+		);
+		await handleSessionStart(
+			root,
+			{
+				type: "session_start",
+				previousSessionFile: "previous",
+			} as never,
+			context("/repo"),
+		);
+		expect(root.sessionState.gitState.remoteOrigin).toBe(
+			"https://persisted.example/repo.git",
+		);
+		expect(root.pi.appendEntry).toHaveBeenCalledWith(
+			"pi-todo-gate-state",
+			expect.objectContaining({
+				remoteOrigin: "https://persisted.example/repo.git",
+				inheritedFrom: "previous-session",
+			}),
+		);
 	});
 
 	it("does not append origin after concurrent shutdown", async () => {

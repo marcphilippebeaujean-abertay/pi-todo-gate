@@ -142,7 +142,6 @@ function inheritPreviousState(
 		...inherited,
 		inheritedFrom: previous.getSessionId(),
 	};
-	appendState(root, inheritedState);
 	return { state: inheritedState, handoffContext: true };
 }
 
@@ -172,7 +171,11 @@ async function activateConfigured(
 	ctx: ExtensionContext,
 	project: { codingRoot: string; todoistProjectRef: string },
 	config: TodoistProjectMapping,
-): Promise<{ session: PrSession; branch: readonly unknown[] } | null> {
+): Promise<{
+	session: PrSession;
+	branch: readonly unknown[];
+	inheritedState?: WorkState;
+} | null> {
 	const branch = ctx.sessionManager.getBranch();
 	const stateEntry = latestStateData(branch, C.entry.state);
 	let state = latestState(branch);
@@ -226,7 +229,23 @@ async function activateConfigured(
 	if (!isCurrentEpoch(root, epoch)) return null;
 	await root.publisher.publishSessionActivated({ context: ctx });
 	if (!isCurrentEpoch(root, epoch)) return null;
-	return { session, branch };
+	return {
+		session,
+		branch,
+		inheritedState: handoffContext ? inherited.state : undefined,
+	};
+}
+
+async function persistInheritedState(
+	root: Root,
+	epoch: number,
+	inheritedState: WorkState | undefined,
+): Promise<boolean> {
+	if (inheritedState === undefined) return true;
+	if (!isCurrentEpoch(root, epoch)) return false;
+	appendState(root, inheritedState);
+	await root.stateUpdatesDrained();
+	return isCurrentEpoch(root, epoch);
 }
 
 async function persistInitialPr(
@@ -268,9 +287,15 @@ export async function handleSessionStart(
 		config,
 	);
 	if (activated === null || !isCurrentEpoch(root, epoch)) return;
-	const { session, branch } = activated;
+	const { session, branch, inheritedState } = activated;
 	await root.stateUpdatesDrained();
 	if (!isCurrentEpoch(root, epoch)) return;
+	const inheritedStateReady = await persistInheritedState(
+		root,
+		epoch,
+		inheritedState,
+	);
+	if (!inheritedStateReady) return;
 	root.registerStateTool(() => root.getSession());
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
