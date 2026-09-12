@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type {
-	ActiveSession,
-	ExtensionRuntime,
-} from "../../src/extension-types.ts";
 import { isCurrentMerge } from "../../src/shared/work-state.ts";
+import type { ActiveSession, ExtensionRuntime } from "../../src/state.ts";
 
 const PR_URL = "https://github.com/owner/repo/pull/42";
 const TASK_REF = "task-42";

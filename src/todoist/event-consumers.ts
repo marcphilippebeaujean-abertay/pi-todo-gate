@@ -1,7 +1,7 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import { applyStatePatch } from "../session-state.ts";
 import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { inspectProject } from "../shared/project.ts";
+import { applyStatePatch } from "../state.ts";
 import {
 	CLAIM,
 	COMPLETED,

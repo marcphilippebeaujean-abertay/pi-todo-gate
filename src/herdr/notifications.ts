@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { handleClaimError } from "../claim-error.ts";
+import { handleClaimError } from "../shared/claim-error.ts";
 import { HERDR, HERDR_FOOTER_TYPE, HERDR_WORKING_STATUS } from "./constants.ts";
 import type { FooterEventSink } from "./events.ts";
 

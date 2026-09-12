@@ -2,28 +2,28 @@ import {
 	type ExtensionContext,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { loadConfig, resolveConfiguredProject } from "./config.ts";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import type { SessionStartEvent } from "./events.ts";
-import { persistPrIfAvailable } from "./extension-events.ts";
-import {
-	appendState,
-	deactivateSession,
-	initializeRemoteOrigin,
-	refreshFooterStatuses,
-	resetTemporarySessionState,
-} from "./extension-lifecycle.ts";
-import { branchTexts, latestStateData } from "./extension-message.ts";
-import { installStateTool } from "./extension-tool.ts";
+import { refreshFooterStatuses } from "../footer/module.ts";
+import { installStateTool } from "../pr/state-tool.ts";
+import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { SessionStartEvent } from "../shared/events.ts";
+import { branchTexts, latestStateData } from "../shared/extension-message.ts";
+import { hasUncommittedChanges } from "../shared/project.ts";
 import type {
 	ActiveSession,
 	ExtensionRuntime,
 	SessionReader,
-} from "./extension-types.ts";
-import { extractInheritedState, latestState } from "./session-state.ts";
-import { spawnExec } from "./shared/command.ts";
-import { hasUncommittedChanges } from "./shared/project.ts";
-import type { TodoistProjectMapping } from "./todoist/module.ts";
+} from "../state.ts";
+import { extractInheritedState, latestState } from "../state.ts";
+import { loadConfig, resolveConfiguredProject } from "../todoist/config.ts";
+import type { TodoistProjectMapping } from "../todoist/module.ts";
+import { persistPrIfAvailable } from "./event-handlers.ts";
+import {
+	appendState,
+	deactivateSession,
+	initializeRemoteOrigin,
+	resetTemporarySessionState,
+} from "./lifecycle.ts";
 
 const FUNCTION_TYPE = "function";
 

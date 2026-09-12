@@ -5,20 +5,16 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import {
-	appendState,
-	refreshFooterStatuses,
-	replaceSessionState,
-} from "./extension-lifecycle.ts";
-import { extensionResult } from "./extension-message.ts";
+import { appendState, replaceSessionState } from "../application/lifecycle.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { extensionResult } from "../shared/extension-message.ts";
 import type {
 	ActiveSession,
 	ExtensionRuntime,
 	StateToolParams,
-} from "./extension-types.ts";
-import { githubPrUrl } from "./pr/module.ts";
-import { applyStatePatch } from "./session-state.ts";
+} from "../state.ts";
+import { applyStatePatch } from "../state.ts";
+import { githubPrUrl } from "./module.ts";
 
 export const stateParameters = Type.Object({
 	action: StringEnum(["status", "set_pr", "clear_pr", "clear_all"] as const),
@@ -56,7 +52,7 @@ function setPrAction(
 	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state);
-	refreshFooterStatuses(runtime, session);
+	runtime.refreshFooterStatuses(session);
 	return extensionResult(`Pinned PR ${url}`);
 }
 
@@ -75,7 +71,7 @@ function clearPrState(
 	);
 	session.allowPrDiscovery = false;
 	appendState(runtime, session.state, true);
-	refreshFooterStatuses(runtime, session);
+	runtime.refreshFooterStatuses(session);
 	return extensionResult(message);
 }
 

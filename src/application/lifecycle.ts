@@ -1,35 +1,16 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import type {
-	ActiveSession,
-	ExtensionDependencies,
-	ExtensionRuntime,
-} from "./extension-types.ts";
-import { renderPrStatus, renderTodoistTaskStatus } from "./footer/module.ts";
-import { invalidateOperations } from "./session-operations.ts";
-import { applyStatePatch } from "./session-state.ts";
-import { spawnExec } from "./shared/command.ts";
-import { inspectProject } from "./shared/project.ts";
-import { TodoistClient } from "./todoist/module.ts";
+import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { inspectProject } from "../shared/project.ts";
+import { invalidateOperations } from "../shared/session-operations.ts";
+import type { ActiveSession, ExtensionRuntime } from "../state.ts";
+import { applyStatePatch } from "../state.ts";
 
 export function resetTemporarySessionState(runtime: ExtensionRuntime): void {
 	runtime.promptQueue.reset();
 	runtime.taskClaim.pending = false;
 	runtime.taskClaim.completed = false;
 	runtime.taskClaim.session = undefined;
-}
-
-export function createClient(
-	ctx: ExtensionContext,
-	dependencies: ExtensionDependencies,
-): TodoistClient {
-	const exec = dependencies.exec ?? spawnExec;
-	return (
-		dependencies.createTodoistClient?.(ctx, exec) ??
-		new TodoistClient({
-			run: (args) => exec(C.command.todoist, [...args], { cwd: ctx.cwd }),
-		})
-	);
 }
 
 export function replaceSessionState(
@@ -69,43 +50,6 @@ export async function initializeRemoteOrigin(
 	const hasChanged = state.remoteOrigin !== nextState.remoteOrigin;
 	if (hasChanged) appendState(runtime, nextState);
 	return nextState;
-}
-
-export function refreshFooterStatuses(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-): void {
-	runtime.footer.update({
-		footerType: C.status.pr,
-		isLoading: false,
-		text: renderPrStatus(
-			session.state.prUrl,
-			session.context.ui.theme,
-			session.hasUncommittedChanges,
-		),
-		isVisible: true,
-	});
-	runtime.footer.update({
-		footerType: C.status.task,
-		isLoading: false,
-		text: renderTodoistTaskStatus(
-			session.state.taskUrl,
-			session.context.ui.theme,
-			session.state.taskName,
-		),
-		isVisible: true,
-	});
-}
-
-export function updateWorkingTreeStatus(
-	runtime: ExtensionRuntime,
-	session: ActiveSession,
-	hasUncommittedChanges: boolean,
-): void {
-	const hasStatusChanged =
-		session.hasUncommittedChanges !== hasUncommittedChanges;
-	session.hasUncommittedChanges = hasUncommittedChanges;
-	if (hasStatusChanged) refreshFooterStatuses(runtime, session);
 }
 
 export function deactivateSession(

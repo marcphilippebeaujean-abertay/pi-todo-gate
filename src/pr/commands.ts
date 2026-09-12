@@ -2,9 +2,9 @@ import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import type { CommandResult } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import {
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
 	mergeProtocolSkillPath,

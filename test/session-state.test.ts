@@ -31,7 +31,7 @@ import {
 	emptyWorkState,
 	extractInheritedState,
 	latestState,
-} from "../src/session-state.ts";
+} from "../src/state.ts";
 
 describe("session state", () => {
 	it(STARTS_EMPTY, () => {

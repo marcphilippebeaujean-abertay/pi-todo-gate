@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { SharedEvents } from "../shared/events.ts";
 import type { PromptQueue } from "../shared/prompt-queue.ts";
 import { EXIT_PRESENT_PHASE } from "./constants.ts";

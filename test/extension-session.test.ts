@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSessionShutdown } from "../src/extension-session.ts";
-import type { ExtensionRuntime } from "../src/extension-types.ts";
+import { handleSessionShutdown } from "../src/application/session.ts";
+import type { ExtensionRuntime } from "../src/state.ts";
 
 describe("session shutdown", () => {
 	it("does not emit delayed shutdown work", () => {

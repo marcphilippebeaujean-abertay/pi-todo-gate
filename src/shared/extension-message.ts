@@ -1,5 +1,5 @@
+import { isWorkState } from "../state.ts";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import { isWorkState } from "./session-state.ts";
 
 const STRING_TYPE = "string";
 const OBJECT_TYPE = "object";

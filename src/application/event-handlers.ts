@@ -1,31 +1,33 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import type {
-	BeforeAgentStartEvent,
-	BeforeAgentStartResultEvent,
-	MessageEndEvent,
-	ToolResultEvent,
-} from "./events.ts";
 import {
-	appendState,
-	initializeRemoteOrigin,
 	refreshFooterStatuses,
-	replaceSessionState,
 	updateWorkingTreeStatus,
-} from "./extension-lifecycle.ts";
-import { textOf } from "./extension-message.ts";
-import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
+} from "../footer/module.ts";
 import {
 	findOpenPr,
 	githubPrUrls,
 	isGithubPrAvailable,
 	matchesPinnedPr,
-} from "./pr/module.ts";
-import { applyStatePatch } from "./session-state.ts";
-import { type Exec, spawnExec } from "./shared/command.ts";
-import { hasUncommittedChanges, inspectProject } from "./shared/project.ts";
-import { isCurrentMerge } from "./shared/work-state.ts";
-import { maybeAnalyzeTaskClaim } from "./todoist/module.ts";
+} from "../pr/module.ts";
+import { type Exec, spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type {
+	BeforeAgentStartEvent,
+	BeforeAgentStartResultEvent,
+	MessageEndEvent,
+	ToolResultEvent,
+} from "../shared/events.ts";
+import { textOf } from "../shared/extension-message.ts";
+import { hasUncommittedChanges, inspectProject } from "../shared/project.ts";
+import { isCurrentMerge } from "../shared/work-state.ts";
+import type { ActiveSession, ExtensionRuntime } from "../state.ts";
+import { applyStatePatch } from "../state.ts";
+import { maybeAnalyzeTaskClaim } from "../todoist/module.ts";
+import {
+	appendState,
+	initializeRemoteOrigin,
+	replaceSessionState,
+} from "./lifecycle.ts";
 
 const STRING_TYPE = "string";
 const GIT_MUTATION_RE =

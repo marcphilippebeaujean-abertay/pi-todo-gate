@@ -1,19 +1,15 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "./constants.ts";
-import {
-	appendState,
-	createClient,
-	refreshFooterStatuses,
-	replaceSessionState,
-} from "./extension-lifecycle.ts";
-import type { ActiveSession, ExtensionRuntime } from "./extension-types.ts";
-import { enqueueSessionOperation } from "./session-operations.ts";
-import { applyStatePatch } from "./session-state.ts";
-import type { ExitActionResult } from "./shared/exit-actions.ts";
+import { appendState, replaceSessionState } from "../application/lifecycle.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { ExitActionResult } from "../shared/exit-actions.ts";
+import { enqueueSessionOperation } from "../shared/session-operations.ts";
+import type { ActiveSession, ExtensionRuntime } from "../state.ts";
+import { applyStatePatch } from "../state.ts";
+import { createClient } from "./client.ts";
 import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
-} from "./todoist/module.ts";
+} from "./event-publishers.ts";
 
 function isCurrentCompletion(
 	runtime: ExtensionRuntime,
@@ -51,7 +47,7 @@ function recordSuccessfulCompletion(
 		}),
 	);
 	appendState(runtime, session.state);
-	refreshFooterStatuses(runtime, session);
+	runtime.refreshFooterStatuses(session);
 	notifyCompletionSuccess(ctx);
 }
 
