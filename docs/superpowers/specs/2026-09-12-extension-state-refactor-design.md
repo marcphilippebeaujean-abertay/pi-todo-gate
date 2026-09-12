@@ -20,7 +20,7 @@ Behavior must remain unchanged.
 
 ## Public state contracts
 
-`src/state.ts` contains `SessionState`, `ExtensionState`, and state construction. Reusable Git-state contracts live in `src/shared/session-state.ts` so event contracts and modules do not import root application types:
+`src/state.ts` contains `SessionState`, `ExtensionState`, and state construction. Reusable Git-state contracts live in `src/shared/session-state.ts` so event contracts and modules do not import root application types. `PromptQueue` and its `PromptTask` type live in root `src/prompt-queue.ts`:
 
 ```ts
 interface SessionState {
@@ -53,6 +53,17 @@ sessionState.moduleState = {};
 `ExtensionState` and any session-context aggregate type are used only by `main.ts`. Submodules may import `SessionState` from root `state.ts`, but may not import `ExtensionState`, `SessionContext`, or root application adapters.
 
 Module-specific types move to their module `state.ts`. Persisted work-state parsing/projection moves to a shared/root-owned contract that does not require importing `ExtensionState`.
+
+### Prompt queue ownership
+
+`src/prompt-queue.ts` is root infrastructure. `main.ts` constructs the single queue and injects it into modules. Root event consumers reset it during lifecycle transitions. Modules may enqueue work but do not reset or replace the queue.
+
+Prompt-related helpers are classified by ownership:
+
+- interactive module prompts stay in their owning module `user-prompts.ts`;
+- exit prompt orchestration stays in the Exit Protocol module;
+- worker argument/text utilities in `src/shared/pi-worker.ts` remain shared because they describe the subprocess protocol, not user prompt coordination;
+- no prompt queue or generic interactive prompt utility remains in `src/shared/`.
 
 ## Ownership boundaries
 
@@ -202,10 +213,11 @@ Working-tree refresh:
 - Move remote-origin discovery and merge-currentness logic into PR facets.
 - Move working-tree status initialization/refresh into Worktree event consumers.
 - Move Todoist claim reset into Todoist event consumers.
+- Move `src/shared/prompt-queue.ts` to root `src/prompt-queue.ts`, including `PromptTask`.
 - Keep PromptQueue reset in root event consumer.
 - Remove root `SessionContext`, WeakMap/session adapters, `ApplicationContext`, and all runtime compatibility wrappers.
 - Delete `src/application/` after imports and tests migrate.
-- Update `main.ts` to construct modules once, pass `PromptQueue`, `EventHandler`, and stable `SessionState` to constructors, then register root consumers.
+- Update `main.ts` to construct root `PromptQueue` and modules once, pass `PromptQueue`, `EventHandler`, and stable `SessionState` to constructors, then register root consumers.
 
 ## Lint and architecture rules
 
