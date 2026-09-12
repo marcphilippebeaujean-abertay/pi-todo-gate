@@ -117,6 +117,12 @@ describe("session shutdown", () => {
 					};
 				if (key === "git rev-parse HEAD")
 					return { stdout: "abc\n", stderr: "", code: 0 };
+				if (key === "git remote get-url origin")
+					return {
+						stdout: "https://github.com/o/r.git\n",
+						stderr: "",
+						code: 0,
+					};
 				return { stdout: "", stderr: "", code: 0 };
 			},
 		);
@@ -134,6 +140,7 @@ describe("session shutdown", () => {
 		expect(root.sessionState.gitState).toMatchObject({
 			isWorktree: true,
 			branch: "feature",
+			remoteOrigin: "https://github.com/o/r.git",
 		});
 	});
 

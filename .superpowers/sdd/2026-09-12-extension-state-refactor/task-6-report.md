@@ -34,7 +34,8 @@
 - Replaced Worktree sibling module-state reads with typed `worktreeStatusEvent`; root formats footer state from active session.
 - Added concurrent start/shutdown, startup module snapshot, and post-drain reset regression coverage.
 - Added Todoist terminal deactivation claim-reset coverage.
-- Startup establishes active-session acceptance before Worktree/PR initialization, then drains root module updates before initial persistence and footer projection.
+- Startup establishes active-session acceptance before PR remote-origin discovery and Worktree initialization, then drains root module updates before initial persistence and footer projection.
+- Startup regression asserts retained `sessionState.gitState.remoteOrigin` alongside Worktree Git fields.
 
 ## Residual risks
 

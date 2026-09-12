@@ -184,14 +184,7 @@ async function activateConfigured(
 		stateEntry,
 		state,
 	);
-	state = await root.pr.initializeRemoteOrigin(ctx, inherited.state);
-	if (!isCurrentEpoch(root, epoch)) return null;
 	const handoffContext = inherited.handoffContext;
-	await root.footer.sessionStart(
-		handoffContext ? event : { ...event, previousSessionFile: undefined },
-		ctx,
-	);
-	if (!isCurrentEpoch(root, epoch)) return null;
 	const session: PrSession = {
 		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
@@ -212,6 +205,19 @@ async function activateConfigured(
 	};
 	root.sessionState.sessionId = session.sessionId;
 	root.setSession(session);
+	state = await root.pr.initializeRemoteOrigin(ctx, inherited.state);
+	if (!isCurrentEpoch(root, epoch)) return null;
+	session.state = state;
+	session.allowPrDiscovery = root.pr.isDiscoveryAllowed(
+		stateEntry,
+		state,
+		handoffContext,
+	);
+	await root.footer.sessionStart(
+		handoffContext ? event : { ...event, previousSessionFile: undefined },
+		ctx,
+	);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	root.exitProtocol.sessionStart(ctx);
 	await root.worktree.sessionStart(ctx);
 	if (!isCurrentEpoch(root, epoch)) return null;
