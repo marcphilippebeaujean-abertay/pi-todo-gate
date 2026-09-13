@@ -20,7 +20,7 @@ coverage/
 .pi/
 
 # SDD scratch workspace
-.superpowers/
+/.superpowers/
 
 # Documentation (temporarily untracked)
 /docs/
