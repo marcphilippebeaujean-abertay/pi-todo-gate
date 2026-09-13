@@ -144,11 +144,6 @@ export interface PrModule {
 	): Promise<string | undefined>;
 	persistPrIfAvailable(text: string): Promise<void>;
 	persistInitialPr(branch: readonly unknown[]): Promise<void>;
-	isDiscoveryAllowed(
-		stateEntry: Record<string, unknown> | null,
-		state: PrState,
-		hasPendingHandoffContext: boolean,
-	): boolean;
 	appendBeforeAgentPrompt(
 		ctx: ExtensionContext,
 		messages: string[],

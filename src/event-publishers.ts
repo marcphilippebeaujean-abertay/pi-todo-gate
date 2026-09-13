@@ -1,9 +1,9 @@
 import type {
 	EventHandler,
-	ModuleStateChangedEvent,
 	PiToolRegistrationsBecameAvailableEvent,
 	SessionActivatedEvent,
 } from "./shared/events.ts";
+import { createModuleStateUpdate } from "./shared/module-state-events.ts";
 import type { GitState, ModuleId, ModuleState } from "./state.ts";
 
 export interface ModuleStatePublisher<K extends ModuleId> {
@@ -22,14 +22,7 @@ export function createModuleStatePublisher<K extends ModuleId>(
 ): ModuleStatePublisher<K> {
 	return {
 		publish(moduleState, options) {
-			const update: ModuleStateChangedEvent = {
-				moduleId,
-				moduleState,
-				persist: options.persist,
-				...(options.gitStatePatch === undefined
-					? {}
-					: { gitStatePatch: options.gitStatePatch }),
-			} as ModuleStateChangedEvent;
+			const update = createModuleStateUpdate(moduleId, moduleState, options);
 			return eventHandler.moduleStateChangedEvent.emit(update);
 		},
 	};

@@ -325,21 +325,6 @@ class PrModuleImpl implements PrModule {
 		await this.persistPrIfAvailable(branchTexts(branch).join("\n"));
 	}
 
-	isDiscoveryAllowed(
-		stateEntry: Record<string, unknown> | null,
-		state: PrState,
-		hasPendingHandoffContext: boolean,
-	): boolean {
-		const disabled =
-			state.discoveryDisabled || stateEntry?.prDiscoveryDisabled === true;
-		const notHandoff = !hasPendingHandoffContext;
-		const discoveryEnabled = !disabled;
-		const hasPinnedPr = state.prUrl !== undefined;
-		const hasNoPinnedPr = !hasPinnedPr;
-		const eligible = notHandoff && discoveryEnabled;
-		return eligible && hasNoPinnedPr;
-	}
-
 	async appendBeforeAgentPrompt(
 		ctx: ExtensionContext,
 		messages: string[],

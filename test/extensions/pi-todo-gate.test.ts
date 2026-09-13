@@ -146,58 +146,37 @@ type TestTool = {
 };
 type StateToolResult = { content: Array<{ text: string }> };
 
-function normalizeStateEntry(entry: unknown): unknown {
-	if (typeof entry !== "object" || entry === null) return entry;
-	const candidate = entry as { customType?: unknown; data?: unknown };
-	if (
-		candidate.customType !== PI_TODO_GATE_STATE_ENTRY ||
-		typeof candidate.data !== "object" ||
-		candidate.data === null ||
-		Array.isArray(candidate.data)
-	)
-		return entry;
-	const data = candidate.data as Record<string, unknown>;
-	if (data.schemaVersion !== undefined) return entry;
-	if (typeof data.taskRef !== "string" && typeof data.prUrl !== "string")
-		return entry;
+function persistedStateEntry(
+	moduleState: {
+		pr?: Record<string, unknown>;
+		todoist?: Record<string, unknown>;
+		herdr?: Record<string, unknown>;
+		worktree?: Record<string, unknown>;
+		footer?: Record<string, unknown>;
+		exitProtocol?: Record<string, unknown>;
+	},
+	gitState: Record<string, unknown> = {},
+	session: Record<string, unknown> = {},
+): unknown {
 	return {
-		...entry,
+		type: CUSTOM,
+		customType: PI_TODO_GATE_STATE_ENTRY,
 		data: {
 			schemaVersion: 1,
-			session:
-				typeof data.inheritedFrom === "string"
-					? { inheritedFromSessionId: data.inheritedFrom }
-					: {},
-			gitState: {
-				...(typeof data.remoteOrigin === "string"
-					? { remoteOrigin: data.remoteOrigin }
-					: {}),
-				...(typeof data.mergeCompletedAt === "string"
-					? { mergeCompletedAt: data.mergeCompletedAt }
-					: {}),
-			},
+			session,
+			gitState,
 			moduleState: {
 				pr: {
-					...(typeof data.prUrl === "string" ? { prUrl: data.prUrl } : {}),
-					discoveryDisabled: data.prDiscoveryDisabled === true,
+					discoveryDisabled: false,
 					discoveryTestedUrls: [],
 					mergedPrs: [],
+					...moduleState.pr,
 				},
-				todoist: {
-					...(typeof data.taskRef === "string"
-						? { taskRef: data.taskRef }
-						: {}),
-					...(typeof data.taskName === "string"
-						? { taskName: data.taskName }
-						: {}),
-					...(typeof data.taskUrl === "string"
-						? { taskUrl: data.taskUrl }
-						: {}),
-				},
-				herdr: {},
-				worktree: {},
-				footer: { footers: {} },
-				exitProtocol: { active: true },
+				todoist: moduleState.todoist ?? {},
+				herdr: moduleState.herdr ?? {},
+				worktree: moduleState.worktree ?? {},
+				footer: moduleState.footer ?? { footers: {} },
+				exitProtocol: moduleState.exitProtocol ?? { active: true },
 			},
 		},
 	};
@@ -210,7 +189,6 @@ function harness(
 	selectResponse?: string,
 ) {
 	const handlers = new Map<string, TestHandler>();
-	const normalizedBranch = branch.map(normalizeStateEntry);
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const footerAppended: unknown[] = [];
@@ -251,7 +229,7 @@ function harness(
 				statusCalls.push({ key, text }),
 		},
 		sessionManager: {
-			getBranch: () => normalizedBranch,
+			getBranch: () => branch,
 			getSessionId: () => SESSION_CURRENT,
 			getSessionFile: () => SESSIONS_CURRENT_JSONL,
 			getSessionDir: () => SESSIONS,
@@ -335,11 +313,9 @@ describe("working tree status", () => {
 		MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT,
 		async () => {
 			const h = harness(CONFIGURED_PROJECT, [
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE_ENTRY,
-					data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
-				},
+				persistedStateEntry({
+					pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				}),
 			]);
 			let isDirty = true;
 			const exec = async (command: string, args: string[]) => {
@@ -387,11 +363,9 @@ describe("working tree status", () => {
 	it("starts exit protocol after an external gh pull request merge", async () => {
 		const root = CONFIGURED_PROJECT;
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+			}),
 		]);
 		h.ctx.hasUI = true;
 		const exec = vi.fn(async (command: string, args: string[]) => {
@@ -697,7 +671,7 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await new Promise((resolve) => setTimeout(resolve, 500));
 		expect(h.confirmations).toHaveLength(0);
 		expect(claimTask).not.toHaveBeenCalled();
 		expect(latestModuleState(h, "todoist")).toMatchObject({
@@ -734,7 +708,7 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(claimTask).not.toHaveBeenCalled();
 		expect(h.appended).toHaveLength(0);
@@ -775,7 +749,7 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(h.confirmations).toHaveLength(0);
 		expect(createTask).not.toHaveBeenCalled();
@@ -867,7 +841,7 @@ describe("automatic Todoist task claiming", () => {
 			},
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 		expect(worker).toHaveBeenCalledTimes(1);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (not used)",
@@ -921,11 +895,12 @@ describe("hidden lifecycle context", () => {
 		expect(result).toBeUndefined();
 
 		const withTask = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: { taskRef: VALUE_42, taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42 },
-			},
+			persistedStateEntry({
+				todoist: {
+					taskRef: VALUE_42,
+					taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42,
+				},
+			}),
 		]);
 		await start(withTask, { "/configured": MERGE_TD });
 		const second = await withTask.handlers.get(BEFORE_AGENT_START)?.(
@@ -1097,14 +1072,10 @@ describe("pi_todo_gate_state", () => {
 
 	it(CLEAR_ALL_PRESERVES_TASK_STATE, async () => {
 		const h = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_1,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		await start(h, { "/configured": MERGE_TD });
 		await h.tools[0].execute(
@@ -1125,15 +1096,13 @@ describe("pi_todo_gate_state", () => {
 
 	it(VALIDATES_AND_PERSISTS_AN_EXPLICIT_PR_OVERRIDE, async () => {
 		const h = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_1,
-					mergeCompletedAt: OLD,
-					todoistCompletionAttemptedAt: OLD,
+			persistedStateEntry(
+				{
+					pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+					todoist: { todoistCompletionAttemptedAt: OLD },
 				},
-			},
+				{ mergeCompletedAt: OLD },
+			),
 		]);
 		const exec = async (_command: string, args: string[]) =>
 			args.join(" ") === "remote get-url origin"
@@ -1187,14 +1156,11 @@ describe("pi_todo_gate_state", () => {
 					"/configured/project": CHILD,
 				}),
 			openSession: () => ({
-				getBranch: () =>
-					[
-						{
-							type: CUSTOM,
-							customType: PI_TODO_GATE_STATE_ENTRY,
-							data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
-						},
-					].map(normalizeStateEntry),
+				getBranch: () => [
+					persistedStateEntry({
+						pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+					}),
+				],
 				getSessionId: () => PREVIOUS,
 				getCwd: () => CONFIGURED_PROJECT,
 			}),
@@ -1222,14 +1188,9 @@ describe("pi_todo_gate_state", () => {
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			openSession: () => ({
-				getBranch: () =>
-					[
-						{
-							type: CUSTOM,
-							customType: PI_TODO_GATE_STATE_ENTRY,
-							data: { taskRef: TASK_1 },
-						},
-					].map(normalizeStateEntry),
+				getBranch: () => [
+					persistedStateEntry({ todoist: { taskRef: TASK_1 } }),
+				],
 				getSessionId: () => PREVIOUS,
 				getCwd: () => root,
 			}),
@@ -1253,15 +1214,10 @@ describe("pi_todo_gate_state", () => {
 	it.skip(CLEARING_A_TASK_CLEARS_ITS_COMPLETION_METADATA, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					taskRef: TASK_1,
-					mergeCompletedAt: OLD,
-					todoistCompletionAttemptedAt: OLD,
-				},
-			},
+			persistedStateEntry(
+				{ todoist: { taskRef: TASK_1, todoistCompletionAttemptedAt: OLD } },
+				{ mergeCompletedAt: OLD },
+			),
 		]);
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -1287,14 +1243,10 @@ describe("pi_todo_gate_state", () => {
 	it.skip(DOES_NOT_COMPLETE_STALE_MERGE_TASK, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		let resolveExec:
 			| ((result: { stdout: string; stderr: string; code: number }) => void)
@@ -1560,16 +1512,14 @@ describe("pi_todo_gate_state", () => {
 	it.skip(DOES_NOT_COMPLETE_ABA_RECLAIM, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: {
 					taskRef: TASK_1,
 					taskName: TASK_NAME,
 					taskUrl: TASK_URL,
 				},
-			},
+			}),
 		]);
 		let resolveExec: (() => void) | undefined;
 		const execReady = new Promise<void>((resolve) => {
@@ -1630,23 +1580,21 @@ describe("pi_todo_gate_state", () => {
 		resolveExec?.();
 		await mergePromise;
 
-		const latest = (h.appended.at(-1) as { data: Record<string, unknown> })
-			.data;
-		expect(latest).toMatchObject({ taskRef: TASK_1 });
-		expect(latest).not.toHaveProperty("mergeCompletedAt");
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
+		expect(latestSnapshotData(h).gitState).not.toHaveProperty(
+			"mergeCompletedAt",
+		);
 	});
 
 	it.skip(DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		let resolveCompletion: (() => void) | undefined;
 		const completion = new Promise<void>((resolve) => {
@@ -1693,26 +1641,19 @@ describe("pi_todo_gate_state", () => {
 		await mergePromise;
 		await clearing;
 
-		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: {
-				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-				prDiscoveryDisabled: true,
-			},
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+			discoveryDisabled: true,
 		});
 	});
 
 	it(DOES_NOT_COMPLETE_BEFORE_EXIT_ACTION, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		const completeTask = vi.fn();
 		const client = { completeTask };

@@ -72,25 +72,6 @@ export function resetSessionState(
 	state.moduleState = createSessionState().moduleState;
 }
 
-export function publishModuleState<K extends import("./state.ts").ModuleId>(
-	root: Root,
-	moduleId: K,
-	moduleState: import("./state.ts").ModuleState[K],
-	options: {
-		persist: boolean;
-		gitStatePatch?: Partial<import("./state.ts").GitState>;
-	},
-): void {
-	void root.eventHandler.moduleStateChangedEvent.emit({
-		moduleId,
-		moduleState,
-		persist: options.persist,
-		...(options.gitStatePatch === undefined
-			? {}
-			: { gitStatePatch: options.gitStatePatch }),
-	} as ModuleStateChangedEvent);
-}
-
 function deactivate(root: Root): void {
 	const session = root.session;
 	const hasSession = session !== null && session !== undefined;
