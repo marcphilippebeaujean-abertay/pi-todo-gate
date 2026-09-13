@@ -7,11 +7,8 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import type {
-	GitState,
-	SessionRecord,
-	SessionStateSnapshot,
-} from "./session-state.ts";
+import type { SessionStateSnapshot } from "../state.ts";
+import type { GitState, SessionRecord } from "./session-state.ts";
 
 export type {
 	BeforeAgentStartEvent,
