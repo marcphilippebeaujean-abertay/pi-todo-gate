@@ -5,6 +5,7 @@ import {
 	isPrState,
 	markRemindersDelivered,
 	mergedUrls,
+	prStateDescriptor,
 	recordMergedPr,
 	removeMergedPr,
 } from "../../src/pr/module.ts";
@@ -33,6 +34,43 @@ describe("isPrState", () => {
 				mergedPrs: [{ prUrl: "https://github.com/o/r/pull/41" }],
 			}),
 		).toBe(false);
+	});
+});
+
+describe("PR state descriptor", () => {
+	it("round-trips valid PR state and normalizes tested URLs", () => {
+		const state = {
+			prUrl: "https://github.com/o/r/pull/42",
+			discoveryDisabled: true,
+			discoveryTestedUrls: ["one", "one", "two"],
+			mergedPrs: [],
+		};
+		const restored = prStateDescriptor.restore(
+			prStateDescriptor.serialize(state),
+		);
+		expect(restored).toEqual({
+			...state,
+			discoveryTestedUrls: ["one", "two"],
+		});
+	});
+
+	it("falls back to defaults when required PR fields are malformed", () => {
+		expect(
+			prStateDescriptor.restore({
+				prUrl: 42,
+				discoveryDisabled: true,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
+			}),
+		).toEqual(prStateDescriptor.createInitialState());
+		expect(
+			prStateDescriptor.restore({
+				prUrl: "https://github.com/o/r/pull/42",
+				discoveryDisabled: true,
+				discoveryTestedUrls: "not-an-array",
+				mergedPrs: [],
+			}),
+		).toEqual(prStateDescriptor.createInitialState());
 	});
 });
 
@@ -299,9 +337,10 @@ describe("PR module ownership", () => {
 			dependencies: { exec },
 		});
 
-		await module.initializeRemoteOrigin(
-			{ cwd: "/repo", hasUI: false } as never,
-		);
+		await module.initializeRemoteOrigin({
+			cwd: "/repo",
+			hasUI: false,
+		} as never);
 
 		expect(updates).toEqual([
 			expect.objectContaining({
@@ -354,12 +393,12 @@ describe("PR module ownership", () => {
 		} as unknown as import("../../src/pr/state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
 		sessionState.moduleState.pr = {
-		prUrl: "https://github.com/o/r/pull/42",
-		discoveryDisabled: true,
-		discoveryTestedUrls: [],
-		mergedPrs: [],
-	};
-	sessionState.moduleState.todoist.taskRef = "task";
+			prUrl: "https://github.com/o/r/pull/42",
+			discoveryDisabled: true,
+			discoveryTestedUrls: [],
+			mergedPrs: [],
+		};
+		sessionState.moduleState.todoist.taskRef = "task";
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
@@ -411,6 +450,15 @@ describe("PR module ownership", () => {
 				"https://github.com/o/r/pull/43",
 			),
 		).toBe(true);
+		expect(
+			module.isCurrentMerge(
+				session,
+				2,
+				1,
+				"task",
+				"https://github.com/o/r/pull/43",
+			),
+		).toBe(false);
 
 		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
 		sessionState.moduleState.pr.discoveryTestedUrls = [
@@ -471,9 +519,10 @@ describe("PR module ownership", () => {
 			dependencies: { exec },
 		});
 		await module.activateSession(session);
-		const discovery = module.initializeRemoteOrigin(
-			{ cwd: "/repo", hasUI: false } as never,
-		);
+		const discovery = module.initializeRemoteOrigin({
+			cwd: "/repo",
+			hasUI: false,
+		} as never);
 		sessionState.session.activeSessionId = "new";
 		module.deactivateSession();
 		release();
@@ -580,7 +629,9 @@ describe("PR module ownership", () => {
 		release();
 		await discovery;
 
-		expect(sessionState.moduleState.pr.prUrl).toBe("https://github.com/o/r/pull/99");
+		expect(sessionState.moduleState.pr.prUrl).toBe(
+			"https://github.com/o/r/pull/99",
+		);
 	});
 
 	it("persists and emits origin discovered during before-agent prompting", async () => {

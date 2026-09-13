@@ -33,12 +33,14 @@ export function isCurrentMerge(
 	session: PrSession,
 	workRevision: number,
 	operationGeneration: number,
+	currentOperationGeneration: number,
 	taskRef: string | undefined,
 	prUrl: string,
 ): boolean {
 	const isActive = sessionState.session.activeSessionId !== null;
 	const hasSameRevision = session.workRevision === workRevision;
-	const hasSamePrGeneration = operationGeneration >= 0;
+	const hasSamePrGeneration =
+		operationGeneration === currentOperationGeneration;
 	const hasSameTask = sessionState.moduleState.todoist.taskRef === taskRef;
 	const hasSamePr = prState.prUrl === prUrl;
 	const sameMergeIdentity = hasSameTask && hasSamePr;
@@ -54,6 +56,7 @@ async function emitCurrentMerge(
 	context: ExtensionContext,
 	workRevision: number,
 	operationGeneration: number,
+	currentOperationGeneration: number,
 	taskRef: string | undefined,
 	prUrl: string,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -65,6 +68,7 @@ async function emitCurrentMerge(
 		session,
 		workRevision,
 		operationGeneration,
+		currentOperationGeneration,
 		taskRef,
 		prUrl,
 	);
@@ -76,6 +80,7 @@ export async function handlePrToolResult(
 	sessionState: SessionState,
 	prState: PrState,
 	operationGeneration: number,
+	currentOperationGeneration: number,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -106,6 +111,7 @@ export async function handlePrToolResult(
 		ctx,
 		session.workRevision,
 		operationGeneration,
+		currentOperationGeneration,
 		taskRef,
 		prUrl,
 		emitMerged,

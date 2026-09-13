@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { createModuleStatePublisher } from "../event-publishers.ts";
 import type { PromptQueue } from "../prompt-queue.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
@@ -12,7 +13,6 @@ import type {
 } from "../shared/events.ts";
 import { branchTexts } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
-import { createModuleStatePublisher } from "../event-publishers.ts";
 import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
@@ -68,7 +68,6 @@ class PrModuleImpl implements PrModule {
 	private generation = -1;
 	private readonly publishState;
 
-
 	constructor(options: PrModuleOptions) {
 		this.promptQueue = options.promptQueue;
 		this.pi = options.pi;
@@ -119,8 +118,8 @@ class PrModuleImpl implements PrModule {
 		installStateTool(pi, {
 			getSession: () => this.currentSession,
 			getPrState: () => this.state,
-			updatePrState: (state, persist) =>
-				this.publishState.publish(state, { persist }),
+			getRemoteOrigin: () => this.sessionState.gitState.remoteOrigin,
+			updatePrState: this.updatePrState.bind(this),
 			refreshFooterStatuses: () => undefined,
 			syncPrState: this.syncSessionState.bind(this),
 		});
@@ -263,10 +262,7 @@ class PrModuleImpl implements PrModule {
 		if (this.state.discoveryTestedUrls?.includes(url) === true) return;
 		this.state = {
 			...this.state,
-			discoveryTestedUrls: [
-				...(this.state.discoveryTestedUrls ?? []),
-				url,
-			],
+			discoveryTestedUrls: [...(this.state.discoveryTestedUrls ?? []), url],
 		};
 		await this.emitState(this.state, { persist: true });
 	}
@@ -303,9 +299,9 @@ class PrModuleImpl implements PrModule {
 			prUrl: url,
 			discoveryDisabled: true,
 			discoveryTestedUrls:
-			this.state.discoveryTestedUrls?.includes(url) === true
-				? this.state.discoveryTestedUrls
-				: [...(this.state.discoveryTestedUrls ?? []), url],
+				this.state.discoveryTestedUrls?.includes(url) === true
+					? this.state.discoveryTestedUrls
+					: [...(this.state.discoveryTestedUrls ?? []), url],
 		};
 		await this.emitState(this.state, { persist: true });
 		return true;
@@ -320,7 +316,8 @@ class PrModuleImpl implements PrModule {
 		state: PrState,
 		hasPendingHandoffContext: boolean,
 	): boolean {
-		const disabled = state.discoveryDisabled || stateEntry?.prDiscoveryDisabled === true;
+		const disabled =
+			state.discoveryDisabled || stateEntry?.prDiscoveryDisabled === true;
 		const notHandoff = !hasPendingHandoffContext;
 		const discoveryEnabled = !disabled;
 		const hasPinnedPr = state.prUrl !== undefined;
@@ -382,6 +379,7 @@ class PrModuleImpl implements PrModule {
 			session,
 			workRevision,
 			operationGeneration,
+			this.generation,
 			taskRef,
 			prUrl,
 		);
@@ -447,13 +445,14 @@ class PrModuleImpl implements PrModule {
 	}
 
 	private async handleToolResult(
-		event: Parameters<typeof handlePrToolResult>[4],
+		event: Parameters<typeof handlePrToolResult>[5],
 		ctx: ExtensionContext,
 	): Promise<void> {
 		await handlePrToolResult(
 			() => this.currentSession,
 			this.sessionState,
 			this.state,
+			this.generation,
 			this.generation,
 			event,
 			ctx,

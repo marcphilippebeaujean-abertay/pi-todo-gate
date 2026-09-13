@@ -3,14 +3,14 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
-import type { Exec } from "../shared/command.ts";
-import type { EventHandler } from "../shared/events.ts";
-import type { SessionRecord } from "../shared/session-state.ts";
-import type { PrModuleState, SessionState } from "../state.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
 } from "../session-state-persistence.ts";
+import type { Exec } from "../shared/command.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
+import type { PrModuleState, SessionState } from "../state.ts";
 
 export type PrState = PrModuleState;
 
@@ -32,29 +32,41 @@ function isMergedPr(value: unknown): value is MergedPr {
 }
 
 function restorePrState(value: unknown): PrState {
-	if (!isRecord(value))
-		return { discoveryDisabled: false, discoveryTestedUrls: [], mergedPrs: [] };
-	const tested = Array.isArray(value.discoveryTestedUrls)
-		? [...new Set(testedStrings(value.discoveryTestedUrls))]
-		: [];
-	const mergedPrs = Array.isArray(value.mergedPrs)
-		? value.mergedPrs.filter(isMergedPr)
-		: [];
+	if (!isRecord(value)) return initialPrState();
+	const hasValidPrUrl =
+		value.prUrl === undefined || typeof value.prUrl === "string";
+	const hasValidDiscoveryDisabled =
+		typeof value.discoveryDisabled === "boolean";
+	const hasValidTestedUrls =
+		Array.isArray(value.discoveryTestedUrls) &&
+		value.discoveryTestedUrls.every((entry) => typeof entry === "string");
+	const hasValidMergedPrs =
+		Array.isArray(value.mergedPrs) && value.mergedPrs.every(isMergedPr);
+	if (
+		!hasValidPrUrl ||
+		!hasValidDiscoveryDisabled ||
+		!hasValidTestedUrls ||
+		!hasValidMergedPrs
+	)
+		return initialPrState();
+	const discoveryDisabled = value.discoveryDisabled as boolean;
+	const discoveryTestedUrls = value.discoveryTestedUrls as unknown[];
+	const mergedPrs = value.mergedPrs as MergedPr[];
 	return {
-		...(typeof value.prUrl === "string" ? { prUrl: value.prUrl } : {}),
-		discoveryDisabled: value.discoveryDisabled === true,
-		discoveryTestedUrls: tested,
+		...(value.prUrl === undefined ? {} : { prUrl: value.prUrl as string }),
+		discoveryDisabled,
+		discoveryTestedUrls: [...new Set(testedStrings(discoveryTestedUrls))],
 		mergedPrs,
 	};
 }
 
+function initialPrState(): PrState {
+	return { discoveryDisabled: false, discoveryTestedUrls: [], mergedPrs: [] };
+}
+
 export const prStateDescriptor: ModuleStateDescriptor<"pr"> = {
 	id: "pr",
-	createInitialState: () => ({
-		discoveryDisabled: false,
-		discoveryTestedUrls: [],
-		mergedPrs: [],
-	}),
+	createInitialState: initialPrState,
 	restore: restorePrState,
 	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
 };
@@ -88,6 +100,7 @@ export type StateToolParams =
 export interface StateToolDependencies {
 	getSession: () => PrSession | null;
 	getPrState: () => PrState;
+	getRemoteOrigin: () => string | undefined;
 	updatePrState: (state: PrState, persist: boolean) => Promise<void> | void;
 	refreshFooterStatuses(session: PrSession): void;
 	syncPrState?: (session: PrSession) => Promise<void> | void;

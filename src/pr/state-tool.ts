@@ -39,7 +39,10 @@ async function setPrAction(
 	params: StateToolParams,
 ): Promise<AgentToolResult<undefined>> {
 	const currentState = dependencies.getPrState();
-	const url = githubPrUrl(params.url ?? "", currentState.prUrl ?? null);
+	const url = githubPrUrl(
+		params.url ?? "",
+		dependencies.getRemoteOrigin() ?? null,
+	);
 	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = currentState.prUrl !== url;
 	const nextState: PrState = {
