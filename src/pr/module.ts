@@ -12,6 +12,7 @@ import type {
 } from "../shared/events.ts";
 import { branchTexts } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
+import { createModuleStatePublisher } from "../event-publishers.ts";
 import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
@@ -27,7 +28,6 @@ import type {
 	PrSession,
 	PrSessionIdentity,
 	PrState,
-	PrWorkState,
 } from "./state.ts";
 import { installStateTool } from "./state-tool.ts";
 
@@ -44,22 +44,14 @@ export * from "./state.ts";
 export * from "./user-prompts.ts";
 
 function prStateFromSession(
-	session: PrSession,
-	operationGeneration: number,
+	state: PrState,
+	discoveryDisabled: boolean,
+	discoveryTestedUrls: readonly string[],
 ): PrState {
 	return {
-		remoteOrigin: session.state.remoteOrigin,
-		prUrl: session.state.prUrl,
-		discoveryDisabled: !session.allowPrDiscovery,
-		discoveryTestedUrls: [...session.prDiscoveryTestedUrls],
-		operationGeneration,
-	};
-}
-
-function stateFromWorkState(state: PrWorkState): PrState {
-	return {
-		remoteOrigin: state.remoteOrigin,
-		prUrl: state.prUrl,
+		...state,
+		discoveryDisabled,
+		discoveryTestedUrls: [...discoveryTestedUrls],
 	};
 }
 
@@ -72,8 +64,10 @@ class PrModuleImpl implements PrModule {
 	private readonly dependencies: PrModuleDependencies;
 	private readonly getLifecycleEpoch: () => number;
 	private registrationsAvailable = false;
-	private state: PrState = {};
+	private state: PrState;
 	private generation = -1;
+	private readonly publishState;
+
 
 	constructor(options: PrModuleOptions) {
 		this.promptQueue = options.promptQueue;
@@ -82,6 +76,11 @@ class PrModuleImpl implements PrModule {
 		this.sessionState = options.sessionState;
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.dependencies = options.dependencies ?? {};
+		this.state = structuredClone(this.sessionState.moduleState.pr);
+		this.publishState = createModuleStatePublisher(
+			this.eventHandler,
+			C.module.pr,
+		);
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
 		);
@@ -119,8 +118,9 @@ class PrModuleImpl implements PrModule {
 		registerMergeProtocol(pi, this.commandDependencies());
 		installStateTool(pi, {
 			getSession: () => this.currentSession,
-			appendState: this.appendPersistedState.bind(this),
-			replaceSessionState: this.replaceSessionState.bind(this),
+			getPrState: () => this.state,
+			updatePrState: (state, persist) =>
+				this.publishState.publish(state, { persist }),
 			refreshFooterStatuses: () => undefined,
 			syncPrState: this.syncSessionState.bind(this),
 		});
@@ -132,16 +132,14 @@ class PrModuleImpl implements PrModule {
 	): Promise<void> {
 		const epoch = activationEpoch ?? this.getLifecycleEpoch();
 		this.currentSession = session;
-		this.generation = Math.max(
-			this.generation + 1,
-			this.state.operationGeneration ?? 0,
+		this.generation += 1;
+		const nextState = prStateFromSession(
+			this.sessionState.moduleState.pr,
+			this.sessionState.moduleState.pr.discoveryDisabled === true,
+			this.sessionState.moduleState.pr.discoveryTestedUrls ?? [],
 		);
-		const nextState = prStateFromSession(session, this.generation);
 		this.state = nextState;
-		await this.emitState(nextState, {
-			operationGeneration: this.generation,
-			sessionId: session.sessionId,
-		});
+		await this.emitState(nextState, { persist: false });
 		const isCurrentActivation =
 			this.currentSession === session && epoch === this.getLifecycleEpoch();
 		if (!isCurrentActivation) return;
@@ -150,114 +148,74 @@ class PrModuleImpl implements PrModule {
 
 	deactivateSession(): void {
 		this.currentSession = null;
-		this.generation = Math.max(
-			this.generation + 1,
-			this.state.operationGeneration ?? 0,
-		);
-		this.state = { operationGeneration: this.generation };
+		this.generation += 1;
+		this.state = {
+			...this.sessionState.moduleState.pr,
+			discoveryDisabled: true,
+			discoveryTestedUrls: [],
+			mergedPrs: [],
+		};
 	}
 
 	async syncSessionState(session: PrSession): Promise<void> {
-		const operationGeneration =
-			this.state.operationGeneration ?? this.generation;
-		const isCurrent = this.isCurrentSession(session, operationGeneration);
+		const isCurrent = this.isCurrentSession(session, this.generation);
 		if (!isCurrent) return;
-		this.state = {
-			...this.state,
-			...prStateFromSession(session, operationGeneration),
-		};
-		await this.emitState(this.state, {
-			operationGeneration,
-			sessionId: session.sessionId,
-		});
+		this.state = prStateFromSession(
+			this.sessionState.moduleState.pr,
+			this.sessionState.moduleState.pr.discoveryDisabled === true,
+			this.sessionState.moduleState.pr.discoveryTestedUrls ?? [],
+		);
+		await this.emitState(this.state, { persist: false });
 	}
 
 	async initializeRemoteOrigin(
 		ctx: ExtensionContext,
-		state: PrWorkState,
-	): Promise<PrWorkState> {
-		const hasRemoteOrigin = state.remoteOrigin !== undefined;
-		const operationGeneration =
-			this.state.operationGeneration ?? this.generation;
+		remoteOrigin?: string,
+	): Promise<string | undefined> {
+		const operationGeneration = this.generation;
 		const request: OriginRequest = {
 			operationGeneration,
 			lifecycleEpoch: this.getLifecycleEpoch(),
-			sessionId: this.sessionState.sessionId,
+			sessionId: this.sessionState.session.activeSessionId,
 		};
-		if (hasRemoteOrigin) {
-			const nextState = {
-				...this.state,
-				...stateFromWorkState(state),
-				operationGeneration,
-			};
-			const isCurrentBeforeEmission = this.isCurrentOriginRequest(request);
-			if (!isCurrentBeforeEmission) return state;
-			await this.emitState(nextState, {
-				remoteOrigin: state.remoteOrigin,
-				operationGeneration,
-				sessionId: request.sessionId,
+		if (remoteOrigin !== undefined) {
+			if (!this.isCurrentOriginRequest(request)) return remoteOrigin;
+			await this.emitState(this.state, {
+				persist: false,
+				gitStatePatch: { remoteOrigin },
 			});
-			const isCurrentAfterEmission = this.isCurrentOriginRequest(request);
-			if (!isCurrentAfterEmission) return state;
-			this.state = nextState;
-			return state;
+			return remoteOrigin;
 		}
-		return this.discoverRemoteOrigin(ctx, state, {
-			operationGeneration: this.state.operationGeneration ?? this.generation,
-			sessionId: this.sessionState.sessionId,
-			lifecycleEpoch: this.getLifecycleEpoch(),
-		});
+		return this.discoverRemoteOrigin(ctx, request);
 	}
 
 	private async discoverRemoteOrigin(
 		ctx: ExtensionContext,
-		state: PrWorkState,
 		request: OriginRequest,
-	): Promise<PrWorkState> {
+	): Promise<string | undefined> {
 		const project = await inspectProject(
 			this.dependencies.exec ?? spawnExec,
 			ctx.cwd,
 		);
-		const shouldRejectRequest = !this.isCurrentOriginRequest(request);
-		if (shouldRejectRequest) return state;
+		if (!this.isCurrentOriginRequest(request)) return undefined;
 		const remoteOrigin = project.remoteOrigin ?? undefined;
-		const previousOrigin = state.remoteOrigin;
-		const nextWorkState = { ...state, remoteOrigin };
-		const nextState = {
-			...this.state,
-			...stateFromWorkState(nextWorkState),
-			operationGeneration: request.operationGeneration,
-		};
-		const originChanged = previousOrigin !== remoteOrigin;
-		const shouldSkipEmission = !originChanged;
-		if (shouldSkipEmission) {
-			const isCurrentBeforeMutation = this.isCurrentOriginRequest(request);
-			if (!isCurrentBeforeMutation) return state;
-			this.state = nextState;
-			return nextWorkState;
-		}
-		await this.emitState(nextState, {
-			remoteOrigin,
-			operationGeneration: request.operationGeneration,
-			sessionId: request.sessionId,
+		if (remoteOrigin === undefined) return undefined;
+		await this.emitState(this.state, {
+			persist: true,
+			gitStatePatch: { remoteOrigin },
 		});
-		const staleAfterEmission = this.isStaleOriginRequest(request);
-		if (staleAfterEmission) return state;
-		this.state = nextState;
-		this.appendPersistedState(nextWorkState);
-		return nextWorkState;
+		return remoteOrigin;
 	}
 
 	async persistPrIfAvailable(text: string): Promise<void> {
 		const session = this.currentSession;
 		const hasSession = session !== null;
 		if (!hasSession) return;
-		const canDiscover = session.allowPrDiscovery;
-		const hasPinnedPr = session.state.prUrl !== undefined;
+		const canDiscover = !this.state.discoveryDisabled;
+		const hasPinnedPr = this.state.prUrl !== undefined;
 		const shouldSkipDiscovery = !canDiscover || hasPinnedPr;
 		if (shouldSkipDiscovery) return;
-		const operationGeneration =
-			this.state.operationGeneration ?? this.generation;
+		const operationGeneration = this.generation;
 		const remoteOrigin = await this.ensureRemoteOrigin(
 			session,
 			operationGeneration,
@@ -280,27 +238,18 @@ class PrModuleImpl implements PrModule {
 		session: PrSession,
 		operationGeneration: number,
 	): Promise<string | null> {
-		const knownOrigin = session.state.remoteOrigin;
+		const knownOrigin = this.sessionState.gitState.remoteOrigin;
 		if (knownOrigin !== undefined) return knownOrigin;
 		const identity = this.captureSessionIdentity(session, operationGeneration);
-		const isCurrentBeforeOrigin = this.isSameSessionIdentity(session, identity);
-		if (!isCurrentBeforeOrigin) return null;
-		const nextState = await this.discoverRemoteOrigin(
-			session.context,
-			session.state,
-			{
-				operationGeneration,
-				lifecycleEpoch: this.getLifecycleEpoch(),
-				sessionId: session.sessionId,
-				session,
-				identity,
-			},
-		);
-		const isCurrentAfterOrigin = this.isSameSessionIdentity(session, identity);
-		if (!isCurrentAfterOrigin) return null;
-		const remoteOrigin = nextState.remoteOrigin;
-		const hasRemoteOrigin = remoteOrigin !== undefined;
-		if (hasRemoteOrigin) this.replaceSessionState(session, nextState);
+		if (!this.isSameSessionIdentity(session, identity)) return null;
+		const remoteOrigin = await this.discoverRemoteOrigin(session.context, {
+			operationGeneration,
+			lifecycleEpoch: this.getLifecycleEpoch(),
+			sessionId: this.sessionState.session.activeSessionId,
+			session,
+			identity,
+		});
+		if (!this.isSameSessionIdentity(session, identity)) return null;
 		return remoteOrigin ?? null;
 	}
 
@@ -311,12 +260,15 @@ class PrModuleImpl implements PrModule {
 	): Promise<void> {
 		const isCurrent = this.isSameSessionIdentity(session, identity);
 		if (!isCurrent) return;
-		session.prDiscoveryTestedUrls.add(url);
-		this.state.discoveryTestedUrls = [...session.prDiscoveryTestedUrls];
-		await this.emitState(this.state, {
-			operationGeneration: identity.operationGeneration,
-			sessionId: session.sessionId,
-		});
+		if (this.state.discoveryTestedUrls?.includes(url) === true) return;
+		this.state = {
+			...this.state,
+			discoveryTestedUrls: [
+				...(this.state.discoveryTestedUrls ?? []),
+				url,
+			],
+		};
+		await this.emitState(this.state, { persist: true });
 	}
 
 	private async persistCandidate(
@@ -326,7 +278,8 @@ class PrModuleImpl implements PrModule {
 		exec: Exec,
 		operationGeneration: number,
 	): Promise<boolean> {
-		const alreadyTested = session.prDiscoveryTestedUrls.has(url);
+		const alreadyTested =
+			this.state.discoveryTestedUrls?.includes(url) === true;
 		if (alreadyTested) return false;
 		const identity = this.captureSessionIdentity(session, operationGeneration);
 		const isAvailable = await isGithubPrAvailable(
@@ -340,25 +293,21 @@ class PrModuleImpl implements PrModule {
 			return false;
 		}
 		const isCurrentSession = this.isSameSessionIdentity(session, identity);
-		const canDiscover = session.allowPrDiscovery;
-		const hasPinnedPr = session.state.prUrl !== undefined;
+		const canDiscover = !this.state.discoveryDisabled;
+		const hasPinnedPr = this.state.prUrl !== undefined;
 		const currentAndDiscoverable = isCurrentSession && canDiscover;
 		const canPersist = currentAndDiscoverable && !hasPinnedPr;
 		if (!canPersist) return false;
-		session.prDiscoveryTestedUrls.add(url);
-		this.state.discoveryTestedUrls = [...session.prDiscoveryTestedUrls];
-		const nextState = { ...session.state, prUrl: url };
-		session.allowPrDiscovery = false;
 		this.state = {
 			...this.state,
 			prUrl: url,
 			discoveryDisabled: true,
-			discoveryTestedUrls: [...session.prDiscoveryTestedUrls],
+			discoveryTestedUrls:
+			this.state.discoveryTestedUrls?.includes(url) === true
+				? this.state.discoveryTestedUrls
+				: [...(this.state.discoveryTestedUrls ?? []), url],
 		};
-		this.replaceSessionState(session, nextState);
-		this.appendPersistedState(nextState);
-
-		await this.emitState(this.state);
+		await this.emitState(this.state, { persist: true });
 		return true;
 	}
 
@@ -368,10 +317,10 @@ class PrModuleImpl implements PrModule {
 
 	isDiscoveryAllowed(
 		stateEntry: Record<string, unknown> | null,
-		state: PrWorkState,
+		state: PrState,
 		hasPendingHandoffContext: boolean,
 	): boolean {
-		const disabled = stateEntry?.prDiscoveryDisabled === true;
+		const disabled = state.discoveryDisabled || stateEntry?.prDiscoveryDisabled === true;
 		const notHandoff = !hasPendingHandoffContext;
 		const discoveryEnabled = !disabled;
 		const hasPinnedPr = state.prUrl !== undefined;
@@ -385,8 +334,7 @@ class PrModuleImpl implements PrModule {
 		messages: string[],
 	): Promise<void> {
 		const session = this.currentSession;
-		const operationGeneration =
-			this.state.operationGeneration ?? this.generation;
+		const operationGeneration = this.generation;
 		const discoveredOrigin =
 			session === null
 				? null
@@ -440,7 +388,7 @@ class PrModuleImpl implements PrModule {
 	}
 
 	private isCurrentOperation(_session: PrSession, generation: number): boolean {
-		return this.state.operationGeneration === generation;
+		return this.generation === generation;
 	}
 
 	private enqueueSessionOperation<T>(
@@ -452,28 +400,12 @@ class PrModuleImpl implements PrModule {
 			.then((result) => result as T);
 	}
 
-	private appendPersistedState(
-		state: PrWorkState,
-		prDiscoveryDisabled?: boolean,
-	): void {
-		const hasPi = this.pi !== undefined;
-		if (!hasPi) return;
-		const shouldDisableDiscovery = prDiscoveryDisabled ?? false;
-		const data = shouldDisableDiscovery
-			? { ...state, prDiscoveryDisabled: true }
-			: state;
-		this.pi.appendEntry(C.entry.state, data);
-	}
-
-	private replaceSessionState(
-		session: PrSession,
-		nextState: PrWorkState,
-	): void {
-		const hasTaskChanged = session.state.taskRef !== nextState.taskRef;
-		const hasPrChanged = session.state.prUrl !== nextState.prUrl;
-		const hasWorkChanged = hasTaskChanged || hasPrChanged;
-		if (hasWorkChanged) session.workRevision += 1;
-		session.state = nextState;
+	private async updatePrState(
+		nextState: PrState,
+		persist: boolean,
+	): Promise<void> {
+		this.state = nextState;
+		await this.publishState.publish(nextState, { persist });
 	}
 
 	private commandDependencies(): PrCommandOptions {
@@ -484,6 +416,7 @@ class PrModuleImpl implements PrModule {
 			getSession: () => this.currentSession,
 			getLifecycleEpoch: this.getLifecycleEpoch,
 			getPrState: () => this.state,
+			getOperationGeneration: () => this.generation,
 			isCurrentOperation: this.isCurrentOperation.bind(this),
 			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
 		};
@@ -492,7 +425,8 @@ class PrModuleImpl implements PrModule {
 	private async recordMerge(event: PrMergedEvent): Promise<void> {
 		const session = this.currentSession;
 		if (session === null) return;
-		const isSameSession = session.sessionId === event.sessionId;
+		const isSameSession =
+			this.sessionState.session.activeSessionId === event.sessionId;
 		const isSameEpoch = this.getLifecycleEpoch() === event.lifecycleEpoch;
 		const isCurrentIdentity = isSameSession && isSameEpoch;
 		if (!isCurrentIdentity) return;
@@ -501,14 +435,11 @@ class PrModuleImpl implements PrModule {
 			{ ...this.state, prUrl: event.prUrl },
 			new Date().toISOString(),
 		);
-		const nextState = {
-			...recordedState,
-			operationGeneration: this.state.operationGeneration,
-		};
+		const nextState = recordedState;
 		const changed = nextState !== this.state;
 		if (!changed) return;
 		this.state = nextState;
-		await this.emitState(this.state);
+		await this.emitState(this.state, { persist: true });
 		const isCurrentAfterEmit =
 			this.currentSession === session &&
 			this.getLifecycleEpoch() === event.lifecycleEpoch;
@@ -516,13 +447,14 @@ class PrModuleImpl implements PrModule {
 	}
 
 	private async handleToolResult(
-		event: Parameters<typeof handlePrToolResult>[3],
+		event: Parameters<typeof handlePrToolResult>[4],
 		ctx: ExtensionContext,
 	): Promise<void> {
 		await handlePrToolResult(
 			() => this.currentSession,
 			this.sessionState,
 			this.state,
+			this.generation,
 			event,
 			ctx,
 			(prUrl) => {
@@ -531,7 +463,7 @@ class PrModuleImpl implements PrModule {
 				return this.eventHandler.prMergedEvent.emit({
 					prUrl,
 					taskMarkedAsCompleted: false,
-					sessionId: session.sessionId,
+					sessionId: this.sessionState.session.activeSessionId ?? "",
 					lifecycleEpoch: this.getLifecycleEpoch(),
 				});
 			},
@@ -544,7 +476,7 @@ class PrModuleImpl implements PrModule {
 			this.getLifecycleEpoch() === request.lifecycleEpoch;
 		const isCurrentGeneration = this.generation === request.operationGeneration;
 		const isCurrentRootSession =
-			this.sessionState.sessionId === request.sessionId;
+			this.sessionState.session.activeSessionId === request.sessionId;
 		const guardedSession = request.session;
 		const guardedIdentity = request.identity;
 		const hasNoSessionGuard = guardedSession === undefined;
@@ -573,10 +505,9 @@ class PrModuleImpl implements PrModule {
 		operationGeneration: number,
 	): PrSessionIdentity {
 		return {
-			state: session.state,
 			workRevision: session.workRevision,
-			prUrl: session.state.prUrl,
-			allowPrDiscovery: session.allowPrDiscovery,
+			prUrl: this.state.prUrl,
+			discoveryDisabled: this.state.discoveryDisabled === true,
 			operationGeneration,
 		};
 	}
@@ -585,21 +516,17 @@ class PrModuleImpl implements PrModule {
 		session: PrSession,
 		identity: PrSessionIdentity,
 	): boolean {
-		const activeSession = this.currentSession;
-		const sameSession = activeSession?.sessionId === session.sessionId;
-		const sameRootSession = this.sessionState.sessionId === session.sessionId;
-		const sameGeneration =
-			this.state.operationGeneration === identity.operationGeneration;
-		const sameStateReference = session.state === identity.state;
+		const sameSession = this.currentSession === session;
+		const sameRootSession = this.sessionState.session.activeSessionId !== null;
+		const sameGeneration = this.generation === identity.operationGeneration;
 		const sameWorkRevision = session.workRevision === identity.workRevision;
-		const samePrUrl = session.state.prUrl === identity.prUrl;
+		const samePrUrl = this.state.prUrl === identity.prUrl;
 		const sameDiscoveryEligibility =
-			session.allowPrDiscovery === identity.allowPrDiscovery;
+			this.state.discoveryDisabled === identity.discoveryDisabled;
 		const sameSessionAndRoot = sameSession && sameRootSession;
-		const sameWorkIdentity = sameStateReference && sameWorkRevision;
 		const samePrIdentity = samePrUrl && sameDiscoveryEligibility;
 		const currentSessionAndGeneration = sameSessionAndRoot && sameGeneration;
-		const currentWorkAndPr = sameWorkIdentity && samePrIdentity;
+		const currentWorkAndPr = sameWorkRevision && samePrIdentity;
 		return currentSessionAndGeneration && currentWorkAndPr;
 	}
 
@@ -614,27 +541,17 @@ class PrModuleImpl implements PrModule {
 	private async emitState(
 		moduleState: PrState,
 		options?: {
-			remoteOrigin?: string;
-			operationGeneration?: number;
-			sessionId?: string | null;
+			persist?: boolean;
+			gitStatePatch?: Partial<import("../state.ts").GitState>;
 		},
 	): Promise<void> {
-		const optionGeneration = options?.operationGeneration;
-		const stateGeneration = this.state.operationGeneration;
-		const operationGeneration =
-			optionGeneration ?? stateGeneration ?? this.generation;
-		const sessionId = options?.sessionId ?? this.sessionState.sessionId;
-		const sameGeneration =
-			(stateGeneration ?? this.generation) === operationGeneration;
-		const sameSession = this.sessionState.sessionId === sessionId;
-		const currentEmission = sameGeneration && sameSession;
+		const currentEmission = this.sessionState.session.activeSessionId !== null;
 		if (!currentEmission) return;
-		await this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.pr,
-			moduleState: { ...moduleState },
-			...(options?.remoteOrigin === undefined
+		await this.publishState.publish(moduleState, {
+			persist: options?.persist ?? false,
+			...(options?.gitStatePatch === undefined
 				? {}
-				: { gitStatePatch: { remoteOrigin: options.remoteOrigin } }),
+				: { gitStatePatch: options.gitStatePatch }),
 		});
 	}
 }

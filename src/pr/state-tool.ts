@@ -11,7 +11,7 @@ import { extensionResult } from "../shared/extension-message.ts";
 import { githubPrUrl } from "./parsing.ts";
 import type {
 	PrSession,
-	PrWorkState,
+	PrState,
 	StateToolDependencies,
 	StateToolParams,
 } from "./state.ts";
@@ -21,22 +21,13 @@ export const stateParameters = Type.Object({
 	url: Type.Optional(Type.String()),
 });
 
-function applyStatePatch(
-	state: PrWorkState,
-	patch: Partial<PrWorkState>,
-): PrWorkState {
-	const next = { ...state };
-	for (const [key, value] of Object.entries(patch)) {
-		if (value === undefined) delete next[key as keyof PrWorkState];
-		else next[key as keyof PrWorkState] = value as never;
-	}
-	return next;
-}
-
-function statusAction(session: PrSession): AgentToolResult<undefined> {
+function statusAction(
+	session: PrSession,
+	state: PrState,
+): AgentToolResult<undefined> {
 	return extensionResult(
 		JSON.stringify({
-			...session.state,
+			...state,
 			codingRoot: session.project.codingRoot,
 		}),
 	);
@@ -47,23 +38,16 @@ async function setPrAction(
 	session: PrSession,
 	params: StateToolParams,
 ): Promise<AgentToolResult<undefined>> {
-	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
+	const currentState = dependencies.getPrState();
+	const url = githubPrUrl(params.url ?? "", currentState.prUrl ?? null);
 	if (url === null) throw new Error(C.message.invalidPr);
-	const prChanged = session.state.prUrl !== url;
-	dependencies.replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			prUrl: url,
-			...(prChanged
-				? {
-						mergeCompletedAt: undefined,
-						todoistCompletionAttemptedAt: undefined,
-					}
-				: {}),
-		}),
-	);
-	session.allowPrDiscovery = false;
-	dependencies.appendState(session.state);
+	const prChanged = currentState.prUrl !== url;
+	const nextState: PrState = {
+		...currentState,
+		prUrl: url,
+		discoveryDisabled: true,
+	};
+	await dependencies.updatePrState(nextState, prChanged);
 	dependencies.refreshFooterStatuses(session);
 	await dependencies.syncPrState?.(session);
 	return extensionResult(`Pinned PR ${url}`);
@@ -74,16 +58,13 @@ async function clearPrState(
 	session: PrSession,
 	message: string,
 ): Promise<AgentToolResult<undefined>> {
-	dependencies.replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			prUrl: undefined,
-			mergeCompletedAt: undefined,
-			todoistCompletionAttemptedAt: undefined,
-		}),
-	);
-	session.allowPrDiscovery = false;
-	dependencies.appendState(session.state, true);
+	const currentState = dependencies.getPrState();
+	const nextState: PrState = {
+		...currentState,
+		prUrl: undefined,
+		discoveryDisabled: true,
+	};
+	await dependencies.updatePrState(nextState, true);
 	dependencies.refreshFooterStatuses(session);
 	await dependencies.syncPrState?.(session);
 	return extensionResult(message);
@@ -102,7 +83,7 @@ export async function executeStateTool(
 	if (!hasSession) throw new Error(C.message.inactive);
 	switch (params.action) {
 		case C.action.status:
-			return statusAction(session);
+			return statusAction(session, dependencies.getPrState());
 		case C.action.setPr:
 			return await setPrAction(dependencies, session, params);
 		case C.action.clearPr:

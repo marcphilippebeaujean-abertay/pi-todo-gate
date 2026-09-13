@@ -10,7 +10,11 @@ import {
 } from "../../src/pr/module.ts";
 import type { PrCommandOptions } from "../../src/pr/state.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
-import type { ExtensionDependencies, SessionRecord } from "../../src/state.ts";
+import {
+	createSessionState,
+	type ExtensionDependencies,
+	type SessionRecord,
+} from "../../src/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 const cwd = "/repo";
@@ -33,29 +37,29 @@ function createRuntime(
 	runtime: PrCommandOptions;
 	context: ExtensionCommandContext;
 	session: SessionRecord;
+	sessionState: ReturnType<typeof createSessionState>;
 } {
 	const context = commandContext(confirm);
 	const session = {
-		sessionId: "session",
 		context,
-		state: { prUrl: PR_URL, taskRef: "task-1" },
+		project: { codingRoot: cwd, todoistProjectRef: "project" },
+		hasPendingHandoffContext: false,
+		hasPerformedAnyGitMutations: false,
+		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
-		workRevision: 0,
 	} as unknown as SessionRecord;
 	const activeSession = { current: session };
-	const sessionState = {
-		sessionId: session.sessionId,
-		gitState: {},
-		moduleState: {},
-	};
+	const sessionState = createSessionState();
+	sessionState.session.activeSessionId = "session";
+	sessionState.moduleState.pr.prUrl = PR_URL;
+	sessionState.moduleState.todoist.taskRef = "task-1";
 	const currentRuntime = {
 		sessionState,
 		exec,
 		getSession: () => activeSession.current,
-		getPrState: () => ({
-			operationGeneration: activeSession.current?.operationGeneration,
-		}),
+		getPrState: () => sessionState.moduleState.pr,
+		getOperationGeneration: () => activeSession.current?.operationGeneration ?? 0,
 		isCurrentOperation: (current: SessionRecord, generation: number) =>
 			current.operationGeneration === generation,
 		enqueueSessionOperation: <T>(
@@ -67,7 +71,7 @@ function createRuntime(
 		},
 	} as unknown as PrCommandOptions;
 
-	return { runtime: currentRuntime, context, session };
+	return { runtime: currentRuntime, context, session, sessionState };
 }
 
 describe("merge protocol command", () => {
@@ -178,14 +182,14 @@ describe("merge protocol command", () => {
 
 	it("does not run without a pinned PR or interactive UI", async () => {
 		const exec = vi.fn();
-		const { runtime, context } = createRuntime(exec);
+		const { runtime, context, sessionState } = createRuntime(exec);
 		const session = runtime.getSession?.();
-		if (session) session.state.prUrl = undefined;
+		if (session) sessionState.moduleState.pr.prUrl = undefined;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
 		context.hasUI = false;
 		const restoredSession = runtime.getSession?.();
-		if (restoredSession) restoredSession.state.prUrl = PR_URL;
+		if (restoredSession) sessionState.moduleState.pr.prUrl = PR_URL;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
 	});

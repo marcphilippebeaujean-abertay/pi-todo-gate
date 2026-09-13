@@ -306,10 +306,8 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 	const hasSameLength = mergedPrsLength === existingMergedPrs.length;
 	if (hasSameLength) return state;
 	switch (mergedPrsLength) {
-		case 0: {
-			const { mergedPrs: _mergedPrs, ...next } = state;
-			return next;
-		}
+		case 0:
+			return { ...state, mergedPrs: [] };
 		default:
 			return { ...state, mergedPrs };
 	}

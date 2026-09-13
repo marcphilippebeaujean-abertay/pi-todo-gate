@@ -291,6 +291,7 @@ describe("PR module ownership", () => {
 				: { stdout: "", stderr: "", code: 0 };
 		});
 		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
 		const module = createPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
@@ -300,7 +301,6 @@ describe("PR module ownership", () => {
 
 		await module.initializeRemoteOrigin(
 			{ cwd: "/repo", hasUI: false } as never,
-			{},
 		);
 
 		expect(updates).toEqual([
@@ -310,20 +310,15 @@ describe("PR module ownership", () => {
 			}),
 		]);
 		const session = {
-			sessionId: "session",
 			context: { cwd: "/repo", hasUI: false },
-			state: {},
-			project: { codingRoot: "/repo" },
-			allowPrDiscovery: true,
-			prDiscoveryTestedUrls: new Set<string>(),
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
-			hasUncommittedChanges: false,
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "session";
 		await module.activateSession(session);
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/42",
@@ -349,20 +344,22 @@ describe("PR module ownership", () => {
 		const events = createEventHandler();
 		const sessionState = createSessionState();
 		const session = {
-			sessionId: "session",
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo" },
-			state: { prUrl: "https://github.com/o/r/pull/42", taskRef: "task" },
-			allowPrDiscovery: false,
-			prDiscoveryTestedUrls: new Set<string>(),
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
-			hasUncommittedChanges: false,
 			workRevision: 2,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.pr = {
+		prUrl: "https://github.com/o/r/pull/42",
+		discoveryDisabled: true,
+		discoveryTestedUrls: [],
+		mergedPrs: [],
+	};
+	sessionState.moduleState.todoist.taskRef = "task";
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
@@ -377,15 +374,15 @@ describe("PR module ownership", () => {
 			expect.objectContaining({
 				moduleId: "pr",
 				moduleState: expect.objectContaining({
-					remoteOrigin: undefined,
 					prUrl: "https://github.com/o/r/pull/42",
+					discoveryDisabled: true,
 					discoveryTestedUrls: [],
 				}),
 			}),
 		);
 
-		session.state.prUrl = "https://github.com/o/r/pull/43";
-		session.allowPrDiscovery = true;
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/43";
+		sessionState.moduleState.pr.discoveryDisabled = false;
 		await module.syncSessionState(session);
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({
@@ -415,8 +412,10 @@ describe("PR module ownership", () => {
 			),
 		).toBe(true);
 
-		session.state.remoteOrigin = "git@github.com:o/r.git";
-		session.prDiscoveryTestedUrls.add("https://github.com/o/r/pull/41");
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		sessionState.moduleState.pr.discoveryTestedUrls = [
+			"https://github.com/o/r/pull/41",
+		];
 		await module.syncSessionState(session);
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/43",
@@ -427,10 +426,8 @@ describe("PR module ownership", () => {
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({
 				moduleState: expect.objectContaining({
-					remoteOrigin: "git@github.com:o/r.git",
 					discoveryTestedUrls: ["https://github.com/o/r/pull/41"],
 					discoveryDisabled: false,
-					operationGeneration: 0,
 					mergedPrs: expect.any(Array),
 				}),
 			}),
@@ -454,7 +451,7 @@ describe("PR module ownership", () => {
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "old";
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
 			release = resolve;
@@ -476,14 +473,13 @@ describe("PR module ownership", () => {
 		await module.activateSession(session);
 		const discovery = module.initializeRemoteOrigin(
 			{ cwd: "/repo", hasUI: false } as never,
-			session.state,
 		);
-		sessionState.sessionId = "new";
+		sessionState.session.activeSessionId = "new";
 		module.deactivateSession();
 		release();
 		await discovery;
 
-		expect(session.state.remoteOrigin).toBeUndefined();
+		expect(sessionState.gitState.remoteOrigin).toBeUndefined();
 		expect(
 			updates.filter((update) =>
 				Object.hasOwn(update as object, "gitStatePatch"),
@@ -508,7 +504,8 @@ describe("PR module ownership", () => {
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "old";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
 			release = resolve;
@@ -531,13 +528,13 @@ describe("PR module ownership", () => {
 		const discovery = module.persistPrIfAvailable(
 			"https://github.com/o/r/pull/42",
 		);
-		sessionState.sessionId = "new";
+		sessionState.session.activeSessionId = "new";
 		module.deactivateSession();
 		release();
 		await discovery;
 
-		expect(session.prDiscoveryTestedUrls).toEqual(new Set());
-		expect(session.state.prUrl).toBeUndefined();
+		expect(sessionState.moduleState.pr.discoveryTestedUrls).toEqual([]);
+		expect(sessionState.moduleState.pr.prUrl).toBeUndefined();
 	});
 
 	it("does not let origin discovery overwrite same-session set_pr", async () => {
@@ -557,7 +554,7 @@ describe("PR module ownership", () => {
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "session";
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
 			release = resolve;
@@ -576,16 +573,14 @@ describe("PR module ownership", () => {
 		const discovery = module.persistPrIfAvailable(
 			"https://github.com/o/r/pull/42",
 		);
-		session.state = { prUrl: "https://github.com/o/r/pull/99" };
-		session.allowPrDiscovery = false;
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/99";
+		sessionState.moduleState.pr.discoveryDisabled = true;
 		session.workRevision += 1;
 		await module.syncSessionState(session);
 		release();
 		await discovery;
 
-		expect(session.state).toEqual({
-			prUrl: "https://github.com/o/r/pull/99",
-		});
+		expect(sessionState.moduleState.pr.prUrl).toBe("https://github.com/o/r/pull/99");
 	});
 
 	it("persists and emits origin discovered during before-agent prompting", async () => {
@@ -605,7 +600,7 @@ describe("PR module ownership", () => {
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/state.ts").PrSession;
-		sessionState.sessionId = session.sessionId;
+		sessionState.session.activeSessionId = "session";
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
@@ -634,7 +629,6 @@ describe("PR module ownership", () => {
 			messages,
 		);
 
-		expect(session.state.remoteOrigin).toBe("git@github.com:o/r.git");
 		expect(updates).toContainEqual(
 			expect.objectContaining({
 				gitStatePatch: { remoteOrigin: "git@github.com:o/r.git" },

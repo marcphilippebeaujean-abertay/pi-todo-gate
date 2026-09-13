@@ -26,9 +26,9 @@ function currentSession(
 ): boolean {
 	const activeSession = dependencies.getSession();
 	const current =
-		activeSession?.sessionId === session.sessionId &&
+		activeSession === session &&
 		dependencies.isCurrentOperation(session, generation);
-	return dependencies.sessionState.sessionId === session.sessionId && current;
+	return dependencies.sessionState.session.activeSessionId !== null && current;
 }
 
 function failureDetail(stderr: string): string {
@@ -112,13 +112,13 @@ async function runMergeProtocol(
 		notifyNoUi(ctx);
 		return;
 	}
-	const prUrl = session.state.prUrl;
+	const prUrl = dependencies.sessionState.moduleState.pr.prUrl;
 	const hasPrUrl = typeof prUrl === "string" && prUrl.trim() !== "";
 	if (!hasPrUrl) {
 		notifyNoPr(ctx);
 		return;
 	}
-	const generation = dependencies.getPrState().operationGeneration ?? 0;
+	const generation = dependencies.getOperationGeneration();
 	const enqueue = dependencies.enqueueSessionOperation;
 	const merged = await enqueue(
 		session,
@@ -130,7 +130,7 @@ async function runMergeProtocol(
 	await dependencies.eventHandler.prMergedEvent.emit({
 		prUrl,
 		taskMarkedAsCompleted: false,
-		sessionId: session.sessionId,
+		sessionId: dependencies.sessionState.session.activeSessionId ?? "",
 		lifecycleEpoch: dependencies.getLifecycleEpoch?.() ?? 0,
 	});
 	const isCurrentAfterEmit = currentSession(dependencies, session, generation);

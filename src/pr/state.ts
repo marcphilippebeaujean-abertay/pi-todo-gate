@@ -6,18 +6,58 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
-import type { SessionState } from "../state.ts";
+import type { PrModuleState, SessionState } from "../state.ts";
+import type {
+	JsonValue,
+	ModuleStateDescriptor,
+} from "../session-state-persistence.ts";
 
-export interface PrWorkState {
-	remoteOrigin?: string;
-	prUrl?: string;
-	taskUrl?: string;
-	taskRef?: string;
-	taskName?: string;
-	inheritedFrom?: string;
-	mergeCompletedAt?: string;
-	todoistCompletionAttemptedAt?: string;
+export type PrState = PrModuleState;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+function testedStrings(values: unknown[]): string[] {
+	return values.filter((value): value is string => typeof value === "string");
+}
+
+function isMergedPr(value: unknown): value is MergedPr {
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.prUrl === "string" &&
+		typeof value.detectedAt === "string" &&
+		typeof value.reminderPending === "boolean"
+	);
+}
+
+function restorePrState(value: unknown): PrState {
+	if (!isRecord(value))
+		return { discoveryDisabled: false, discoveryTestedUrls: [], mergedPrs: [] };
+	const tested = Array.isArray(value.discoveryTestedUrls)
+		? [...new Set(testedStrings(value.discoveryTestedUrls))]
+		: [];
+	const mergedPrs = Array.isArray(value.mergedPrs)
+		? value.mergedPrs.filter(isMergedPr)
+		: [];
+	return {
+		...(typeof value.prUrl === "string" ? { prUrl: value.prUrl } : {}),
+		discoveryDisabled: value.discoveryDisabled === true,
+		discoveryTestedUrls: tested,
+		mergedPrs,
+	};
+}
+
+export const prStateDescriptor: ModuleStateDescriptor<"pr"> = {
+	id: "pr",
+	createInitialState: () => ({
+		discoveryDisabled: false,
+		discoveryTestedUrls: [],
+		mergedPrs: [],
+	}),
+	restore: restorePrState,
+	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
+};
 
 export type PrSession = SessionRecord;
 
@@ -28,6 +68,7 @@ export interface PrCommandOptions {
 	readonly getSession: () => PrSession | null;
 	readonly getLifecycleEpoch?: () => number;
 	readonly getPrState: () => PrState;
+	readonly getOperationGeneration: () => number;
 	readonly isCurrentOperation: (
 		session: PrSession,
 		generation: number,
@@ -46,8 +87,8 @@ export type StateToolParams =
 
 export interface StateToolDependencies {
 	getSession: () => PrSession | null;
-	appendState(state: PrWorkState, prDiscoveryDisabled?: boolean): void;
-	replaceSessionState(session: PrSession, state: PrWorkState): void;
+	getPrState: () => PrState;
+	updatePrState: (state: PrState, persist: boolean) => Promise<void> | void;
 	refreshFooterStatuses(session: PrSession): void;
 	syncPrState?: (session: PrSession) => Promise<void> | void;
 }
@@ -71,13 +112,13 @@ export interface PrModule {
 	syncSessionState(session: PrSession): Promise<void>;
 	initializeRemoteOrigin(
 		ctx: ExtensionContext,
-		state: PrWorkState,
-	): Promise<PrWorkState>;
+		remoteOrigin?: string,
+	): Promise<string | undefined>;
 	persistPrIfAvailable(text: string): Promise<void>;
 	persistInitialPr(branch: readonly unknown[]): Promise<void>;
 	isDiscoveryAllowed(
 		stateEntry: Record<string, unknown> | null,
-		state: PrWorkState,
+		state: PrState,
 		hasPendingHandoffContext: boolean,
 	): boolean;
 	appendBeforeAgentPrompt(
@@ -103,10 +144,9 @@ export interface MergedPr {
 	reminderPending: boolean;
 }
 export interface PrSessionIdentity {
-	state: PrWorkState;
 	workRevision: number;
 	prUrl: string | undefined;
-	allowPrDiscovery: boolean;
+	discoveryDisabled: boolean;
 	operationGeneration: number;
 }
 
@@ -118,14 +158,6 @@ export interface OriginRequest {
 	identity?: PrSessionIdentity;
 }
 
-export interface PrState {
-	remoteOrigin?: string;
-	prUrl?: string;
-	mergedPrs?: MergedPr[];
-	discoveryDisabled?: boolean;
-	discoveryTestedUrls?: string[];
-	operationGeneration?: number;
-}
 export interface ParsedMerge {
 	kind: "git" | "gh";
 	args: string[];

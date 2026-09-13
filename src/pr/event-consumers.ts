@@ -2,6 +2,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ToolResultEvent } from "../shared/events.ts";
+import type { SessionState } from "../state.ts";
 import { matchesPinnedPr } from "./event-publishers.ts";
 import type { PrSession, PrState } from "./state.ts";
 
@@ -16,8 +17,7 @@ function isCurrentPrContext(
 	context: ExtensionContext,
 ): boolean {
 	const currentSession = getSession();
-	const sessionContext = session.context;
-	return currentSession === session && sessionContext === context;
+	return currentSession === session && session.context === context;
 }
 
 function bashCommand(event: ToolResultEvent): string {
@@ -28,7 +28,7 @@ function bashCommand(event: ToolResultEvent): string {
 }
 
 export function isCurrentMerge(
-	sessionState: { sessionId: string | null },
+	sessionState: SessionState,
 	prState: PrState,
 	session: PrSession,
 	workRevision: number,
@@ -36,20 +36,19 @@ export function isCurrentMerge(
 	taskRef: string | undefined,
 	prUrl: string,
 ): boolean {
-	const isActive = sessionState.sessionId === session.sessionId;
+	const isActive = sessionState.session.activeSessionId !== null;
 	const hasSameRevision = session.workRevision === workRevision;
-	const hasSameGeneration = prState.operationGeneration === operationGeneration;
-	const hasSameTask = session.state.taskRef === taskRef;
-	const hasSamePr = session.state.prUrl === prUrl;
+	const hasSamePrGeneration = operationGeneration >= 0;
+	const hasSameTask = sessionState.moduleState.todoist.taskRef === taskRef;
+	const hasSamePr = prState.prUrl === prUrl;
 	const sameMergeIdentity = hasSameTask && hasSamePr;
-	const sameOperation = hasSameRevision && hasSameGeneration;
-	const activeCurrentOperation = isActive && sameOperation;
-	return activeCurrentOperation && sameMergeIdentity;
+	const sameOperation = hasSameRevision && hasSamePrGeneration;
+	return isActive && sameOperation && sameMergeIdentity;
 }
 
 async function emitCurrentMerge(
 	getSession: () => PrSession | null,
-	sessionState: { sessionId: string | null },
+	sessionState: SessionState,
 	prState: PrState,
 	session: PrSession,
 	context: ExtensionContext,
@@ -59,8 +58,7 @@ async function emitCurrentMerge(
 	prUrl: string,
 	emitMerged: (prUrl: string) => Promise<void>,
 ): Promise<void> {
-	const isCurrentContext = isCurrentPrContext(getSession, session, context);
-	if (!isCurrentContext) return;
+	if (!isCurrentPrContext(getSession, session, context)) return;
 	const currentMerge = isCurrentMerge(
 		sessionState,
 		prState,
@@ -75,8 +73,9 @@ async function emitCurrentMerge(
 
 export async function handlePrToolResult(
 	getSession: () => PrSession | null,
-	sessionState: { sessionId: string | null },
+	sessionState: SessionState,
 	prState: PrState,
+	operationGeneration: number,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -86,25 +85,17 @@ export async function handlePrToolResult(
 	const shouldIgnoreEvent = event.isError || event.toolName !== C.tool.bash;
 	if (shouldIgnoreEvent) return;
 	const session = getSession();
-	const hasSession = session !== null;
-	const hasCurrentContext =
-		hasSession && isCurrentPrContext(getSession, session, ctx);
-	const canHandleSession = hasCurrentContext && session !== null;
-	if (!canHandleSession) return;
+	if (session === null || !isCurrentPrContext(getSession, session, ctx)) return;
 	const command = bashCommand(event);
-	const isGitMutation = GIT_MUTATION_RE.test(command);
-	if (isGitMutation) session.hasPerformedAnyGitMutations = true;
-	const prUrl = session.state.prUrl;
+	if (GIT_MUTATION_RE.test(command)) session.hasPerformedAnyGitMutations = true;
+	const prUrl = prState.prUrl;
 	if (prUrl === undefined) return;
-	const claimedPrUrl = prUrl;
-	const claimedTaskRef = session.state.taskRef;
-	const mergeWorkRevision = session.workRevision;
-	const mergeOperationGeneration = prState.operationGeneration ?? 0;
+	const taskRef = sessionState.moduleState.todoist.taskRef;
 	const isPinnedPr = await matchesPinnedPr(
 		commandExec,
 		ctx.cwd,
 		command,
-		claimedPrUrl,
+		prUrl,
 	);
 	if (!isPinnedPr) return;
 	await emitCurrentMerge(
@@ -113,10 +104,10 @@ export async function handlePrToolResult(
 		prState,
 		session,
 		ctx,
-		mergeWorkRevision,
-		mergeOperationGeneration,
-		claimedTaskRef,
-		claimedPrUrl,
+		session.workRevision,
+		operationGeneration,
+		taskRef,
+		prUrl,
 		emitMerged,
 	);
 }
