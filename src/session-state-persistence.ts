@@ -1,9 +1,4 @@
-import type {
-	GitState,
-	ModuleId,
-	ModuleState,
-	SessionState,
-} from "./state.ts";
+import type { GitState, ModuleId, ModuleState, SessionState } from "./state.ts";
 import { createSessionState } from "./state.ts";
 
 const CUSTOM_ENTRY_TYPE = "custom";
@@ -71,7 +66,9 @@ function isGitState(value: unknown): value is GitState {
 	);
 }
 
-function isPersistedSessionState(value: unknown): value is PersistedSessionState {
+function isPersistedSessionState(
+	value: unknown,
+): value is PersistedSessionState {
 	if (!isRecord(value)) return false;
 	if (value.schemaVersion !== CURRENT_SCHEMA_VERSION) return false;
 	const session = value.session;
@@ -97,12 +94,10 @@ export function serializeSessionState(
 	descriptors: ModuleStateDescriptors,
 ): PersistedSessionState {
 	const moduleState = {} as ModuleState;
-	for (const moduleId of Object.keys(
-		state.moduleState,
-	) as ModuleId[]) {
-		const descriptor = descriptors[
-			moduleId
-		] as ModuleStateDescriptor<typeof moduleId>;
+	for (const moduleId of Object.keys(state.moduleState) as ModuleId[]) {
+		const descriptor = descriptors[moduleId] as ModuleStateDescriptor<
+			typeof moduleId
+		>;
 		const serialized = descriptor.serialize(
 			state.moduleState[moduleId] as never,
 		);
@@ -130,12 +125,10 @@ export function restoreSessionState(
 	restored.session.inheritedFromSessionId =
 		value.session.inheritedFromSessionId;
 	restored.gitState = structuredClone(value.gitState);
-	for (const moduleId of Object.keys(
-		restored.moduleState,
-	) as ModuleId[]) {
-		const descriptor = descriptors[
-			moduleId
-		] as ModuleStateDescriptor<typeof moduleId>;
+	for (const moduleId of Object.keys(restored.moduleState) as ModuleId[]) {
+		const descriptor = descriptors[moduleId] as ModuleStateDescriptor<
+			typeof moduleId
+		>;
 		restored.moduleState[moduleId] = descriptorState(
 			descriptor,
 			value.moduleState[moduleId],

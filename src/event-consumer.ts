@@ -8,6 +8,11 @@ import type { ExitProtocolModule } from "./exit-protocol/state.ts";
 import type { FooterModule as FooterModuleType } from "./footer/state.ts";
 import type { PrModule, PrSession } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
+import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
+import {
+	latestPersistedSessionState,
+	restoreSessionState,
+} from "./session-state-persistence.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type {
 	BeforeAgentStartEvent,
@@ -18,14 +23,9 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "./shared/events.ts";
-import { latestStateData, textOf } from "./shared/extension-message.ts";
-import type { SessionReader, WorkState } from "./shared/session-state.ts";
-import {
-	createSessionState,
-	extractInheritedState,
-	latestState,
-	type SessionState,
-} from "./state.ts";
+import { textOf } from "./shared/extension-message.ts";
+import type { SessionReader } from "./shared/session-state.ts";
+import { createSessionState, type SessionState } from "./state.ts";
 import { loadConfig, resolveConfiguredProject } from "./todoist/config.ts";
 import type { TodoistModule, TodoistProjectMapping } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
@@ -49,6 +49,8 @@ export interface RootComposition {
 	lifecycleEpoch: { value: number };
 	stateUpdateEpoch: { value: number };
 	stateUpdatesDrained: () => Promise<void>;
+	stateDescriptors: ModuleStateDescriptors;
+	persistSessionState: (state: SessionState) => void | Promise<void>;
 }
 
 const FUNCTION_TYPE = "function";
@@ -89,28 +91,6 @@ export function publishModuleState<K extends import("./state.ts").ModuleId>(
 	} as ModuleStateChangedEvent);
 }
 
-export function appendState(
-	root: Root,
-	state: WorkState,
-	prDiscoveryDisabled?: boolean,
-): void {
-	const shouldDisableDiscovery = prDiscoveryDisabled ?? false;
-	const data = shouldDisableDiscovery
-		? { ...state, prDiscoveryDisabled: true }
-		: state;
-	root.pi.appendEntry(C.entry.state, data);
-}
-
-export function replaceSessionState(
-	session: PrSession,
-	nextState: WorkState,
-): void {
-	const hasTaskChanged = session.state.taskRef !== nextState.taskRef;
-	const hasPrChanged = session.state.prUrl !== nextState.prUrl;
-	if (hasTaskChanged || hasPrChanged) session.workRevision += 1;
-	session.state = nextState;
-}
-
 function deactivate(root: Root): void {
 	const session = root.session;
 	const hasSession = session !== null && session !== undefined;
@@ -131,27 +111,23 @@ function inheritPreviousState(
 	event: SessionStartEvent,
 	config: TodoistProjectMapping,
 	project: { codingRoot: string },
-	stateEntry: Record<string, unknown> | null,
-	state: WorkState,
-): { state: WorkState; hasPendingHandoffContext: boolean } {
-	const hasStateEntry = stateEntry !== null;
+	hasCurrentSnapshot: boolean,
+	state: SessionState,
+): { state: SessionState; hasPendingHandoffContext: boolean } {
 	const previousSessionFile = event.previousSessionFile;
 	const hasPreviousSession = previousSessionFile !== undefined;
-	if (hasStateEntry || !hasPreviousSession)
+	if (hasCurrentSnapshot || !hasPreviousSession)
 		return { state, hasPendingHandoffContext: false };
 	const previous: SessionReader =
 		root.dependencies.openSession?.(previousSessionFile) ??
 		SessionManager.open(previousSessionFile);
 	const previousProject = resolveConfiguredProject(previous.getCwd(), config);
 	const sameCodingProject = previousProject?.codingRoot === project.codingRoot;
-	const inherited = sameCodingProject
-		? extractInheritedState(previous.getBranch())
-		: null;
-	if (inherited === null) return { state, hasPendingHandoffContext: false };
-	const inheritedState = {
-		...inherited,
-		inheritedFrom: previous.getSessionId(),
-	};
+	if (!sameCodingProject) return { state, hasPendingHandoffContext: false };
+	const persisted = latestPersistedSessionState(previous.getBranch());
+	if (persisted === null) return { state, hasPendingHandoffContext: false };
+	const inheritedState = restoreSessionState(persisted, root.stateDescriptors);
+	inheritedState.session.inheritedFromSessionId = previous.getSessionId();
 	return { state: inheritedState, hasPendingHandoffContext: true };
 }
 
@@ -184,48 +160,45 @@ async function activateConfigured(
 ): Promise<{
 	session: PrSession;
 	branch: readonly unknown[];
-	inheritedState?: WorkState;
+	hasPendingHandoffContext: boolean;
 } | null> {
 	const branch = ctx.sessionManager.getBranch();
-	const stateEntry = latestStateData(branch, C.entry.state);
-	let state = latestState(branch);
+	const persisted = latestPersistedSessionState(branch);
+	const restored =
+		persisted === null
+			? createSessionState()
+			: restoreSessionState(persisted, root.stateDescriptors);
 	const inherited = inheritPreviousState(
 		root,
 		event,
 		config,
 		project,
-		stateEntry,
-		state,
+		persisted !== null,
+		restored,
 	);
+	const state = inherited.state;
+	root.sessionState.session = {
+		...state.session,
+		activeSessionId: ctx.sessionManager.getSessionId(),
+	};
+	root.sessionState.gitState = state.gitState;
+	root.sessionState.moduleState = state.moduleState;
 	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
 	const session: PrSession = {
-		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
 		project,
-		state,
-		allowPrDiscovery: root.pr.isDiscoveryAllowed(
-			stateEntry,
-			state,
-			hasPendingHandoffContext,
-		),
-		prDiscoveryTestedUrls: new Set<string>(),
 		hasPendingHandoffContext,
 		hasPerformedAnyGitMutations: false,
-		hasUncommittedChanges: false,
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 	};
-	root.sessionState.sessionId = session.sessionId;
 	root.session = session;
-	state = await root.pr.initializeRemoteOrigin(ctx, inherited.state);
-	if (!isCurrentEpoch(root, epoch)) return null;
-	session.state = state;
-	session.allowPrDiscovery = root.pr.isDiscoveryAllowed(
-		stateEntry,
-		state,
-		hasPendingHandoffContext,
+	await root.pr.initializeRemoteOrigin(
+		ctx,
+		root.sessionState.gitState.remoteOrigin,
 	);
+	if (!isCurrentEpoch(root, epoch)) return null;
 	await root.publisher.publishSessionActivated({
 		context: ctx,
 		previousSessionFile: hasPendingHandoffContext
@@ -235,27 +208,17 @@ async function activateConfigured(
 		lifecycleEpoch: epoch,
 	});
 	if (!isCurrentEpoch(root, epoch)) return null;
-	if (!isCurrentEpoch(root, epoch)) return null;
-	return {
-		session,
-		branch,
-		inheritedState: hasPendingHandoffContext ? inherited.state : undefined,
-	};
+	return { session, branch, hasPendingHandoffContext };
 }
 
 async function persistInheritedState(
 	root: Root,
 	epoch: number,
-	inheritedState: WorkState | undefined,
+	hasPendingHandoffContext: boolean,
 ): Promise<boolean> {
-	if (inheritedState === undefined) return true;
+	if (!hasPendingHandoffContext) return true;
 	if (!isCurrentEpoch(root, epoch)) return false;
-	const remoteOrigin = root.sessionState.gitState.remoteOrigin;
-	const finalState =
-		remoteOrigin === undefined
-			? inheritedState
-			: { ...inheritedState, remoteOrigin };
-	appendState(root, finalState);
+	await root.persistSessionState(root.sessionState);
 	await root.stateUpdatesDrained();
 	return isCurrentEpoch(root, epoch);
 }
@@ -265,9 +228,9 @@ async function persistInitialPr(
 	epoch: number,
 	branch: readonly unknown[],
 ): Promise<void> {
-	const session = root.session;
-	if (session?.allowPrDiscovery !== true || !isCurrentEpoch(root, epoch))
-		return;
+	const prState = root.sessionState.moduleState.pr;
+	const canDiscover = !prState.discoveryDisabled && prState.prUrl === undefined;
+	if (!canDiscover || !isCurrentEpoch(root, epoch)) return;
 	await root.pr.persistInitialPr(branch);
 	if (!isCurrentEpoch(root, epoch)) return;
 }
@@ -299,13 +262,13 @@ export async function handleSessionStart(
 		config,
 	);
 	if (activated === null || !isCurrentEpoch(root, epoch)) return;
-	const { branch, inheritedState } = activated;
+	const { branch, hasPendingHandoffContext } = activated;
 	await root.stateUpdatesDrained();
 	if (!isCurrentEpoch(root, epoch)) return;
 	const inheritedStateReady = await persistInheritedState(
 		root,
 		epoch,
-		inheritedState,
+		hasPendingHandoffContext,
 	);
 	if (!inheritedStateReady) return;
 	manageActiveTools(root);
@@ -330,12 +293,14 @@ export async function handleBeforeAgentStart(
 	if (session === null) return undefined;
 	const messages: string[] = [];
 	if (session.hasPendingHandoffContext) {
+		const todoistState = root.sessionState.moduleState.todoist;
+		const prState = root.sessionState.moduleState.pr;
 		messages.push(
-			`This is the task and PR that we were working on.\nTask: ${session.state.taskUrl ?? C.value.none}\nPR: ${session.state.prUrl ?? C.value.none}`,
+			`This is the task and PR that we were working on.\nTask: ${todoistState.taskUrl ?? C.value.none}\nPR: ${prState.prUrl ?? C.value.none}`,
 		);
 		session.hasPendingHandoffContext = false;
 	}
-	if (session.state.taskRef === undefined)
+	if (root.sessionState.moduleState.todoist.taskRef === undefined)
 		root.todoist.maybeAnalyzeTaskClaim(session, event.prompt);
 	if (session.hasPerformedAnyGitMutations)
 		await root.pr.appendBeforeAgentPrompt(ctx, messages);
@@ -375,9 +340,7 @@ export async function applyModuleStateChanged(
 	updateModuleState(state, update);
 }
 
-export type PersistSessionState = (
-	state: SessionState,
-) => void | Promise<void>;
+export type PersistSessionState = (state: SessionState) => void | Promise<void>;
 
 export function registerModuleStateConsumer(
 	events: EventHandler,

@@ -12,7 +12,7 @@ import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { PrModuleState, SessionState } from "../state.ts";
 
-export type PrState = PrModuleState;
+export type PrState = Partial<PrModuleState>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,7 +31,7 @@ function isMergedPr(value: unknown): value is MergedPr {
 	);
 }
 
-function restorePrState(value: unknown): PrState {
+function restorePrState(value: unknown): PrModuleState {
 	if (!isRecord(value)) return initialPrState();
 	const hasValidPrUrl =
 		value.prUrl === undefined || typeof value.prUrl === "string";
@@ -60,7 +60,7 @@ function restorePrState(value: unknown): PrState {
 	};
 }
 
-function initialPrState(): PrState {
+function initialPrState(): PrModuleState {
 	return { discoveryDisabled: false, discoveryTestedUrls: [], mergedPrs: [] };
 }
 
@@ -68,7 +68,8 @@ export const prStateDescriptor: ModuleStateDescriptor<"pr"> = {
 	id: "pr",
 	createInitialState: initialPrState,
 	restore: restorePrState,
-	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
+	serialize: (state): JsonValue =>
+		structuredClone(state) as unknown as JsonValue,
 };
 
 export type PrSession = SessionRecord;

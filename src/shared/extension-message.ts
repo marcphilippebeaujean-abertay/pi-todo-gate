@@ -1,4 +1,3 @@
-import { isWorkState } from "../state.ts";
 import { EXTENSION_CONSTANTS as C } from "./constants.ts";
 
 const STRING_TYPE = "string";
@@ -37,33 +36,6 @@ export function extensionResult(text: string): {
 		content: [{ type: C.content.text, text }],
 		details: undefined,
 	};
-}
-
-export function latestStateData(
-	entries: readonly unknown[],
-	stateType: string,
-): Record<string, unknown> | null {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const entry = entries[index];
-		const isObjectEntry = typeof entry === OBJECT_TYPE && entry !== null;
-		if (!isObjectEntry) continue;
-		const candidate = entry as {
-			type?: unknown;
-			customType?: unknown;
-			data?: unknown;
-		};
-		const isCustomEntry = candidate.type === C.entry.custom;
-		if (!isCustomEntry) continue;
-		const isStateEntry = candidate.customType === stateType;
-		if (!isStateEntry) continue;
-		const hasObjectData =
-			typeof candidate.data === OBJECT_TYPE && candidate.data !== null;
-		if (!hasObjectData) continue;
-		const hasValidStateData = isWorkState(candidate.data);
-		if (!hasValidStateData) continue;
-		return candidate.data as Record<string, unknown>;
-	}
-	return null;
 }
 
 export function branchTexts(entries: readonly unknown[]): string[] {

@@ -7,6 +7,7 @@ import {
 import { RootEventPublisher } from "../src/event-publishers.ts";
 import { createExtensionState } from "../src/main.ts";
 import { type EventHandler, event } from "../src/shared/events.ts";
+import { createSessionState } from "../src/state.ts";
 
 function context(cwd: string, branch: unknown[] = []) {
 	return {
@@ -78,24 +79,19 @@ describe("session shutdown", () => {
 			.spyOn(root.promptQueue, "enqueue")
 			.mockImplementation(() => Promise.resolve(undefined));
 		const session = {
-			sessionId: "session",
 			context: activationContext,
 			project: { codingRoot: "/repo" },
-			state: {
-				taskRef: "42",
-				taskName: "Task",
-				prUrl: "https://github.com/o/r/pull/42",
-			},
-			allowPrDiscovery: true,
-			prDiscoveryTestedUrls: new Set<string>(),
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
-			hasUncommittedChanges: false,
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../src/pr/state.ts").PrSession;
 		root.session = session;
+		root.sessionState.session.activeSessionId = "session";
+		root.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		root.sessionState.moduleState.todoist.taskRef = "42";
+		root.sessionState.moduleState.todoist.taskName = "Task";
 		await root.eventHandler.sessionActivatedEvent.emit({
 			context: activationContext,
 			session,
@@ -143,9 +139,9 @@ describe("session shutdown", () => {
 			lifecycleEpoch: { value: 0 },
 			promptQueue: { reset: vi.fn() },
 			sessionState: {
-				sessionId: "session",
+				...createSessionState(),
+				session: { activeSessionId: "session" },
 				gitState: { branch: "main" },
-				moduleState: { work: {} },
 			},
 			getSession: () => null,
 			setSession: vi.fn(),
@@ -159,9 +155,9 @@ describe("session shutdown", () => {
 
 		expect(runtime.promptQueue.reset).toHaveBeenCalledOnce();
 		expect(runtime.sessionState).toMatchObject({
-			sessionId: null,
+			session: { activeSessionId: null },
 			gitState: {},
-			moduleState: {},
+			moduleState: createSessionState().moduleState,
 		});
 		expect(runtime.footer.deactivate).toHaveBeenCalledOnce();
 		expect(runtime.worktree.deactivate).toHaveBeenCalledOnce();
@@ -200,12 +196,19 @@ describe("session shutdown", () => {
 				{
 					type: "custom",
 					customType: "pi-todo-gate-state",
-					data: { remoteOrigin: "https://persisted.example/repo.git" },
+					data: {
+						schemaVersion: 1,
+						session: {},
+						gitState: {
+							remoteOrigin: "https://persisted.example/repo.git",
+						},
+						moduleState: {},
+					},
 				},
 			]),
 		);
 		expect(updates.map(({ moduleId }) => moduleId)).toEqual(
-			expect.arrayContaining(["worktree", "pr", "exit-protocol"]),
+			expect.arrayContaining(["worktree", "pr", "exitProtocol"]),
 		);
 		expect(root.sessionState.gitState).toMatchObject({
 			isWorktree: true,
@@ -245,7 +248,14 @@ describe("session shutdown", () => {
 					{
 						type: "custom",
 						customType: "pi-todo-gate-state",
-						data: { taskRef: "TASK-123" },
+						data: {
+							schemaVersion: 1,
+							session: {},
+							gitState: {},
+							moduleState: {
+								todoist: { taskRef: "TASK-123" },
+							},
+						},
 					},
 				],
 			}),
@@ -270,8 +280,11 @@ describe("session shutdown", () => {
 		expect(stateEntries.at(-1)).toEqual([
 			"pi-todo-gate-state",
 			expect.objectContaining({
-				remoteOrigin: "https://current.example/repo.git",
-				inheritedFrom: "previous-session",
+				schemaVersion: 1,
+				session: { inheritedFromSessionId: "previous-session" },
+				gitState: {
+					remoteOrigin: "https://current.example/repo.git",
+				},
 			}),
 		]);
 	});
@@ -324,9 +337,9 @@ describe("session shutdown", () => {
 		).appendEntry;
 		expect(appendEntry).not.toHaveBeenCalled();
 		expect(root.sessionState).toMatchObject({
-			sessionId: null,
+			session: { activeSessionId: null },
 			gitState: {},
-			moduleState: {},
+			moduleState: createSessionState().moduleState,
 		});
 	});
 
@@ -349,21 +362,16 @@ describe("session shutdown", () => {
 		);
 		const activationContext = context("/repo");
 		const session = {
-			sessionId: "session",
 			context: activationContext,
 			project: { codingRoot: "/repo" },
-			state: {},
-			allowPrDiscovery: true,
-			prDiscoveryTestedUrls: new Set<string>(),
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
-			hasUncommittedChanges: false,
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../src/pr/state.ts").PrSession;
 		root.session = session;
-		root.sessionState.sessionId = session.sessionId;
+		root.sessionState.session.activeSessionId = "session";
 		const activation = root.eventHandler.sessionActivatedEvent.emit({
 			context: activationContext,
 			session,
@@ -375,7 +383,9 @@ describe("session shutdown", () => {
 		await activation;
 		await Promise.resolve();
 		expect(root.session).toBeNull();
-		expect(root.sessionState.moduleState).toEqual({});
+		expect(root.sessionState.moduleState).toEqual(
+			createSessionState().moduleState,
+		);
 	});
 
 	it("does not activate stale concurrent starts", async () => {
@@ -404,9 +414,9 @@ describe("session shutdown", () => {
 		await Promise.all([first, second]);
 		expect(root.session).toBeNull();
 		expect(root.sessionState).toMatchObject({
-			sessionId: null,
+			session: { activeSessionId: null },
 			gitState: {},
-			moduleState: {},
+			moduleState: createSessionState().moduleState,
 		});
 	});
 
@@ -427,22 +437,24 @@ describe("session shutdown", () => {
 		await Promise.resolve();
 		handleSessionShutdown(root);
 		void root.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: "stale",
-			moduleState: { value: true },
+			moduleId: "footer",
+			moduleState: { footers: {} },
+			persist: false,
 		});
 		release({ projects: { "/repo": "project" } });
 		await start;
 		await root.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: "late",
-			moduleState: { value: true },
+			moduleId: "footer",
+			moduleState: { footers: {} },
+			persist: false,
 		});
 		await Promise.resolve();
 		expect(root.session).toBeNull();
 		expect(root.sessionState).toBe(stateReference);
 		expect(root.sessionState).toMatchObject({
-			sessionId: null,
+			session: { activeSessionId: null },
 			gitState: {},
-			moduleState: {},
+			moduleState: createSessionState().moduleState,
 		});
 	});
 });

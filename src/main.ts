@@ -8,11 +8,20 @@ import {
 	RootEventPublisher,
 } from "./event-publishers.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
+import { exitProtocolStateDescriptor } from "./exit-protocol/state.ts";
 import { createFooterModule } from "./footer/module.ts";
+import { footerStateDescriptor } from "./footer/state.ts";
 import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
+import { herdrStateDescriptor } from "./herdr/state.ts";
 import { createPrModule } from "./pr/module.ts";
+import { prStateDescriptor } from "./pr/state.ts";
 import { PromptQueue } from "./prompt-queue.ts";
+import {
+	type ModuleStateDescriptors,
+	serializeSessionState,
+} from "./session-state-persistence.ts";
+import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import { createEventHandler } from "./shared/events.ts";
 import { isSubagent } from "./shared/session.ts";
 import {
@@ -21,7 +30,9 @@ import {
 	type ExtensionState,
 } from "./state.ts";
 import { createTodoistModule } from "./todoist/module.ts";
+import { todoistStateDescriptor } from "./todoist/state.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
+import { worktreeStateDescriptor } from "./worktree/state.ts";
 
 export type { ExtensionDependencies } from "./state.ts";
 
@@ -32,6 +43,20 @@ export function createExtensionState(
 	const eventHandler = createEventHandler();
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
+	const stateDescriptors: ModuleStateDescriptors = {
+		pr: prStateDescriptor,
+		todoist: todoistStateDescriptor,
+		herdr: herdrStateDescriptor,
+		worktree: worktreeStateDescriptor,
+		footer: footerStateDescriptor,
+		exitProtocol: exitProtocolStateDescriptor,
+	};
+	const persistSessionState = (state: typeof sessionState): void => {
+		pi.appendEntry(
+			C.entry.state,
+			serializeSessionState(state, stateDescriptors),
+		);
+	};
 	const lifecycleEpoch = { value: 0 };
 	const stateUpdateEpoch = { value: 0 };
 	const footer = createFooterModule({
@@ -101,6 +126,8 @@ export function createExtensionState(
 		lifecycleEpoch,
 		stateUpdateEpoch,
 		stateUpdatesDrained: async () => undefined,
+		stateDescriptors,
+		persistSessionState,
 	};
 	return Object.assign(extensionState, { root });
 }
@@ -124,6 +151,7 @@ function startExtensions(
 		extensionState.sessionState,
 		() => root.session !== null,
 		root.stateUpdateEpoch,
+		root.persistSessionState,
 	);
 	registerExtensionEventConsumers(root);
 	installHerdrTabClaim(pi, {

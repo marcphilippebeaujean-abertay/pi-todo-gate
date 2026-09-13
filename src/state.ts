@@ -47,9 +47,9 @@ export interface MergedPrState {
 
 export interface PrModuleState {
 	prUrl?: string;
-	discoveryDisabled?: boolean;
-	discoveryTestedUrls?: string[];
-	mergedPrs?: MergedPrState[];
+	discoveryDisabled: boolean;
+	discoveryTestedUrls: string[];
+	mergedPrs: MergedPrState[];
 }
 
 export interface TodoistModuleState {

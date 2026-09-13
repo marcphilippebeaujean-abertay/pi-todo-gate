@@ -59,7 +59,8 @@ function createRuntime(
 		exec,
 		getSession: () => activeSession.current,
 		getPrState: () => sessionState.moduleState.pr,
-		getOperationGeneration: () => activeSession.current?.operationGeneration ?? 0,
+		getOperationGeneration: () =>
+			activeSession.current?.operationGeneration ?? 0,
 		isCurrentOperation: (current: SessionRecord, generation: number) =>
 			current.operationGeneration === generation,
 		enqueueSessionOperation: <T>(
