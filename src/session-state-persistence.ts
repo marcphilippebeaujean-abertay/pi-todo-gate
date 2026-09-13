@@ -36,35 +36,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return isObject && !isArray;
 }
 
-function isOptionalString(value: unknown): boolean {
-	return value === undefined || typeof value === STRING_TYPE;
-}
-
-function isOptionalNullableString(value: unknown): boolean {
-	switch (value) {
-		case undefined:
-		case null:
-			return true;
-		default:
-			return typeof value === STRING_TYPE;
-	}
-}
-
-function isOptionalBoolean(value: unknown): boolean {
-	return value === undefined || typeof value === BOOLEAN_TYPE;
+function isOptionalValue(
+	value: unknown,
+	type: typeof STRING_TYPE | typeof BOOLEAN_TYPE,
+	allowNull?: boolean,
+): boolean {
+	const isUndefined = value === undefined;
+	const permitsNull = allowNull === true;
+	const isNull = permitsNull && value === null;
+	const hasExpectedType = typeof value === type;
+	if (isUndefined) return true;
+	if (isNull) return true;
+	return hasExpectedType;
 }
 
 function isGitState(value: unknown): value is GitState {
 	const isGitRecord = isRecord(value);
 	if (!isGitRecord) return false;
 	const validityChecks = [
-		isOptionalString(value.remoteOrigin),
-		isOptionalString(value.mergeCompletedAt),
-		isOptionalNullableString(value.branch),
-		isOptionalBoolean(value.isWorktree),
-		isOptionalNullableString(value.worktreeRoot),
-		isOptionalNullableString(value.mainRoot),
-		isOptionalBoolean(value.hasUncommittedChanges),
+		isOptionalValue(value.remoteOrigin, STRING_TYPE),
+		isOptionalValue(value.mergeCompletedAt, STRING_TYPE),
+		isOptionalValue(value.branch, STRING_TYPE, true),
+		isOptionalValue(value.isWorktree, BOOLEAN_TYPE),
+		isOptionalValue(value.worktreeRoot, STRING_TYPE, true),
+		isOptionalValue(value.mainRoot, STRING_TYPE, true),
+		isOptionalValue(value.hasUncommittedChanges, BOOLEAN_TYPE),
 	];
 	return validityChecks.every(Boolean);
 }
@@ -79,7 +75,10 @@ function isPersistedSessionState(
 	const session = value.session;
 	const isSessionRecord = isRecord(session);
 	if (!isSessionRecord) return false;
-	const hasValidSession = isOptionalString(session.inheritedFromSessionId);
+	const hasValidSession = isOptionalValue(
+		session.inheritedFromSessionId,
+		STRING_TYPE,
+	);
 	if (!hasValidSession) return false;
 	const hasValidGitState = isGitState(value.gitState);
 	if (!hasValidGitState) return false;
@@ -98,20 +97,50 @@ function descriptorState<K extends ModuleId>(
 	}
 }
 
+function serializeModuleState(
+	state: SessionState,
+	descriptors: ModuleStateDescriptors,
+): PersistedSessionState["moduleState"] {
+	return {
+		pr: descriptors.pr.serialize(
+			state.moduleState.pr,
+		) as unknown as ModuleState["pr"],
+		todoist: descriptors.todoist.serialize(
+			state.moduleState.todoist,
+		) as unknown as ModuleState["todoist"],
+		herdr: descriptors.herdr.serialize(
+			state.moduleState.herdr,
+		) as unknown as ModuleState["herdr"],
+		worktree: descriptors.worktree.serialize(
+			state.moduleState.worktree,
+		) as unknown as ModuleState["worktree"],
+		footer: descriptors.footer.serialize(
+			state.moduleState.footer,
+		) as unknown as ModuleState["footer"],
+		exitProtocol: descriptors.exitProtocol.serialize(
+			state.moduleState.exitProtocol,
+		) as unknown as ModuleState["exitProtocol"],
+	};
+}
+
+function restoreModuleState(
+	value: PersistedSessionState["moduleState"],
+	descriptors: ModuleStateDescriptors,
+): ModuleState {
+	return {
+		pr: descriptorState(descriptors.pr, value.pr),
+		todoist: descriptorState(descriptors.todoist, value.todoist),
+		herdr: descriptorState(descriptors.herdr, value.herdr),
+		worktree: descriptorState(descriptors.worktree, value.worktree),
+		footer: descriptorState(descriptors.footer, value.footer),
+		exitProtocol: descriptorState(descriptors.exitProtocol, value.exitProtocol),
+	};
+}
+
 export function serializeSessionState(
 	state: SessionState,
 	descriptors: ModuleStateDescriptors,
 ): PersistedSessionState {
-	const moduleState = {} as ModuleState;
-	for (const moduleId of Object.keys(state.moduleState) as ModuleId[]) {
-		const descriptor = descriptors[moduleId] as ModuleStateDescriptor<
-			typeof moduleId
-		>;
-		const serialized = descriptor.serialize(
-			state.moduleState[moduleId] as never,
-		);
-		moduleState[moduleId] = serialized as never;
-	}
 	return {
 		schemaVersion: CURRENT_SCHEMA_VERSION,
 		session: {
@@ -120,7 +149,7 @@ export function serializeSessionState(
 				: { inheritedFromSessionId: state.session.inheritedFromSessionId }),
 		},
 		gitState: structuredClone(state.gitState),
-		moduleState,
+		moduleState: serializeModuleState(state, descriptors),
 	};
 }
 
@@ -135,15 +164,7 @@ export function restoreSessionState(
 	restored.session.inheritedFromSessionId =
 		value.session.inheritedFromSessionId;
 	restored.gitState = structuredClone(value.gitState);
-	for (const moduleId of Object.keys(restored.moduleState) as ModuleId[]) {
-		const descriptor = descriptors[moduleId] as ModuleStateDescriptor<
-			typeof moduleId
-		>;
-		restored.moduleState[moduleId] = descriptorState(
-			descriptor,
-			value.moduleState[moduleId],
-		) as never;
-	}
+	restored.moduleState = restoreModuleState(value.moduleState, descriptors);
 	return restored;
 }
 

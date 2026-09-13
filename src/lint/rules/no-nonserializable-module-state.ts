@@ -2,7 +2,7 @@ import ts from "typescript";
 import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
-const ROOT_STATE_PATH = /[\\/]src[\\/]state\.ts$/;
+const MODULE_CONTRACT_PATH = /[\\/]src[\\/]shared[\\/]session-state\.ts$/;
 const RULE_ID = "no-nonserializable-module-state" as const;
 const MESSAGE =
 	"Module state must contain only JSON-compatible declarative values";
@@ -140,7 +140,7 @@ export const noNonserializableModuleState: LintRule = ({
 	diagnostics,
 	checker,
 }) => {
-	if (!ROOT_STATE_PATH.test(sourceFile.fileName)) return;
+	if (!MODULE_CONTRACT_PATH.test(sourceFile.fileName)) return;
 	for (const statement of sourceFile.statements) {
 		if (
 			!ts.isInterfaceDeclaration(statement) &&

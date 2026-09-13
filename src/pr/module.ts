@@ -29,6 +29,7 @@ import type {
 	PrSessionIdentity,
 	PrState,
 } from "./state.ts";
+import { normalizePrState } from "./state.ts";
 import { installStateTool } from "./state-tool.ts";
 
 export * from "./commands.ts";
@@ -48,11 +49,11 @@ function prStateFromSession(
 	discoveryDisabled: boolean,
 	discoveryTestedUrls: readonly string[],
 ): PrState {
-	return {
+	return normalizePrState({
 		...state,
 		discoveryDisabled,
 		discoveryTestedUrls: [...discoveryTestedUrls],
-	};
+	});
 }
 
 class PrModuleImpl implements PrModule {
@@ -401,8 +402,9 @@ class PrModuleImpl implements PrModule {
 		nextState: PrState,
 		persist: boolean,
 	): Promise<void> {
-		this.state = nextState;
-		await this.publishState.publish(nextState, { persist });
+		const normalizedState = normalizePrState(nextState);
+		this.state = normalizedState;
+		await this.publishState.publish(normalizedState, { persist });
 	}
 
 	private commandDependencies(): PrCommandOptions {
@@ -541,7 +543,7 @@ class PrModuleImpl implements PrModule {
 	): Promise<void> {
 		const currentEmission = this.sessionState.session.activeSessionId !== null;
 		if (!currentEmission) return;
-		await this.publishState.publish(moduleState, {
+		await this.publishState.publish(normalizePrState(moduleState), {
 			persist: options?.persist ?? false,
 			...(options?.gitStatePatch === undefined
 				? {}

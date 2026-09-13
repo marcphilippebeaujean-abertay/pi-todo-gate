@@ -38,6 +38,40 @@ export function update(sessionState: { moduleState: { todoist: unknown } }) {
 		);
 	});
 
+	it("rejects mutating module-state calls", async () => {
+		const diagnostics = await lintModuleSource(`
+export function update(sessionState: { moduleState: { todoist: { tasks: string[] } } }) {
+	 sessionState.moduleState.todoist.tasks.push("task");
+	 Object.assign(sessionState.moduleState.todoist.tasks, {});
+	 ({ tasks: sessionState.moduleState.todoist.tasks } = { tasks: [] });
+}
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			3,
+		);
+	});
+
+	it("rejects module publishers bound to another module", async () => {
+		const diagnostics = await lintModuleSource(`
+import { createModuleStatePublisher } from "../../event-publishers.ts";
+const publisher = createModuleStatePublisher(eventHandler, "todoist");
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("allows module publisher bound to its own module", async () => {
+		const diagnostics = await lintModuleSource(`
+import { createModuleStatePublisher } from "../../event-publishers.ts";
+const publisher = createModuleStatePublisher(eventHandler, "pr");
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
+	});
+
 	it("rejects computed module-state assignments", async () => {
 		const diagnostics = await lintModuleSource(`
 export function update(sessionState: { moduleState: Record<string, unknown> }) {

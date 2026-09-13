@@ -14,6 +14,7 @@ const SANCTIONED_ROOT_WRITERS = new Set([
 	"activateConfigured",
 	"serializeSessionState",
 	"restoreSessionState",
+	"resetSessionState",
 ]);
 
 export function isScopedModulePath(filePath: string): boolean {
@@ -38,8 +39,28 @@ function readsModuleState(node: ts.Node): boolean {
 		if (isModuleStateAccess) return true;
 		return readsModuleState(node.expression);
 	}
-	return false;
+	let found = false;
+	ts.forEachChild(node, (child) => {
+		if (!found) found = readsModuleState(child);
+	});
+	return found;
 }
+
+const MUTATING_METHODS = new Set([
+	"add",
+	"clear",
+	"copyWithin",
+	"delete",
+	"fill",
+	"pop",
+	"push",
+	"reverse",
+	"set",
+	"shift",
+	"sort",
+	"splice",
+	"unshift",
+]);
 
 function isWriteExpression(node: ts.Node): boolean {
 	if (ts.isBinaryExpression(node)) return isAssignment(node);
@@ -49,7 +70,18 @@ function isWriteExpression(node: ts.Node): boolean {
 			node.operator === ts.SyntaxKind.MinusMinusToken
 		);
 	if (ts.isDeleteExpression(node)) return true;
-	return false;
+	if (!ts.isCallExpression(node)) return false;
+	const callee = node.expression;
+	if (
+		ts.isPropertyAccessExpression(callee) &&
+		MUTATING_METHODS.has(callee.name.text)
+	)
+		return readsModuleState(callee.expression);
+	const isObjectAssign =
+		ts.isPropertyAccessExpression(callee) &&
+		callee.expression.getText() === "Object" &&
+		callee.name.text === "assign";
+	return isObjectAssign && node.arguments.some(readsModuleState);
 }
 
 function containingFunction(node: ts.Node): ts.Node | null {
@@ -64,6 +96,31 @@ function containingFunction(node: ts.Node): ts.Node | null {
 		current = current.parent;
 	}
 	return null;
+}
+
+function scopedModuleId(fileName: string): string | undefined {
+	const normalized = fileName.replaceAll("\\", "/");
+	const match = normalized.match(/\/src\/([^/]+)\//);
+	return match?.[1];
+}
+
+function publisherModuleId(node: ts.Expression): string | undefined {
+	if (ts.isStringLiteral(node)) return node.text;
+	if (ts.isPropertyAccessExpression(node)) return node.name.text;
+	return undefined;
+}
+
+function isBoundPublisherCall(
+	node: ts.CallExpression,
+	sourceFile: ts.SourceFile,
+): boolean {
+	if (!ts.isIdentifier(node.expression)) return true;
+	if (node.expression.text !== "createModuleStatePublisher") return true;
+	const moduleIdArgument = node.arguments[1];
+	if (moduleIdArgument === undefined) return false;
+	return (
+		publisherModuleId(moduleIdArgument) === scopedModuleId(sourceFile.fileName)
+	);
 }
 
 function isAllowedRootWrite(node: ts.Node, sourceFile: ts.SourceFile): boolean {
@@ -95,12 +152,22 @@ export const noDirectModuleStateWrite: LintRule = ({
 				? node.expression
 				: ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)
 					? node.operand
-					: null;
+					: ts.isCallExpression(node)
+						? (node.arguments.find(readsModuleState) ?? node.expression)
+						: null;
 		const isDirectModuleStateWrite =
 			isWrite && target !== null && readsModuleState(target);
 		const isAllowed = !isModuleFile && isAllowedRootWrite(node, sourceFile);
 		if (isDirectModuleStateWrite && !isAllowed)
 			diagnostics.push(diagnostic(sourceFile, target, RULE_ID, MESSAGE, 1, 0));
+		if (
+			isModuleFile &&
+			ts.isCallExpression(node) &&
+			!isBoundPublisherCall(node, sourceFile)
+		)
+			diagnostics.push(
+				diagnostic(sourceFile, node.expression, RULE_ID, MESSAGE, 1, 0),
+			);
 		ts.forEachChild(node, visit);
 	}
 	visit(sourceFile);

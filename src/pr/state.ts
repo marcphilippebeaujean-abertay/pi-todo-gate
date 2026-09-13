@@ -22,8 +22,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return isObjectValue && !isArrayValue;
 }
 
+function normalizeUrl(value: unknown): string | undefined {
+	const isEmpty = typeof value !== "string" || value.trim() === "";
+	if (isEmpty) return undefined;
+	return value;
+}
+
 function testedStrings(values: unknown[]): string[] {
-	return values.filter((value): value is string => typeof value === "string");
+	return [
+		...new Set(
+			values.flatMap((value) => {
+				const url = normalizeUrl(value);
+				return url === undefined ? [] : [url];
+			}),
+		),
+	];
 }
 
 function isMergedPr(value: unknown): value is MergedPr {
@@ -65,12 +78,22 @@ function restorePrState(value: unknown): PrModuleState {
 	const discoveryDisabled = value.discoveryDisabled as boolean;
 	const discoveryTestedUrls = value.discoveryTestedUrls as unknown[];
 	const mergedPrs = value.mergedPrs as MergedPr[];
-	const prUrl = value.prUrl;
+	const prUrl = normalizeUrl(value.prUrl);
 	return {
-		...(prUrl === undefined ? {} : { prUrl: prUrl as string }),
+		...(prUrl === undefined ? {} : { prUrl }),
 		discoveryDisabled,
-		discoveryTestedUrls: [...new Set(testedStrings(discoveryTestedUrls))],
+		discoveryTestedUrls: testedStrings(discoveryTestedUrls),
 		mergedPrs,
+	};
+}
+
+export function normalizePrState(state: PrModuleState): PrModuleState {
+	const prUrl = normalizeUrl(state.prUrl);
+	return {
+		...(prUrl === undefined ? {} : { prUrl }),
+		discoveryDisabled: state.discoveryDisabled,
+		discoveryTestedUrls: testedStrings(state.discoveryTestedUrls),
+		mergedPrs: state.mergedPrs,
 	};
 }
 
@@ -82,8 +105,15 @@ export const prStateDescriptor: ModuleStateDescriptor<"pr"> = {
 	id: "pr",
 	createInitialState: initialPrState,
 	restore: restorePrState,
-	serialize: (state): JsonValue =>
-		structuredClone(state) as unknown as JsonValue,
+	serialize: (state): JsonValue => {
+		const prUrl = normalizeUrl(state.prUrl);
+		return structuredClone({
+			...(prUrl === undefined ? {} : { prUrl }),
+			discoveryDisabled: state.discoveryDisabled,
+			discoveryTestedUrls: testedStrings(state.discoveryTestedUrls),
+			mergedPrs: state.mergedPrs,
+		}) as unknown as JsonValue;
+	},
 };
 
 export type PrSession = SessionRecord;

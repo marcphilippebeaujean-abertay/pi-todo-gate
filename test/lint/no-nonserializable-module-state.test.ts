@@ -12,7 +12,9 @@ async function lintStateSource(source: string) {
 	const root = await mkdtemp(join(tmpdir(), TEMP_PREFIX));
 	const directory = join(root, "src");
 	await mkdir(directory, { recursive: true });
-	const filePath = join(directory, "state.ts");
+	const sharedDirectory = join(directory, "shared");
+	await mkdir(sharedDirectory, { recursive: true });
+	const filePath = join(sharedDirectory, "session-state.ts");
 	await writeFile(filePath, source);
 	const program = ts.createProgram([filePath], {
 		strict: true,

@@ -55,6 +55,35 @@ describe("PR state descriptor", () => {
 		});
 	});
 
+	it("serializes non-empty PR URLs and deduplicates tested URLs", () => {
+		const serialized = prStateDescriptor.serialize({
+			prUrl: "",
+			discoveryDisabled: true,
+			discoveryTestedUrls: ["", "one", "one", "two", "  "],
+			mergedPrs: [],
+		});
+		expect(serialized).toEqual({
+			discoveryDisabled: true,
+			discoveryTestedUrls: ["one", "two"],
+			mergedPrs: [],
+		});
+	});
+
+	it("restores non-empty PR URLs and deduplicates tested URLs", () => {
+		expect(
+			prStateDescriptor.restore({
+				prUrl: "",
+				discoveryDisabled: true,
+				discoveryTestedUrls: ["", "one", "one", "two", "  "],
+				mergedPrs: [],
+			}),
+		).toEqual({
+			discoveryDisabled: true,
+			discoveryTestedUrls: ["one", "two"],
+			mergedPrs: [],
+		});
+	});
+
 	it("falls back to defaults when required PR fields are malformed", () => {
 		expect(
 			prStateDescriptor.restore({
