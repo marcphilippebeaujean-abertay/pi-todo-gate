@@ -104,6 +104,7 @@ export interface TodoistState {
 
 export interface TodoistModule {
 	register(): void;
+	syncSessionState(session: TodoistSession): Promise<void>;
 	taskClaim: {
 		pending: boolean;
 		completed: boolean;
@@ -113,6 +114,7 @@ export interface TodoistModule {
 }
 
 export interface TodoistModuleOptions {
+	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
@@ -122,31 +124,22 @@ export interface TodoistModuleOptions {
 		taskClaimWorker?: TaskClaimWorker;
 		createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
 	};
-	appendState?(state: WorkState, prDiscoveryDisabled?: boolean): void;
-	refreshFooterStatuses?(session: TodoistSession): void;
-	replaceSessionState?(session: TodoistSession, state: WorkState): void;
-	completeMergedTask?(
-		session: TodoistSession,
-		taskRef: string,
-		stateSnapshot: WorkState,
-		workRevision: number,
-		operationGeneration: number,
-	): Promise<ExitActionResult>;
 }
 
 export type TodoistSession = SessionRecord;
 
-export interface TodoistRuntime {
+export interface TodoistDependencies {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
 	todoist: TodoistModule;
 	promptQueue: PromptQueue;
 	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;
 	eventHandler: EventHandler;
+	emitState(session: TodoistSession): Promise<void>;
 	appendState(state: WorkState, prDiscoveryDisabled?: boolean): void;
 	refreshFooterStatuses(session: TodoistSession): void;
 	replaceSessionState(session: TodoistSession, nextState: WorkState): void;
-	completeMergedTask(
+	completeMergedTask?(
 		session: TodoistSession,
 		taskRef: string,
 		stateSnapshot: WorkState,

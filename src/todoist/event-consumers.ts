@@ -19,20 +19,20 @@ import type {
 	ClaimTaskData,
 	MergeRequest,
 	TaskClaimWorkerResult,
-	TodoistRuntime,
+	TodoistDependencies,
 	TodoistSession,
 } from "./state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
 function isSessionRecord(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 ): boolean {
 	return runtime.getSession() === session;
 }
 
 function isCurrentEvent(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): boolean {
@@ -63,7 +63,7 @@ function claimTaskData(
 }
 
 function persistClaim(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 	taskData: ClaimTaskData,
 ): void {
@@ -79,11 +79,12 @@ function persistClaim(
 	);
 	runtime.appendState(session.state, session.allowPrDiscovery === false);
 	runtime.refreshFooterStatuses(session);
+	void runtime.emitState(session);
 	notifyTaskAssigned(session.context);
 }
 
 export function handleTaskClaimResult(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): void {
@@ -111,7 +112,7 @@ function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 }
 
 export async function runTaskClaim(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 	prompt: string,
 ): Promise<void> {
@@ -142,7 +143,7 @@ export async function runTaskClaim(
 }
 
 export function maybeAnalyzeTaskClaim(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: TodoistSession,
 	prompt: string,
 ): void {
@@ -159,7 +160,7 @@ export function maybeAnalyzeTaskClaim(
 }
 
 async function consumeMergedEvent(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	event: MergeRequest,
 ): Promise<void> {
 	const alreadyCompleted = event.taskMarkedAsCompleted === true;
@@ -190,7 +191,9 @@ async function consumeMergedEvent(
 			if (!isCurrentAfterPromptEpoch) return;
 			const isCurrentSessionAfterPrompt = isSessionRecord(runtime, session);
 			if (!isCurrentSessionAfterPrompt) return;
-			const result = await runtime.completeMergedTask(
+			const completeMergedTask = runtime.completeMergedTask;
+			if (completeMergedTask === undefined) return;
+			const result = await completeMergedTask(
 				session,
 				taskRef,
 				stateSnapshot,
@@ -203,7 +206,9 @@ async function consumeMergedEvent(
 		.catch(() => undefined);
 }
 
-export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
+export function registerTodoistMergeConsumer(
+	runtime: TodoistDependencies,
+): void {
 	runtime.eventHandler.prMergedEvent.subscribe(
 		consumeMergedEvent.bind(null, runtime),
 	);

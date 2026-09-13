@@ -579,12 +579,7 @@ describe("PR module ownership", () => {
 			eventHandler: events,
 			sessionState,
 			getSession: () => session,
-			dependencies: {
-				exec,
-				replaceSessionState: (_session, nextState) => {
-					session.state = nextState;
-				},
-			},
+			dependencies: { exec },
 		});
 		await module.activateSession(session);
 		const messages: string[] = [];

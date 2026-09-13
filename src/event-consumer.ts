@@ -5,7 +5,6 @@ import type {
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { RootEventPublisher } from "./event-publishers.ts";
 import type { ExitProtocolModule } from "./exit-protocol/state.ts";
-import { refreshFooterStatuses } from "./footer/module.ts";
 import type { FooterModule as FooterModuleType } from "./footer/state.ts";
 import type { PrModule, PrSession } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
@@ -46,9 +45,10 @@ export interface RootComposition {
 	getSession: () => PrSession | null;
 	setSession: (session: PrSession | null) => void;
 	registered: () => boolean;
-	registerStateTool: (getSession: () => PrSession | null) => void;
+	registerStateTool: () => void;
 	publisher: RootEventPublisher;
 	lifecycleEpoch: { value: number };
+	stateUpdateEpoch: { value: number };
 	stateUpdatesDrained: () => Promise<void>;
 }
 
@@ -56,10 +56,15 @@ const FUNCTION_TYPE = "function";
 
 type Root = RootComposition;
 
-const resetEpochs = new WeakMap<SessionState, number>();
+export interface StateUpdateEpoch {
+	value: number;
+}
 
-export function resetSessionState(state: SessionState): void {
-	resetEpochs.set(state, (resetEpochs.get(state) ?? 0) + 1);
+export function resetSessionState(
+	state: SessionState,
+	epoch?: StateUpdateEpoch,
+): void {
+	if (epoch !== undefined) epoch.value += 1;
 	state.sessionId = null;
 	state.gitState = {};
 	state.moduleState = {};
@@ -81,7 +86,6 @@ export function appendState(
 	state: WorkState,
 	prDiscoveryDisabled?: boolean,
 ): void {
-	publishModuleState(root, C.module.work, { ...state });
 	const shouldDisableDiscovery = prDiscoveryDisabled ?? false;
 	const data = shouldDisableDiscovery
 		? { ...state, prDiscoveryDisabled: true }
@@ -103,12 +107,10 @@ function deactivate(root: Root): void {
 	const session = root.getSession();
 	const hasSession = session !== null;
 	if (hasSession) session.operationGeneration += 1;
-	root.pr.deactivateSession();
 	root.setSession(null);
-	resetSessionState(root.sessionState);
+	resetSessionState(root.sessionState, root.stateUpdateEpoch);
 	void root.publisher.publishSessionDeactivated();
 	root.promptQueue.reset();
-	root.worktree.deactivate();
 }
 
 function deactivateUnconfigured(root: Root): void {
@@ -216,18 +218,11 @@ async function activateConfigured(
 		state,
 		handoffContext,
 	);
-	await root.footer.sessionStart(
-		handoffContext ? event : { ...event, previousSessionFile: undefined },
-		ctx,
-	);
+	await root.publisher.publishSessionActivated({
+		context: ctx,
+		previousSessionFile: handoffContext ? event.previousSessionFile : undefined,
+	});
 	if (!isCurrentEpoch(root, epoch)) return null;
-	root.exitProtocol.sessionStart(ctx);
-	await root.worktree.sessionStart(ctx);
-	if (!isCurrentEpoch(root, epoch)) return null;
-	publishModuleState(root, C.module.work, { ...state });
-	await root.pr.activateSession(session);
-	if (!isCurrentEpoch(root, epoch)) return null;
-	await root.publisher.publishSessionActivated({ context: ctx });
 	if (!isCurrentEpoch(root, epoch)) return null;
 	return {
 		session,
@@ -292,7 +287,7 @@ export async function handleSessionStart(
 		config,
 	);
 	if (activated === null || !isCurrentEpoch(root, epoch)) return;
-	const { session, branch, inheritedState } = activated;
+	const { branch, inheritedState } = activated;
 	await root.stateUpdatesDrained();
 	if (!isCurrentEpoch(root, epoch)) return;
 	const inheritedStateReady = await persistInheritedState(
@@ -301,13 +296,11 @@ export async function handleSessionStart(
 		inheritedState,
 	);
 	if (!inheritedStateReady) return;
-	root.registerStateTool(() => root.getSession());
+	root.registerStateTool();
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
 	await persistInitialPr(root, epoch, branch);
 	if (!isCurrentEpoch(root, epoch)) return;
-	session.hasUncommittedChanges = root.worktree.getHasUncommittedChanges();
-	refreshFooterStatuses(root.footer, session);
 }
 
 export async function handleMessageEnd(
@@ -347,7 +340,6 @@ export async function handleBeforeAgentStart(
 export function handleSessionShutdown(root: Root): void {
 	root.lifecycleEpoch.value += 1;
 	deactivate(root);
-	resetSessionState(root.sessionState);
 }
 
 export function updateModuleState(
@@ -373,13 +365,14 @@ export function registerModuleStateConsumer(
 	events: EventHandler,
 	state: SessionState,
 	acceptUpdate?: () => boolean,
+	stateUpdateEpoch?: StateUpdateEpoch,
 ): () => Promise<void> {
 	let updateQueue = Promise.resolve();
 	events.moduleStateChangedEvent.subscribe((update) => {
 		const acceptedAtEmission = acceptUpdate?.() ?? true;
-		const updateEpoch = resetEpochs.get(state) ?? 0;
+		const updateEpoch = stateUpdateEpoch?.value ?? 0;
 		const queued = updateQueue.then(async () => {
-			if (!acceptedAtEmission || updateEpoch !== (resetEpochs.get(state) ?? 0))
+			if (!acceptedAtEmission || updateEpoch !== (stateUpdateEpoch?.value ?? 0))
 				return;
 			const previousState = structuredClone(state);
 			updateModuleState(state, update);
@@ -403,15 +396,6 @@ export function registerExtensionEventConsumers(root: Root): void {
 		C.event.toolResult,
 		(event: ToolResultEvent, context: ExtensionContext) =>
 			root.eventHandler.toolResultEvent.emit({ event, context }),
-	);
-	root.eventHandler.worktreeStatusEvent.subscribe(
-		({ context, hasUncommittedChanges }) => {
-			const session = root.getSession();
-			const isCurrent = session !== null && session.context === context;
-			if (!isCurrent || session === null) return;
-			session.hasUncommittedChanges = hasUncommittedChanges;
-			refreshFooterStatuses(root.footer, session);
-		},
 	);
 	root.pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, root));
 }

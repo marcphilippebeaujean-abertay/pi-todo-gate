@@ -8,7 +8,7 @@ import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
 } from "../../src/pr/module.ts";
-import type { PrRuntime } from "../../src/pr/state.ts";
+import type { PrCommandDependencies } from "../../src/pr/state.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
 import type { ExtensionDependencies, SessionRecord } from "../../src/state.ts";
 
@@ -30,7 +30,7 @@ function createRuntime(
 	exec: ExtensionDependencies["exec"],
 	confirm = true,
 ): {
-	runtime: PrRuntime;
+	runtime: PrCommandDependencies;
 	context: ExtensionCommandContext;
 	session: SessionRecord;
 } {
@@ -51,12 +51,21 @@ function createRuntime(
 	};
 	const currentRuntime = {
 		sessionState,
-		dependencies: { exec },
+		exec,
 		getSession: () => activeSession.current,
+		getPrState: () => ({
+			operationGeneration: activeSession.current?.operationGeneration,
+		}),
+		isCurrentOperation: (current: SessionRecord, generation: number) =>
+			current.operationGeneration === generation,
+		enqueueSessionOperation: <T>(
+			_session: SessionRecord,
+			operation: () => Promise<T>,
+		) => operation(),
 		eventHandler: {
 			prMergedEvent: { emit: vi.fn(async () => undefined) },
 		},
-	} as unknown as PrRuntime;
+	} as unknown as PrCommandDependencies;
 
 	return { runtime: currentRuntime, context, session };
 }
@@ -214,7 +223,7 @@ function runtimeForTest() {
 	return createRuntime(async () => ({ stdout: "", stderr: "", code: 0 }));
 }
 
-async function commandFor(runtime: PrRuntime) {
+async function commandFor(runtime: PrCommandDependencies) {
 	const commands = new Map<
 		string,
 		{ handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }

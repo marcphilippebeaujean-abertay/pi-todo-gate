@@ -2,7 +2,6 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
-import type { ModuleContext } from "../shared/module-context.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
 	EXIT_ACTION_KEY,
@@ -31,13 +30,6 @@ export interface ExitProtocolModuleOptions {
 	eventHandler: EventHandler;
 	worktree?: WorktreeModule;
 }
-
-export type ExitProtocolFactory = (
-	events: EventHandler,
-	promptQueue?: PromptQueue,
-	moduleContext?: ModuleContext,
-	worktree?: WorktreeModule,
-) => ExitProtocolModule;
 
 export type PickerFocus =
 	| typeof EXIT_SUBMIT_KEY

@@ -1,17 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-	appendState,
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
-	replaceSessionState,
 } from "./event-consumer.ts";
 import { RootEventPublisher } from "./event-publishers.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
-import { createFooterModule, refreshFooterStatuses } from "./footer/module.ts";
+import { createFooterModule } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
+import { createPrModule } from "./pr/module.ts";
 import type { PrSession } from "./pr/state.ts";
-import { installStateTool } from "./pr/state-tool.ts";
-import { createRootPrModule } from "./pr-root.ts";
 import { PromptQueue } from "./prompt-queue.ts";
 import { createEventHandler } from "./shared/events.ts";
 import { isSubagent } from "./shared/session.ts";
@@ -33,6 +30,7 @@ export function createExtensionState(
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
 	const lifecycleEpoch = { value: 0 };
+	const stateUpdateEpoch = { value: 0 };
 	let activeSession: PrSession | null = null;
 	let stateToolRegistered = false;
 	const getSession = (): PrSession | null => activeSession;
@@ -49,21 +47,17 @@ export function createExtensionState(
 		sessionState,
 		dependencies: { exec: dependencies.exec },
 	});
-	const pr = createRootPrModule(
+	const pr = createPrModule({
+		pi,
 		promptQueue,
 		eventHandler,
 		sessionState,
-		dependencies.exec,
 		getSession,
-		{
-			appendState: (state, disabled) => appendState(root, state, disabled),
-			replaceSessionState,
-			refreshFooterStatuses: (session) =>
-				refreshFooterStatuses(footer, session),
-			getLifecycleEpoch: () => lifecycleEpoch.value,
-		},
-	);
+		getLifecycleEpoch: () => lifecycleEpoch.value,
+		dependencies: { exec: dependencies.exec },
+	});
 	const todoist = createTodoistModule({
+		pi,
 		promptQueue,
 		eventHandler,
 		sessionState,
@@ -73,9 +67,6 @@ export function createExtensionState(
 			taskClaimWorker: dependencies.taskClaimWorker,
 			createTodoistClient: dependencies.createTodoistClient,
 		},
-		appendState: (state, disabled) => appendState(root, state, disabled),
-		refreshFooterStatuses: (session) => refreshFooterStatuses(footer, session),
-		replaceSessionState,
 	});
 	const exitProtocol = createExitProtocolModule({
 		promptQueue,
@@ -109,22 +100,15 @@ export function createExtensionState(
 		getSession,
 		setSession,
 		registered: () => stateToolRegistered,
-		registerStateTool: (sessionGetter: () => PrSession | null) => {
+		registerStateTool: () => {
 			if (stateToolRegistered) return;
-			installStateTool({
-				pi,
-				registered: false,
-				getSession: sessionGetter,
-				appendState: (state, disabled) => appendState(root, state, disabled),
-				replaceSessionState,
-				refreshFooterStatuses: (session) =>
-					refreshFooterStatuses(footer, session),
-			});
+			pr.registerStateTool(pi);
 			stateToolRegistered = true;
 			extensionState.registered = true;
 		},
 		publisher: new RootEventPublisher(eventHandler),
 		lifecycleEpoch,
+		stateUpdateEpoch,
 		stateUpdatesDrained: async () => undefined,
 	};
 	return Object.assign(extensionState, { root });
@@ -144,6 +128,7 @@ function startExtensions(
 		extensionState.eventHandler,
 		extensionState.sessionState,
 		() => root.getSession() !== null,
+		root.stateUpdateEpoch,
 	);
 	registerExtensionEventConsumers(root);
 	extensionState.pr.register(pi);

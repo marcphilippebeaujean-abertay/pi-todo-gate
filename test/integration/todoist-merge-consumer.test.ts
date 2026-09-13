@@ -6,12 +6,13 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { register } from "../../src/pr/module.ts";
+import type { PrCommandDependencies } from "../../src/pr/state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { SessionRecord } from "../../src/state.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
-import type { TodoistRuntime } from "../../src/todoist/state.ts";
+import type { TodoistDependencies } from "../../src/todoist/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 
@@ -83,12 +84,12 @@ function setup(overrides: Record<string, unknown> = {}) {
 			}
 			return isCurrent() ? ("completed" as const) : ("failed" as const);
 		},
-	} as unknown as TodoistRuntime;
+	} as unknown as TodoistDependencies;
 
 	return { runtime, session, confirm, notify, completeTask };
 }
 
-async function emit(runtime: TodoistRuntime) {
+async function emit(runtime: TodoistDependencies) {
 	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
@@ -96,7 +97,7 @@ async function emit(runtime: TodoistRuntime) {
 }
 
 async function runMergeCommand(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	context: ExtensionCommandContext,
 ): Promise<void> {
 	let handler:
@@ -113,7 +114,20 @@ async function runMergeCommand(
 			handler = command.handler;
 		},
 	} as unknown as ExtensionAPI;
-	register(pi, runtime);
+	const commandDependencies: PrCommandDependencies = {
+		sessionState: runtime.sessionState,
+		eventHandler: runtime.eventHandler,
+		exec: runtime.dependencies.exec,
+		getSession: runtime.getSession,
+		getPrState: () => ({
+			operationGeneration: runtime.getSession()?.operationGeneration,
+		}),
+		isCurrentOperation: (session, generation) =>
+			session.operationGeneration === generation,
+		enqueueSessionOperation: (_session, operation) =>
+			runtime.promptQueue.enqueue(operation).then((result) => result as never),
+	};
+	register(pi, commandDependencies);
 	await handler?.("", context);
 }
 
@@ -157,18 +171,17 @@ describe("Todoist merge consumer", () => {
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
-		const exitModule = createExitProtocolModule(
-			setupResult.runtime.eventHandler,
-			setupResult.runtime.promptQueue,
-			undefined,
-			{
+		const exitModule = createExitProtocolModule({
+			eventHandler: setupResult.runtime.eventHandler,
+			promptQueue: setupResult.runtime.promptQueue,
+			worktree: {
 				getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),
 				removeWorktree: async () => {
 					order.push("exit");
 					return "completed";
 				},
 			} as never,
-		);
+		});
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
 		);
@@ -301,7 +314,7 @@ describe("Todoist merge consumer", () => {
 				await completeTask(taskRef, isCurrent);
 				return isCurrent() ? ("completed" as const) : ("failed" as const);
 			},
-		} as unknown as TodoistRuntime;
+		} as unknown as TodoistDependencies;
 
 		registerTodoistMergeConsumer(runtime);
 

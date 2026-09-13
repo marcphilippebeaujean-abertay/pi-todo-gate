@@ -9,10 +9,10 @@ import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
 } from "./event-publishers.ts";
-import type { TodoistRuntime } from "./state.ts";
+import type { TodoistDependencies } from "./state.ts";
 
 function isCurrentCompletion(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: SessionRecord,
 	stateSnapshot: SessionRecord["state"],
 	workRevision: number,
@@ -32,7 +32,7 @@ function isCurrentCompletion(
 }
 
 function recordSuccessfulCompletion(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 ): void {
@@ -48,6 +48,7 @@ function recordSuccessfulCompletion(
 	);
 	runtime.appendState(session.state);
 	runtime.refreshFooterStatuses(session);
+	void runtime.emitState(session);
 	notifyCompletionSuccess(ctx);
 }
 
@@ -56,7 +57,7 @@ function recordFailedCompletion(ctx: ExtensionContext): void {
 }
 
 async function completeMergedTaskNow(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
@@ -93,7 +94,7 @@ async function completeMergedTaskNow(
 }
 
 export async function completeMergedTask(
-	runtime: TodoistRuntime,
+	runtime: TodoistDependencies,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,

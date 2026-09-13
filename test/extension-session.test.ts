@@ -67,11 +67,13 @@ describe("session shutdown", () => {
 			footerUpdateEvent: event(),
 		} as unknown as EventHandler;
 		const footer = { deactivate: vi.fn() };
+		const worktree = { deactivate: vi.fn() };
 		const exitProtocol = { deactivate: vi.fn() };
 		eventHandler.sessionDeactivatedEvent.subscribe(() => footer.deactivate());
 		eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			exitProtocol.deactivate(),
 		);
+		eventHandler.sessionDeactivatedEvent.subscribe(() => worktree.deactivate());
 		const runtime = {
 			eventHandler,
 			publisher: new RootEventPublisher(eventHandler),
@@ -86,7 +88,7 @@ describe("session shutdown", () => {
 			setSession: vi.fn(),
 			pr: { deactivateSession: vi.fn() },
 			footer,
-			worktree: { deactivate: vi.fn() },
+			worktree,
 			exitProtocol,
 		} as unknown as Parameters<typeof handleSessionShutdown>[0];
 

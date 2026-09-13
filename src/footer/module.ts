@@ -1,8 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import { createEventHandler } from "../shared/events.ts";
-import type { ModuleContext } from "../shared/module-context.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import "./commands.ts";
 import "./constants.ts";
@@ -15,11 +11,7 @@ import "./user-prompts.ts";
 import "./footer-rendering.ts";
 import { FooterEventConsumer } from "./event-consumers.ts";
 import { renderPrStatus, renderTaskStatusCompact } from "./footer-rendering.ts";
-import type {
-	FooterModule,
-	FooterModuleDependencies,
-	FooterModuleOptions,
-} from "./state.ts";
+import type { FooterModule, FooterModuleOptions } from "./state.ts";
 
 export * from "./events.ts";
 export * from "./footer-rendering.ts";
@@ -64,28 +56,7 @@ export function updateWorkingTreeStatus(
 }
 
 export function createFooterModule(options: FooterModuleOptions): FooterModule;
-export function createFooterModule(
-	pi: ExtensionAPI,
-	dependencies?: FooterModuleDependencies,
-	moduleContext?: ModuleContext,
-): FooterModule;
-export function createFooterModule(
-	optionsOrPi: FooterModuleOptions | ExtensionAPI,
-	dependencies?: FooterModuleDependencies,
-	moduleContext?: ModuleContext,
-): FooterModule {
-	if ("eventHandler" in optionsOrPi) {
-		return new FooterEventConsumer(optionsOrPi);
-	}
-	const moduleDependencies = dependencies ?? {};
-	const context = moduleContext ?? {
-		promptQueue: new PromptQueue(),
-		eventHandler: createEventHandler(),
-		sessionState: { sessionId: null, gitState: {}, moduleState: {} },
-	};
-	return new FooterEventConsumer({
-		eventHandler: context.eventHandler,
-		pi: optionsOrPi,
-		dependencies: moduleDependencies,
-	});
+
+export function createFooterModule(options: FooterModuleOptions): FooterModule {
+	return new FooterEventConsumer(options);
 }

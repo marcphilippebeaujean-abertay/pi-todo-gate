@@ -17,19 +17,21 @@ export * from "./events.ts";
 export * from "./parsing.ts";
 export * from "./state.ts";
 
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
 	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
+	TodoistDependencies,
 	TodoistModule,
 	TodoistModuleOptions,
-	TodoistRuntime,
 	TodoistSession,
 } from "./state.ts";
 
 class TodoistModuleImpl implements TodoistModule {
+	private readonly pi: TodoistModuleOptions["pi"];
 	readonly taskClaim = {
 		pending: false,
 		completed: false,
@@ -38,6 +40,16 @@ class TodoistModuleImpl implements TodoistModule {
 	private registered = false;
 
 	constructor(private readonly options: TodoistModuleOptions) {
+		this.pi = options.pi;
+		this.options.eventHandler.sessionActivatedEvent.subscribe(({ context }) => {
+			this.resetTaskClaim();
+			const session = this.options.getSession?.();
+			const hasSession = session !== undefined && session !== null;
+			const isCurrentContext = hasSession && session.context === context;
+			const canSync = isCurrentContext && session !== undefined;
+			if (!canSync) return;
+			void this.syncSessionState(session);
+		});
 		this.options.eventHandler.sessionResetEvent.subscribe(() =>
 			this.resetTaskClaim(),
 		);
@@ -46,13 +58,48 @@ class TodoistModuleImpl implements TodoistModule {
 		);
 	}
 
+	async syncSessionState(session: TodoistSession): Promise<void> {
+		await this.options.eventHandler.moduleStateChangedEvent.emit({
+			moduleId: C.module.todoist,
+			moduleState: {
+				taskRef: session.state.taskRef,
+				taskName: session.state.taskName,
+				taskUrl: session.state.taskUrl,
+				mergeCompletedAt: session.state.mergeCompletedAt,
+				todoistCompletionAttemptedAt:
+					session.state.todoistCompletionAttemptedAt,
+			},
+		});
+	}
+
 	private resetTaskClaim(): void {
 		this.taskClaim.pending = false;
 		this.taskClaim.completed = false;
 		this.taskClaim.session = undefined;
 	}
 
-	private runtime(): TodoistRuntime | null {
+	private appendPersistedState(
+		state: import("../shared/session-state.ts").WorkState,
+		prDiscoveryDisabled?: boolean,
+	): void {
+		const hasPi = this.pi !== undefined;
+		if (!hasPi) return;
+		const shouldDisableDiscovery = prDiscoveryDisabled ?? false;
+		const data = shouldDisableDiscovery
+			? { ...state, prDiscoveryDisabled: true }
+			: state;
+		this.pi.appendEntry(C.entry.state, data);
+	}
+
+	private replaceSessionState(
+		session: TodoistSession,
+		state: import("../shared/session-state.ts").WorkState,
+	): void {
+		session.state = state;
+		session.workRevision += 1;
+	}
+
+	private runtime(): TodoistDependencies {
 		const dependencies = this.options.dependencies ?? {};
 		const sessionState = this.options.sessionState;
 		const runtime = {
@@ -62,16 +109,12 @@ class TodoistModuleImpl implements TodoistModule {
 			promptQueue: this.options.promptQueue,
 			dependencies,
 			eventHandler: this.options.eventHandler,
-			appendState: this.options.appendState ?? (() => undefined),
-			refreshFooterStatuses:
-				this.options.refreshFooterStatuses ?? (() => undefined),
-			replaceSessionState:
-				this.options.replaceSessionState ??
-				((session, state) => {
-					session.state = state;
-				}),
-			completeMergedTask: this.options.completeMergedTask,
-		} as TodoistRuntime;
+			emitState: this.syncSessionState.bind(this),
+			appendState: this.appendPersistedState.bind(this),
+			refreshFooterStatuses: () => undefined,
+			replaceSessionState: this.replaceSessionState.bind(this),
+			completeMergedTask: undefined,
+		} as TodoistDependencies;
 		if (runtime.completeMergedTask === undefined)
 			runtime.completeMergedTask = (
 				session,

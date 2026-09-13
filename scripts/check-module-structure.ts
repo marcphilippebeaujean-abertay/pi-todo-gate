@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 export const SCOPED_DOMAINS = [
@@ -49,9 +49,15 @@ const FORBIDDEN_IDENTIFIERS = [
 	"ExtensionRuntime",
 	"SessionContext",
 	"ApplicationContext",
+	"PrRuntime",
+	"TodoistRuntime",
+	"StateToolRuntime",
+	"ModuleContext",
 ] as const;
-const SCOPED_EVENT_FILES = /src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/events\.ts$/;
-const ALLOWED_NATIVE_ON = /(?:^|\.)pi\.on\(|(?:^|\.)(?:child|stdout|stderr)\??\.on\(/;
+const SCOPED_EVENT_FILES =
+	/src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/events\.ts$/;
+const ALLOWED_NATIVE_ON =
+	/(?:^|\.)pi\.on\(|(?:^|\.)(?:child|stdout|stderr)\??\.on\(/;
 
 async function productionFiles(root: string): Promise<string[]> {
 	const files: string[] = [];
@@ -102,7 +108,8 @@ export async function checkProductionArchitecture(
 			issues.push({
 				domain: "root",
 				path: `${relativePath}:${lineNumber + 1}`,
-				message: "production architecture must use typed Event channels, not .on()",
+				message:
+					"production architecture must use typed Event channels, not .on()",
 				correction: "use Event<T>.subscribe()",
 			});
 		}
@@ -133,6 +140,18 @@ export async function checkProductionArchitecture(
 			message: "legacy application directory is not allowed",
 			correction: `delete ${relative(root, applicationPath)}`,
 		});
+	for (const legacyPath of [
+		join(root, "src", "shared", "module-context.ts"),
+		join(root, "src", "pr-root.ts"),
+	]) {
+		if (!(await isFile(legacyPath))) continue;
+		issues.push({
+			domain: "root",
+			path: relative(root, legacyPath),
+			message: "transitional root adapter is not allowed",
+			correction: `delete ${relative(root, legacyPath)}`,
+		});
+	}
 	const queuePath = join(root, "src", "shared", "prompt-queue.ts");
 	if (await isFile(queuePath))
 		issues.push({
@@ -147,7 +166,8 @@ export async function checkProductionArchitecture(
 		const mergedDeclarationCount =
 			sharedEvents.match(/prMergedEvent:\s*Event<PrMergedEvent>/g)?.length ?? 0;
 		const mergedConstructionCount =
-			sharedEvents.match(/prMergedEvent\s*=\s*event<PrMergedEvent>/g)?.length ?? 0;
+			sharedEvents.match(/prMergedEvent\s*=\s*event<PrMergedEvent>/g)?.length ??
+			0;
 		if (mergedDeclarationCount !== 1 || mergedConstructionCount !== 1)
 			issues.push({
 				domain: "root",

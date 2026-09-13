@@ -122,15 +122,14 @@ describe("exit protocol presenter", () => {
 		expect(catchFailure).toHaveBeenCalledOnce();
 	});
 
-	it("supports the legacy factory call without a prompt queue", async () => {
+	it("uses injected lifecycle dependencies", async () => {
 		const events = createSharedEvents();
 		const ctx = context();
-		const module = createExitProtocolModule(
-			events,
-			undefined,
-			undefined,
-			worktree(),
-		);
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: new PromptQueue(),
+			worktree: worktree(),
+		});
 		module.sessionStart(ctx);
 
 		await events.prMergedEvent.emit({
@@ -146,12 +145,11 @@ describe("exit protocol presenter", () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(
-			events,
-			queue,
-			undefined,
-			worktree(),
-		);
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: queue,
+			worktree: worktree(),
+		});
 		module.sessionStart(ctx);
 
 		await events.prMergedEvent.emit({
@@ -168,7 +166,10 @@ describe("exit protocol presenter", () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule(events, queue);
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: queue,
+		});
 		module.sessionStart(ctx);
 
 		await events.prMergedEvent.emit({
@@ -190,12 +191,11 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const custom = vi.fn(() => prompt);
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
-		const module = createExitProtocolModule(
-			events,
-			queue,
-			undefined,
-			worktree(),
-		);
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: queue,
+			worktree: worktree(),
+		});
 		module.sessionStart(ctx);
 
 		await events.prMergedEvent.emit({
@@ -221,12 +221,11 @@ describe("exit protocol presenter", () => {
 				notify: vi.fn(),
 			},
 		});
-		const module = createExitProtocolModule(
-			events,
-			queue,
-			undefined,
-			worktree(),
-		);
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: queue,
+			worktree: worktree(),
+		});
 		module.sessionStart(ctx);
 
 		await events.prMergedEvent.emit({

@@ -30,6 +30,37 @@ describe("Todoist module ownership", () => {
 	});
 });
 
+describe("Todoist module projection", () => {
+	it("publishes task state under Todoist ownership", async () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const module = createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState: createSessionState(),
+		});
+		const session = {
+			state: {
+				taskRef: "42",
+				taskName: "Implement feature",
+				taskUrl: "https://app.todoist.com/app/task/42",
+			},
+		} as never;
+
+		await module.syncSessionState(session);
+
+		expect(updates).toEqual([
+			expect.objectContaining({
+				moduleId: "todoist",
+				moduleState: expect.objectContaining({ taskRef: "42" }),
+			}),
+		]);
+	});
+});
+
 describe("isTodoistState", () => {
 	it("accepts task state and rejects PR-shaped state", () => {
 		expect(

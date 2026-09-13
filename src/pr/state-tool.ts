@@ -2,17 +2,18 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
+	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { extensionResult } from "../shared/extension-message.ts";
-import { githubPrUrl } from "./module.ts";
+import { githubPrUrl } from "./parsing.ts";
 import type {
 	PrSession,
 	PrWorkState,
+	StateToolDependencies,
 	StateToolParams,
-	StateToolRuntime,
 } from "./state.ts";
 
 export const stateParameters = Type.Object({
@@ -42,14 +43,14 @@ function statusAction(session: PrSession): AgentToolResult<undefined> {
 }
 
 async function setPrAction(
-	runtime: StateToolRuntime,
+	dependencies: StateToolDependencies,
 	session: PrSession,
 	params: StateToolParams,
 ): Promise<AgentToolResult<undefined>> {
 	const url = githubPrUrl(params.url ?? "", session.state.remoteOrigin ?? null);
 	if (url === null) throw new Error(C.message.invalidPr);
 	const prChanged = session.state.prUrl !== url;
-	runtime.replaceSessionState(
+	dependencies.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			prUrl: url,
@@ -62,18 +63,18 @@ async function setPrAction(
 		}),
 	);
 	session.allowPrDiscovery = false;
-	runtime.appendState(session.state);
-	runtime.refreshFooterStatuses(session);
-	await runtime.syncPrState?.(session);
+	dependencies.appendState(session.state);
+	dependencies.refreshFooterStatuses(session);
+	await dependencies.syncPrState?.(session);
 	return extensionResult(`Pinned PR ${url}`);
 }
 
 async function clearPrState(
-	runtime: StateToolRuntime,
+	dependencies: StateToolDependencies,
 	session: PrSession,
 	message: string,
 ): Promise<AgentToolResult<undefined>> {
-	runtime.replaceSessionState(
+	dependencies.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			prUrl: undefined,
@@ -82,60 +83,45 @@ async function clearPrState(
 		}),
 	);
 	session.allowPrDiscovery = false;
-	runtime.appendState(session.state, true);
-	runtime.refreshFooterStatuses(session);
-	await runtime.syncPrState?.(session);
+	dependencies.appendState(session.state, true);
+	dependencies.refreshFooterStatuses(session);
+	await dependencies.syncPrState?.(session);
 	return extensionResult(message);
 }
 
 export async function executeStateTool(
-	runtime: StateToolRuntime,
+	dependencies: StateToolDependencies,
 	_toolCallId: string,
 	params: StateToolParams,
 	_signal: AbortSignal | undefined,
 	_onUpdate: AgentToolUpdateCallback<undefined> | undefined,
 	_ctx: ExtensionContext,
 ): Promise<AgentToolResult<undefined>> {
-	const session = runtime.getSession?.();
+	const session = dependencies.getSession?.();
 	const hasSession = session !== undefined && session !== null;
 	if (!hasSession) throw new Error(C.message.inactive);
 	switch (params.action) {
 		case C.action.status:
 			return statusAction(session);
 		case C.action.setPr:
-			return await setPrAction(runtime, session, params);
+			return await setPrAction(dependencies, session, params);
 		case C.action.clearPr:
-			return await clearPrState(runtime, session, C.message.prCleared);
+			return await clearPrState(dependencies, session, C.message.prCleared);
 		default:
-			return await clearPrState(runtime, session, C.message.stateCleared);
+			return await clearPrState(dependencies, session, C.message.stateCleared);
 	}
 }
 
 export function installStateTool(
-	runtime: StateToolRuntime,
-	getSession?: () => PrSession | null,
-	syncPrState?: (session: PrSession) => Promise<void> | void,
+	pi: ExtensionAPI,
+	dependencies: StateToolDependencies,
 ): void {
-	const hasSessionGetter = getSession !== undefined;
-	const hasSync = syncPrState !== undefined;
-	const hasOverrides = hasSessionGetter || hasSync;
-	const effectiveRuntime = hasOverrides
-		? {
-				...runtime,
-				...(hasSessionGetter ? { getSession } : {}),
-				...(hasSync ? { syncPrState } : {}),
-			}
-		: runtime;
-	const isRegistered = effectiveRuntime.registered;
-	if (isRegistered) return;
-	runtime.registered = true;
-	effectiveRuntime.registered = true;
-	effectiveRuntime.pi.registerTool<typeof stateParameters>({
+	pi.registerTool<typeof stateParameters>({
 		name: C.tool.state,
 		label: C.tool.todoist,
 		description: C.message.prDescription,
 		promptSnippet: C.message.prPrompt,
 		parameters: stateParameters,
-		execute: executeStateTool.bind(null, effectiveRuntime),
+		execute: executeStateTool.bind(null, dependencies),
 	});
 }

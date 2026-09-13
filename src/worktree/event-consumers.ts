@@ -42,6 +42,12 @@ class Worktree implements WorktreeModule {
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
+		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
+			this.sessionStart(context),
+		);
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.deactivate(),
+		);
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {

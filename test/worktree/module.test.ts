@@ -85,7 +85,11 @@ describe("worktree event actions", () => {
 				return ok("\n");
 			return ok("");
 		};
-		const module = createWorktreeModule(events, { exec });
+		const module = createWorktreeModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+			dependencies: { exec },
+		});
 		const sharedContext = context();
 		const firstStart = module.sessionStart(sharedContext);
 		await Promise.resolve();
@@ -205,9 +209,13 @@ describe("worktree event actions", () => {
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
 		const changeDirectory = vi.fn();
-		const module = createWorktreeModule(events, {
-			exec: projectResult("abc", "abc", "", "", commands),
-			changeDirectory,
+		const module = createWorktreeModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+			dependencies: {
+				exec: projectResult("abc", "abc", "", "", commands),
+				changeDirectory,
+			},
 		});
 		await module.sessionStart(context());
 		await expect(module.removeWorktree()).resolves.toBe("completed");

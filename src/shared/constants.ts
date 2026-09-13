@@ -24,6 +24,7 @@ export const EXTENSION_CONSTANTS = {
 		exitProtocol: "exit-protocol",
 		work: "work",
 		pr: "pr",
+		todoist: "todoist",
 	},
 	action: {
 		status: "status",

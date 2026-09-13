@@ -21,17 +21,20 @@ export interface PrWorkState {
 
 export type PrSession = SessionRecord;
 
-export interface PrRuntime {
-	sessionState: SessionState;
-	eventHandler: EventHandler;
-	dependencies: { exec?: Exec };
-	getSession: () => PrSession | null;
-	prState?: () => PrState;
-	isCurrentOperation?(session: PrSession, generation: number): boolean;
-	enqueueSessionOperation?<T>(
+export interface PrCommandDependencies {
+	readonly sessionState: SessionState;
+	readonly eventHandler: EventHandler;
+	readonly exec?: Exec;
+	readonly getSession: () => PrSession | null;
+	readonly getPrState: () => PrState;
+	readonly isCurrentOperation: (
+		session: PrSession,
+		generation: number,
+	) => boolean;
+	readonly enqueueSessionOperation: <T>(
 		session: PrSession,
 		operation: () => Promise<T>,
-	): Promise<T>;
+	) => Promise<T>;
 }
 
 export type StateToolParams =
@@ -40,10 +43,8 @@ export type StateToolParams =
 	| { action: "clear_pr"; url?: string }
 	| { action: "clear_all"; url?: string };
 
-export interface StateToolRuntime {
-	pi: ExtensionAPI;
-	registered: boolean;
-	getSession?: () => PrSession | null;
+export interface StateToolDependencies {
+	getSession: () => PrSession | null;
 	appendState(state: PrWorkState, prDiscoveryDisabled?: boolean): void;
 	replaceSessionState(session: PrSession, state: PrWorkState): void;
 	refreshFooterStatuses(session: PrSession): void;
@@ -52,13 +53,11 @@ export interface StateToolRuntime {
 
 export interface PrModuleDependencies {
 	exec?: Exec;
-	appendState?: (state: PrWorkState, prDiscoveryDisabled?: boolean) => void;
-	replaceSessionState?: (session: PrSession, state: PrWorkState) => void;
-	refreshFooterStatuses?: (session: PrSession) => void;
 }
 
 export interface PrModuleOptions {
 	promptQueue: PromptQueue;
+	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	getSession: () => PrSession | null;
@@ -71,6 +70,7 @@ export interface PrModule {
 	activateSession(session: PrSession): Promise<void>;
 	deactivateSession(): void;
 	syncSessionState(session: PrSession): Promise<void>;
+	registerStateTool(pi: ExtensionAPI): void;
 	initializeRemoteOrigin(
 		ctx: ExtensionContext,
 		state: PrWorkState,

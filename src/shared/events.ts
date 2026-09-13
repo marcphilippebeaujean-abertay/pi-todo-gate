@@ -97,6 +97,7 @@ export interface SessionStateChangedEvent {
 export type SessionResetEvent = undefined;
 export interface SessionActivatedEvent {
 	context: ExtensionContext;
+	previousSessionFile?: string;
 }
 export type SessionDeactivatedEvent = undefined;
 

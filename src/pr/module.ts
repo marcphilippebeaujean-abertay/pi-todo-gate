@@ -16,15 +16,16 @@ import { findOpenPr, isGithubPrAvailable } from "./git.ts";
 import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import type {
 	OriginRequest,
+	PrCommandDependencies,
 	PrModule,
 	PrModuleDependencies,
 	PrModuleOptions,
-	PrRuntime,
 	PrSession,
 	PrSessionIdentity,
 	PrState,
 	PrWorkState,
 } from "./state.ts";
+import { installStateTool } from "./state-tool.ts";
 
 export * from "./commands.ts";
 export { register as registerMergeProtocol } from "./commands.ts";
@@ -64,6 +65,7 @@ function stateFromWorkState(state: PrWorkState): PrState {
 
 class PrModuleImpl implements PrModule {
 	private readonly promptQueue: PromptQueue;
+	private readonly pi: ExtensionAPI | undefined;
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly getSession: () => PrSession | null;
@@ -74,6 +76,7 @@ class PrModuleImpl implements PrModule {
 
 	constructor(options: PrModuleOptions) {
 		this.promptQueue = options.promptQueue;
+		this.pi = options.pi;
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
 		this.getSession = options.getSession;
@@ -82,13 +85,33 @@ class PrModuleImpl implements PrModule {
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
 		);
+		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) => {
+			const session = this.getSession();
+			const hasSession = session !== null;
+			const isCurrentContext = hasSession && session.context === context;
+			if (!isCurrentContext) return;
+			return this.activateSession(session);
+		});
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.deactivateSession(),
+		);
 		this.eventHandler.prMergedEvent.subscribe((event) =>
 			this.recordMerge(event.prUrl),
 		);
 	}
 
 	register(pi: ExtensionAPI): void {
-		registerMergeProtocol(pi, this.runtime());
+		registerMergeProtocol(pi, this.commandDependencies());
+	}
+
+	registerStateTool(pi: ExtensionAPI): void {
+		installStateTool(pi, {
+			getSession: this.getSession,
+			appendState: this.appendPersistedState.bind(this),
+			replaceSessionState: this.replaceSessionState.bind(this),
+			refreshFooterStatuses: () => undefined,
+			syncPrState: (session) => this.syncSessionState(session),
+		});
 	}
 
 	async activateSession(session: PrSession): Promise<void> {
@@ -201,7 +224,7 @@ class PrModuleImpl implements PrModule {
 		const staleAfterEmission = this.isStaleOriginRequest(request);
 		if (staleAfterEmission) return state;
 		this.state = nextState;
-		this.dependencies.appendState?.(nextWorkState);
+		this.appendPersistedState(nextWorkState);
 		return nextWorkState;
 	}
 
@@ -257,8 +280,7 @@ class PrModuleImpl implements PrModule {
 		if (!isCurrentAfterOrigin) return null;
 		const remoteOrigin = nextState.remoteOrigin;
 		const hasRemoteOrigin = remoteOrigin !== undefined;
-		if (hasRemoteOrigin)
-			this.dependencies.replaceSessionState?.(session, nextState);
+		if (hasRemoteOrigin) this.replaceSessionState(session, nextState);
 		return remoteOrigin ?? null;
 	}
 
@@ -313,9 +335,9 @@ class PrModuleImpl implements PrModule {
 			discoveryDisabled: true,
 			discoveryTestedUrls: [...session.prDiscoveryTestedUrls],
 		};
-		this.dependencies.replaceSessionState?.(session, nextState);
-		this.dependencies.appendState?.(nextState);
-		this.dependencies.refreshFooterStatuses?.(session);
+		this.replaceSessionState(session, nextState);
+		this.appendPersistedState(nextState);
+
 		await this.emitState(this.state);
 		return true;
 	}
@@ -410,13 +432,37 @@ class PrModuleImpl implements PrModule {
 			.then((result) => result as T);
 	}
 
-	private runtime(): PrRuntime {
+	private appendPersistedState(
+		state: PrWorkState,
+		prDiscoveryDisabled?: boolean,
+	): void {
+		const hasPi = this.pi !== undefined;
+		if (!hasPi) return;
+		const shouldDisableDiscovery = prDiscoveryDisabled ?? false;
+		const data = shouldDisableDiscovery
+			? { ...state, prDiscoveryDisabled: true }
+			: state;
+		this.pi.appendEntry(C.entry.state, data);
+	}
+
+	private replaceSessionState(
+		session: PrSession,
+		nextState: PrWorkState,
+	): void {
+		const hasTaskChanged = session.state.taskRef !== nextState.taskRef;
+		const hasPrChanged = session.state.prUrl !== nextState.prUrl;
+		const hasWorkChanged = hasTaskChanged || hasPrChanged;
+		if (hasWorkChanged) session.workRevision += 1;
+		session.state = nextState;
+	}
+
+	private commandDependencies(): PrCommandDependencies {
 		return {
 			sessionState: this.sessionState,
 			eventHandler: this.eventHandler,
-			dependencies: { exec: this.dependencies.exec },
+			exec: this.dependencies.exec,
 			getSession: this.getSession,
-			prState: () => this.state,
+			getPrState: () => this.state,
 			isCurrentOperation: this.isCurrentOperation.bind(this),
 			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
 		};

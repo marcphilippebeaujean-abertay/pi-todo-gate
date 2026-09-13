@@ -3,7 +3,6 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { EventHandler } from "../shared/events.ts";
-import type { ModuleContext } from "../shared/module-context.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
@@ -60,12 +59,6 @@ export interface FooterModule {
 	getState(): FooterState;
 	deactivate(): void;
 }
-export type FooterModuleFactory = (
-	pi: ExtensionAPI,
-	dependencies?: FooterModuleDependencies,
-	moduleContext?: ModuleContext,
-) => FooterModule;
-
 export type FooterSessionRecord = {
 	ui: {
 		setStatus(key: string, text: string | undefined): void;

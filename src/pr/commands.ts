@@ -16,36 +16,19 @@ import {
 	notifyNoPr,
 	notifyNoUi,
 } from "./notifications.ts";
-import type { PrRuntime, PrSession } from "./state.ts";
+import type { PrCommandDependencies, PrSession } from "./state.ts";
 import { confirmMerge } from "./user-prompts.ts";
 
 function currentSession(
-	runtime: PrRuntime,
+	runtime: PrCommandDependencies,
 	session: PrSession,
 	generation: number,
 ): boolean {
 	const activeSession = runtime.getSession();
-	const operationGuard = runtime.isCurrentOperation;
-	const hasModuleGuard = operationGuard !== undefined;
-	const current = hasModuleGuard
-		? operationGuard(session, generation)
-		: activeSession?.sessionId === session.sessionId &&
-			(runtime.prState?.().operationGeneration ??
-				session.operationGeneration) === generation;
+	const current =
+		activeSession?.sessionId === session.sessionId &&
+		runtime.isCurrentOperation(session, generation);
 	return runtime.sessionState.sessionId === session.sessionId && current;
-}
-
-function enqueueOperation<T>(
-	session: PrSession,
-	operation: () => Promise<T>,
-): Promise<T> {
-	const previous = session.operationQueue ?? Promise.resolve();
-	const result = previous.then(operation);
-	session.operationQueue = result.then(
-		() => undefined,
-		() => undefined,
-	);
-	return result;
 }
 
 function failureDetail(stderr: string): string {
@@ -53,7 +36,7 @@ function failureDetail(stderr: string): string {
 }
 
 async function mergeNow(
-	runtime: PrRuntime,
+	runtime: PrCommandDependencies,
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
@@ -61,7 +44,7 @@ async function mergeNow(
 ): Promise<boolean> {
 	const isCurrentBeforeCommand = currentSession(runtime, session, generation);
 	if (!isCurrentBeforeCommand) return false;
-	const exec = runtime.dependencies.exec ?? spawnExec;
+	const exec = runtime.exec ?? spawnExec;
 	let result: CommandResult;
 	try {
 		result = await mergePinnedPr(exec, session.context.cwd, prUrl);
@@ -85,7 +68,7 @@ async function mergeNow(
 }
 
 async function confirmAndMerge(
-	runtime: PrRuntime,
+	runtime: PrCommandDependencies,
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
@@ -99,7 +82,7 @@ async function confirmAndMerge(
 }
 
 async function runMergeProtocol(
-	runtime: PrRuntime,
+	runtime: PrCommandDependencies,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
 	const session = runtime.getSession();
@@ -119,8 +102,8 @@ async function runMergeProtocol(
 		notifyNoPr(ctx);
 		return;
 	}
-	const generation = runtime.prState?.().operationGeneration ?? 0;
-	const enqueue = runtime.enqueueSessionOperation ?? enqueueOperation;
+	const generation = runtime.getPrState().operationGeneration ?? 0;
+	const enqueue = runtime.enqueueSessionOperation;
 	const merged = await enqueue(
 		session,
 		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
@@ -136,7 +119,10 @@ async function runMergeProtocol(
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
 }
 
-export function register(pi: ExtensionAPI, runtime: PrRuntime): void {
+export function register(
+	pi: ExtensionAPI,
+	runtime: PrCommandDependencies,
+): void {
 	pi.on("resources_discover", () => ({
 		skillPaths: [mergeProtocolSkillPath],
 	}));

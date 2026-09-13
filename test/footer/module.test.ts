@@ -27,7 +27,7 @@ function harness(branch: unknown[] = []) {
 			},
 			sessionManager: { getBranch: () => sessionBranch },
 		}) as unknown as ExtensionContext;
-	return { pi, appended, statusCalls, context };
+	return { pi, events: createSharedEvents(), appended, statusCalls, context };
 }
 
 const update: FooterUpdate = {
@@ -62,7 +62,7 @@ describe("footer module", () => {
 
 	it("starts a blank session without rendering default footers", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 
 		await footer.sessionStart({}, h.context());
 
@@ -75,7 +75,7 @@ describe("footer module", () => {
 		vi.useFakeTimers();
 		try {
 			const h = harness();
-			const footer = createFooterModule(h.pi);
+			const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 			await footer.sessionStart({}, h.context());
 
 			footer.update({
@@ -99,7 +99,7 @@ describe("footer module", () => {
 
 	it("persists updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 		await footer.sessionStart({}, h.context());
 
 		footer.update(update);
@@ -142,7 +142,7 @@ describe("footer module", () => {
 
 	it("throws when live module update receives invalid data", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 		await footer.sessionStart({}, h.context());
 
 		expect(() =>
@@ -169,7 +169,7 @@ describe("footer module", () => {
 				},
 			},
 		]);
-		const footer = createFooterModule(h.pi);
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 
 		await footer.sessionStart({}, h.context());
 
@@ -197,7 +197,7 @@ describe("footer module", () => {
 					},
 				},
 			]);
-			const footer = createFooterModule(h.pi);
+			const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 
 			await footer.sessionStart({}, h.context());
 			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
@@ -227,8 +227,12 @@ describe("footer module", () => {
 			},
 		];
 		const h = harness();
-		const footer = createFooterModule(h.pi, {
-			openSession: () => ({ getBranch: () => previous }),
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			dependencies: {
+				openSession: () => ({ getBranch: () => previous }),
+			},
 		});
 
 		await footer.sessionStart(
@@ -277,7 +281,7 @@ describe("footer module", () => {
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
 		const firstContext = h.context();
 		await footer.sessionStart({}, firstContext);
 		footer.update(update);

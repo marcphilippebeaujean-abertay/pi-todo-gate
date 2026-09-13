@@ -7,14 +7,8 @@ import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { EventHandler } from "../shared/events.ts";
-import type { ModuleContext } from "../shared/module-context.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
-import type {
-	WorktreeModule,
-	WorktreeModuleDependencies,
-	WorktreeModuleOptions,
-} from "./state.ts";
+import type { WorktreeModule, WorktreeModuleOptions } from "./state.ts";
 
 export * from "./events.ts";
 export type {
@@ -30,28 +24,9 @@ export function createWorktreeModule(
 	options: WorktreeModuleOptions,
 ): WorktreeModule;
 export function createWorktreeModule(
-	events: EventHandler,
-	dependencies?: WorktreeModuleDependencies,
-	moduleContext?: ModuleContext,
-): WorktreeModule;
-export function createWorktreeModule(
-	optionsOrEvents: WorktreeModuleOptions | EventHandler,
-	dependencies?: WorktreeModuleDependencies,
-	moduleContext?: ModuleContext,
+	options: WorktreeModuleOptions,
 ): WorktreeModule {
-	if ("eventHandler" in optionsOrEvents) {
-		return createWorktreeConsumer(optionsOrEvents);
-	}
-	const moduleDependencies = dependencies ?? {};
-	const context = moduleContext ?? {
-		eventHandler: optionsOrEvents,
-		sessionState: { sessionId: null, gitState: {}, moduleState: {} },
-	};
-	return createWorktreeConsumer({
-		eventHandler: context.eventHandler,
-		sessionState: context.sessionState,
-		dependencies: moduleDependencies,
-	});
+	return createWorktreeConsumer(options);
 }
 
 export {
