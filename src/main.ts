@@ -19,7 +19,7 @@ import {
 import { createTodoistModule } from "./todoist/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 
-export type { ExtensionDependencies, WorkStateAction } from "./state.ts";
+export type { ExtensionDependencies } from "./state.ts";
 
 export function createExtensionState(
 	pi: ExtensionAPI,

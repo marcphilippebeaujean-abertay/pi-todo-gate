@@ -105,18 +105,6 @@ export function extractInheritedState(
 	return null;
 }
 
-export type WorkStateAction =
-	| { action: "status" }
-	| { action: "set_pr"; url: string }
-	| { action: "clear_pr" }
-	| { action: "clear_all" };
-
-export type StateToolParams =
-	| { action: "status"; url?: string }
-	| { action: "set_pr"; url?: string }
-	| { action: "clear_pr"; url?: string }
-	| { action: "clear_all"; url?: string };
-
 export interface ExtensionDependencies {
 	loadConfig?: (path?: string) => Promise<TodoistProjectMapping>;
 	openSession?: (path: string) => SessionReader;
