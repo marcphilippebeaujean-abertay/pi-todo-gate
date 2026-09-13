@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
 	CANONICAL_FACETS,
 	checkModuleStructure,
+	checkProductionArchitecture,
 	SCOPED_DOMAINS,
 } from "../../scripts/check-module-structure.ts";
 
@@ -60,6 +61,47 @@ describe("module structure checker", () => {
 
 	it("accepts all canonical files, including empty facets", async () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
+	});
+
+	it("rejects reintroduced legacy application directory", async () => {
+		const root = await validFixture();
+		await mkdir(join(root, "src", "application"), { recursive: true });
+
+		expect(await checkModuleStructure(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: "src/application",
+					message: "legacy application directory is not allowed",
+				}),
+			]),
+		);
+	});
+
+	it("passes final production architecture constraints", async () => {
+		expect(await checkProductionArchitecture(PROJECT_ROOT)).toEqual([]);
+	});
+
+	it("reports forbidden compatibility APIs in production files", async () => {
+		const root = await mkdtemp(join(tmpdir(), "production-architecture-"));
+		const sourcePath = join(root, "src", "legacy.ts");
+		await mkdir(join(root, "src"), { recursive: true });
+		await writeFile(
+			sourcePath,
+			"class SessionContext {}\nconst events = { on() {} }; events.on();\n",
+		);
+
+		const issues = await checkProductionArchitecture(root);
+		expect(issues).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					message: "forbidden compatibility identifier SessionContext",
+				}),
+				expect.objectContaining({
+					message:
+						"production architecture must use typed Event channels, not .on()",
+				}),
+			]),
+		);
 	});
 
 	it("rejects nested domain directories", async () => {

@@ -51,6 +51,13 @@ describe("shared events", () => {
 		expect(order).toEqual(["first", "second", "third"]);
 	});
 
+	it("exposes one shared PR merge channel", () => {
+		const events = createSharedEvents();
+		expect(
+			Object.keys(events).filter((key) => key === "prMergedEvent"),
+		).toEqual(["prMergedEvent"]);
+	});
+
 	it("delivers merge payload to subscribers in registration order", async () => {
 		const events = createSharedEvents();
 		const order: string[] = [];
