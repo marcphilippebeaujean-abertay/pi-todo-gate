@@ -5,7 +5,11 @@ import type {
 import type { PromptQueue } from "../prompt-queue.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
+import type {
+	EventHandler,
+	PiToolRegistrationsBecameAvailableEvent,
+	PrMergedEvent,
+} from "../shared/events.ts";
 import { branchTexts } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
 import type { SessionState } from "../state.ts";
@@ -67,6 +71,7 @@ class PrModuleImpl implements PrModule {
 	private currentSession: PrSession | null = null;
 	private readonly dependencies: PrModuleDependencies;
 	private readonly getLifecycleEpoch: () => number;
+	private registrationsAvailable = false;
 	private state: PrState = {};
 	private generation = -1;
 
@@ -79,6 +84,9 @@ class PrModuleImpl implements PrModule {
 		this.dependencies = options.dependencies ?? {};
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
+		);
+		this.eventHandler.piToolRegistrationsBecameAvailableEvent.subscribe(
+			this.registerPiTools.bind(this),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
 			({ context, session, lifecycleEpoch }) => {
@@ -102,17 +110,19 @@ class PrModuleImpl implements PrModule {
 		);
 	}
 
-	register(pi: ExtensionAPI): void {
+	private registerPiTools({
+		pi,
+	}: PiToolRegistrationsBecameAvailableEvent): void {
+		const alreadyRegistered = this.registrationsAvailable;
+		if (alreadyRegistered) return;
+		this.registrationsAvailable = true;
 		registerMergeProtocol(pi, this.commandDependencies());
-	}
-
-	registerStateTool(pi: ExtensionAPI): void {
 		installStateTool(pi, {
 			getSession: () => this.currentSession,
 			appendState: this.appendPersistedState.bind(this),
 			replaceSessionState: this.replaceSessionState.bind(this),
 			refreshFooterStatuses: () => undefined,
-			syncPrState: (session) => this.syncSessionState(session),
+			syncPrState: this.syncSessionState.bind(this),
 		});
 	}
 

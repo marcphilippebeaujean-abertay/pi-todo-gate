@@ -246,6 +246,37 @@ describe("firstUnmergedGithubPrUrl", () => {
 });
 
 describe("PR module ownership", () => {
+	it("registers PI command and state tool once when registrations become available", async () => {
+		const events = createEventHandler();
+		const registerCommand = vi.fn();
+		const registerTool = vi.fn();
+		const pi = {
+			on: vi.fn(),
+			registerCommand,
+			registerTool,
+		};
+		const extensionApi = pi as never;
+		createPrModule({
+			pi: extensionApi,
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState: createSessionState(),
+		});
+
+		expect(registerCommand).not.toHaveBeenCalled();
+		expect(registerTool).not.toHaveBeenCalled();
+
+		await events.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: extensionApi,
+		});
+		await events.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: extensionApi,
+		});
+
+		expect(registerCommand).toHaveBeenCalledOnce();
+		expect(registerTool).toHaveBeenCalledOnce();
+	});
+
 	it("emits remote origin through module state and shared Git state", async () => {
 		const events = createEventHandler();
 		const updates: unknown[] = [];

@@ -43,8 +43,6 @@ export interface RootComposition {
 	worktree: WorktreeModule;
 	exitProtocol: ExitProtocolModule;
 	session: PrSession | null;
-	registered: () => boolean;
-	registerStateTool: () => void;
 	publisher: RootEventPublisher;
 	lifecycleEpoch: { value: number };
 	stateUpdateEpoch: { value: number };
@@ -157,7 +155,7 @@ function manageActiveTools(root: Root, remove?: boolean): void {
 		root.pi.setActiveTools(active.filter((name) => name !== C.tool.state));
 		return;
 	}
-	if (!root.registered() || active.includes(C.tool.state)) return;
+	if (active.includes(C.tool.state)) return;
 	root.pi.setActiveTools([...active, C.tool.state]);
 }
 
@@ -297,7 +295,6 @@ export async function handleSessionStart(
 		inheritedState,
 	);
 	if (!inheritedStateReady) return;
-	root.registerStateTool();
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
 	await persistInitialPr(root, epoch, branch);

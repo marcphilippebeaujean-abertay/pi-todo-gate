@@ -30,7 +30,6 @@ export function createExtensionState(
 	const sessionState = createSessionState();
 	const lifecycleEpoch = { value: 0 };
 	const stateUpdateEpoch = { value: 0 };
-	let stateToolRegistered = false;
 	const footer = createFooterModule({
 		eventHandler,
 		pi,
@@ -81,7 +80,6 @@ export function createExtensionState(
 		todoist,
 		worktree,
 		exitProtocol,
-		registered: false,
 	} as ExtensionState;
 	const root = {
 		pi,
@@ -95,13 +93,6 @@ export function createExtensionState(
 		worktree,
 		exitProtocol,
 		session: null,
-		registered: () => stateToolRegistered,
-		registerStateTool: () => {
-			if (stateToolRegistered) return;
-			pr.registerStateTool(pi);
-			stateToolRegistered = true;
-			extensionState.registered = true;
-		},
 		publisher: new RootEventPublisher(eventHandler),
 		lifecycleEpoch,
 		stateUpdateEpoch,
@@ -127,12 +118,12 @@ function startExtensions(
 		root.stateUpdateEpoch,
 	);
 	registerExtensionEventConsumers(root);
-	extensionState.pr.register(pi);
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 		onFooterUpdate: extensionState.footer.update.bind(extensionState.footer),
 	});
+	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }
 
 export default function extension(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RootEventPublisher } from "../src/event-publishers.ts";
 import { createSharedEvents, event } from "../src/shared/events.ts";
 
 describe("shared events", () => {
@@ -49,6 +50,20 @@ describe("shared events", () => {
 		await channel.emit(undefined);
 
 		expect(order).toEqual(["first", "second", "third"]);
+	});
+
+	it("publishes minimum PI registration context", async () => {
+		const events = createSharedEvents();
+		const publisher = new RootEventPublisher(events);
+		const pi = {} as never;
+		const payloads: unknown[] = [];
+		events.piToolRegistrationsBecameAvailableEvent.subscribe((payload) => {
+			payloads.push(payload);
+		});
+
+		await publisher.publishPiToolRegistrationsBecameAvailable({ pi });
+
+		expect(payloads).toEqual([{ pi }]);
 	});
 
 	it("exposes one shared PR merge channel", () => {

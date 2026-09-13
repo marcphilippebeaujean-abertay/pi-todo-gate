@@ -66,11 +66,9 @@ export interface PrModuleOptions {
 }
 
 export interface PrModule {
-	register(pi: ExtensionAPI): void;
 	activateSession(session: PrSession): Promise<void>;
 	deactivateSession(): void;
 	syncSessionState(session: PrSession): Promise<void>;
-	registerStateTool(pi: ExtensionAPI): void;
 	initializeRemoteOrigin(
 		ctx: ExtensionContext,
 		state: PrWorkState,

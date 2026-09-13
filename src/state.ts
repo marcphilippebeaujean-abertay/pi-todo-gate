@@ -141,5 +141,4 @@ export interface ExtensionState {
 	todoist: TodoistModule;
 	worktree: WorktreeModule;
 	exitProtocol: ExitProtocolModule;
-	registered: boolean;
 }

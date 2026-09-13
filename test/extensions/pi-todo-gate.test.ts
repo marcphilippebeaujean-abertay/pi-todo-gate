@@ -5,8 +5,8 @@ const SESSIONS = "/sessions";
 const EMPTY_STRING = "";
 const SESSION_START = "session_start";
 const STARTUP = "startup";
-const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
-	"does not register tools or perform external work for an unmatched project";
+const REGISTERS_TOOL_WITHOUT_PERFORMING_EXTERNAL_WORK =
+	"registers tool without performing external work for an unmatched project";
 const DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT =
 	"does not start worktree tracking for an unmatched project";
 const INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION =
@@ -16,8 +16,8 @@ const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
-const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
-	"registers the state tool only for a matched project";
+const REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION =
+	"registers state tool before session activation";
 const CONFIGURED_PROJECT = "/configured/project";
 const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
@@ -387,11 +387,20 @@ describe("lazy activation", () => {
 		expect(h.tools).toHaveLength(0);
 	});
 
-	it(DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL, async () => {
+	it(REGISTERS_TOOL_WITHOUT_PERFORMING_EXTERNAL_WORK, async () => {
 		const h = harness(UNCONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
-		expect(h.tools).toHaveLength(0);
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
 		expect(h.appended).toHaveLength(0);
+		await expect(
+			h.tools[0]?.execute(
+				"call",
+				{ action: "status" },
+				undefined,
+				undefined,
+				h.ctx,
+			),
+		).rejects.toThrow("pi-todo-gate is inactive for this project");
 	});
 
 	it(DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT, async () => {
@@ -405,9 +414,17 @@ describe("lazy activation", () => {
 		expect(exec).not.toHaveBeenCalled();
 	});
 
-	it(REGISTERS_THE_STATE_TOOL_ONLY_FOR_A, async () => {
+	it(REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION, async () => {
 		const h = harness(CONFIGURED_PROJECT);
-		await start(h, { "/configured": MERGE_TD });
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": MERGE_TD }),
+		});
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
+
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
 		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
 	});
 

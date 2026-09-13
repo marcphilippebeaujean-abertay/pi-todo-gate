@@ -1,6 +1,7 @@
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
+	ExtensionAPI,
 	ExtensionContext,
 	MessageEndEvent,
 	SessionStartEvent,
@@ -114,6 +115,10 @@ export interface PrMergedEvent {
 	lifecycleEpoch: number;
 }
 
+export interface PiToolRegistrationsBecameAvailableEvent {
+	pi: ExtensionAPI;
+}
+
 export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
@@ -122,6 +127,7 @@ export interface EventHandler {
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
+	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
 	footerUpdateEvent: Event<FooterUpdateEvent>;
 	worktreeStatusEvent: Event<WorktreeStatusEvent>;
 }
@@ -139,6 +145,8 @@ export function createSharedEvents(): EventHandler {
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
+		piToolRegistrationsBecameAvailableEvent:
+			event<PiToolRegistrationsBecameAvailableEvent>(),
 		footerUpdateEvent: event<FooterUpdateEvent>(),
 		worktreeStatusEvent: event<WorktreeStatusEvent>(),
 	};

@@ -1,4 +1,8 @@
-import type { EventHandler, SessionActivatedEvent } from "./shared/events.ts";
+import type {
+	EventHandler,
+	PiToolRegistrationsBecameAvailableEvent,
+	SessionActivatedEvent,
+} from "./shared/events.ts";
 
 export class RootEventPublisher {
 	constructor(private readonly eventHandler: EventHandler) {}
@@ -13,5 +17,13 @@ export class RootEventPublisher {
 
 	publishSessionDeactivated(): Promise<void> {
 		return this.eventHandler.sessionDeactivatedEvent.emit(undefined);
+	}
+
+	publishPiToolRegistrationsBecameAvailable(
+		payload: PiToolRegistrationsBecameAvailableEvent,
+	): Promise<void> {
+		return this.eventHandler.piToolRegistrationsBecameAvailableEvent.emit(
+			payload,
+		);
 	}
 }
