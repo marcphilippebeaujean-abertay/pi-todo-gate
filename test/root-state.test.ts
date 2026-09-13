@@ -18,11 +18,13 @@ describe("extension module state", () => {
 		updateModuleState(state, {
 			moduleId: "footer",
 			moduleState: { footers: {} },
+			persist: false,
 		});
 
 		updateModuleState(state, {
 			moduleId: "todoist",
 			moduleState: { taskRef: "43" },
+			persist: false,
 		});
 
 		expect(state.moduleState.footer).toEqual({ footers: {} });
@@ -52,6 +54,7 @@ describe("extension module state", () => {
 		await events.moduleStateChangedEvent.emit({
 			moduleId: "footer",
 			moduleState: { footers: {} },
+			persist: false,
 			gitStatePatch: { remoteOrigin: "https://github.com/o/r.git" },
 		});
 
@@ -89,10 +92,12 @@ describe("extension module state", () => {
 				discoveryTestedUrls: [],
 				mergedPrs: [],
 			},
+			persist: false,
 		});
 		const secondUpdate = events.moduleStateChangedEvent.emit({
 			moduleId: "todoist",
 			moduleState: { taskRef: "second" },
+			persist: false,
 			gitStatePatch: { branch: "second" },
 		});
 		await Promise.all([firstUpdate, secondUpdate]);
@@ -109,6 +114,63 @@ describe("extension module state", () => {
 		expect(snapshots[1]?.currentState.gitState).toEqual({ branch: "second" });
 	});
 
+	it("persists only durable updates and clones published state", async () => {
+		const state = createSessionState();
+		const events = createSharedEvents();
+		const persisted: SessionState[] = [];
+		registerModuleStateConsumer(
+			events,
+			state,
+			undefined,
+			undefined,
+			(snapshot) => {
+				persisted.push(snapshot);
+			},
+		);
+		const transient = {
+			moduleId: "pr" as const,
+			moduleState: {
+				prUrl: "transient",
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
+			},
+			persist: false,
+		};
+		await events.moduleStateChangedEvent.emit(transient);
+		transient.moduleState.prUrl = "mutated after emit";
+		expect(persisted).toHaveLength(0);
+		expect(state.moduleState.pr.prUrl).toBe("transient");
+
+		await events.moduleStateChangedEvent.emit({
+			moduleId: "todoist",
+			moduleState: { taskRef: "42" },
+			persist: true,
+		});
+		expect(persisted).toHaveLength(1);
+		expect(persisted[0]).toEqual(state);
+	});
+
+	it("correlates module IDs with their state contracts", () => {
+		const validUpdate: import("../src/shared/events.ts").ModuleStateUpdate = {
+			moduleId: "pr",
+			moduleState: {
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
+			},
+			persist: false,
+		};
+		expect(validUpdate.moduleId).toBe("pr");
+		const invalidUpdate: import("../src/shared/events.ts").ModuleStateUpdate = {
+			moduleId: "pr",
+			// @ts-expect-error PR updates cannot carry Todoist state.
+			moduleState: { taskRef: "42" },
+			persist: false,
+		};
+		expect(invalidUpdate.moduleId).toBe("pr");
+	});
+
 	it("consumes published module state updates", async () => {
 		const state = createSessionState();
 		const events = createSharedEvents();
@@ -122,6 +184,7 @@ describe("extension module state", () => {
 				discoveryTestedUrls: [],
 				mergedPrs: [],
 			},
+			persist: false,
 		});
 
 		expect(state.moduleState.pr).toEqual({

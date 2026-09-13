@@ -14,12 +14,14 @@ import type {
 	BeforeAgentStartResultEvent,
 	EventHandler,
 	MessageEndEvent,
+	ModuleStateChangedEvent,
 	SessionStartEvent,
 	ToolResultEvent,
 } from "./shared/events.ts";
 import { latestStateData, textOf } from "./shared/extension-message.ts";
 import type { SessionReader, WorkState } from "./shared/session-state.ts";
 import {
+	createSessionState,
 	extractInheritedState,
 	latestState,
 	type SessionState,
@@ -62,20 +64,29 @@ export function resetSessionState(
 	epoch?: StateUpdateEpoch,
 ): void {
 	if (epoch !== undefined) epoch.value += 1;
-	state.sessionId = null;
+	state.session.activeSessionId = null;
+	delete state.session.inheritedFromSessionId;
 	state.gitState = {};
-	state.moduleState = {};
+	state.moduleState = createSessionState().moduleState;
 }
 
-export function publishModuleState(
+export function publishModuleState<K extends import("./state.ts").ModuleId>(
 	root: Root,
-	moduleId: string,
-	moduleState: Record<string, unknown>,
+	moduleId: K,
+	moduleState: import("./state.ts").ModuleState[K],
+	options: {
+		persist: boolean;
+		gitStatePatch?: Partial<import("./state.ts").GitState>;
+	},
 ): void {
 	void root.eventHandler.moduleStateChangedEvent.emit({
 		moduleId,
 		moduleState,
-	});
+		persist: options.persist,
+		...(options.gitStatePatch === undefined
+			? {}
+			: { gitStatePatch: options.gitStatePatch }),
+	} as ModuleStateChangedEvent);
 }
 
 export function appendState(
@@ -345,9 +356,11 @@ export function handleSessionShutdown(root: Root): void {
 
 export function updateModuleState(
 	state: SessionState,
-	update: import("./shared/events.ts").ModuleStateChangedEvent,
+	update: ModuleStateChangedEvent,
 ): void {
-	state.moduleState[update.moduleId] = structuredClone(update.moduleState);
+	state.moduleState[update.moduleId] = structuredClone(
+		update.moduleState,
+	) as never;
 	if (update.gitStatePatch !== undefined)
 		state.gitState = {
 			...state.gitState,
@@ -357,16 +370,21 @@ export function updateModuleState(
 
 export async function applyModuleStateChanged(
 	state: SessionState,
-	update: import("./shared/events.ts").ModuleStateChangedEvent,
+	update: ModuleStateChangedEvent,
 ): Promise<void> {
 	updateModuleState(state, update);
 }
+
+export type PersistSessionState = (
+	state: SessionState,
+) => void | Promise<void>;
 
 export function registerModuleStateConsumer(
 	events: EventHandler,
 	state: SessionState,
 	acceptUpdate?: () => boolean,
 	stateUpdateEpoch?: StateUpdateEpoch,
+	persistSessionState?: PersistSessionState,
 ): () => Promise<void> {
 	let updateQueue = Promise.resolve();
 	events.moduleStateChangedEvent.subscribe((update) => {
@@ -377,6 +395,8 @@ export function registerModuleStateConsumer(
 				return;
 			const previousState = structuredClone(state);
 			updateModuleState(state, update);
+			if (update.persist && persistSessionState !== undefined)
+				await persistSessionState(structuredClone(state));
 			const currentState = structuredClone(state);
 			await events.sessionStateChangedEvent.emit({
 				previousState,

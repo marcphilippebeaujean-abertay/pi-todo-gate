@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { RootEventPublisher } from "../src/event-publishers.ts";
+import {
+	createModuleStatePublisher,
+	RootEventPublisher,
+} from "../src/event-publishers.ts";
 import { createSharedEvents, event } from "../src/shared/events.ts";
 
 describe("shared events", () => {
@@ -50,6 +53,38 @@ describe("shared events", () => {
 		await channel.emit(undefined);
 
 		expect(order).toEqual(["first", "second", "third"]);
+	});
+
+	it("binds module publisher to its module ID", async () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const publisher = createModuleStatePublisher(events, "pr");
+
+		await publisher.publish(
+			{
+				prUrl: "https://github.com/o/r/pull/42",
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
+			},
+			{ persist: true },
+		);
+
+		expect(updates).toEqual([
+			{
+				moduleId: "pr",
+				moduleState: {
+					prUrl: "https://github.com/o/r/pull/42",
+					discoveryDisabled: false,
+					discoveryTestedUrls: [],
+					mergedPrs: [],
+				},
+				persist: true,
+			},
+		]);
 	});
 
 	it("publishes minimum PI registration context", async () => {

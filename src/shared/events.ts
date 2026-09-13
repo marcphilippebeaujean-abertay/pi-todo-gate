@@ -7,7 +7,12 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { GitState, SessionStateSnapshot } from "../state.ts";
+import type {
+	GitState,
+	ModuleId,
+	ModuleState,
+	SessionStateSnapshot,
+} from "../state.ts";
 import type { SessionRecord } from "./session-state.ts";
 
 export type {
@@ -71,11 +76,16 @@ export interface ClaimErrorEvent {
 	error: string;
 }
 
-export interface ModuleStateChangedEvent {
-	moduleId: string;
-	moduleState: Record<string, unknown>;
-	gitStatePatch?: Partial<GitState>;
-}
+export type ModuleStateChangedEvent = {
+	[K in ModuleId]: {
+		moduleId: K;
+		moduleState: ModuleState[K];
+		persist: boolean;
+		gitStatePatch?: Partial<GitState>;
+	};
+}[ModuleId];
+
+export type ModuleStateUpdate = ModuleStateChangedEvent;
 
 export interface WorktreeStatusEvent {
 	context: ExtensionContext;
