@@ -122,6 +122,26 @@ describe("exit protocol presenter", () => {
 		expect(catchFailure).toHaveBeenCalledOnce();
 	});
 
+	it("publishes exact active and inactive module state payloads", () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((event) => {
+			updates.push(event);
+		});
+		const module = createExitProtocolModule({
+			eventHandler: events,
+			promptQueue: new PromptQueue(),
+		});
+
+		module.sessionStart(context());
+		module.deactivate();
+
+		expect(updates).toEqual([
+			{ moduleId: "exit-protocol", moduleState: { active: true } },
+			{ moduleId: "exit-protocol", moduleState: { active: false } },
+		]);
+	});
+
 	it("uses injected lifecycle dependencies", async () => {
 		const events = createSharedEvents();
 		const ctx = context();

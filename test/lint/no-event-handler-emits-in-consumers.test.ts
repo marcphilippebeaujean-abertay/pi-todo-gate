@@ -35,21 +35,30 @@ function ruleDiagnostics(
 }
 
 describe(RULE_ID, () => {
-	it("rejects direct and this EventHandler channel emits in consumers", async () => {
+	it("rejects typed direct, nested, alias, and destructured references", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`declare const eventHandler: { foo: { emit(value: unknown): Promise<void> } };
+			`interface EventHandler { foo: { emit(value: unknown): Promise<void> } }
+declare const eventHandler: EventHandler;
+declare const operations: { eventHandler: EventHandler };
 class Consumer {
-	private eventHandler = eventHandler;
+	private eventHandler: EventHandler = eventHandler;
 	publish(): void {
 		void eventHandler.foo.emit(undefined);
 		void this.eventHandler.foo.emit(undefined);
+		void operations.eventHandler.foo.emit(undefined);
+		const alias = operations.eventHandler;
+		void alias.foo.emit(undefined);
+		const typedAlias: EventHandler = operations.eventHandler;
+		void typedAlias.foo.emit(undefined);
+		const { eventHandler: destructured } = operations;
+		void destructured.foo.emit(undefined);
 	}
 }
 `,
 		);
 
-		expect(ruleDiagnostics(diagnostics)).toHaveLength(2);
+		expect(ruleDiagnostics(diagnostics)).toHaveLength(6);
 		expect(
 			ruleDiagnostics(diagnostics).every(({ message }) =>
 				message.includes("event-publishers.ts"),
@@ -72,15 +81,18 @@ export function publish(): void {
 		expect(ruleDiagnostics(diagnostics)).toEqual([]);
 	});
 
-	it("allows unrelated emit calls in consumers", async () => {
+	it("allows unrelated emitters, including locals named eventHandler", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`declare const event: { emit(value: unknown): Promise<void> };
+			`interface UnrelatedHandler { foo: { emit(value: unknown): Promise<void> } }
+declare const event: { emit(value: unknown): Promise<void> };
+declare const eventHandler: UnrelatedHandler;
 class Consumer {
 	private readonly emitter = event;
 	publish(): void {
 		void event.emit(undefined);
 		void this.emitter.emit(undefined);
+		void eventHandler.foo.emit(undefined);
 	}
 }
 `,

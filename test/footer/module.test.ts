@@ -140,6 +140,25 @@ describe("footer module", () => {
 		});
 	});
 
+	it("publishes exact module state payload for footer updates", async () => {
+		const h = harness();
+		const updates: unknown[] = [];
+		h.events.moduleStateChangedEvent.subscribe((event) => {
+			updates.push(event);
+		});
+		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		await footer.sessionStart({}, h.context());
+
+		footer.update(update);
+
+		expect(updates).toEqual([
+			{
+				moduleId: "footer",
+				moduleState: { footers: { [update.footerType]: update } },
+			},
+		]);
+	});
+
 	it("throws when live module update receives invalid data", async () => {
 		const h = harness();
 		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });

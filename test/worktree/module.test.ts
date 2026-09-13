@@ -104,6 +104,28 @@ describe("worktree event actions", () => {
 		});
 	});
 
+	it("publishes exact reset payload on deactivate", () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const module = createWorktreeModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+		});
+
+		module.deactivate();
+
+		expect(updates).toEqual([
+			{
+				moduleId: "worktree",
+				moduleState: {},
+				gitStatePatch: {},
+			},
+		]);
+	});
+
 	it("owns tool-result status refresh and emits typed updates", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
@@ -141,7 +163,8 @@ describe("worktree event actions", () => {
 			context: ctx,
 		});
 
-		expect(footerUpdates.at(-1)).toMatchObject({
+		expect(footerUpdates.at(-1)).toEqual({
+			context: ctx,
 			hasUncommittedChanges: true,
 		});
 		expect(updates.at(-1)).toMatchObject({
