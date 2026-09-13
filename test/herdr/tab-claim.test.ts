@@ -159,6 +159,15 @@ describe("Herdr state ownership", () => {
 		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
 		expect(
 			herdrStateDescriptor.restore({
+				claimInProgress: true,
+				herdrClaimReturnedSuccessfully: "true",
+			}),
+		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
+		expect(herdrStateDescriptor.serialize({ claimInProgress: true })).toEqual(
+			{},
+		);
+		expect(
+			herdrStateDescriptor.restore({
 				pending: Promise.resolve(),
 				seen: new Set<string>(),
 			}),
@@ -167,6 +176,32 @@ describe("Herdr state ownership", () => {
 });
 
 describe("background Herdr tab claim", () => {
+	it("publishes transient claim status through Herdr module state", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			const claimStates: boolean[] = [];
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: backgroundWorker.start,
+				publishClaimInProgress: (claimInProgress) => {
+					claimStates.push(claimInProgress);
+				},
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim" },
+				context(),
+			);
+			emitFailure(backgroundWorker.requests[0] as ClaimWorkerRequest);
+
+			expect(claimStates).toEqual([false, true, false]);
+		} finally {
+			restore();
+		}
+	});
+
 	it("derives worker response instructions from typed response template", () => {
 		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
 			JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE),

@@ -1,6 +1,10 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { EventHandler } from "../shared/events.ts";
+import type {
+	EventHandler,
+	ModuleStateChangedEvent,
+} from "../shared/events.ts";
+import { FOOTER_HERDR_TYPE, FOOTER_HERDR_WORKING_STATUS } from "./constants.ts";
 import { publishFooterState } from "./event-publishers.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import {
@@ -34,9 +38,6 @@ export class FooterEventConsumer implements FooterModule {
 	constructor(options: FooterModuleOptions) {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		this.eventHandler.footerUpdateEvent.subscribe((event) =>
-			this.update(event),
-		);
 		this.eventHandler.moduleStateChangedEvent.subscribe((event) =>
 			this.refreshFromModuleState(event),
 		);
@@ -49,27 +50,33 @@ export class FooterEventConsumer implements FooterModule {
 		);
 	}
 
-	private refreshFromModuleState(
-		event: import("../shared/events.ts").ModuleStateChangedEvent,
-	): void {
+	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
+		this.hasUncommittedChanges =
+			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;
 		switch (event.moduleId) {
-			case C.module.pr: {
+			case C.module.pr:
 				this.currentPrUrl = event.moduleState.prUrl;
 				this.refreshPrStatus(this.currentPrUrl);
 				return;
-			}
-			case C.module.worktree: {
-				this.hasUncommittedChanges =
-					event.gitStatePatch?.hasUncommittedChanges ??
-					this.sessionState.gitState.hasUncommittedChanges ??
-					false;
+			case C.module.worktree:
 				this.refreshPrStatus(this.currentPrUrl);
 				return;
-			}
-			case C.module.todoist: {
+			case C.module.todoist:
 				this.currentTaskUrl = event.moduleState.taskUrl;
 				this.currentTaskName = event.moduleState.taskName;
 				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
+				return;
+			case C.module.herdr:
+				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
+				return;
+			case C.module.footer: {
+				const hasSameState =
+					JSON.stringify(this.state) === JSON.stringify(event.moduleState);
+				if (hasSameState) return;
+				this.state = structuredClone(event.moduleState);
+				if (this.context === null) return;
+				for (const footer of Object.values(this.state.footers))
+					this.display.update(this.state, footer);
 				return;
 			}
 			default:
@@ -90,6 +97,15 @@ export class FooterEventConsumer implements FooterModule {
 			isVisible: true,
 		});
 		this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName, true);
+	}
+
+	private refreshHerdrStatus(claimInProgress: boolean): void {
+		this.update({
+			footerType: FOOTER_HERDR_TYPE,
+			isLoading: claimInProgress,
+			text: FOOTER_HERDR_WORKING_STATUS,
+			isVisible: claimInProgress,
+		});
 	}
 
 	private refreshTaskStatus(

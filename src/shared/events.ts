@@ -87,18 +87,6 @@ export type ModuleStateChangedEvent = {
 
 export type ModuleStateUpdate = ModuleStateChangedEvent;
 
-export interface WorktreeStatusEvent {
-	context: ExtensionContext;
-	hasUncommittedChanges: boolean;
-}
-
-export interface FooterUpdateEvent {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}
-
 export type UpdateModuleStateEvent = ModuleStateChangedEvent;
 
 export interface SessionStateChangedEvent {
@@ -135,8 +123,6 @@ export interface EventHandler {
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
 	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
-	footerUpdateEvent: Event<FooterUpdateEvent>;
-	worktreeStatusEvent: Event<WorktreeStatusEvent>;
 }
 
 export function createSharedEvents(): EventHandler {
@@ -154,8 +140,6 @@ export function createSharedEvents(): EventHandler {
 		prMergedEvent,
 		piToolRegistrationsBecameAvailableEvent:
 			event<PiToolRegistrationsBecameAvailableEvent>(),
-		footerUpdateEvent: event<FooterUpdateEvent>(),
-		worktreeStatusEvent: event<WorktreeStatusEvent>(),
 	};
 }
 

@@ -131,7 +131,6 @@ class TodoistModuleImpl implements TodoistModule {
 			dependencies,
 			eventHandler: this.options.eventHandler,
 			emitState: this.syncSessionState.bind(this),
-			refreshFooterStatuses: () => undefined,
 			updateTodoistState: this.updateTodoistState.bind(this),
 			completeMergedTask: undefined,
 		} as TodoistOperations;

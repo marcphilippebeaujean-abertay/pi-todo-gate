@@ -157,7 +157,13 @@ function startExtensions(
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
-		onFooterUpdate: extensionState.footer.update.bind(extensionState.footer),
+		publishClaimInProgress: (claimInProgress) => {
+			const current = extensionState.sessionState.moduleState.herdr;
+			void herdrStatePublisher.publish(
+				{ ...current, claimInProgress },
+				{ persist: false },
+			);
+		},
 		hasClaimReturnedSuccessfully: () =>
 			extensionState.sessionState.moduleState.herdr
 				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED,

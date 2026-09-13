@@ -31,7 +31,6 @@ function dependencies(
 			getPrState: () => state,
 			getRemoteOrigin: () => remoteOrigin,
 			updatePrState: (nextState, persist) => updatePrState(nextState, persist),
-			refreshFooterStatuses: vi.fn(),
 			syncPrState: vi.fn(),
 		},
 		updatePrState,

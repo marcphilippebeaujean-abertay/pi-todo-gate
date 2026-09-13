@@ -163,7 +163,6 @@ describe("Todoist task identity", () => {
 				state: TodoistState,
 				options: TodoistStateUpdateOptions,
 			) => module.updateState(state, options),
-			refreshFooterStatuses: () => undefined,
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			todoist: module,

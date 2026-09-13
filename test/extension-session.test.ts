@@ -123,7 +123,6 @@ describe("session shutdown", () => {
 			sessionActivatedEvent: event(),
 			sessionDeactivatedEvent: event(),
 			prMergedEvent: event(),
-			footerUpdateEvent: event(),
 		} as unknown as EventHandler;
 		const footer = { deactivate: vi.fn() };
 		const worktree = { deactivate: vi.fn() };

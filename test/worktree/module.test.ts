@@ -142,12 +142,8 @@ describe("worktree event actions", () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
 		const updates: unknown[] = [];
-		const footerUpdates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
-		});
-		events.worktreeStatusEvent.subscribe((update) => {
-			footerUpdates.push(update);
 		});
 		let dirty = false;
 		const exec: Exec = async (command, args) => {
@@ -173,11 +169,6 @@ describe("worktree event actions", () => {
 		await events.toolResultEvent.emit({
 			event: { toolName: "edit", isError: false } as never,
 			context: ctx,
-		});
-
-		expect(footerUpdates.at(-1)).toEqual({
-			context: ctx,
-			hasUncommittedChanges: true,
 		});
 		expect(updates.at(-1)).toMatchObject({
 			moduleId: "worktree",

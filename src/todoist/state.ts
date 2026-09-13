@@ -207,7 +207,6 @@ export interface TodoistOperations {
 		state: TodoistState,
 		options: TodoistStateUpdateOptions,
 	): Promise<void>;
-	refreshFooterStatuses(session: TodoistSession): void;
 	completeMergedTask?(
 		session: TodoistSession,
 		taskRef: string,

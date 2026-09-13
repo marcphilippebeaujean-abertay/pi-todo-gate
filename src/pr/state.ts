@@ -147,7 +147,6 @@ export interface StateToolDependencies {
 	getPrState: () => PrState;
 	getRemoteOrigin: () => string | undefined;
 	updatePrState: (state: PrState, persist: boolean) => Promise<void> | void;
-	refreshFooterStatuses(session: PrSession): void;
 	syncPrState?: (session: PrSession) => Promise<void> | void;
 }
 

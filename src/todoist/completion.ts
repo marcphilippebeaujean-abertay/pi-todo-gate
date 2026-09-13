@@ -39,7 +39,6 @@ function isCurrentCompletion(
 
 function recordSuccessfulCompletion(
 	operations: TodoistOperations,
-	session: SessionRecord,
 	ctx: ExtensionContext,
 ): Promise<void> {
 	const todoistState: TodoistState = {
@@ -56,7 +55,6 @@ function recordSuccessfulCompletion(
 			gitStatePatch: { mergeCompletedAt },
 		})
 		.then(() => {
-			operations.refreshFooterStatuses(session);
 			notifyCompletionSuccess(ctx);
 		});
 }
@@ -92,7 +90,7 @@ async function completeMergedTaskNow(
 		);
 		const isStaleSuccess = !isCurrent();
 		if (isStaleSuccess) return C.exit.failed;
-		await recordSuccessfulCompletion(operations, session, ctx);
+		await recordSuccessfulCompletion(operations, ctx);
 		return C.exit.completed;
 	} catch {
 		const isStaleFailure = !isCurrent();

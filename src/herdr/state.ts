@@ -8,7 +8,7 @@ import type {
 	JsonValue,
 	ModuleStateDescriptor,
 } from "../shared/session-state.ts";
-import type { FooterEventSink, HerdrEvents } from "./events.ts";
+import type { HerdrEvents } from "./events.ts";
 
 export type HerdrState = HerdrModuleState;
 
@@ -33,7 +33,10 @@ export const herdrStateDescriptor: ModuleStateDescriptor<"herdr"> = {
 	id: "herdr",
 	createInitialState: () => ({}),
 	restore: restoreHerdrState,
-	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
+	serialize: (state): JsonValue => {
+		const { claimInProgress: _claimInProgress, ...durableState } = state;
+		return structuredClone(durableState) as JsonValue;
+	},
 };
 
 export interface ClaimWorkerResponseData {
@@ -91,7 +94,7 @@ export interface HerdrTabOptions {
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	onFooterUpdate?: FooterEventSink;
+	publishClaimInProgress?: (claimInProgress: boolean) => void;
 	hasClaimReturnedSuccessfully?: (ctx: ExtensionContext) => boolean;
 	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void;
 }

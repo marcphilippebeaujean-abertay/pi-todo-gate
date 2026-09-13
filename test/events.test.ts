@@ -101,6 +101,12 @@ describe("shared events", () => {
 		expect(payloads).toEqual([{ pi }]);
 	});
 
+	it("exposes no footer-specific event channels", () => {
+		const events = createSharedEvents();
+		expect(events).not.toHaveProperty("footerUpdateEvent");
+		expect(events).not.toHaveProperty("worktreeStatusEvent");
+	});
+
 	it("exposes one shared PR merge channel", () => {
 		const events = createSharedEvents();
 		expect(

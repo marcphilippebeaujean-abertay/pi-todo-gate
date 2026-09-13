@@ -121,7 +121,6 @@ class PrModuleImpl implements PrModule {
 			getPrState: () => this.state,
 			getRemoteOrigin: () => this.sessionState.gitState.remoteOrigin,
 			updatePrState: this.updatePrState.bind(this),
-			refreshFooterStatuses: () => undefined,
 			syncPrState: this.syncSessionState.bind(this),
 		});
 	}

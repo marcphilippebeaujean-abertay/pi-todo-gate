@@ -18,13 +18,6 @@ export interface HerdrEvents {
 	claimFailedEvent: Event<ClaimFailedEvent>;
 }
 
-export type FooterEventSink = (event: {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}) => void;
-
 export function createHerdrEvents(): HerdrEvents {
 	return {
 		claimCompletedEvent: event<ClaimCompletedEvent>(),

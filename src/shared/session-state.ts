@@ -37,6 +37,7 @@ export interface TodoistModuleState {
 }
 
 export interface HerdrModuleState {
+	claimInProgress?: boolean;
 	herdrClaimReturnedSuccessfully?: string;
 }
 

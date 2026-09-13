@@ -51,7 +51,6 @@ async function setPrAction(
 		discoveryDisabled: true,
 	};
 	await dependencies.updatePrState(nextState, prChanged);
-	dependencies.refreshFooterStatuses(session);
 	await dependencies.syncPrState?.(session);
 	return extensionResult(`Pinned PR ${url}`);
 }
@@ -68,7 +67,6 @@ async function clearPrState(
 		discoveryDisabled: true,
 	};
 	await dependencies.updatePrState(nextState, true);
-	dependencies.refreshFooterStatuses(session);
 	await dependencies.syncPrState?.(session);
 	return extensionResult(message);
 }

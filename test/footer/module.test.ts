@@ -1,6 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { FOOTER_SPINNER_INTERVAL_MS } from "../../src/footer/constants.ts";
+import {
+	FOOTER_HERDR_TYPE,
+	FOOTER_SPINNER_INTERVAL_MS,
+} from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
 import type { FooterUpdate } from "../../src/footer/state.ts";
 import { restoreFooterState } from "../../src/footer/state.ts";
@@ -157,24 +160,49 @@ describe("footer module", () => {
 		).toThrow(TypeError);
 	});
 
-	it("consumes typed footer updates through shared event channel", async () => {
+	it("derives all statuses from module state changes", async () => {
 		const h = harness();
-		const events = createSharedEvents();
 		const footer = createFooterModule({
-			eventHandler: events,
+			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
 
-		await events.footerUpdateEvent.emit(update);
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "pr",
+			moduleState: {
+				prUrl: "https://github.com/o/r/pull/42",
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
+			},
+			persist: false,
+			gitStatePatch: { hasUncommittedChanges: true },
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "todoist",
+			moduleState: {
+				taskUrl: "https://app.todoist.com/app/task/42",
+				taskName: "Fix footer",
+			},
+			persist: false,
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: true },
+			persist: false,
+		});
 
-		expect(footer.getState()).toEqual({
-			footers: { [update.footerType]: update },
-		});
-		expect(h.statusCalls.at(-1)).toEqual({
-			key: update.footerType,
-			text: update.text,
-		});
+		expect(footer.getState().footers).toEqual(
+			expect.objectContaining({
+				"pi-todo-gate-pr": expect.objectContaining({ isVisible: true }),
+				"pi-todo-gate-task": expect.objectContaining({ isVisible: true }),
+				[FOOTER_HERDR_TYPE]: expect.objectContaining({
+					isLoading: true,
+					isVisible: true,
+				}),
+			}),
+		);
 	});
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {

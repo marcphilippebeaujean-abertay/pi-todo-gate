@@ -25,14 +25,9 @@ import {
 	type ClaimCompletedEvent,
 	type ClaimFailedEvent,
 	createHerdrEvents,
-	type FooterEventSink,
 	type HerdrEvents,
 } from "./events.ts";
-import {
-	hideHerdrFooter,
-	notifyHerdrFailure,
-	showHerdrFooter,
-} from "./notifications.ts";
+import { notifyHerdrFailure } from "./notifications.ts";
 import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
 import type {
 	ClaimWorkerHandle,
@@ -90,7 +85,9 @@ class HerdrTabClaimConsumer {
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
 	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
 	private readonly onClaimReturnedSuccessfully: HerdrTabOptions["onClaimReturnedSuccessfully"];
-	private readonly emitFooter: FooterEventSink;
+	private readonly publishClaimInProgress: NonNullable<
+		HerdrTabOptions["publishClaimInProgress"]
+	>;
 	private readonly events: HerdrEvents;
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
@@ -117,7 +114,8 @@ class HerdrTabClaimConsumer {
 		this.shouldActivate = options.shouldActivate;
 		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
 		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
-		this.emitFooter = options.onFooterUpdate ?? (() => undefined);
+		this.publishClaimInProgress =
+			options.publishClaimInProgress ?? (() => undefined);
 		this.events = events;
 		this.events.claimCompletedEvent.subscribe(this.completeClaim.bind(this));
 		this.events.claimFailedEvent.subscribe(this.failClaim.bind(this));
@@ -139,7 +137,7 @@ class HerdrTabClaimConsumer {
 		this.initialLabel = undefined;
 		this.tabId = undefined;
 		this.paneId = undefined;
-		hideHerdrFooter(this.emitFooter);
+		this.publishClaimInProgress(false);
 		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
 		const shouldSkip = !this.herdrAvailable || isDisabled;
 		if (shouldSkip) return;
@@ -188,7 +186,7 @@ class HerdrTabClaimConsumer {
 				attemptId: attempt.attemptId,
 				events: this.events,
 			});
-			showHerdrFooter(this.emitFooter);
+			this.publishClaimInProgress(true);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
 			this.failClaim({
@@ -211,7 +209,7 @@ class HerdrTabClaimConsumer {
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
-		hideHerdrFooter(this.emitFooter);
+		this.publishClaimInProgress(false);
 		try {
 			applyClaimResponse(this.commandRunner, attempt, event.result);
 		} catch (error) {
@@ -248,7 +246,7 @@ class HerdrTabClaimConsumer {
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
-		hideHerdrFooter(this.emitFooter);
+		this.publishClaimInProgress(false);
 		const isWorkerFailure = event.workerFailed;
 		const isNumericTab = tabNameIsParseableAsInt(this.initialLabel);
 		const hasAttemptsRemaining = this.nextAttemptId < HERDR_MAX_CLAIM_ATTEMPTS;
@@ -262,7 +260,7 @@ class HerdrTabClaimConsumer {
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.activeAttempt = undefined;
-		hideHerdrFooter(this.emitFooter);
+		this.publishClaimInProgress(false);
 		this.hasValidatedClaim = false;
 		this.hasClaimReturnedSuccessfully = false;
 		this.herdrGateClaimProcessed = false;

@@ -10,10 +10,7 @@ import {
 import type { GitState } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
-import {
-	publishWorktreeState,
-	publishWorktreeStatus,
-} from "./event-publishers.ts";
+import { publishWorktreeState } from "./event-publishers.ts";
 import {
 	cleanupWorktree,
 	currentWorktreeState,
@@ -118,14 +115,6 @@ class Worktree implements WorktreeModule {
 		void publishWorktreeState(this.eventHandler, moduleState, gitStatePatch);
 	}
 
-	private emitFooterStatus(context: ExtensionContext): void {
-		void publishWorktreeStatus(
-			this.eventHandler,
-			context,
-			this.hasUncommittedChanges,
-		);
-	}
-
 	private async refreshStatus(
 		context: ExtensionContext,
 		generation: number,
@@ -140,7 +129,6 @@ class Worktree implements WorktreeModule {
 		if (shouldSkipStatus) return;
 		this.hasUncommittedChanges = dirtyStatus;
 		this.emitState({ hasUncommittedChanges: this.hasUncommittedChanges });
-		this.emitFooterStatus(context);
 	}
 
 	private async initializeSession(
@@ -183,7 +171,6 @@ class Worktree implements WorktreeModule {
 			mainRoot: project.mainRoot,
 			hasUncommittedChanges: this.hasUncommittedChanges,
 		});
-		this.emitFooterStatus(ctx);
 	}
 
 	deactivate(): void {

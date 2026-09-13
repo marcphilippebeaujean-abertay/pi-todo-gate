@@ -117,7 +117,6 @@ async function persistClaim(
 		persist: true,
 		gitStatePatch: { mergeCompletedAt: undefined },
 	});
-	operations.refreshFooterStatuses(session);
 	void operations.emitState(session);
 	notifyTaskAssigned(session.context);
 }
