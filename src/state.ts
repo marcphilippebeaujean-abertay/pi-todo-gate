@@ -13,16 +13,11 @@ import type { PromptQueue } from "./prompt-queue.ts";
 import type { Exec } from "./shared/command.ts";
 import type { EventHandler } from "./shared/events.ts";
 import type {
-	GitState,
 	SessionReader,
 	SessionRecord,
 } from "./shared/session-state.ts";
 
-export type {
-	GitState,
-	SessionReader,
-	SessionRecord,
-} from "./shared/session-state.ts";
+export type { SessionReader, SessionRecord } from "./shared/session-state.ts";
 
 import type {
 	TaskClaimWorker,
@@ -31,6 +26,16 @@ import type {
 	TodoistProjectMapping,
 } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
+
+export interface GitState {
+	remoteOrigin?: string;
+	mergeCompletedAt?: string;
+	branch?: string | null;
+	isWorktree?: boolean;
+	worktreeRoot?: string | null;
+	mainRoot?: string | null;
+	hasUncommittedChanges?: boolean;
+}
 
 export interface SessionMetadata {
 	activeSessionId: string | null;

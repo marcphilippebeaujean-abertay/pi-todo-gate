@@ -1,15 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-export interface GitState {
-	remoteOrigin?: string;
-	mergeCompletedAt?: string;
-	branch?: string | null;
-	isWorktree?: boolean;
-	worktreeRoot?: string | null;
-	mainRoot?: string | null;
-	hasUncommittedChanges?: boolean;
-}
-
 export interface SessionRecord {
 	context: ExtensionContext;
 	project: {

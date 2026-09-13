@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSessionState, type SessionState } from "../src/state.ts";
 
 describe("session state", () => {
@@ -28,5 +28,14 @@ describe("session state", () => {
 
 		expect(state.moduleState.pr.prUrl).toContain("/pull/42");
 		expect(state.moduleState.todoist.taskRef).toBe("42");
+	});
+
+	it("rejects Todoist fields from the PR module slice at type level", () => {
+		type PrState = SessionState["moduleState"]["pr"];
+		expectTypeOf<PrState>().toMatchTypeOf<{
+			prUrl?: string;
+			discoveryDisabled: boolean;
+		}>();
+		expectTypeOf<PrState>().not.toMatchTypeOf<{ taskRef: string }>();
 	});
 });
