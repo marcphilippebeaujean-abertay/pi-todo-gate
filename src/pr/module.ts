@@ -13,7 +13,7 @@ import type {
 } from "../shared/events.ts";
 import { branchTexts } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
-import type { PrModuleState, SessionState } from "../state.ts";
+import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
 import { handlePrToolResult, isCurrentMerge } from "./event-consumers.ts";
@@ -403,7 +403,7 @@ class PrModuleImpl implements PrModule {
 		persist: boolean,
 	): Promise<void> {
 		this.state = nextState;
-		await this.publishState.publish(nextState as PrModuleState, { persist });
+		await this.publishState.publish(nextState, { persist });
 	}
 
 	private commandDependencies(): PrCommandOptions {
@@ -433,7 +433,7 @@ class PrModuleImpl implements PrModule {
 			{ ...this.state, prUrl: event.prUrl },
 			new Date().toISOString(),
 		);
-		const nextState = recordedState;
+		const nextState = { ...this.state, ...recordedState };
 		const changed = nextState !== this.state;
 		if (!changed) return;
 		this.state = nextState;
@@ -542,7 +542,7 @@ class PrModuleImpl implements PrModule {
 	): Promise<void> {
 		const currentEmission = this.sessionState.session.activeSessionId !== null;
 		if (!currentEmission) return;
-		await this.publishState.publish(moduleState as PrModuleState, {
+		await this.publishState.publish(moduleState, {
 			persist: options?.persist ?? false,
 			...(options?.gitStatePatch === undefined
 				? {}

@@ -166,6 +166,10 @@ describe("session shutdown", () => {
 
 	it("retains startup module snapshots after activation", async () => {
 		const updates: Array<{ moduleId: string }> = [];
+		let observed: {
+			prUrl: string | undefined;
+			taskRef: string | undefined;
+		} | null = null;
 		const root = rootWithConfig(
 			async () => ({ projects: { "/repo": "project" } }),
 			async (command, args) => {
@@ -189,6 +193,12 @@ describe("session shutdown", () => {
 		root.eventHandler.moduleStateChangedEvent.subscribe(({ moduleId }) => {
 			updates.push({ moduleId });
 		});
+		root.eventHandler.sessionActivatedEvent.subscribe(() => {
+			observed = {
+				prUrl: root.sessionState.moduleState.pr.prUrl,
+				taskRef: root.sessionState.moduleState.todoist.taskRef,
+			};
+		});
 		await handleSessionStart(
 			root,
 			{ type: "session_start" } as never,
@@ -202,7 +212,15 @@ describe("session shutdown", () => {
 						gitState: {
 							remoteOrigin: "https://persisted.example/repo.git",
 						},
-						moduleState: {},
+						moduleState: {
+							pr: {
+								prUrl: "https://github.com/o/r/pull/42",
+								discoveryDisabled: true,
+								discoveryTestedUrls: [],
+								mergedPrs: [],
+							},
+							todoist: { taskRef: "TASK-42" },
+						},
 					},
 				},
 			]),
@@ -214,6 +232,10 @@ describe("session shutdown", () => {
 			isWorktree: true,
 			branch: "feature",
 			remoteOrigin: "https://persisted.example/repo.git",
+		});
+		expect(observed).toEqual({
+			prUrl: "https://github.com/o/r/pull/42",
+			taskRef: "TASK-42",
 		});
 	});
 

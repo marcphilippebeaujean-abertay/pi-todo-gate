@@ -26,6 +26,7 @@ describe("isPrState", () => {
 					},
 				],
 				discoveryDisabled: true,
+				discoveryTestedUrls: [],
 			}),
 		).toBe(true);
 		expect(isPrState({ prUrl: 42 })).toBe(false);

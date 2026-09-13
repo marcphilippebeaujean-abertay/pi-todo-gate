@@ -194,11 +194,6 @@ async function activateConfigured(
 		operationQueue: Promise.resolve(),
 	};
 	root.session = session;
-	await root.pr.initializeRemoteOrigin(
-		ctx,
-		root.sessionState.gitState.remoteOrigin,
-	);
-	if (!isCurrentEpoch(root, epoch)) return null;
 	await root.publisher.publishSessionActivated({
 		context: ctx,
 		previousSessionFile: hasPendingHandoffContext
@@ -207,6 +202,11 @@ async function activateConfigured(
 		session,
 		lifecycleEpoch: epoch,
 	});
+	if (!isCurrentEpoch(root, epoch)) return null;
+	await root.pr.initializeRemoteOrigin(
+		ctx,
+		root.sessionState.gitState.remoteOrigin,
+	);
 	if (!isCurrentEpoch(root, epoch)) return null;
 	return { session, branch, hasPendingHandoffContext };
 }

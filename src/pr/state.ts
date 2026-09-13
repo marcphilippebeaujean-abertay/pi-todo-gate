@@ -12,7 +12,8 @@ import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { PrModuleState, SessionState } from "../state.ts";
 
-export type PrState = Partial<PrModuleState>;
+export type PrState = PrModuleState;
+export type PrStatePatch = Partial<PrState>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);

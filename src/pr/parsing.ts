@@ -23,6 +23,7 @@ import type {
 	OpenPrInfo,
 	ParsedMerge,
 	PrState,
+	PrStatePatch,
 	QuoteCharacter,
 	ShellState,
 } from "./state.ts";
@@ -63,8 +64,9 @@ const mergedPrSchema = z.object({
 export const prStateDataSchema = z
 	.object({
 		prUrl: z.string().optional(),
-		mergedPrs: z.array(mergedPrSchema).optional(),
-		discoveryDisabled: z.boolean().optional(),
+		mergedPrs: z.array(mergedPrSchema),
+		discoveryDisabled: z.boolean(),
+		discoveryTestedUrls: z.array(z.string()),
 	})
 	.loose();
 
@@ -269,7 +271,10 @@ export function isPrState(value: unknown): value is PrState {
 	return prStateDataSchema.safeParse(value).success;
 }
 
-export function recordMergedPr(state: PrState, detectedAt: string): PrState {
+export function recordMergedPr(
+	state: PrStatePatch,
+	detectedAt: string,
+): PrStatePatch {
 	const prUrl = state.prUrl;
 	if (prUrl === undefined) return state;
 	const hasPrUrl = prUrl !== "";
@@ -287,7 +292,7 @@ export function recordMergedPr(state: PrState, detectedAt: string): PrState {
 	};
 }
 
-export function markRemindersDelivered(state: PrState): PrState {
+export function markRemindersDelivered(state: PrStatePatch): PrStatePatch {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const hasPending = existingMergedPrs.some(hasPendingReminder);
@@ -298,7 +303,10 @@ export function markRemindersDelivered(state: PrState): PrState {
 	};
 }
 
-export function removeMergedPr(state: PrState, prUrl: string): PrState {
+export function removeMergedPr(
+	state: PrStatePatch,
+	prUrl: string,
+): PrStatePatch {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const mergedPrs = withoutPrUrl(existingMergedPrs, prUrl);
@@ -313,7 +321,7 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 	}
 }
 
-export function mergedUrls(state: PrState): string[] {
+export function mergedUrls(state: PrStatePatch): string[] {
 	return state.mergedPrs?.map(prUrlOf) ?? [];
 }
 
