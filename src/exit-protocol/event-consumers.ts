@@ -18,24 +18,37 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;
 	private readonly promptQueue: PromptQueue;
 	private readonly eventHandler: EventHandler;
+	private readonly getLifecycleEpoch: () => number;
 	private readonly worktree: WorktreeModule | undefined;
 	private request: ExitRequest | null = null;
 
 	constructor(options: ExitProtocolModuleOptions) {
 		this.promptQueue = options.promptQueue;
 		this.eventHandler = options.eventHandler;
+		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
-		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
-			this.sessionStart(context),
+		this.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, lifecycleEpoch }) => {
+				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
+				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+				if (!isCurrentEpoch) return;
+				this.sessionStart(context, activationEpoch);
+			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);
 	}
 
-	sessionStart(context: ExtensionContext): void {
+	sessionStart(context: ExtensionContext, activationEpoch?: number): void {
+		const epoch = activationEpoch ?? this.getLifecycleEpoch();
+		const isCurrentEpoch = epoch === this.getLifecycleEpoch();
+		if (!isCurrentEpoch) return;
 		this.context = context;
+		const isCurrentActivation =
+			this.context === context && epoch === this.getLifecycleEpoch();
+		if (!isCurrentActivation) return;
 		void this.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.exitProtocol,
 			moduleState: { active: true },

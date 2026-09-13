@@ -55,6 +55,67 @@ function rootWithConfig(
 }
 
 describe("session shutdown", () => {
+	it("wires Todoist merge handling before Exit Protocol prompts", async () => {
+		const confirm = vi.fn(async () => false);
+		const custom = vi.fn(async () => undefined);
+		const activationContext = {
+			cwd: "/repo",
+			hasUI: true,
+			ui: { confirm, custom, setFooter: vi.fn(), theme: { fg: vi.fn() } },
+		} as never;
+		const pi = {
+			appendEntry: vi.fn(),
+			registerTool: vi.fn(),
+			on: vi.fn(),
+		} as never;
+		const state = createExtensionState(pi, {});
+		const root = (
+			state as typeof state & {
+				root: Parameters<typeof handleSessionStart>[0];
+			}
+		).root;
+		const enqueue = vi
+			.spyOn(root.promptQueue, "enqueue")
+			.mockImplementation(() => Promise.resolve(undefined));
+		const session = {
+			sessionId: "session",
+			context: activationContext,
+			project: { codingRoot: "/repo" },
+			state: {
+				taskRef: "42",
+				taskName: "Task",
+				prUrl: "https://github.com/o/r/pull/42",
+			},
+			allowPrDiscovery: true,
+			prDiscoveryTestedUrls: new Set<string>(),
+			handoffContext: false,
+			workChanged: false,
+			hasUncommittedChanges: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../src/pr/state.ts").PrSession;
+		root.session = session;
+		await root.eventHandler.sessionActivatedEvent.emit({
+			context: activationContext,
+			session,
+			lifecycleEpoch: 0,
+		});
+		await root.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/42",
+			taskMarkedAsCompleted: false,
+		});
+
+		expect(enqueue).toHaveBeenCalledTimes(2);
+		const queuedTasks = enqueue.mock.calls.map(
+			([task]) =>
+				task as (isCurrent: () => boolean) => Promise<unknown> | unknown,
+		);
+		await queuedTasks[0]?.(() => true);
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(custom).not.toHaveBeenCalled();
+	});
+
 	it("clears shared state and deactivates modules", () => {
 		const eventHandler = {
 			moduleStateChangedEvent: event(),
@@ -265,6 +326,54 @@ describe("session shutdown", () => {
 			gitState: {},
 			moduleState: {},
 		});
+	});
+
+	it("does not resurrect module state when activation shuts down", async () => {
+		let releaseInspection!: () => void;
+		let inspectionStarted!: () => void;
+		const inspection = new Promise<void>((resolve) => {
+			releaseInspection = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			inspectionStarted = resolve;
+		});
+		const root = rootWithConfig(
+			async () => ({ projects: {} }),
+			async () => {
+				inspectionStarted();
+				await inspection;
+				return { stdout: "", stderr: "", code: 1 };
+			},
+		);
+		const activationContext = context("/repo");
+		const session = {
+			sessionId: "session",
+			context: activationContext,
+			project: { codingRoot: "/repo" },
+			state: {},
+			allowPrDiscovery: true,
+			prDiscoveryTestedUrls: new Set<string>(),
+			handoffContext: false,
+			workChanged: false,
+			hasUncommittedChanges: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../src/pr/state.ts").PrSession;
+		root.session = session;
+		root.sessionState.sessionId = session.sessionId;
+		const activation = root.eventHandler.sessionActivatedEvent.emit({
+			context: activationContext,
+			session,
+			lifecycleEpoch: root.lifecycleEpoch.value,
+		});
+		await started;
+		handleSessionShutdown(root);
+		releaseInspection();
+		await activation;
+		await Promise.resolve();
+		expect(root.session).toBeNull();
+		expect(root.sessionState.moduleState).toEqual({});
 	});
 
 	it("does not activate stale concurrent starts", async () => {

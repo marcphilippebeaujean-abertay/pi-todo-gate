@@ -81,13 +81,16 @@ class PrModuleImpl implements PrModule {
 			this.handleToolResult(event, context),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session }) => {
+			({ context, session, lifecycleEpoch }) => {
 				const hasSession = session !== undefined;
-				const isCurrentContext = hasSession && session.context === context;
-				const canActivate = isCurrentContext && session !== undefined;
-				if (!canActivate) return;
+				if (!hasSession) return;
+				const isCurrentContext = session.context === context;
+				if (!isCurrentContext) return;
+				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
+				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+				if (!isCurrentEpoch) return;
 				this.currentSession = session;
-				return this.activateSession(session);
+				return this.activateSession(session, activationEpoch);
 			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() => {
@@ -113,17 +116,26 @@ class PrModuleImpl implements PrModule {
 		});
 	}
 
-	async activateSession(session: PrSession): Promise<void> {
+	async activateSession(
+		session: PrSession,
+		activationEpoch?: number,
+	): Promise<void> {
+		const epoch = activationEpoch ?? this.getLifecycleEpoch();
 		this.currentSession = session;
 		this.generation = Math.max(
 			this.generation + 1,
 			this.state.operationGeneration ?? 0,
 		);
-		this.state = prStateFromSession(session, this.generation);
-		await this.emitState(this.state, {
+		const nextState = prStateFromSession(session, this.generation);
+		this.state = nextState;
+		await this.emitState(nextState, {
 			operationGeneration: this.generation,
 			sessionId: session.sessionId,
 		});
+		const isCurrentActivation =
+			this.currentSession === session && epoch === this.getLifecycleEpoch();
+		if (!isCurrentActivation) return;
+		this.state = nextState;
 	}
 
 	deactivateSession(): void {

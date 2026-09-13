@@ -103,6 +103,7 @@ export interface SessionActivatedEvent {
 	context: ExtensionContext;
 	previousSessionFile?: string;
 	session?: SessionRecord;
+	lifecycleEpoch?: number;
 }
 export type SessionDeactivatedEvent = undefined;
 

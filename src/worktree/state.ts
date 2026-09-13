@@ -22,6 +22,7 @@ export interface WorktreeModuleDependencies {
 export interface WorktreeModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
+	getLifecycleEpoch?: () => number;
 	dependencies?: WorktreeModuleDependencies;
 }
 

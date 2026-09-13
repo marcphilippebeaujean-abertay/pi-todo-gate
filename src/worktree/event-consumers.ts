@@ -27,11 +27,13 @@ class Worktree implements WorktreeModule {
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
+	private readonly getLifecycleEpoch: () => number;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private hasUncommittedChanges = false;
 	private sessionGeneration = 0;
 	private refreshSequence = 0;
+	private sessionLifecycleEpoch = 0;
 
 	constructor(options: WorktreeModuleOptions) {
 		this.eventHandler = options.eventHandler;
@@ -39,27 +41,44 @@ class Worktree implements WorktreeModule {
 		const dependencies = options.dependencies ?? {};
 		this.exec = dependencies.exec ?? spawnExec;
 		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
+		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
-		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
-			this.sessionStart(context),
+		this.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, lifecycleEpoch }) => {
+				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
+				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+				if (!isCurrentEpoch) return;
+				return this.sessionStart(context, activationEpoch);
+			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);
 	}
 
-	async sessionStart(nextContext: ExtensionContext): Promise<void> {
+	async sessionStart(
+		nextContext: ExtensionContext,
+		activationEpoch?: number,
+	): Promise<void> {
+		const epoch = activationEpoch ?? this.getLifecycleEpoch();
 		const generation = ++this.sessionGeneration;
 		this.refreshSequence += 1;
+		this.sessionLifecycleEpoch = epoch;
 		this.context = nextContext;
 		this.baseline = null;
 		await this.initializeSession(nextContext, generation);
 	}
 
 	private isCurrentSession(ctx: ExtensionContext, generation: number): boolean {
-		return this.context === ctx && this.sessionGeneration === generation;
+		const isCurrentContext = this.context === ctx;
+		const isCurrentGeneration = this.sessionGeneration === generation;
+		const isCurrentContextAndGeneration =
+			isCurrentContext && isCurrentGeneration;
+		const isCurrentEpoch =
+			this.sessionLifecycleEpoch === this.getLifecycleEpoch();
+		return isCurrentContextAndGeneration && isCurrentEpoch;
 	}
 
 	private async consumeToolResult(

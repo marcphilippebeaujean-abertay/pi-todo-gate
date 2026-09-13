@@ -32,6 +32,7 @@ import type {
 
 class TodoistModuleImpl implements TodoistModule {
 	private readonly pi: TodoistModuleOptions["pi"];
+	private readonly getLifecycleEpoch: () => number;
 	private currentSession: TodoistSession | null = null;
 	readonly taskClaim = {
 		pending: false,
@@ -42,15 +43,19 @@ class TodoistModuleImpl implements TodoistModule {
 
 	constructor(private readonly options: TodoistModuleOptions) {
 		this.pi = options.pi;
+		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.options.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session }) => {
+			({ context, session, lifecycleEpoch }) => {
 				this.resetTaskClaim();
 				const hasSession = session !== undefined;
-				const isCurrentContext = hasSession && session.context === context;
-				const canActivate = isCurrentContext && session !== undefined;
-				if (!canActivate) return;
+				if (!hasSession) return;
+				const isCurrentContext = session.context === context;
+				if (!isCurrentContext) return;
+				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
+				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+				if (!isCurrentEpoch) return;
 				this.currentSession = session;
-				void this.syncSessionState(session);
+				void this.syncSessionState(session, activationEpoch);
 			},
 		);
 		this.options.eventHandler.sessionResetEvent.subscribe(() =>
@@ -62,7 +67,17 @@ class TodoistModuleImpl implements TodoistModule {
 		});
 	}
 
-	async syncSessionState(session: TodoistSession): Promise<void> {
+	async syncSessionState(
+		session: TodoistSession,
+		activationEpoch?: number,
+	): Promise<void> {
+		const hasExplicitEpoch = activationEpoch !== undefined;
+		const epoch = activationEpoch ?? this.getLifecycleEpoch();
+		const isCurrentSession =
+			this.currentSession === session || !hasExplicitEpoch;
+		const isCurrentActivation =
+			isCurrentSession && epoch === this.getLifecycleEpoch();
+		if (!isCurrentActivation) return;
 		await this.options.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.todoist,
 			moduleState: {

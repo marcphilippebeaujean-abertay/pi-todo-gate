@@ -221,6 +221,7 @@ async function activateConfigured(
 		context: ctx,
 		previousSessionFile: handoffContext ? event.previousSessionFile : undefined,
 		session,
+		lifecycleEpoch: epoch,
 	});
 	if (!isCurrentEpoch(root, epoch)) return null;
 	if (!isCurrentEpoch(root, epoch)) return null;

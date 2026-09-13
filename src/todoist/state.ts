@@ -118,6 +118,7 @@ export interface TodoistModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
+	getLifecycleEpoch?: () => number;
 	dependencies?: {
 		exec?: Exec;
 		taskClaimWorker?: TaskClaimWorker;

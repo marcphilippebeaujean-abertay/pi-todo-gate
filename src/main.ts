@@ -39,6 +39,7 @@ export function createExtensionState(
 	const worktree = createWorktreeModule({
 		eventHandler,
 		sessionState,
+		getLifecycleEpoch: () => lifecycleEpoch.value,
 		dependencies: { exec: dependencies.exec },
 	});
 	const pr = createPrModule({
@@ -54,16 +55,20 @@ export function createExtensionState(
 		promptQueue,
 		eventHandler,
 		sessionState,
+		getLifecycleEpoch: () => lifecycleEpoch.value,
 		dependencies: {
 			exec: dependencies.exec,
 			taskClaimWorker: dependencies.taskClaimWorker,
 			createTodoistClient: dependencies.createTodoistClient,
 		},
 	});
+	// Register Todoist merge consumer before Exit Protocol subscribes to prMergedEvent.
+	todoist.register();
 	const exitProtocol = createExitProtocolModule({
 		promptQueue,
 		eventHandler,
 		worktree,
+		getLifecycleEpoch: () => lifecycleEpoch.value,
 	});
 	const extensionState = {
 		pi,
@@ -123,7 +128,6 @@ function startExtensions(
 	);
 	registerExtensionEventConsumers(root);
 	extensionState.pr.register(pi);
-	extensionState.todoist.register();
 	installHerdrTabClaim(pi, {
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
