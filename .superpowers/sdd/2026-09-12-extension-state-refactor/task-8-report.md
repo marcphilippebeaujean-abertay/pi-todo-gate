@@ -10,6 +10,7 @@
 - PR deactivation clears PR facet state while preserving generation barrier; known-origin startup cannot inherit stale merged metadata.
 - Production wiring registers Todoist merge consumer before constructing Exit Protocol, making `prMergedEvent` subscriber order deterministic. Added production-wiring regression coverage.
 - Added lifecycle epoch/session guards to Worktree, PR, Todoist, and Exit Protocol activation. Shutdown during awaited Worktree inspection cannot reactivate stale module state or prompts. Added shutdown-during-activation regression coverage.
+- Todoist claim reset now occurs only after activation session/context/epoch guards pass. Added regression coverage proving stale activation cannot clear newer claim state.
 - Preserved one `prMergedEvent`, typed `Event<T>`, native tool-result bridge, direct awaited Exit Protocol → Worktree action, stable SessionState snapshots, Worktree/Footer ownership, deleted `src/application`, and lint boundary.
 
 ## Structural review
@@ -22,12 +23,12 @@
 
 ## Validation
 
-- `env -u PI_SUBAGENT_CHILD npm test` — passed; 51 files, 313 passed, 8 skipped.
-- `npm run architecture` — passed; dependency cruiser: 189 modules / 685 dependencies, structure and production checks clean.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed; 51 files, 314 passed, 8 skipped.
+- `npm run architecture` — passed; dependency cruiser: 189 modules / 686 dependencies, structure and production checks clean.
 - `npm run lint` — passed Biome and strict lint.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
-- Targeted production wiring, shutdown race, PR, Worktree, Todoist, and extension tests — passed.
+- Targeted production wiring, shutdown race, Todoist stale-activation, PR, Worktree, and extension tests — passed.
 - Targeted `rg` checks — no forbidden identifiers/adapters, no custom event `.on()` calls, no WeakMap, no root callback injection, no aggregate work projection.
 
 ## Commit

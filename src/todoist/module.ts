@@ -46,7 +46,6 @@ class TodoistModuleImpl implements TodoistModule {
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.options.eventHandler.sessionActivatedEvent.subscribe(
 			({ context, session, lifecycleEpoch }) => {
-				this.resetTaskClaim();
 				const hasSession = session !== undefined;
 				if (!hasSession) return;
 				const isCurrentContext = session.context === context;
@@ -54,6 +53,7 @@ class TodoistModuleImpl implements TodoistModule {
 				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
 				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 				if (!isCurrentEpoch) return;
+				this.resetTaskClaim();
 				this.currentSession = session;
 				void this.syncSessionState(session, activationEpoch);
 			},
