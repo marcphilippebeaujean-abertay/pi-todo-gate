@@ -4,6 +4,7 @@ import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { lintProgram } from "../../src/lint/index.ts";
+import { isScopedModulePath } from "../../src/lint/rules/no-direct-module-state-write.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-no-direct-module-state-write-";
 const RULE_ID = "no-direct-module-state-write";
@@ -49,10 +50,30 @@ export function update(sessionState: { moduleState: Record<string, unknown> }) {
 		);
 	});
 
+	it("matches Windows-style scoped module paths", () => {
+		expect(isScopedModulePath("C:\\repo\\src\\pr\\module.ts")).toBe(true);
+	});
+
 	it("rejects root assignments outside sanctioned updater", async () => {
 		const diagnostics = await lintModuleSource(
 			`export function mutate(state: { moduleState: Record<string, unknown> }) {
 	state.moduleState.pr = {};
+}
+`,
+			"root",
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("rejects shadowed sanctioned updater names", async () => {
+		const diagnostics = await lintModuleSource(
+			`export function wrapper(state: { moduleState: Record<string, unknown> }) {
+	 function updateModuleState() {
+		 state.moduleState.pr = {};
+	 }
 }
 `,
 			"root",

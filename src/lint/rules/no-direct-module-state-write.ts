@@ -3,8 +3,8 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const MODULE_PATH =
-	/[\\/]src[/](pr|todoist|herdr|worktree|exit-protocol|footer)[/].+\.ts$/;
-const ROOT_PATH = /[\\/]src[/].+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/].+\.ts$/;
+const ROOT_PATH = /[\\/]src[\\/].+\.ts$/;
 const MODULE_STATE_NAME = "moduleState";
 const RULE_ID = "no-direct-module-state-write" as const;
 const MESSAGE = "Module state must be changed through the root state updater";
@@ -15,6 +15,10 @@ const SANCTIONED_ROOT_WRITERS = new Set([
 	"serializeSessionState",
 	"restoreSessionState",
 ]);
+
+export function isScopedModulePath(filePath: string): boolean {
+	return MODULE_PATH.test(filePath);
+}
 
 function isAssignment(node: ts.BinaryExpression): boolean {
 	return node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment;
@@ -48,32 +52,39 @@ function isWriteExpression(node: ts.Node): boolean {
 	return false;
 }
 
-function containingFunctionName(node: ts.Node): string | null {
+function containingFunction(node: ts.Node): ts.Node | null {
 	let current: ts.Node | undefined = node.parent;
 	while (current !== undefined) {
-		if (ts.isFunctionDeclaration(current) && current.name !== undefined)
-			return current.name.text;
-		if (
-			(ts.isMethodDeclaration(current) || ts.isFunctionExpression(current)) &&
-			current.name !== undefined &&
-			ts.isIdentifier(current.name)
-		)
-			return current.name.text;
+		const isFunction =
+			ts.isFunctionDeclaration(current) ||
+			ts.isMethodDeclaration(current) ||
+			ts.isFunctionExpression(current) ||
+			ts.isArrowFunction(current);
+		if (isFunction) return current;
 		current = current.parent;
 	}
 	return null;
 }
 
-function isAllowedRootWrite(node: ts.Node): boolean {
-	const functionName = containingFunctionName(node);
-	return functionName !== null && SANCTIONED_ROOT_WRITERS.has(functionName);
+function isAllowedRootWrite(node: ts.Node, sourceFile: ts.SourceFile): boolean {
+	const functionNode = containingFunction(node);
+	const isTopLevelDeclaration =
+		functionNode !== null &&
+		ts.isFunctionDeclaration(functionNode) &&
+		functionNode.parent === sourceFile;
+	if (!isTopLevelDeclaration || !ts.isFunctionDeclaration(functionNode))
+		return false;
+	const functionName = functionNode.name?.text;
+	return (
+		functionName !== undefined && SANCTIONED_ROOT_WRITERS.has(functionName)
+	);
 }
 
 export const noDirectModuleStateWrite: LintRule = ({
 	sourceFile,
 	diagnostics,
 }) => {
-	const isModuleFile = MODULE_PATH.test(sourceFile.fileName);
+	const isModuleFile = isScopedModulePath(sourceFile.fileName);
 	const isRootFile = ROOT_PATH.test(sourceFile.fileName);
 	if (!isModuleFile && !isRootFile) return;
 	function visit(node: ts.Node): void {
@@ -87,7 +98,7 @@ export const noDirectModuleStateWrite: LintRule = ({
 					: null;
 		const isDirectModuleStateWrite =
 			isWrite && target !== null && readsModuleState(target);
-		const isAllowed = !isModuleFile && isAllowedRootWrite(node);
+		const isAllowed = !isModuleFile && isAllowedRootWrite(node, sourceFile);
 		if (isDirectModuleStateWrite && !isAllowed)
 			diagnostics.push(diagnostic(sourceFile, target, RULE_ID, MESSAGE, 1, 0));
 		ts.forEachChild(node, visit);
