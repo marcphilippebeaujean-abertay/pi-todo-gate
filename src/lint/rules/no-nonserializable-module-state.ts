@@ -3,7 +3,6 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const ROOT_STATE_PATH = /[\\/]src[\\/]state\.ts$/;
-const MODULE_STATE_SUFFIX = "ModuleState";
 const RULE_ID = "no-nonserializable-module-state" as const;
 const MESSAGE =
 	"Module state must contain only JSON-compatible declarative values";
@@ -31,8 +30,101 @@ function declarationName(node: ts.Declaration): string | null {
 }
 
 function isModuleStateDeclaration(node: ts.Declaration): boolean {
-	const name = declarationName(node);
-	return name === "ModuleState" || name?.endsWith(MODULE_STATE_SUFFIX) === true;
+	return declarationName(node) === "ModuleState";
+}
+
+function isForbiddenTypeName(name: string): boolean {
+	const finalName = name.split(".").at(-1) ?? name;
+	return FORBIDDEN_NAMES.has(finalName);
+}
+
+function collectMember(
+	member: ts.TypeElement,
+	checker: ts.TypeChecker,
+	seen: Set<ts.Declaration>,
+): ts.Node[] {
+	if (
+		ts.isMethodSignature(member) ||
+		ts.isCallSignatureDeclaration(member) ||
+		ts.isConstructSignatureDeclaration(member)
+	)
+		return [member];
+	if (ts.isIndexSignatureDeclaration(member))
+		return collectType(member.type, checker, seen);
+	if (!ts.isPropertySignature(member) || member.type === undefined) return [];
+	return collectType(member.type, checker, seen);
+}
+
+function collectDeclaration(
+	declaration: ts.Declaration,
+	checker: ts.TypeChecker,
+	seen: Set<ts.Declaration>,
+): ts.Node[] {
+	if (seen.has(declaration)) return [];
+	seen.add(declaration);
+	let result: ts.Node[] = [];
+	if (ts.isInterfaceDeclaration(declaration)) {
+		for (const member of declaration.members)
+			result = [...result, ...collectMember(member, checker, seen)];
+	} else if (ts.isTypeAliasDeclaration(declaration)) {
+		result = collectType(declaration.type, checker, seen);
+	}
+	seen.delete(declaration);
+	return result;
+}
+
+function collectTypeReference(
+	node: ts.TypeReferenceNode,
+	checker: ts.TypeChecker,
+	seen: Set<ts.Declaration>,
+): ts.Node[] {
+	const name = node.typeName.getText();
+	if (isForbiddenTypeName(name)) return [node];
+	const argumentResults = (node.typeArguments ?? []).flatMap((argument) =>
+		collectType(argument, checker, seen),
+	);
+	const symbol = checker.getSymbolAtLocation(node.typeName);
+	const declaration = symbol?.declarations?.find((candidate) => {
+		return (
+			ts.isInterfaceDeclaration(candidate) ||
+			ts.isTypeAliasDeclaration(candidate) ||
+			ts.isClassDeclaration(candidate)
+		);
+	});
+	if (declaration === undefined) return argumentResults;
+	if (ts.isClassDeclaration(declaration)) return [node];
+	return [
+		...argumentResults,
+		...collectDeclaration(declaration, checker, seen),
+	];
+}
+
+function collectType(
+	node: ts.TypeNode,
+	checker: ts.TypeChecker,
+	seen: Set<ts.Declaration>,
+): ts.Node[] {
+	if (ts.isTypeReferenceNode(node))
+		return collectTypeReference(node, checker, seen);
+	if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node))
+		return [node];
+	if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
+		for (const type of node.types) {
+			const result = collectType(type, checker, seen);
+			if (result.length > 0) return result.slice(0, 1);
+		}
+		return [];
+	}
+	if (ts.isTypeLiteralNode(node))
+		return node.members.flatMap((member) =>
+			collectMember(member, checker, seen),
+		);
+	let result: ts.Node[] = [];
+	ts.forEachChild(node, (child) => {
+		if (result.length > 0 || !ts.isTypeNode(child)) return;
+		result = collectType(child, checker, seen);
+	});
+	return result;
 }
 
 function report(
@@ -43,115 +135,12 @@ function report(
 	diagnostics.push(diagnostic(sourceFile, node, RULE_ID, MESSAGE, 1, 0));
 }
 
-function typeName(node: ts.TypeReferenceNode): string {
-	return node.typeName.getText();
-}
-
-function isForbiddenTypeName(name: string): boolean {
-	const finalName = name.split(".").at(-1) ?? name;
-	return FORBIDDEN_NAMES.has(finalName);
-}
-
-function inspectMember(
-	member: ts.TypeElement,
-	checker: ts.TypeChecker,
-	seen: Set<ts.Declaration>,
-	sourceFile: ts.SourceFile,
-	diagnostics: Parameters<LintRule>[0]["diagnostics"],
-): void {
-	if (
-		ts.isMethodSignature(member) ||
-		ts.isConstructSignatureDeclaration(member)
-	) {
-		report(sourceFile, member, diagnostics);
-		return;
-	}
-	if (!ts.isPropertySignature(member)) return;
-	if (member.type === undefined) return;
-	inspectTypeNode(member.type, checker, seen, sourceFile, diagnostics);
-}
-
-function inspectDeclaration(
-	declaration: ts.Declaration,
-	checker: ts.TypeChecker,
-	seen: Set<ts.Declaration>,
-	sourceFile: ts.SourceFile,
-	diagnostics: Parameters<LintRule>[0]["diagnostics"],
-): void {
-	if (seen.has(declaration)) return;
-	seen.add(declaration);
-	if (ts.isInterfaceDeclaration(declaration)) {
-		for (const member of declaration.members)
-			inspectMember(member, checker, seen, sourceFile, diagnostics);
-		return;
-	}
-	if (ts.isTypeAliasDeclaration(declaration))
-		inspectTypeNode(declaration.type, checker, seen, sourceFile, diagnostics);
-}
-
-function inspectTypeReference(
-	node: ts.TypeReferenceNode,
-	checker: ts.TypeChecker,
-	seen: Set<ts.Declaration>,
-	sourceFile: ts.SourceFile,
-	diagnostics: Parameters<LintRule>[0]["diagnostics"],
-): void {
-	const name = typeName(node);
-	if (isForbiddenTypeName(name)) {
-		report(sourceFile, node, diagnostics);
-		return;
-	}
-	for (const argument of node.typeArguments ?? [])
-		inspectTypeNode(argument, checker, seen, sourceFile, diagnostics);
-	const symbol = checker.getSymbolAtLocation(node.typeName);
-	const declaration = symbol?.declarations?.find((candidate) => {
-		return (
-			ts.isInterfaceDeclaration(candidate) ||
-			ts.isTypeAliasDeclaration(candidate) ||
-			ts.isClassDeclaration(candidate)
-		);
-	});
-	if (declaration === undefined) return;
-	if (ts.isClassDeclaration(declaration)) {
-		report(sourceFile, node, diagnostics);
-		return;
-	}
-	inspectDeclaration(declaration, checker, seen, sourceFile, diagnostics);
-}
-
-function inspectTypeNode(
-	node: ts.TypeNode,
-	checker: ts.TypeChecker,
-	seen: Set<ts.Declaration>,
-	sourceFile: ts.SourceFile,
-	diagnostics: Parameters<LintRule>[0]["diagnostics"],
-): void {
-	if (ts.isTypeReferenceNode(node)) {
-		inspectTypeReference(node, checker, seen, sourceFile, diagnostics);
-		return;
-	}
-	if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) {
-		report(sourceFile, node, diagnostics);
-		return;
-	}
-	if (ts.isTypeLiteralNode(node)) {
-		for (const member of node.members)
-			inspectMember(member, checker, seen, sourceFile, diagnostics);
-		return;
-	}
-	ts.forEachChild(node, (child) => {
-		if (ts.isTypeNode(child))
-			inspectTypeNode(child, checker, seen, sourceFile, diagnostics);
-	});
-}
-
 export const noNonserializableModuleState: LintRule = ({
 	sourceFile,
 	diagnostics,
 	checker,
 }) => {
 	if (!ROOT_STATE_PATH.test(sourceFile.fileName)) return;
-	const seen = new Set<ts.Declaration>();
 	for (const statement of sourceFile.statements) {
 		if (
 			!ts.isInterfaceDeclaration(statement) &&
@@ -159,6 +148,11 @@ export const noNonserializableModuleState: LintRule = ({
 		)
 			continue;
 		if (!isModuleStateDeclaration(statement)) continue;
-		inspectDeclaration(statement, checker, seen, sourceFile, diagnostics);
+		for (const offendingNode of collectDeclaration(
+			statement,
+			checker,
+			new Set<ts.Declaration>(),
+		))
+			report(sourceFile, offendingNode, diagnostics);
 	}
 };

@@ -40,7 +40,7 @@ export function update(sessionState: { moduleState: { todoist: unknown } }) {
 	it("rejects computed module-state assignments", async () => {
 		const diagnostics = await lintModuleSource(`
 export function update(sessionState: { moduleState: Record<string, unknown> }) {
-	sessionState.moduleState["todoist"] = {};
+	sessionState["moduleState"].pr = {};
 }
 `);
 
@@ -49,9 +49,23 @@ export function update(sessionState: { moduleState: Record<string, unknown> }) {
 		);
 	});
 
-	it("allows root state consumers to assign module slices", async () => {
+	it("rejects root assignments outside sanctioned updater", async () => {
 		const diagnostics = await lintModuleSource(
-			`export function update(state: { moduleState: Record<string, unknown> }) {
+			`export function mutate(state: { moduleState: Record<string, unknown> }) {
+	state.moduleState.pr = {};
+}
+`,
+			"root",
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("allows sanctioned root state updater", async () => {
+		const diagnostics = await lintModuleSource(
+			`export function updateModuleState(state: { moduleState: Record<string, unknown> }) {
 	state.moduleState.pr = {};
 }
 `,

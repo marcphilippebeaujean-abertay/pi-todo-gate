@@ -58,6 +58,37 @@ export interface ModuleState {
 		);
 	});
 
+	it("rejects one diagnostic per property with multiple forbidden types", async () => {
+		const diagnostics = await lintStateSource(`
+interface BadModuleState {
+	value: Promise<void> | Set<string>;
+}
+export interface ModuleState {
+	pr: BadModuleState;
+}
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("rejects non-serializable index and call signatures", async () => {
+		const diagnostics = await lintStateSource(`
+interface BadModuleState {
+	[key: string]: Set<string>;
+	(): void;
+}
+export interface ModuleState {
+	pr: BadModuleState;
+}
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			2,
+		);
+	});
+
 	it("rejects class instances reachable from module state", async () => {
 		const diagnostics = await lintStateSource(`
 class RuntimeHandle {}
