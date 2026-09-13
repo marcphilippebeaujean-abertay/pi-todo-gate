@@ -19,7 +19,8 @@ export type LintRuleId =
 	| "no-root-state-imports-in-modules"
 	| "event-types-outside-events"
 	| "event-types-location"
-	| "no-functions-in-data";
+	| "no-functions-in-data"
+	| "no-event-handler-emits-in-consumers";
 export interface LintDiagnostic {
 	filePath: string;
 	line: number;

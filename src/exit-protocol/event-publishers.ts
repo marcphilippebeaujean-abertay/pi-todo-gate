@@ -1,9 +1,21 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import type { ExitRequest } from "./state.ts";
 import { presentExitActions } from "./user-prompts.ts";
+
+export function publishExitProtocolState(
+	eventHandler: EventHandler,
+	active: boolean,
+): Promise<void> {
+	return eventHandler.moduleStateChangedEvent.emit({
+		moduleId: C.module.exitProtocol,
+		moduleState: { active },
+	});
+}
 
 function addAction(actions: ExitAction[], action: ExitAction): void {
 	const alreadyAdded = actions.some((existing) => existing.id === action.id);

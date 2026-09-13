@@ -6,6 +6,7 @@ import {
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
 import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
+import { publishFooterState } from "./event-publishers.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import {
 	FooterDisplay,
@@ -201,10 +202,7 @@ export class FooterEventConsumer implements FooterModule {
 		const shouldSkip = isUnchanged && !shouldForce;
 		if (shouldSkip) return;
 		this.state = applyFooterUpdate(this.state, parsed);
-		void this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.footer,
-			moduleState: { ...this.getState() },
-		});
+		void publishFooterState(this.eventHandler, { ...this.getState() });
 		this.appendState();
 		this.display.update(this.state, parsed);
 	}

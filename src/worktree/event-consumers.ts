@@ -10,6 +10,10 @@ import {
 import type { SessionState } from "../state.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import {
+	publishWorktreeState,
+	publishWorktreeStatus,
+} from "./event-publishers.ts";
+import {
 	cleanupWorktree,
 	currentWorktreeState,
 	isCurrentWorktree,
@@ -103,21 +107,22 @@ class Worktree implements WorktreeModule {
 	}
 
 	private emitState(gitStatePatch?: Record<string, unknown>): void {
-		void this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.worktree,
-			moduleState: {
+		void publishWorktreeState(
+			this.eventHandler,
+			{
 				...(this.baseline ?? {}),
 				hasUncommittedChanges: this.hasUncommittedChanges,
 			},
-			...(gitStatePatch === undefined ? {} : { gitStatePatch }),
-		});
+			gitStatePatch,
+		);
 	}
 
 	private emitFooterStatus(context: ExtensionContext): void {
-		void this.eventHandler.worktreeStatusEvent.emit({
+		void publishWorktreeStatus(
+			this.eventHandler,
 			context,
-			hasUncommittedChanges: this.hasUncommittedChanges,
-		});
+			this.hasUncommittedChanges,
+		);
 	}
 
 	private async refreshStatus(
@@ -186,11 +191,7 @@ class Worktree implements WorktreeModule {
 		this.context = null;
 		this.baseline = null;
 		this.hasUncommittedChanges = false;
-		void this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.worktree,
-			moduleState: {},
-			gitStatePatch: {},
-		});
+		void publishWorktreeState(this.eventHandler, {}, {});
 	}
 
 	getHasUncommittedChanges(): boolean {

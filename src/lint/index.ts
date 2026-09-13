@@ -11,6 +11,7 @@ import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
 import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts";
 import { noDefaultParameters } from "./rules/no-default-parameters.ts";
 import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state.ts";
+import { noEventHandlerEmitsInConsumers } from "./rules/no-event-handler-emits-in-consumers.ts";
 import { noRootStateImportsInModules } from "./rules/no-extension-state-in-modules.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
@@ -36,6 +37,7 @@ const RULES: readonly LintRule[] = [
 	eventTypesOutsideEvents,
 	eventTypesLocation,
 	noDomainTypesOutsideState,
+	noEventHandlerEmitsInConsumers,
 	noRootStateImportsInModules,
 	noFunctionsInData,
 	repeatedFieldChecks,

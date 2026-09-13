@@ -1,12 +1,12 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
-import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
 	addWorktreeExitAction,
 	createExitRequest,
 	enqueueExitActions,
+	publishExitProtocolState,
 } from "./event-publishers.ts";
 import type {
 	ExitProtocolModule,
@@ -57,20 +57,14 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		const isCurrentActivation =
 			this.context === context && epoch === this.getLifecycleEpoch();
 		if (!isCurrentActivation) return;
-		void this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.exitProtocol,
-			moduleState: { active: true },
-		});
+		void publishExitProtocolState(this.eventHandler, true);
 	}
 
 	deactivate(): void {
 		this.context = null;
 		this.sessionId = null;
 		this.request = null;
-		void this.eventHandler.moduleStateChangedEvent.emit({
-			moduleId: C.module.exitProtocol,
-			moduleState: { active: false },
-		});
+		void publishExitProtocolState(this.eventHandler, false);
 	}
 
 	private onPrMerged(event: PrMergedEvent): void {
