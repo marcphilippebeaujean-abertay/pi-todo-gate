@@ -10,9 +10,12 @@ import type { PrCommandOptions } from "../../src/pr/state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
-import type { SessionRecord } from "../../src/state.ts";
+import { createSessionState, type SessionRecord } from "../../src/state.ts";
 import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
-import type { TodoistOperations } from "../../src/todoist/state.ts";
+import type {
+	TodoistCompletionSnapshot,
+	TodoistOperations,
+} from "../../src/todoist/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 
@@ -23,8 +26,15 @@ function setup(overrides: Record<string, unknown> = {}) {
 	const completeTask = vi.fn(
 		async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
 	);
+	const sessionState = createSessionState();
+	sessionState.session.activeSessionId = "session";
+	sessionState.moduleState.pr.prUrl = PR_URL;
+	sessionState.moduleState.todoist = {
+		taskRef: "task-1",
+		taskName: "Implement feature",
+		taskUrl: "https://app.todoist.com/app/task/task-1",
+	};
 	const session = {
-		sessionId: "session",
 		context: {
 			hasUI: true,
 			cwd: "/repo",
@@ -34,23 +44,12 @@ function setup(overrides: Record<string, unknown> = {}) {
 				theme: { fg: (_color: string, text: string) => text },
 			},
 		},
-		state: {
-			prUrl: PR_URL,
-			taskRef: "task-1",
-			taskName: "Implement feature",
-			taskUrl: "https://app.todoist.com/app/task/task-1",
-		},
 		workRevision: 0,
 		operationGeneration: 0,
 		operationQueue: Promise.resolve(),
 		...sessionOverrides,
 	} as unknown as SessionRecord;
 	const activeSession: SessionRecord | null = session;
-	const sessionState = {
-		sessionId: session.sessionId,
-		gitState: {},
-		moduleState: {},
-	};
 	const runtime = {
 		sessionState,
 		todoist: {
@@ -68,7 +67,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 		completeMergedTask: async (
 			targetSession: typeof session,
 			taskRef: string,
-			_stateSnapshot: typeof session.state,
+			_stateSnapshot: TodoistCompletionSnapshot,
 			_workRevision: number,
 			generation: number,
 		) => {
@@ -95,7 +94,7 @@ async function emit(runtime: TodoistOperations) {
 	const payload = {
 		prUrl: PR_URL,
 		taskMarkedAsCompleted: false,
-		sessionId: session.sessionId,
+		sessionId: runtime.sessionState.session.activeSessionId ?? "",
 		lifecycleEpoch: runtime.getLifecycleEpoch?.() ?? 0,
 	};
 	await runtime.eventHandler.prMergedEvent.emit(payload);
@@ -127,9 +126,9 @@ async function runMergeCommand(
 		exec: runtime.dependencies.exec,
 		getSession: runtime.getSession,
 		getLifecycleEpoch: () => 0,
-		getPrState: () => ({
-			operationGeneration: runtime.getSession()?.operationGeneration,
-		}),
+		getPrState: () => runtime.sessionState.moduleState.pr,
+		getOperationGeneration: () =>
+			runtime.getSession()?.operationGeneration ?? 0,
 		isCurrentOperation: (session, generation) =>
 			session.operationGeneration === generation,
 		enqueueSessionOperation: (_session, operation) =>
@@ -146,8 +145,10 @@ describe("Todoist merge consumer", () => {
 		const events = createSharedEvents();
 		const queue = { enqueue: vi.fn(() => Promise.resolve(undefined)) };
 		const lifecycleEpoch = { value: 1 };
-		const sessionA = { sessionId: "session-a" } as SessionRecord;
-		const sessionB = { sessionId: "session-b" } as SessionRecord;
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session-a";
+		const sessionA = {} as SessionRecord;
+		const sessionB = {} as SessionRecord;
 		let activeSession: SessionRecord | null = sessionA;
 		let releaseSubscriber!: () => void;
 		const subscriberBlocked = new Promise<void>((resolve) => {
@@ -155,6 +156,7 @@ describe("Todoist merge consumer", () => {
 		});
 		events.prMergedEvent.subscribe(async () => subscriberBlocked);
 		registerTodoistMergeConsumer({
+			sessionState,
 			eventHandler: events,
 			getSession: () => activeSession,
 			getLifecycleEpoch: () => lifecycleEpoch.value,
@@ -164,7 +166,7 @@ describe("Todoist merge consumer", () => {
 		const delivery = events.prMergedEvent.emit({
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
-			sessionId: sessionA.sessionId,
+			sessionId: "session-a",
 			lifecycleEpoch: 1,
 		});
 		await Promise.resolve();
@@ -246,7 +248,8 @@ describe("Todoist merge consumer", () => {
 	});
 
 	it("does not prompt without a task, UI, or after completion failure", async () => {
-		const noTask = setup({ state: { prUrl: PR_URL } });
+		const noTask = setup();
+		noTask.runtime.sessionState.moduleState.todoist = {};
 		registerTodoistMergeConsumer(noTask.runtime);
 		await emit(noTask.runtime);
 		expect(noTask.confirm).not.toHaveBeenCalled();
@@ -312,24 +315,21 @@ describe("Todoist merge consumer", () => {
 				theme: { fg: (_color: string, text: string) => text },
 			},
 		} as unknown as ExtensionCommandContext;
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		sessionState.moduleState.todoist = {
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			taskUrl: "https://app.todoist.com/app/task/task-1",
+		};
 		const session = {
-			sessionId: "session",
 			context,
-			state: {
-				prUrl: PR_URL,
-				taskRef: "task-1",
-				taskName: "Implement feature",
-				taskUrl: "https://app.todoist.com/app/task/task-1",
-			},
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as SessionRecord;
-		const sessionState = {
-			sessionId: session.sessionId,
-			gitState: {},
-			moduleState: {},
-		};
+
 		const runtime = {
 			sessionState,
 			todoist: {
@@ -347,7 +347,7 @@ describe("Todoist merge consumer", () => {
 			completeMergedTask: async (
 				targetSession: typeof session,
 				taskRef: string,
-				_stateSnapshot: typeof session.state,
+				_stateSnapshot: TodoistCompletionSnapshot,
 				_workRevision: number,
 				generation: number,
 			) => {

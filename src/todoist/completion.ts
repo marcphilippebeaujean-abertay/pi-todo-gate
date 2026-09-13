@@ -3,18 +3,21 @@ import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { enqueueSessionOperation } from "../shared/session-operations.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
-import { applyStatePatch } from "../shared/session-state.ts";
 import { createClient } from "./client.ts";
 import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
 } from "./event-publishers.ts";
-import type { TodoistOperations } from "./state.ts";
+import type {
+	TodoistCompletionSnapshot,
+	TodoistOperations,
+	TodoistState,
+} from "./state.ts";
 
 function isCurrentCompletion(
 	operations: TodoistOperations,
 	session: SessionRecord,
-	stateSnapshot: SessionRecord["state"],
+	stateSnapshot: TodoistCompletionSnapshot,
 	workRevision: number,
 	operationGeneration: number,
 ): boolean {
@@ -22,8 +25,11 @@ function isCurrentCompletion(
 	const isCurrentGeneration =
 		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
-	const isCurrentTask = session.state.taskRef === stateSnapshot.taskRef;
-	const isCurrentPr = session.state.prUrl === stateSnapshot.prUrl;
+	const isCurrentTask =
+		operations.sessionState.moduleState.todoist.taskRef ===
+		stateSnapshot.taskRef;
+	const isCurrentPr =
+		operations.sessionState.moduleState.pr.prUrl === stateSnapshot.prUrl;
 	const isCurrentSessionAndRevision = isCurrentSession && isCurrentRevision;
 	const isCurrentSessionRevisionAndGeneration =
 		isCurrentSessionAndRevision && isCurrentGeneration;
@@ -35,21 +41,24 @@ function recordSuccessfulCompletion(
 	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
-): void {
-	operations.replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			taskRef: undefined,
-			taskName: undefined,
-			taskUrl: undefined,
-			mergeCompletedAt: new Date().toISOString(),
-			todoistCompletionAttemptedAt: new Date().toISOString(),
-		}),
-	);
-	operations.appendState(session.state);
-	operations.refreshFooterStatuses(session);
-	void operations.emitState(session);
-	notifyCompletionSuccess(ctx);
+): Promise<void> {
+	const todoistState: TodoistState = {
+		...operations.sessionState.moduleState.todoist,
+		taskRef: undefined,
+		taskName: undefined,
+		taskUrl: undefined,
+		todoistCompletionAttemptedAt: new Date().toISOString(),
+	};
+	const mergeCompletedAt = new Date().toISOString();
+	return operations
+		.updateTodoistState(todoistState, {
+			persist: true,
+			gitStatePatch: { mergeCompletedAt },
+		})
+		.then(() => {
+			operations.refreshFooterStatuses(session);
+			notifyCompletionSuccess(ctx);
+		});
 }
 
 function recordFailedCompletion(ctx: ExtensionContext): void {
@@ -61,7 +70,7 @@ async function completeMergedTaskNow(
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: SessionRecord["state"],
+	stateSnapshot: TodoistCompletionSnapshot,
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {
@@ -83,7 +92,7 @@ async function completeMergedTaskNow(
 		);
 		const isStaleSuccess = !isCurrent();
 		if (isStaleSuccess) return C.exit.failed;
-		recordSuccessfulCompletion(operations, session, ctx);
+		await recordSuccessfulCompletion(operations, session, ctx);
 		return C.exit.completed;
 	} catch {
 		const isStaleFailure = !isCurrent();
@@ -98,7 +107,7 @@ export async function completeMergedTask(
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
-	stateSnapshot: SessionRecord["state"],
+	stateSnapshot: TodoistCompletionSnapshot,
 	workRevision: number,
 	operationGeneration: number,
 ): Promise<ExitActionResult> {

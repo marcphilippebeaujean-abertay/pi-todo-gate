@@ -6,6 +6,7 @@ import type { ClaimWorkerRequest } from "../../src/herdr/module.ts";
 import {
 	CLAIM_WORKER_RESPONSE_TEMPLATE,
 	type CommandRunner,
+	herdrStateDescriptor,
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
 } from "../../src/herdr/module.ts";
@@ -148,6 +149,22 @@ function emitFailure(
 		workerFailed: true,
 	});
 }
+
+describe("Herdr state ownership", () => {
+	it("restores only serializable Herdr claim state", () => {
+		expect(
+			herdrStateDescriptor.restore({
+				herdrClaimReturnedSuccessfully: "true",
+			}),
+		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
+		expect(
+			herdrStateDescriptor.restore({
+				pending: Promise.resolve(),
+				seen: new Set<string>(),
+			}),
+		).toEqual({});
+	});
+});
 
 describe("background Herdr tab claim", () => {
 	it("derives worker response instructions from typed response template", () => {

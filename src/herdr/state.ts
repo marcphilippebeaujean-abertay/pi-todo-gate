@@ -1,9 +1,34 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
+	JsonValue,
+	ModuleStateDescriptor,
+} from "../session-state-persistence.ts";
+import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
+import type { HerdrModuleState } from "../state.ts";
 import type { FooterEventSink, HerdrEvents } from "./events.ts";
+
+export type HerdrState = HerdrModuleState;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function restoreHerdrState(value: unknown): HerdrState {
+	if (!isRecord(value)) return {};
+	const marker = value.herdrClaimReturnedSuccessfully;
+	if (marker !== undefined && typeof marker !== "string") return {};
+	return marker === undefined ? {} : { herdrClaimReturnedSuccessfully: marker };
+}
+
+export const herdrStateDescriptor: ModuleStateDescriptor<"herdr"> = {
+	id: "herdr",
+	createInitialState: () => ({}),
+	restore: restoreHerdrState,
+	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
+};
 
 export interface ClaimWorkerResponseData {
 	tabName: string;

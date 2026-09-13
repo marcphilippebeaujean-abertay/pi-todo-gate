@@ -1,6 +1,5 @@
 import { spawnExec } from "../shared/command.ts";
 import { inspectProject } from "../shared/project.ts";
-import { applyStatePatch } from "../shared/session-state.ts";
 import {
 	CLAIM,
 	COMPLETED,
@@ -19,8 +18,10 @@ import type {
 	ClaimTaskData,
 	MergeRequest,
 	TaskClaimWorkerResult,
+	TodoistCompletionSnapshot,
 	TodoistOperations,
 	TodoistSession,
+	TodoistState,
 } from "./state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
@@ -38,23 +39,31 @@ function isCurrentMergeEvent(
 ): boolean {
 	const currentEpoch = operations.getLifecycleEpoch?.();
 	const isCurrentSession = isSessionRecord(operations, session);
-	const isSameSession = event.sessionId === session.sessionId;
+	const isSameSession =
+		event.sessionId === operations.sessionState.session.activeSessionId;
 	const isSameEpoch =
 		currentEpoch === undefined || event.lifecycleEpoch === currentEpoch;
 	const isCurrentSessionAndEvent = isCurrentSession && isSameSession;
 	return isCurrentSessionAndEvent && isSameEpoch;
 }
 
-function mergeState(session: TodoistSession): {
+function mergeState(
+	operations: TodoistOperations,
+	session: TodoistSession,
+): {
 	taskName: string;
-	stateSnapshot: TodoistSession["state"];
+	stateSnapshot: TodoistCompletionSnapshot;
 	workRevision: number;
 	operationGeneration: number;
 } {
-	const taskName = session.state.taskName ?? session.state.taskRef ?? "";
+	const todoistState = operations.sessionState.moduleState.todoist;
+	const taskName = todoistState.taskName ?? todoistState.taskRef ?? "";
 	return {
 		taskName,
-		stateSnapshot: structuredClone(session.state),
+		stateSnapshot: {
+			taskRef: todoistState.taskRef,
+			prUrl: operations.sessionState.moduleState.pr.prUrl,
+		},
 		workRevision: session.workRevision,
 		operationGeneration: session.operationGeneration,
 	};
@@ -72,7 +81,7 @@ function isCurrentEvent(
 	if (!isPending) return false;
 	const isExpectedWorker = operation.session === session;
 	if (!isExpectedWorker) return false;
-	return event.sessionId === session.sessionId;
+	return event.sessionId === operations.sessionState.session.activeSessionId;
 }
 
 function claimTaskData(
@@ -91,22 +100,23 @@ function claimTaskData(
 	return { ...taskData, id: claimId };
 }
 
-function persistClaim(
+async function persistClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
 	taskData: ClaimTaskData,
-): void {
-	operations.replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			taskRef: taskData.id,
-			taskName: taskData.title,
-			taskUrl: `${TASK_URL}${taskData.id}`,
-			mergeCompletedAt: undefined,
-			todoistCompletionAttemptedAt: undefined,
-		}),
-	);
-	operations.appendState(session.state, session.allowPrDiscovery === false);
+): Promise<void> {
+	const current = operations.sessionState.moduleState.todoist;
+	const nextState: TodoistState = {
+		...current,
+		taskRef: taskData.id,
+		taskName: taskData.title,
+		taskUrl: `${TASK_URL}${taskData.id}`,
+		todoistCompletionAttemptedAt: undefined,
+	};
+	await operations.updateTodoistState(nextState, {
+		persist: true,
+		gitStatePatch: { mergeCompletedAt: undefined },
+	});
 	operations.refreshFooterStatuses(session);
 	void operations.emitState(session);
 	notifyTaskAssigned(session.context);
@@ -125,8 +135,9 @@ export function handleTaskClaimResult(
 	const hasClaim = taskData !== undefined;
 	if (hasClaim) {
 		operations.todoist.taskClaim.completed = true;
-		const canPersist = session.state.taskRef === undefined;
-		if (canPersist) persistClaim(operations, session, taskData);
+		const canPersist =
+			operations.sessionState.moduleState.todoist.taskRef === undefined;
+		if (canPersist) void persistClaim(operations, session, taskData);
 		return;
 	}
 	operations.todoist.taskClaim.completed = false;
@@ -151,11 +162,11 @@ export async function runTaskClaim(
 		const worker =
 			operations.dependencies.taskClaimWorker ?? createTaskClaimWorker(exec);
 		const result = await worker({
-			sessionId: session.sessionId,
+			sessionId: operations.sessionState.session.activeSessionId ?? "",
 			prompt,
 			cwd: session.context.cwd,
 			projectRef: session.project.todoistProjectRef,
-			prRef: session.state.prUrl ?? null,
+			prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 			worktree,
 		});
 		handleTaskClaimResult(operations, session, {
@@ -165,8 +176,11 @@ export async function runTaskClaim(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		handleTaskClaimResult(operations, session, {
-			sessionId: session.sessionId,
-			result: errorResult(session.sessionId, message || UNKNOWN_ERROR),
+			sessionId: operations.sessionState.session.activeSessionId ?? "",
+			result: errorResult(
+				operations.sessionState.session.activeSessionId ?? "",
+				message || UNKNOWN_ERROR,
+			),
 		});
 	}
 }
@@ -177,7 +191,8 @@ export function maybeAnalyzeTaskClaim(
 	prompt: string,
 ): void {
 	const canStart =
-		operations.getSession() === session && session.state.taskRef === undefined;
+		operations.getSession() === session &&
+		operations.sessionState.moduleState.todoist.taskRef === undefined;
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
 	const operation = operations.todoist.taskClaim;
@@ -200,10 +215,10 @@ async function consumeMergedEvent(
 	if (!isCurrentMerge) return;
 	const hasInteractiveUi = session.context.hasUI;
 	if (!hasInteractiveUi) return;
-	const taskRef = session.state.taskRef;
+	const taskRef = operations.sessionState.moduleState.todoist.taskRef;
 	if (taskRef === undefined) return;
 	const { taskName, stateSnapshot, workRevision, operationGeneration } =
-		mergeState(session);
+		mergeState(operations, session);
 	void operations.promptQueue
 		.enqueue(async (isCurrent) => {
 			const isCurrentBeforePrompt =

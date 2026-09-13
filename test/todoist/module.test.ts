@@ -31,11 +31,9 @@ describe("Todoist module ownership", () => {
 		const newContext = { cwd: "/new" } as never;
 		const oldSession = {
 			context: oldContext,
-			state: {},
 		} as unknown as TodoistSession;
 		const newSession = {
 			context: newContext,
-			state: {},
 		} as unknown as TodoistSession;
 		const oldActivation = events.sessionActivatedEvent.emit({
 			context: oldContext,
@@ -87,25 +85,30 @@ describe("Todoist module projection", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
+		const sessionState = createSessionState();
+		sessionState.moduleState.todoist = {
+			taskRef: "42",
+			taskName: "Implement feature",
+			taskUrl: "https://app.todoist.com/app/task/42",
+		};
 		const module = createTodoistModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
-			sessionState: createSessionState(),
+			sessionState,
 		});
-		const session = {
-			state: {
-				taskRef: "42",
-				taskName: "Implement feature",
-				taskUrl: "https://app.todoist.com/app/task/42",
-			},
-		} as never;
+		const session = {} as TodoistSession;
 
 		await module.syncSessionState(session);
 
 		expect(updates).toEqual([
 			expect.objectContaining({
 				moduleId: "todoist",
-				moduleState: expect.objectContaining({ taskRef: "42" }),
+				moduleState: {
+					taskRef: "42",
+					taskName: "Implement feature",
+					taskUrl: "https://app.todoist.com/app/task/42",
+				},
+				persist: false,
 			}),
 		]);
 	});
