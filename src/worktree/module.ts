@@ -22,9 +22,6 @@ export type {
 
 export function createWorktreeModule(
 	options: WorktreeModuleOptions,
-): WorktreeModule;
-export function createWorktreeModule(
-	options: WorktreeModuleOptions,
 ): WorktreeModule {
 	return createWorktreeConsumer(options);
 }

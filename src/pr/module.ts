@@ -16,7 +16,7 @@ import { findOpenPr, isGithubPrAvailable } from "./git.ts";
 import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import type {
 	OriginRequest,
-	PrCommandDependencies,
+	PrCommandOptions,
 	PrModule,
 	PrModuleDependencies,
 	PrModuleOptions,
@@ -49,8 +49,6 @@ function prStateFromSession(
 		discoveryDisabled: !session.allowPrDiscovery,
 		discoveryTestedUrls: [...session.prDiscoveryTestedUrls],
 		operationGeneration,
-		mergeCompletedAt: session.state.mergeCompletedAt,
-		todoistCompletionAttemptedAt: session.state.todoistCompletionAttemptedAt,
 	};
 }
 
@@ -58,8 +56,6 @@ function stateFromWorkState(state: PrWorkState): PrState {
 	return {
 		remoteOrigin: state.remoteOrigin,
 		prUrl: state.prUrl,
-		mergeCompletedAt: state.mergeCompletedAt,
-		todoistCompletionAttemptedAt: state.todoistCompletionAttemptedAt,
 	};
 }
 
@@ -68,7 +64,7 @@ class PrModuleImpl implements PrModule {
 	private readonly pi: ExtensionAPI | undefined;
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
-	private readonly getSession: () => PrSession | null;
+	private currentSession: PrSession | null = null;
 	private readonly dependencies: PrModuleDependencies;
 	private readonly getLifecycleEpoch: () => number;
 	private state: PrState = {};
@@ -79,22 +75,25 @@ class PrModuleImpl implements PrModule {
 		this.pi = options.pi;
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		this.getSession = options.getSession;
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.dependencies = options.dependencies ?? {};
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
 		);
-		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) => {
-			const session = this.getSession();
-			const hasSession = session !== null;
-			const isCurrentContext = hasSession && session.context === context;
-			if (!isCurrentContext) return;
-			return this.activateSession(session);
-		});
-		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
-			this.deactivateSession(),
+		this.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, session }) => {
+				const hasSession = session !== undefined;
+				const isCurrentContext = hasSession && session.context === context;
+				const canActivate = isCurrentContext && session !== undefined;
+				if (!canActivate) return;
+				this.currentSession = session;
+				return this.activateSession(session);
+			},
 		);
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() => {
+			this.currentSession = null;
+			this.deactivateSession();
+		});
 		this.eventHandler.prMergedEvent.subscribe((event) =>
 			this.recordMerge(event.prUrl),
 		);
@@ -106,7 +105,7 @@ class PrModuleImpl implements PrModule {
 
 	registerStateTool(pi: ExtensionAPI): void {
 		installStateTool(pi, {
-			getSession: this.getSession,
+			getSession: () => this.currentSession,
 			appendState: this.appendPersistedState.bind(this),
 			replaceSessionState: this.replaceSessionState.bind(this),
 			refreshFooterStatuses: () => undefined,
@@ -115,6 +114,7 @@ class PrModuleImpl implements PrModule {
 	}
 
 	async activateSession(session: PrSession): Promise<void> {
+		this.currentSession = session;
 		this.generation = Math.max(
 			this.generation + 1,
 			this.state.operationGeneration ?? 0,
@@ -127,14 +127,12 @@ class PrModuleImpl implements PrModule {
 	}
 
 	deactivateSession(): void {
+		this.currentSession = null;
 		this.generation = Math.max(
 			this.generation + 1,
 			this.state.operationGeneration ?? 0,
 		);
-		this.state = {
-			...this.state,
-			operationGeneration: this.generation,
-		};
+		this.state = { operationGeneration: this.generation };
 	}
 
 	async syncSessionState(session: PrSession): Promise<void> {
@@ -229,7 +227,7 @@ class PrModuleImpl implements PrModule {
 	}
 
 	async persistPrIfAvailable(text: string): Promise<void> {
-		const session = this.getSession();
+		const session = this.currentSession;
 		const hasSession = session !== null;
 		if (!hasSession) return;
 		const canDiscover = session.allowPrDiscovery;
@@ -364,7 +362,7 @@ class PrModuleImpl implements PrModule {
 		ctx: ExtensionContext,
 		messages: string[],
 	): Promise<void> {
-		const session = this.getSession();
+		const session = this.currentSession;
 		const operationGeneration =
 			this.state.operationGeneration ?? this.generation;
 		const discoveredOrigin =
@@ -456,12 +454,12 @@ class PrModuleImpl implements PrModule {
 		session.state = nextState;
 	}
 
-	private commandDependencies(): PrCommandDependencies {
+	private commandDependencies(): PrCommandOptions {
 		return {
 			sessionState: this.sessionState,
 			eventHandler: this.eventHandler,
 			exec: this.dependencies.exec,
-			getSession: this.getSession,
+			getSession: () => this.currentSession,
 			getPrState: () => this.state,
 			isCurrentOperation: this.isCurrentOperation.bind(this),
 			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
@@ -489,7 +487,7 @@ class PrModuleImpl implements PrModule {
 		ctx: ExtensionContext,
 	): Promise<void> {
 		await handlePrToolResult(
-			this.getSession,
+			() => this.currentSession,
 			this.sessionState,
 			this.state,
 			event,
@@ -549,7 +547,7 @@ class PrModuleImpl implements PrModule {
 		session: PrSession,
 		identity: PrSessionIdentity,
 	): boolean {
-		const activeSession = this.getSession();
+		const activeSession = this.currentSession;
 		const sameSession = activeSession?.sessionId === session.sessionId;
 		const sameRootSession = this.sessionState.sessionId === session.sessionId;
 		const sameGeneration =

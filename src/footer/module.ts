@@ -55,8 +55,6 @@ export function updateWorkingTreeStatus(
 	if (hasStatusChanged) refreshFooterStatuses(footer, session);
 }
 
-export function createFooterModule(options: FooterModuleOptions): FooterModule;
-
 export function createFooterModule(options: FooterModuleOptions): FooterModule {
 	return new FooterEventConsumer(options);
 }

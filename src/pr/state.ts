@@ -21,7 +21,7 @@ export interface PrWorkState {
 
 export type PrSession = SessionRecord;
 
-export interface PrCommandDependencies {
+export interface PrCommandOptions {
 	readonly sessionState: SessionState;
 	readonly eventHandler: EventHandler;
 	readonly exec?: Exec;
@@ -60,7 +60,6 @@ export interface PrModuleOptions {
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getSession: () => PrSession | null;
 	getLifecycleEpoch?: () => number;
 	dependencies?: PrModuleDependencies;
 }
@@ -127,8 +126,6 @@ export interface PrState {
 	discoveryDisabled?: boolean;
 	discoveryTestedUrls?: string[];
 	operationGeneration?: number;
-	mergeCompletedAt?: string;
-	todoistCompletionAttemptedAt?: string;
 }
 export interface ParsedMerge {
 	kind: "git" | "gh";

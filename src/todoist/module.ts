@@ -24,14 +24,15 @@ import {
 	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
-	TodoistDependencies,
 	TodoistModule,
 	TodoistModuleOptions,
+	TodoistOperations,
 	TodoistSession,
 } from "./state.ts";
 
 class TodoistModuleImpl implements TodoistModule {
 	private readonly pi: TodoistModuleOptions["pi"];
+	private currentSession: TodoistSession | null = null;
 	readonly taskClaim = {
 		pending: false,
 		completed: false,
@@ -41,21 +42,24 @@ class TodoistModuleImpl implements TodoistModule {
 
 	constructor(private readonly options: TodoistModuleOptions) {
 		this.pi = options.pi;
-		this.options.eventHandler.sessionActivatedEvent.subscribe(({ context }) => {
-			this.resetTaskClaim();
-			const session = this.options.getSession?.();
-			const hasSession = session !== undefined && session !== null;
-			const isCurrentContext = hasSession && session.context === context;
-			const canSync = isCurrentContext && session !== undefined;
-			if (!canSync) return;
-			void this.syncSessionState(session);
-		});
+		this.options.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, session }) => {
+				this.resetTaskClaim();
+				const hasSession = session !== undefined;
+				const isCurrentContext = hasSession && session.context === context;
+				const canActivate = isCurrentContext && session !== undefined;
+				if (!canActivate) return;
+				this.currentSession = session;
+				void this.syncSessionState(session);
+			},
+		);
 		this.options.eventHandler.sessionResetEvent.subscribe(() =>
 			this.resetTaskClaim(),
 		);
-		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
-			this.resetTaskClaim(),
-		);
+		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() => {
+			this.currentSession = null;
+			this.resetTaskClaim();
+		});
 	}
 
 	async syncSessionState(session: TodoistSession): Promise<void> {
@@ -99,12 +103,12 @@ class TodoistModuleImpl implements TodoistModule {
 		session.workRevision += 1;
 	}
 
-	private runtime(): TodoistDependencies {
+	private operations(): TodoistOperations {
 		const dependencies = this.options.dependencies ?? {};
 		const sessionState = this.options.sessionState;
-		const runtime = {
+		const operations = {
 			sessionState,
-			getSession: this.options.getSession ?? (() => null),
+			getSession: () => this.currentSession,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
 			dependencies,
@@ -114,9 +118,9 @@ class TodoistModuleImpl implements TodoistModule {
 			refreshFooterStatuses: () => undefined,
 			replaceSessionState: this.replaceSessionState.bind(this),
 			completeMergedTask: undefined,
-		} as TodoistDependencies;
-		if (runtime.completeMergedTask === undefined)
-			runtime.completeMergedTask = (
+		} as TodoistOperations;
+		if (operations.completeMergedTask === undefined)
+			operations.completeMergedTask = (
 				session,
 				taskRef,
 				snapshot,
@@ -124,7 +128,7 @@ class TodoistModuleImpl implements TodoistModule {
 				generation,
 			) =>
 				completeMergedTask(
-					runtime,
+					operations,
 					session,
 					session.context,
 					taskRef,
@@ -132,31 +136,28 @@ class TodoistModuleImpl implements TodoistModule {
 					revision,
 					generation,
 				);
-		return runtime;
+		return operations;
 	}
 
 	register(): void {
 		const alreadyRegistered = this.registered;
 		if (alreadyRegistered) return;
-		const runtime = this.runtime();
-		const hasRuntime = runtime !== null;
-		const shouldSkipRegistration = !hasRuntime;
+		const operations = this.operations();
+		const hasOperations = operations !== null;
+		const shouldSkipRegistration = !hasOperations;
 		if (shouldSkipRegistration) return;
 		this.registered = true;
-		registerTodoistMergeConsumer(runtime);
+		registerTodoistMergeConsumer(operations);
 	}
 
 	maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void {
-		const runtime = this.runtime();
-		const hasRuntime = runtime !== null;
-		if (!hasRuntime) return;
-		analyzeTaskClaim(runtime, session, prompt);
+		const operations = this.operations();
+		const hasOperations = operations !== null;
+		if (!hasOperations) return;
+		analyzeTaskClaim(operations, session, prompt);
 	}
 }
 
-export function createTodoistModule(
-	options: TodoistModuleOptions,
-): TodoistModule;
 export function createTodoistModule(
 	options: TodoistModuleOptions,
 ): TodoistModule {

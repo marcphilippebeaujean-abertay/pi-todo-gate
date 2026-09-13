@@ -263,7 +263,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState: createSessionState(),
-			getSession: () => null,
 			dependencies: { exec },
 		});
 
@@ -322,7 +321,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getSession: () => session,
 		});
 		await module.activateSession(session);
 		expect(updates.at(-1)).toEqual(
@@ -421,7 +419,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getSession: () => session,
 			dependencies: { exec },
 		});
 		await module.activateSession(session);
@@ -476,7 +473,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getSession: () => session,
 			dependencies: { exec },
 		});
 		await module.activateSession(session);
@@ -522,7 +518,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getSession: () => session,
 			dependencies: { exec },
 		});
 		await module.activateSession(session);
@@ -578,7 +573,6 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getSession: () => session,
 			dependencies: { exec },
 		});
 		await module.activateSession(session);

@@ -10,6 +10,23 @@ const BASH_COMMAND = "command";
 const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 
+function isCurrentPrContext(
+	getSession: () => PrSession | null,
+	session: PrSession,
+	context: ExtensionContext,
+): boolean {
+	const currentSession = getSession();
+	const sessionContext = session.context;
+	return currentSession === session && sessionContext === context;
+}
+
+function bashCommand(event: ToolResultEvent): string {
+	const commandValue = event.input[BASH_COMMAND];
+	return typeof commandValue === STRING_TYPE
+		? String(commandValue)
+		: C.worktree.empty;
+}
+
 export function isCurrentMerge(
 	sessionState: { sessionId: string | null },
 	prState: PrState,
@@ -30,6 +47,32 @@ export function isCurrentMerge(
 	return activeCurrentOperation && sameMergeIdentity;
 }
 
+async function emitCurrentMerge(
+	getSession: () => PrSession | null,
+	sessionState: { sessionId: string | null },
+	prState: PrState,
+	session: PrSession,
+	context: ExtensionContext,
+	workRevision: number,
+	operationGeneration: number,
+	taskRef: string | undefined,
+	prUrl: string,
+	emitMerged: (prUrl: string) => Promise<void>,
+): Promise<void> {
+	const isCurrentContext = isCurrentPrContext(getSession, session, context);
+	if (!isCurrentContext) return;
+	const currentMerge = isCurrentMerge(
+		sessionState,
+		prState,
+		session,
+		workRevision,
+		operationGeneration,
+		taskRef,
+		prUrl,
+	);
+	if (currentMerge) await emitMerged(prUrl);
+}
+
 export async function handlePrToolResult(
 	getSession: () => PrSession | null,
 	sessionState: { sessionId: string | null },
@@ -43,12 +86,12 @@ export async function handlePrToolResult(
 	const shouldIgnoreEvent = event.isError || event.toolName !== C.tool.bash;
 	if (shouldIgnoreEvent) return;
 	const session = getSession();
-	if (session === null) return;
-	const commandValue = event.input[BASH_COMMAND];
-	const command =
-		typeof commandValue === STRING_TYPE
-			? String(commandValue)
-			: C.worktree.empty;
+	const hasSession = session !== null;
+	const hasCurrentContext =
+		hasSession && isCurrentPrContext(getSession, session, ctx);
+	const canHandleSession = hasCurrentContext && session !== null;
+	if (!canHandleSession) return;
+	const command = bashCommand(event);
 	const isGitMutation = GIT_MUTATION_RE.test(command);
 	if (isGitMutation) session.workChanged = true;
 	const prUrl = session.state.prUrl;
@@ -64,14 +107,16 @@ export async function handlePrToolResult(
 		claimedPrUrl,
 	);
 	if (!isPinnedPr) return;
-	const currentMerge = isCurrentMerge(
+	await emitCurrentMerge(
+		getSession,
 		sessionState,
 		prState,
 		session,
+		ctx,
 		mergeWorkRevision,
 		mergeOperationGeneration,
 		claimedTaskRef,
 		claimedPrUrl,
+		emitMerged,
 	);
-	if (currentMerge) await emitMerged(claimedPrUrl);
 }

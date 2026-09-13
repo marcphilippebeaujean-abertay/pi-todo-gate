@@ -16,19 +16,19 @@ import {
 	notifyNoPr,
 	notifyNoUi,
 } from "./notifications.ts";
-import type { PrCommandDependencies, PrSession } from "./state.ts";
+import type { PrCommandOptions, PrSession } from "./state.ts";
 import { confirmMerge } from "./user-prompts.ts";
 
 function currentSession(
-	runtime: PrCommandDependencies,
+	dependencies: PrCommandOptions,
 	session: PrSession,
 	generation: number,
 ): boolean {
-	const activeSession = runtime.getSession();
+	const activeSession = dependencies.getSession();
 	const current =
 		activeSession?.sessionId === session.sessionId &&
-		runtime.isCurrentOperation(session, generation);
-	return runtime.sessionState.sessionId === session.sessionId && current;
+		dependencies.isCurrentOperation(session, generation);
+	return dependencies.sessionState.sessionId === session.sessionId && current;
 }
 
 function failureDetail(stderr: string): string {
@@ -36,20 +36,28 @@ function failureDetail(stderr: string): string {
 }
 
 async function mergeNow(
-	runtime: PrCommandDependencies,
+	dependencies: PrCommandOptions,
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
 	generation: number,
 ): Promise<boolean> {
-	const isCurrentBeforeCommand = currentSession(runtime, session, generation);
+	const isCurrentBeforeCommand = currentSession(
+		dependencies,
+		session,
+		generation,
+	);
 	if (!isCurrentBeforeCommand) return false;
-	const exec = runtime.exec ?? spawnExec;
+	const exec = dependencies.exec ?? spawnExec;
 	let result: CommandResult;
 	try {
 		result = await mergePinnedPr(exec, session.context.cwd, prUrl);
 	} catch (error) {
-		const isCurrentAfterFailure = currentSession(runtime, session, generation);
+		const isCurrentAfterFailure = currentSession(
+			dependencies,
+			session,
+			generation,
+		);
 		if (!isCurrentAfterFailure) return false;
 		const detail = failureDetail(
 			error instanceof Error ? error.message : String(error),
@@ -57,7 +65,11 @@ async function mergeNow(
 		notifyMergeFailure(ctx, detail);
 		return false;
 	}
-	const isCurrentAfterCommand = currentSession(runtime, session, generation);
+	const isCurrentAfterCommand = currentSession(
+		dependencies,
+		session,
+		generation,
+	);
 	if (!isCurrentAfterCommand) return false;
 	const commandFailed = result.code !== 0;
 	if (commandFailed) {
@@ -68,7 +80,7 @@ async function mergeNow(
 }
 
 async function confirmAndMerge(
-	runtime: PrCommandDependencies,
+	dependencies: PrCommandOptions,
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
@@ -76,16 +88,20 @@ async function confirmAndMerge(
 ): Promise<boolean> {
 	const confirmed = await confirmMerge(ctx, prUrl);
 	if (!confirmed) return false;
-	const isCurrentAfterConfirm = currentSession(runtime, session, generation);
+	const isCurrentAfterConfirm = currentSession(
+		dependencies,
+		session,
+		generation,
+	);
 	if (!isCurrentAfterConfirm) return false;
-	return mergeNow(runtime, session, ctx, prUrl, generation);
+	return mergeNow(dependencies, session, ctx, prUrl, generation);
 }
 
 async function runMergeProtocol(
-	runtime: PrCommandDependencies,
+	dependencies: PrCommandOptions,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
-	const session = runtime.getSession();
+	const session = dependencies.getSession();
 	const hasSession = session !== null;
 	if (!hasSession) {
 		notifyInactive(ctx);
@@ -102,26 +118,26 @@ async function runMergeProtocol(
 		notifyNoPr(ctx);
 		return;
 	}
-	const generation = runtime.getPrState().operationGeneration ?? 0;
-	const enqueue = runtime.enqueueSessionOperation;
+	const generation = dependencies.getPrState().operationGeneration ?? 0;
+	const enqueue = dependencies.enqueueSessionOperation;
 	const merged = await enqueue(
 		session,
-		confirmAndMerge.bind(null, runtime, session, ctx, prUrl, generation),
+		confirmAndMerge.bind(null, dependencies, session, ctx, prUrl, generation),
 	);
-	const isCurrentAfterMerge = currentSession(runtime, session, generation);
+	const isCurrentAfterMerge = currentSession(dependencies, session, generation);
 	const shouldStop = !merged || !isCurrentAfterMerge;
 	if (shouldStop) return;
-	await runtime.eventHandler.prMergedEvent.emit({
+	await dependencies.eventHandler.prMergedEvent.emit({
 		prUrl,
 		taskMarkedAsCompleted: false,
 	});
-	const isCurrentAfterEmit = currentSession(runtime, session, generation);
+	const isCurrentAfterEmit = currentSession(dependencies, session, generation);
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
 }
 
 export function register(
 	pi: ExtensionAPI,
-	runtime: PrCommandDependencies,
+	dependencies: PrCommandOptions,
 ): void {
 	pi.on("resources_discover", () => ({
 		skillPaths: [mergeProtocolSkillPath],
@@ -129,6 +145,6 @@ export function register(
 	if (typeof pi.registerCommand !== "function") return;
 	pi.registerCommand(MERGE_PROTOCOL_COMMAND, {
 		description: "Merge the active session's pinned pull request",
-		handler: (_args, ctx) => runMergeProtocol(runtime, ctx),
+		handler: (_args, ctx) => runMergeProtocol(dependencies, ctx),
 	});
 }

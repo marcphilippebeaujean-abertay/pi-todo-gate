@@ -6,7 +6,11 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { GitState, SessionStateSnapshot } from "./session-state.ts";
+import type {
+	GitState,
+	SessionRecord,
+	SessionStateSnapshot,
+} from "./session-state.ts";
 
 export type {
 	BeforeAgentStartEvent,
@@ -98,6 +102,7 @@ export type SessionResetEvent = undefined;
 export interface SessionActivatedEvent {
 	context: ExtensionContext;
 	previousSessionFile?: string;
+	session?: SessionRecord;
 }
 export type SessionDeactivatedEvent = undefined;
 

@@ -20,9 +20,6 @@ export * from "./user-prompts.ts";
 
 export function createExitProtocolModule(
 	options: ExitProtocolModuleOptions,
-): ExitProtocolModule;
-export function createExitProtocolModule(
-	options: ExitProtocolModuleOptions,
 ): ExitProtocolModule {
 	return new ExitProtocolConsumer(options);
 }

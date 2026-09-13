@@ -1,33 +1,34 @@
 # Task 8 Report: Final Architecture and Behavior Gate
 
-## Follow-up fixes
+## Whole-branch review fixes
 
-- Lifecycle startup/deactivation now dispatches through typed `sessionActivatedEvent`, `sessionDeactivatedEvent`, and `sessionResetEvent`; modules subscribe and perform startup/reset/deactivation work. Root keeps epoch barriers and no longer directly starts/stops modules.
-- Removed `src/shared/module-context.ts`, `src/pr-root.ts`, factory compatibility overloads, and root callback injection from `main.ts`.
-- Removed `PrRuntime`, `TodoistRuntime`, and `StateToolRuntime`; PR and Todoist modules own persistence/session mutation and expose narrow operation dependencies.
-- Persisted WorkState remains legacy persistence only. PR and Todoist emit separate `pr` and `todoist` module projections; no aggregate `work` projection is published.
-- Replaced `resetEpochs` WeakMap with root-owned `stateUpdateEpoch` token.
-- Footer consumes typed module projections and renders status updates; direct Exit Protocol → Worktree cleanup action remains unchanged.
-- Added Todoist module projection and lifecycle subscription coverage paths; preserved one `prMergedEvent` channel and native `tool_result` bridge.
+- Removed duplicate factory overload declarations from Worktree, Todoist, Footer, and Exit Protocol modules.
+- Removed root `getSession`/`setSession` callbacks and closures. Root now owns stable `session` composition field; activation payload carries current SessionRecord to modules.
+- Removed remaining named runtime compatibility bundles (`TodoistRuntime`, `PrRuntime`, `StateToolRuntime`) and Todoist `.runtime()` factory; module-owned operation dependencies remain narrow and direct.
+- PR module no longer emits Todoist-owned `mergeCompletedAt` or `todoistCompletionAttemptedAt` fields. Todoist owns those projection fields; legacy WorkState persistence remains compatible.
+- PR tool-result merge path now validates current session/context both before and after async Git inspection, retaining operation-generation guards.
+- PR deactivation clears PR facet state while preserving generation barrier; known-origin startup cannot inherit stale merged metadata.
+- Deterministic production subscriber order keeps Todoist merge completion consumer before Exit Protocol prompt registration.
+- Added root callback-adapter architecture assertion and Todoist-owned projection regression coverage.
+- Preserved one `prMergedEvent`, typed `Event<T>`, native tool-result bridge, direct awaited Exit Protocol → Worktree action, stable SessionState snapshots, Worktree/Footer ownership, deleted `src/application`, and lint boundary.
 
 ## Structural review
 
-- `src/application/` absent.
-- No `ActiveSession`, `ExtensionRuntime`, `SessionContext`, `ApplicationContext`, `PrRuntime`, `TodoistRuntime`, `StateToolRuntime`, `ModuleContext`, `shared/prompt-queue`, or `setupListener` in production sources.
+- No `src/application/`.
+- No forbidden runtime/context adapters, `shared/prompt-queue`, `setupListener`, WeakMap epoch adapter, root session callback adapters, or aggregate `work` module projection.
 - Custom event `.on(...)` calls absent; remaining `.on(...)` calls are native PI or Node stream APIs.
-- `ExtensionState` production usage limited to `src/main.ts` plus its declaration in `src/state.ts`.
+- `ExtensionState` production usage limited to `src/main.ts` plus declaration in `src/state.ts`.
 - Shared `Event<T>` primitive and one `prMergedEvent` channel validated.
-- Stable `SessionState` identity, reset behavior, snapshot isolation, module ownership, and root import boundary remain covered by tests/lint.
 
 ## Validation
 
 - `env -u PI_SUBAGENT_CHILD npm test` — passed; 51 files, 311 passed, 8 skipped.
-- `npm run architecture` — passed; dependency cruiser: 189 modules / 685 dependencies, structure and production checks clean.
+- `npm run architecture` — passed; dependency cruiser: 189 modules / 684 dependencies, structure and production checks clean.
 - `npm run lint` — passed Biome and strict lint.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
-- Targeted lifecycle/module/extension tests — passed; final full suite passed after one known timing-sensitive existing test retry.
-- Targeted `rg` checks — no forbidden identifiers/adapters; no custom event `.on()` calls; no WeakMap; no aggregate module-work publication.
+- Targeted PR, lifecycle, Todoist projection, and extension tests — passed.
+- Targeted `rg` checks — no forbidden identifiers/adapters, no custom event `.on()` calls, no WeakMap, no root lifecycle direct calls, no aggregate work projection.
 
 ## Commit
 
@@ -36,4 +37,5 @@ Pending final commit: `refactor: complete extension state architecture`
 ## Residual risks
 
 - Native PI and Node stream `.on(...)` calls remain intentionally because they are external APIs, not module event channels.
-- One existing asynchronous integration assertion can flake under full parallel Vitest scheduling; retry passed full suite.
+- Existing asynchronous claim-proposal assertions can intermittently flake under parallel Vitest scheduling; repeated full run passed.
+- Previously skipped stale claim/completion race tests remain skipped because they require broader fixture repair; no failures hidden.

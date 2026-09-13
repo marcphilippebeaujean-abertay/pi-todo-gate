@@ -8,7 +8,6 @@ import { createExitProtocolModule } from "./exit-protocol/module.ts";
 import { createFooterModule } from "./footer/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import { createPrModule } from "./pr/module.ts";
-import type { PrSession } from "./pr/state.ts";
 import { PromptQueue } from "./prompt-queue.ts";
 import { createEventHandler } from "./shared/events.ts";
 import { isSubagent } from "./shared/session.ts";
@@ -31,12 +30,7 @@ export function createExtensionState(
 	const sessionState = createSessionState();
 	const lifecycleEpoch = { value: 0 };
 	const stateUpdateEpoch = { value: 0 };
-	let activeSession: PrSession | null = null;
 	let stateToolRegistered = false;
-	const getSession = (): PrSession | null => activeSession;
-	const setSession = (session: PrSession | null): void => {
-		activeSession = session;
-	};
 	const footer = createFooterModule({
 		eventHandler,
 		pi,
@@ -52,7 +46,6 @@ export function createExtensionState(
 		promptQueue,
 		eventHandler,
 		sessionState,
-		getSession,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
 		dependencies: { exec: dependencies.exec },
 	});
@@ -61,7 +54,6 @@ export function createExtensionState(
 		promptQueue,
 		eventHandler,
 		sessionState,
-		getSession,
 		dependencies: {
 			exec: dependencies.exec,
 			taskClaimWorker: dependencies.taskClaimWorker,
@@ -97,8 +89,7 @@ export function createExtensionState(
 		todoist,
 		worktree,
 		exitProtocol,
-		getSession,
-		setSession,
+		session: null,
 		registered: () => stateToolRegistered,
 		registerStateTool: () => {
 			if (stateToolRegistered) return;
@@ -127,7 +118,7 @@ function startExtensions(
 	root.stateUpdatesDrained = registerModuleStateConsumer(
 		extensionState.eventHandler,
 		extensionState.sessionState,
-		() => root.getSession() !== null,
+		() => root.session !== null,
 		root.stateUpdateEpoch,
 	);
 	registerExtensionEventConsumers(root);

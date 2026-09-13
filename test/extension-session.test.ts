@@ -49,7 +49,7 @@ function rootWithConfig(
 	registerModuleStateConsumer(
 		root.eventHandler,
 		root.sessionState,
-		() => root.getSession() !== null,
+		() => root.session !== null,
 	);
 	return root;
 }
@@ -291,7 +291,7 @@ describe("session shutdown", () => {
 		);
 		releaseFirst({ projects: { "/repo": "project" } });
 		await Promise.all([first, second]);
-		expect(root.getSession()).toBeNull();
+		expect(root.session).toBeNull();
 		expect(root.sessionState).toMatchObject({
 			sessionId: null,
 			gitState: {},
@@ -326,7 +326,7 @@ describe("session shutdown", () => {
 			moduleState: { value: true },
 		});
 		await Promise.resolve();
-		expect(root.getSession()).toBeNull();
+		expect(root.session).toBeNull();
 		expect(root.sessionState).toBe(stateReference);
 		expect(root.sessionState).toMatchObject({
 			sessionId: null,

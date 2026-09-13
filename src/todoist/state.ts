@@ -118,7 +118,6 @@ export interface TodoistModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getSession?: () => TodoistSession | null;
 	dependencies?: {
 		exec?: Exec;
 		taskClaimWorker?: TaskClaimWorker;
@@ -128,7 +127,7 @@ export interface TodoistModuleOptions {
 
 export type TodoistSession = SessionRecord;
 
-export interface TodoistDependencies {
+export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
 	todoist: TodoistModule;

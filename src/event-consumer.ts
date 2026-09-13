@@ -42,8 +42,7 @@ export interface RootComposition {
 	todoist: TodoistModule;
 	worktree: WorktreeModule;
 	exitProtocol: ExitProtocolModule;
-	getSession: () => PrSession | null;
-	setSession: (session: PrSession | null) => void;
+	session: PrSession | null;
 	registered: () => boolean;
 	registerStateTool: () => void;
 	publisher: RootEventPublisher;
@@ -104,10 +103,10 @@ export function replaceSessionState(
 }
 
 function deactivate(root: Root): void {
-	const session = root.getSession();
-	const hasSession = session !== null;
+	const session = root.session;
+	const hasSession = session !== null && session !== undefined;
 	if (hasSession) session.operationGeneration += 1;
-	root.setSession(null);
+	root.session = null;
 	resetSessionState(root.sessionState, root.stateUpdateEpoch);
 	void root.publisher.publishSessionDeactivated();
 	root.promptQueue.reset();
@@ -209,7 +208,7 @@ async function activateConfigured(
 		operationQueue: Promise.resolve(),
 	};
 	root.sessionState.sessionId = session.sessionId;
-	root.setSession(session);
+	root.session = session;
 	state = await root.pr.initializeRemoteOrigin(ctx, inherited.state);
 	if (!isCurrentEpoch(root, epoch)) return null;
 	session.state = state;
@@ -221,6 +220,7 @@ async function activateConfigured(
 	await root.publisher.publishSessionActivated({
 		context: ctx,
 		previousSessionFile: handoffContext ? event.previousSessionFile : undefined,
+		session,
 	});
 	if (!isCurrentEpoch(root, epoch)) return null;
 	if (!isCurrentEpoch(root, epoch)) return null;
@@ -253,7 +253,7 @@ async function persistInitialPr(
 	epoch: number,
 	branch: readonly unknown[],
 ): Promise<void> {
-	const session = root.getSession();
+	const session = root.session;
 	if (session?.allowPrDiscovery !== true || !isCurrentEpoch(root, epoch))
 		return;
 	await root.pr.persistInitialPr(branch);
@@ -274,7 +274,7 @@ export async function handleSessionStart(
 	if (!isCurrentEpoch(root, epoch)) return;
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	if (project === null) {
-		resetSessionState(root.sessionState);
+		resetSessionState(root.sessionState, root.stateUpdateEpoch);
 		manageActiveTools(root, true);
 		return;
 	}
@@ -315,7 +315,7 @@ export async function handleBeforeAgentStart(
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionContext,
 ): Promise<BeforeAgentStartResultEvent | undefined> {
-	const session = root.getSession();
+	const session = root.session;
 	if (session === null) return undefined;
 	const messages: string[] = [];
 	if (session.handoffContext) {

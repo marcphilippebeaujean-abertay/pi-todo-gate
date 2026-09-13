@@ -189,6 +189,17 @@ export async function checkProductionArchitecture(
 			correction: "move ExtensionState usage to src/main.ts",
 		});
 	}
+	for (const path of [mainPath, join(root, "src", "event-consumer.ts")]) {
+		if (!(await isFile(path))) continue;
+		const source = await readFile(path, "utf8");
+		if (!/\b(?:getSession|setSession)\b/.test(source)) continue;
+		issues.push({
+			domain: "root",
+			path: relative(root, path),
+			message: "root session callback adapters are not allowed",
+			correction: "use root session composition field",
+		});
+	}
 	return issues.sort((a, b) =>
 		a.domain < b.domain || (a.domain === b.domain && a.path < b.path)
 			? -1

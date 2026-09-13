@@ -9,16 +9,16 @@ import {
 	notifyCompletionFailure,
 	notifyCompletionSuccess,
 } from "./event-publishers.ts";
-import type { TodoistDependencies } from "./state.ts";
+import type { TodoistOperations } from "./state.ts";
 
 function isCurrentCompletion(
-	runtime: TodoistDependencies,
+	operations: TodoistOperations,
 	session: SessionRecord,
 	stateSnapshot: SessionRecord["state"],
 	workRevision: number,
 	operationGeneration: number,
 ): boolean {
-	const isCurrentSession = runtime.getSession() === session;
+	const isCurrentSession = operations.getSession() === session;
 	const isCurrentGeneration =
 		session.operationGeneration === operationGeneration;
 	const isCurrentRevision = session.workRevision === workRevision;
@@ -32,11 +32,11 @@ function isCurrentCompletion(
 }
 
 function recordSuccessfulCompletion(
-	runtime: TodoistDependencies,
+	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 ): void {
-	runtime.replaceSessionState(
+	operations.replaceSessionState(
 		session,
 		applyStatePatch(session.state, {
 			taskRef: undefined,
@@ -46,9 +46,9 @@ function recordSuccessfulCompletion(
 			todoistCompletionAttemptedAt: new Date().toISOString(),
 		}),
 	);
-	runtime.appendState(session.state);
-	runtime.refreshFooterStatuses(session);
-	void runtime.emitState(session);
+	operations.appendState(session.state);
+	operations.refreshFooterStatuses(session);
+	void operations.emitState(session);
 	notifyCompletionSuccess(ctx);
 }
 
@@ -57,7 +57,7 @@ function recordFailedCompletion(ctx: ExtensionContext): void {
 }
 
 async function completeMergedTaskNow(
-	runtime: TodoistDependencies,
+	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
@@ -67,7 +67,7 @@ async function completeMergedTaskNow(
 ): Promise<ExitActionResult> {
 	const isCurrent = isCurrentCompletion.bind(
 		null,
-		runtime,
+		operations,
 		session,
 		stateSnapshot,
 		workRevision,
@@ -77,13 +77,13 @@ async function completeMergedTaskNow(
 	const shouldSkipCompletion = isStaleCompletion;
 	if (shouldSkipCompletion) return C.exit.failed;
 	try {
-		await createClient(ctx, runtime.dependencies).completeTask(
+		await createClient(ctx, operations.dependencies).completeTask(
 			taskRef,
 			isCurrent,
 		);
 		const isStaleSuccess = !isCurrent();
 		if (isStaleSuccess) return C.exit.failed;
-		recordSuccessfulCompletion(runtime, session, ctx);
+		recordSuccessfulCompletion(operations, session, ctx);
 		return C.exit.completed;
 	} catch {
 		const isStaleFailure = !isCurrent();
@@ -94,7 +94,7 @@ async function completeMergedTaskNow(
 }
 
 export async function completeMergedTask(
-	runtime: TodoistDependencies,
+	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
 	taskRef: string,
@@ -106,7 +106,7 @@ export async function completeMergedTask(
 		session,
 		completeMergedTaskNow.bind(
 			null,
-			runtime,
+			operations,
 			session,
 			ctx,
 			taskRef,
