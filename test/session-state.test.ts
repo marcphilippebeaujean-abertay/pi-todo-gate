@@ -37,5 +37,14 @@ describe("session state", () => {
 			discoveryDisabled: boolean;
 		}>();
 		expectTypeOf<PrState>().not.toMatchTypeOf<{ taskRef: string }>();
+
+		const invalidPrState: PrState = {
+			discoveryDisabled: false,
+			discoveryTestedUrls: [],
+			mergedPrs: [],
+			// @ts-expect-error PR state must reject Todoist task fields.
+			taskRef: "42",
+		};
+		expect(invalidPrState.discoveryDisabled).toBe(false);
 	});
 });
