@@ -7,7 +7,8 @@ import {
 	hasUncommittedChanges as inspectDirtyStatus,
 	inspectProject,
 } from "../shared/project.ts";
-import type { GitState, SessionState } from "../state.ts";
+import type { GitState } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import {
 	publishWorktreeState,

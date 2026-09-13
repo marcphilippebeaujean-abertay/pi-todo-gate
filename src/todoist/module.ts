@@ -103,8 +103,12 @@ class TodoistModuleImpl implements TodoistModule {
 		const previousTaskRef =
 			this.options.sessionState.moduleState.todoist.taskRef;
 		const taskIdentityChanged = previousTaskRef !== state.taskRef;
-		if (taskIdentityChanged && this.currentSession !== null)
-			this.currentSession.workRevision += 1;
+		const hasCurrentSession = this.currentSession !== null;
+		const shouldIncrementRevision = taskIdentityChanged && hasCurrentSession;
+		if (shouldIncrementRevision) {
+			const currentSession = this.currentSession;
+			if (currentSession !== null) currentSession.workRevision += 1;
+		}
 		return this.publishState.publish(state, options);
 	}
 

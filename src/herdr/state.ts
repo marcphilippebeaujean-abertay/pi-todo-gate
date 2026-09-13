@@ -1,26 +1,32 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
-	JsonValue,
-	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
-import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
-import type { HerdrModuleState } from "../state.ts";
+import type {
+	HerdrModuleState,
+	JsonValue,
+	ModuleStateDescriptor,
+} from "../shared/session-state.ts";
 import type { FooterEventSink, HerdrEvents } from "./events.ts";
 
 export type HerdrState = HerdrModuleState;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	const isObjectValue = typeof value === "object" && value !== null;
+	const isArrayValue = Array.isArray(value);
+	return isObjectValue && !isArrayValue;
 }
 
 function restoreHerdrState(value: unknown): HerdrState {
-	if (!isRecord(value)) return {};
+	const isHerdrRecord = isRecord(value);
+	if (!isHerdrRecord) return {};
 	const marker = value.herdrClaimReturnedSuccessfully;
-	if (marker !== undefined && typeof marker !== "string") return {};
-	return marker === undefined ? {} : { herdrClaimReturnedSuccessfully: marker };
+	const hasInvalidMarker = marker !== undefined && typeof marker !== "string";
+	if (hasInvalidMarker) return {};
+	const hasMarker = marker !== undefined;
+	if (hasMarker) return { herdrClaimReturnedSuccessfully: marker as string };
+	return {};
 }
 
 export const herdrStateDescriptor: ModuleStateDescriptor<"herdr"> = {

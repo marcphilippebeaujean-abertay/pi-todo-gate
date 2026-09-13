@@ -1,10 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { EventHandler } from "../shared/events.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
-import type { EventHandler } from "../shared/events.ts";
-import type { SessionState, WorktreeModuleState } from "../state.ts";
+	WorktreeModuleState,
+} from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 export interface WorktreeBaseline {
 	worktreePath: string;
 	branch: string;
@@ -18,28 +19,29 @@ export interface WorktreeCurrentState {
 	currentStatus: string;
 }
 
+function isOptionalString(value: unknown): boolean {
+	return value === undefined || typeof value === "string";
+}
+
 function restoreWorktreeState(value: unknown): WorktreeModuleState {
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		return {};
+	const isObjectValue = typeof value === "object" && value !== null;
+	const isArrayValue = Array.isArray(value);
+	const isInvalidValue = !isObjectValue || isArrayValue;
+	if (isInvalidValue) return {};
 	const candidate = value as Record<string, unknown>;
-	const hasInvalidInitialHead =
-		candidate.initialHead !== undefined &&
-		typeof candidate.initialHead !== "string";
-	const hasInvalidInitialStatus =
-		candidate.initialStatus !== undefined &&
-		typeof candidate.initialStatus !== "string";
-	if (hasInvalidInitialHead || hasInvalidInitialStatus) return {};
-	const initialHead =
-		typeof candidate.initialHead === "string"
-			? candidate.initialHead
-			: undefined;
-	const initialStatus =
-		typeof candidate.initialStatus === "string"
-			? candidate.initialStatus
-			: undefined;
+	const hasValidInitialHead = isOptionalString(candidate.initialHead);
+	const hasValidInitialStatus = isOptionalString(candidate.initialStatus);
+	const hasValidState = hasValidInitialHead && hasValidInitialStatus;
+	if (!hasValidState) return {};
+	const initialHead = candidate.initialHead;
+	const initialStatus = candidate.initialStatus;
 	return {
-		...(initialHead === undefined ? {} : { initialHead }),
-		...(initialStatus === undefined ? {} : { initialStatus }),
+		...(initialHead === undefined
+			? {}
+			: { initialHead: initialHead as string }),
+		...(initialStatus === undefined
+			? {}
+			: { initialStatus: initialStatus as string }),
 	};
 }
 

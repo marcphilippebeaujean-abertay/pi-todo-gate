@@ -177,8 +177,10 @@ class PrModuleImpl implements PrModule {
 			lifecycleEpoch: this.getLifecycleEpoch(),
 			sessionId: this.sessionState.session.activeSessionId,
 		};
-		if (remoteOrigin !== undefined) {
-			if (!this.isCurrentOriginRequest(request)) return remoteOrigin;
+		const hasRemoteOrigin = remoteOrigin !== undefined;
+		if (hasRemoteOrigin) {
+			const isCurrentRequest = this.isCurrentOriginRequest(request);
+			if (!isCurrentRequest) return remoteOrigin;
 			await this.emitState(this.state, {
 				persist: false,
 				gitStatePatch: { remoteOrigin },
@@ -196,9 +198,11 @@ class PrModuleImpl implements PrModule {
 			this.dependencies.exec ?? spawnExec,
 			ctx.cwd,
 		);
-		if (!this.isCurrentOriginRequest(request)) return undefined;
+		const isCurrentRequest = this.isCurrentOriginRequest(request);
+		if (!isCurrentRequest) return undefined;
 		const remoteOrigin = project.remoteOrigin ?? undefined;
-		if (remoteOrigin === undefined) return undefined;
+		const hasNoRemoteOrigin = remoteOrigin === undefined;
+		if (hasNoRemoteOrigin) return undefined;
 		await this.emitState(this.state, {
 			persist: true,
 			gitStatePatch: { remoteOrigin },
@@ -240,7 +244,11 @@ class PrModuleImpl implements PrModule {
 		const knownOrigin = this.sessionState.gitState.remoteOrigin;
 		if (knownOrigin !== undefined) return knownOrigin;
 		const identity = this.captureSessionIdentity(session, operationGeneration);
-		if (!this.isSameSessionIdentity(session, identity)) return null;
+		const isCurrentBeforeDiscovery = this.isSameSessionIdentity(
+			session,
+			identity,
+		);
+		if (!isCurrentBeforeDiscovery) return null;
 		const remoteOrigin = await this.discoverRemoteOrigin(session.context, {
 			operationGeneration,
 			lifecycleEpoch: this.getLifecycleEpoch(),
@@ -248,7 +256,11 @@ class PrModuleImpl implements PrModule {
 			session,
 			identity,
 		});
-		if (!this.isSameSessionIdentity(session, identity)) return null;
+		const isCurrentAfterDiscovery = this.isSameSessionIdentity(
+			session,
+			identity,
+		);
+		if (!isCurrentAfterDiscovery) return null;
 		return remoteOrigin ?? null;
 	}
 
@@ -259,7 +271,9 @@ class PrModuleImpl implements PrModule {
 	): Promise<void> {
 		const isCurrent = this.isSameSessionIdentity(session, identity);
 		if (!isCurrent) return;
-		if (this.state.discoveryTestedUrls?.includes(url) === true) return;
+		const alreadyTested =
+			this.state.discoveryTestedUrls?.includes(url) === true;
+		if (alreadyTested) return;
 		this.state = {
 			...this.state,
 			discoveryTestedUrls: [...(this.state.discoveryTestedUrls ?? []), url],
@@ -294,14 +308,14 @@ class PrModuleImpl implements PrModule {
 		const currentAndDiscoverable = isCurrentSession && canDiscover;
 		const canPersist = currentAndDiscoverable && !hasPinnedPr;
 		if (!canPersist) return false;
+		const testedUrls = this.state.discoveryTestedUrls ?? [];
+		const hasAlreadyTested = testedUrls.includes(url);
+		const nextTestedUrls = hasAlreadyTested ? testedUrls : [...testedUrls, url];
 		this.state = {
 			...this.state,
 			prUrl: url,
 			discoveryDisabled: true,
-			discoveryTestedUrls:
-				this.state.discoveryTestedUrls?.includes(url) === true
-					? this.state.discoveryTestedUrls
-					: [...(this.state.discoveryTestedUrls ?? []), url],
+			discoveryTestedUrls: nextTestedUrls,
 		};
 		await this.emitState(this.state, { persist: true });
 		return true;

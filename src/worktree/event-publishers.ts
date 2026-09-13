@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
-import type { GitState, ModuleState } from "../state.ts";
+import type { GitState, ModuleState } from "../shared/session-state.ts";
 
 export function publishWorktreeState(
 	eventHandler: EventHandler,

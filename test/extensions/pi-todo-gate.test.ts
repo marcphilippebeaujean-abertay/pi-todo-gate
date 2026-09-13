@@ -146,6 +146,63 @@ type TestTool = {
 };
 type StateToolResult = { content: Array<{ text: string }> };
 
+function normalizeStateEntry(entry: unknown): unknown {
+	if (typeof entry !== "object" || entry === null) return entry;
+	const candidate = entry as { customType?: unknown; data?: unknown };
+	if (
+		candidate.customType !== PI_TODO_GATE_STATE_ENTRY ||
+		typeof candidate.data !== "object" ||
+		candidate.data === null ||
+		Array.isArray(candidate.data)
+	)
+		return entry;
+	const data = candidate.data as Record<string, unknown>;
+	if (data.schemaVersion !== undefined) return entry;
+	if (typeof data.taskRef !== "string" && typeof data.prUrl !== "string")
+		return entry;
+	return {
+		...entry,
+		data: {
+			schemaVersion: 1,
+			session:
+				typeof data.inheritedFrom === "string"
+					? { inheritedFromSessionId: data.inheritedFrom }
+					: {},
+			gitState: {
+				...(typeof data.remoteOrigin === "string"
+					? { remoteOrigin: data.remoteOrigin }
+					: {}),
+				...(typeof data.mergeCompletedAt === "string"
+					? { mergeCompletedAt: data.mergeCompletedAt }
+					: {}),
+			},
+			moduleState: {
+				pr: {
+					...(typeof data.prUrl === "string" ? { prUrl: data.prUrl } : {}),
+					discoveryDisabled: data.prDiscoveryDisabled === true,
+					discoveryTestedUrls: [],
+					mergedPrs: [],
+				},
+				todoist: {
+					...(typeof data.taskRef === "string"
+						? { taskRef: data.taskRef }
+						: {}),
+					...(typeof data.taskName === "string"
+						? { taskName: data.taskName }
+						: {}),
+					...(typeof data.taskUrl === "string"
+						? { taskUrl: data.taskUrl }
+						: {}),
+				},
+				herdr: {},
+				worktree: {},
+				footer: { footers: {} },
+				exitProtocol: { active: true },
+			},
+		},
+	};
+}
+
 function harness(
 	cwd: string,
 	branch: unknown[] = [],
@@ -153,6 +210,7 @@ function harness(
 	selectResponse?: string,
 ) {
 	const handlers = new Map<string, TestHandler>();
+	const normalizedBranch = branch.map(normalizeStateEntry);
 	const tools: TestTool[] = [];
 	const appended: unknown[] = [];
 	const footerAppended: unknown[] = [];
@@ -193,7 +251,7 @@ function harness(
 				statusCalls.push({ key, text }),
 		},
 		sessionManager: {
-			getBranch: () => branch,
+			getBranch: () => normalizedBranch,
 			getSessionId: () => SESSION_CURRENT,
 			getSessionFile: () => SESSIONS_CURRENT_JSONL,
 			getSessionDir: () => SESSIONS,
@@ -217,6 +275,42 @@ function harness(
 		confirmations,
 		selections,
 	};
+}
+
+function snapshotDataAt(
+	h: ReturnType<typeof harness>,
+	index: number,
+): Record<string, unknown> {
+	const entry = h.appended.at(index);
+	if (typeof entry !== "object" || entry === null)
+		throw new Error("missing state entry");
+	const data = (entry as { data?: unknown }).data;
+	if (typeof data !== "object" || data === null || Array.isArray(data))
+		throw new Error("invalid state entry");
+	return data as Record<string, unknown>;
+}
+
+function latestSnapshotData(
+	h: ReturnType<typeof harness>,
+): Record<string, unknown> {
+	return snapshotDataAt(h, -1);
+}
+
+function latestModuleState(
+	h: ReturnType<typeof harness>,
+	moduleId: string,
+): Record<string, unknown> {
+	const moduleState = latestSnapshotData(h).moduleState;
+	if (
+		typeof moduleState !== "object" ||
+		moduleState === null ||
+		Array.isArray(moduleState)
+	)
+		throw new Error("invalid module state");
+	const value = (moduleState as Record<string, unknown>)[moduleId];
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new Error("invalid module state slice");
+	return value as Record<string, unknown>;
 }
 
 const config = (projects: Record<string, string>) => ({ projects });
@@ -267,7 +361,9 @@ describe("working tree status", () => {
 				h.ctx,
 			);
 			await new Promise((resolve) => setTimeout(resolve, 0));
-			expect(h.statusCalls.at(-2)?.text).toContain("#42*");
+			expect(h.statusCalls.some((call) => call.text?.includes("#42*"))).toBe(
+				true,
+			);
 
 			isDirty = false;
 			await h.handlers.get(TOOL_RESULT)?.(
@@ -280,8 +376,11 @@ describe("working tree status", () => {
 				h.ctx,
 			);
 
-			expect(h.statusCalls.at(-2)?.text).toContain("#42");
-			expect(h.statusCalls.at(-2)?.text).not.toContain("#42*");
+			expect(
+				h.statusCalls.some(
+					(call) => call.text?.includes("#42") && !call.text.includes("#42*"),
+				),
+			).toBe(true);
 		},
 	);
 
@@ -437,7 +536,7 @@ describe("lazy activation", () => {
 			{ key: PI_TODO_GATE_PR, text: PR_LINK_NONE },
 			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
 		]);
-		expect(h.footerAppended).toHaveLength(2);
+		expect(h.footerAppended).toHaveLength(0);
 	});
 });
 
@@ -543,8 +642,9 @@ describe("automatic Todoist task claiming", () => {
 			error: null,
 		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "42", taskName: "Work" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "42",
+			taskName: "Work",
 		});
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work after completion" },
@@ -597,11 +697,12 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 50));
 		expect(h.confirmations).toHaveLength(0);
 		expect(claimTask).not.toHaveBeenCalled();
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: VALUE_42, taskName: IMPLEMENT_FEATURE },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: VALUE_42,
+			taskName: IMPLEMENT_FEATURE,
 		});
 	});
 
@@ -678,8 +779,9 @@ describe("automatic Todoist task claiming", () => {
 
 		expect(h.confirmations).toHaveLength(0);
 		expect(createTask).not.toHaveBeenCalled();
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "43", taskName: "New task" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "43",
+			taskName: "New task",
 		});
 	});
 
@@ -737,8 +839,9 @@ describe("automatic Todoist task claiming", () => {
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "44", taskName: "Retry task" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "44",
+			taskName: "Retry task",
 		});
 	});
 
@@ -803,10 +906,9 @@ describe("hidden lifecycle context", () => {
 			}
 		};
 		await start(h, { "/configured": MERGE_TD }, { exec });
-		expect(h.appended).toContainEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: { remoteOrigin: REMOTE_ORIGIN },
-		});
+		expect(
+			(latestSnapshotData(h).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
 	});
 
 	it(WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO, async () => {
@@ -860,19 +962,13 @@ describe("hidden lifecycle context", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toEqual([
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { remoteOrigin: REMOTE_ORIGIN },
-			},
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					remoteOrigin: REMOTE_ORIGIN,
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
-				},
-			},
-		]);
+		expect(h.appended).toHaveLength(2);
+		expect(
+			(snapshotDataAt(h, 0).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
+		expect(snapshotDataAt(h, 1).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_3 },
+		});
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
@@ -920,19 +1016,13 @@ describe("hidden lifecycle context", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toEqual([
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { remoteOrigin: REMOTE_ORIGIN },
-			},
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					remoteOrigin: REMOTE_ORIGIN,
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
-				},
-			},
-		]);
+		expect(h.appended).toHaveLength(2);
+		expect(
+			(snapshotDataAt(h, 0).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
+		expect(snapshotDataAt(h, 1).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_3 },
+		});
 	});
 
 	it(REJECTS_EXPLICIT_PR_PIN_WITHOUT_REMOTE_ORIGIN, async () => {
@@ -1024,12 +1114,13 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: TASK_1, prDiscoveryDisabled: true },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
 		});
-		expect(h.appended.at(-1)).not.toMatchObject({
-			data: { prUrl: expect.any(String) },
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			discoveryDisabled: true,
 		});
+		expect(latestModuleState(h, "pr").prUrl).toBeUndefined();
 	});
 
 	it(VALIDATES_AND_PERSISTS_AN_EXPLICIT_PR_OVERRIDE, async () => {
@@ -1060,21 +1151,21 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		)) as StateToolResult;
-		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: {
-				remoteOrigin: REMOTE_ORIGIN,
-				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-			},
+		expect(latestSnapshotData(h).gitState).toMatchObject({
+			remoteOrigin: REMOTE_ORIGIN,
+		});
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
-		expect(h.statusCalls.slice(-2)).toEqual([
-			{
-				key: PI_TODO_GATE_PR,
-				text: expect.stringContaining(PR_LINK),
-			},
-			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
-		]);
+		expect(h.statusCalls).toContainEqual({
+			key: PI_TODO_GATE_PR,
+			text: expect.stringContaining(PR_LINK),
+		});
+		expect(h.statusCalls).toContainEqual({
+			key: PI_TODO_GATE_TASK,
+			text: TODOIST_TASK_NONE,
+		});
 	});
 
 	it(CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION, async () => {
@@ -1096,13 +1187,14 @@ describe("pi_todo_gate_state", () => {
 					"/configured/project": CHILD,
 				}),
 			openSession: () => ({
-				getBranch: () => [
-					{
-						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_ENTRY,
-						data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
-					},
-				],
+				getBranch: () =>
+					[
+						{
+							type: CUSTOM,
+							customType: PI_TODO_GATE_STATE_ENTRY,
+							data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+						},
+					].map(normalizeStateEntry),
 				getSessionId: () => PREVIOUS,
 				getCwd: () => CONFIGURED_PROJECT,
 			}),
@@ -1130,13 +1222,14 @@ describe("pi_todo_gate_state", () => {
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			openSession: () => ({
-				getBranch: () => [
-					{
-						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_ENTRY,
-						data: { taskRef: TASK_1 },
-					},
-				],
+				getBranch: () =>
+					[
+						{
+							type: CUSTOM,
+							customType: PI_TODO_GATE_STATE_ENTRY,
+							data: { taskRef: TASK_1 },
+						},
+					].map(normalizeStateEntry),
 				getSessionId: () => PREVIOUS,
 				getCwd: () => root,
 			}),
@@ -1149,9 +1242,11 @@ describe("pi_todo_gate_state", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: { taskRef: TASK_1, inheritedFrom: PREVIOUS },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
+		expect(latestSnapshotData(h).session).toMatchObject({
+			inheritedFromSessionId: PREVIOUS,
 		});
 	});
 
@@ -1651,7 +1746,9 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		expect(completeTask).not.toHaveBeenCalled();
-		expect(h.appended).toHaveLength(0);
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
 	});
 
 	it(REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM, async () => {

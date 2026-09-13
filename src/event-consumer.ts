@@ -323,9 +323,26 @@ export function updateModuleState(
 	state: SessionState,
 	update: ModuleStateChangedEvent,
 ): void {
-	state.moduleState[update.moduleId] = structuredClone(
-		update.moduleState,
-	) as never;
+	switch (update.moduleId) {
+		case "pr":
+			state.moduleState.pr = structuredClone(update.moduleState);
+			break;
+		case "todoist":
+			state.moduleState.todoist = structuredClone(update.moduleState);
+			break;
+		case "herdr":
+			state.moduleState.herdr = structuredClone(update.moduleState);
+			break;
+		case "worktree":
+			state.moduleState.worktree = structuredClone(update.moduleState);
+			break;
+		case "footer":
+			state.moduleState.footer = structuredClone(update.moduleState);
+			break;
+		case "exitProtocol":
+			state.moduleState.exitProtocol = structuredClone(update.moduleState);
+			break;
+	}
 	if (update.gitStatePatch !== undefined)
 		state.gitState = {
 			...state.gitState,

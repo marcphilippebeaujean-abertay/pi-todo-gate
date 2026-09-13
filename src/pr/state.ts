@@ -3,20 +3,23 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
+import type { Exec } from "../shared/command.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
-import type { Exec } from "../shared/command.ts";
-import type { EventHandler } from "../shared/events.ts";
-import type { SessionRecord } from "../shared/session-state.ts";
-import type { PrModuleState, SessionState } from "../state.ts";
+	PrModuleState,
+	SessionRecord,
+} from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 
 export type PrState = PrModuleState;
 export type PrStatePatch = Partial<PrState>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	const isObjectValue = typeof value === "object" && value !== null;
+	const isArrayValue = Array.isArray(value);
+	return isObjectValue && !isArrayValue;
 }
 
 function testedStrings(values: unknown[]): string[] {
@@ -24,37 +27,47 @@ function testedStrings(values: unknown[]): string[] {
 }
 
 function isMergedPr(value: unknown): value is MergedPr {
-	if (!isRecord(value)) return false;
-	return (
-		typeof value.prUrl === "string" &&
-		typeof value.detectedAt === "string" &&
-		typeof value.reminderPending === "boolean"
-	);
+	const isMergedPrRecord = isRecord(value);
+	if (!isMergedPrRecord) return false;
+	const validityChecks = [
+		typeof value.prUrl === "string",
+		typeof value.detectedAt === "string",
+		typeof value.reminderPending === "boolean",
+	];
+	return validityChecks.every(Boolean);
 }
 
 function restorePrState(value: unknown): PrModuleState {
-	if (!isRecord(value)) return initialPrState();
+	const isPrRecord = isRecord(value);
+	if (!isPrRecord) return initialPrState();
 	const hasValidPrUrl =
 		value.prUrl === undefined || typeof value.prUrl === "string";
 	const hasValidDiscoveryDisabled =
 		typeof value.discoveryDisabled === "boolean";
-	const hasValidTestedUrls =
-		Array.isArray(value.discoveryTestedUrls) &&
-		value.discoveryTestedUrls.every((entry) => typeof entry === "string");
-	const hasValidMergedPrs =
-		Array.isArray(value.mergedPrs) && value.mergedPrs.every(isMergedPr);
-	if (
-		!hasValidPrUrl ||
-		!hasValidDiscoveryDisabled ||
-		!hasValidTestedUrls ||
-		!hasValidMergedPrs
-	)
-		return initialPrState();
+	const testedUrlsValue = value.discoveryTestedUrls;
+	const hasTestedUrlsArray = Array.isArray(testedUrlsValue);
+	const hasValidTestedUrls = hasTestedUrlsArray
+		? (testedUrlsValue as unknown[]).every((entry) => typeof entry === "string")
+		: false;
+	const mergedPrsValue = value.mergedPrs;
+	const hasMergedPrsArray = Array.isArray(mergedPrsValue);
+	const hasValidMergedPrs = hasMergedPrsArray
+		? (mergedPrsValue as unknown[]).every(isMergedPr)
+		: false;
+	const validityChecks = [
+		hasValidPrUrl,
+		hasValidDiscoveryDisabled,
+		hasValidTestedUrls,
+		hasValidMergedPrs,
+	];
+	const hasValidState = validityChecks.every(Boolean);
+	if (!hasValidState) return initialPrState();
 	const discoveryDisabled = value.discoveryDisabled as boolean;
 	const discoveryTestedUrls = value.discoveryTestedUrls as unknown[];
 	const mergedPrs = value.mergedPrs as MergedPr[];
+	const prUrl = value.prUrl;
 	return {
-		...(value.prUrl === undefined ? {} : { prUrl: value.prUrl as string }),
+		...(prUrl === undefined ? {} : { prUrl: prUrl as string }),
 		discoveryDisabled,
 		discoveryTestedUrls: [...new Set(testedStrings(discoveryTestedUrls))],
 		mergedPrs,

@@ -11,9 +11,9 @@ import type {
 	GitState,
 	ModuleId,
 	ModuleState,
+	SessionRecord,
 	SessionStateSnapshot,
-} from "../state.ts";
-import type { SessionRecord } from "./session-state.ts";
+} from "./session-state.ts";
 
 export type {
 	BeforeAgentStartEvent,

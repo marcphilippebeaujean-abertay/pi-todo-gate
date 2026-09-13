@@ -1,11 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { ExitAction } from "../shared/exit-actions.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
-import type { EventHandler } from "../shared/events.ts";
-import type { ExitAction } from "../shared/exit-actions.ts";
+} from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import {
@@ -35,10 +35,13 @@ export const exitProtocolStateDescriptor: ModuleStateDescriptor<"exitProtocol"> 
 		id: "exitProtocol",
 		createInitialState: () => ({ active: false }),
 		restore: (value) => {
-			if (typeof value !== "object" || value === null || Array.isArray(value))
-				return { active: false };
+			const isObjectValue = typeof value === "object" && value !== null;
+			const isArrayValue = Array.isArray(value);
+			const isInvalidValue = !isObjectValue || isArrayValue;
+			if (isInvalidValue) return { active: false };
 			const active = (value as { active?: unknown }).active;
-			return typeof active === "boolean" ? { active } : { active: false };
+			const hasValidActive = typeof active === "boolean";
+			return hasValidActive ? { active } : { active: false };
 		},
 		serialize: (state): JsonValue => ({ active: state.active }),
 	};

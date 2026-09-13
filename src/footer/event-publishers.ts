@@ -1,6 +1,6 @@
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
-import type { ModuleState } from "../state.ts";
+import type { ModuleState } from "../shared/session-state.ts";
 
 export function publishFooterState(
 	eventHandler: EventHandler,

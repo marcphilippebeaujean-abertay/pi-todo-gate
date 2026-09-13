@@ -1,5 +1,18 @@
-import type { GitState, ModuleId, ModuleState, SessionState } from "./state.ts";
+import type {
+	GitState,
+	ModuleId,
+	ModuleState,
+	ModuleStateDescriptor,
+	ModuleStateDescriptors,
+	SessionState,
+} from "./shared/session-state.ts";
 import { createSessionState } from "./state.ts";
+
+export type {
+	JsonValue,
+	ModuleStateDescriptor,
+	ModuleStateDescriptors,
+} from "./shared/session-state.ts";
 
 const CUSTOM_ENTRY_TYPE = "custom";
 const STATE_CUSTOM_TYPE = "pi-todo-gate-state";
@@ -7,14 +20,6 @@ const CURRENT_SCHEMA_VERSION = 1;
 const OBJECT_TYPE = "object";
 const STRING_TYPE = "string";
 const BOOLEAN_TYPE = "boolean";
-
-export type JsonValue =
-	| string
-	| number
-	| boolean
-	| null
-	| JsonValue[]
-	| { [key: string]: JsonValue | undefined };
 
 export interface PersistedSessionState {
 	schemaVersion: 1;
@@ -25,20 +30,10 @@ export interface PersistedSessionState {
 	moduleState: ModuleState;
 }
 
-export interface ModuleStateDescriptor<K extends ModuleId> {
-	id: K;
-	createInitialState(): ModuleState[K];
-	restore(value: unknown): ModuleState[K];
-	serialize(state: ModuleState[K]): JsonValue;
-}
-
-export type ModuleStateDescriptors = {
-	[K in ModuleId]: ModuleStateDescriptor<K>;
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === OBJECT_TYPE;
-	return isObject && value !== null && !Array.isArray(value);
+	const isObject = typeof value === OBJECT_TYPE && value !== null;
+	const isArray = Array.isArray(value);
+	return isObject && !isArray;
 }
 
 function isOptionalString(value: unknown): boolean {
@@ -46,7 +41,13 @@ function isOptionalString(value: unknown): boolean {
 }
 
 function isOptionalNullableString(value: unknown): boolean {
-	return value === undefined || value === null || typeof value === STRING_TYPE;
+	switch (value) {
+		case undefined:
+		case null:
+			return true;
+		default:
+			return typeof value === STRING_TYPE;
+	}
 }
 
 function isOptionalBoolean(value: unknown): boolean {
@@ -54,28 +55,36 @@ function isOptionalBoolean(value: unknown): boolean {
 }
 
 function isGitState(value: unknown): value is GitState {
-	if (!isRecord(value)) return false;
-	return (
-		isOptionalString(value.remoteOrigin) &&
-		isOptionalString(value.mergeCompletedAt) &&
-		isOptionalNullableString(value.branch) &&
-		isOptionalBoolean(value.isWorktree) &&
-		isOptionalNullableString(value.worktreeRoot) &&
-		isOptionalNullableString(value.mainRoot) &&
-		isOptionalBoolean(value.hasUncommittedChanges)
-	);
+	const isGitRecord = isRecord(value);
+	if (!isGitRecord) return false;
+	const validityChecks = [
+		isOptionalString(value.remoteOrigin),
+		isOptionalString(value.mergeCompletedAt),
+		isOptionalNullableString(value.branch),
+		isOptionalBoolean(value.isWorktree),
+		isOptionalNullableString(value.worktreeRoot),
+		isOptionalNullableString(value.mainRoot),
+		isOptionalBoolean(value.hasUncommittedChanges),
+	];
+	return validityChecks.every(Boolean);
 }
 
 function isPersistedSessionState(
 	value: unknown,
 ): value is PersistedSessionState {
-	if (!isRecord(value)) return false;
-	if (value.schemaVersion !== CURRENT_SCHEMA_VERSION) return false;
+	const isPersistedRecord = isRecord(value);
+	if (!isPersistedRecord) return false;
+	const hasCurrentSchema = value.schemaVersion === CURRENT_SCHEMA_VERSION;
+	if (!hasCurrentSchema) return false;
 	const session = value.session;
-	if (!isRecord(session) || !isOptionalString(session.inheritedFromSessionId))
-		return false;
-	if (!isGitState(value.gitState)) return false;
-	return isRecord(value.moduleState);
+	const isSessionRecord = isRecord(session);
+	if (!isSessionRecord) return false;
+	const hasValidSession = isOptionalString(session.inheritedFromSessionId);
+	if (!hasValidSession) return false;
+	const hasValidGitState = isGitState(value.gitState);
+	if (!hasValidGitState) return false;
+	const hasModuleState = isRecord(value.moduleState);
+	return hasModuleState;
 }
 
 function descriptorState<K extends ModuleId>(
@@ -120,7 +129,8 @@ export function restoreSessionState(
 	descriptors: ModuleStateDescriptors,
 ): SessionState {
 	const restored = createSessionState();
-	if (!isPersistedSessionState(value)) return restored;
+	const hasPersistedState = isPersistedSessionState(value);
+	if (!hasPersistedState) return restored;
 
 	restored.session.inheritedFromSessionId =
 		value.session.inheritedFromSessionId;
@@ -142,11 +152,15 @@ export function latestPersistedSessionState(
 ): PersistedSessionState | null {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const entry = entries[index];
-		if (!isRecord(entry)) continue;
-		if (entry.type !== CUSTOM_ENTRY_TYPE) continue;
-		if (entry.customType !== STATE_CUSTOM_TYPE) continue;
-		if (!isPersistedSessionState(entry.data)) continue;
-		return structuredClone(entry.data);
+		const isRecordEntry = isRecord(entry);
+		if (!isRecordEntry) continue;
+		const hasCustomType = entry.type === CUSTOM_ENTRY_TYPE;
+		if (!hasCustomType) continue;
+		const hasStateType = entry.customType === STATE_CUSTOM_TYPE;
+		if (!hasStateType) continue;
+		const hasValidState = isPersistedSessionState(entry.data);
+		if (!hasValidState) continue;
+		return structuredClone(entry.data as PersistedSessionState);
 	}
 	return null;
 }

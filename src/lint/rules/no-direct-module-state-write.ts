@@ -45,8 +45,8 @@ function isWriteExpression(node: ts.Node): boolean {
 	if (ts.isBinaryExpression(node)) return isAssignment(node);
 	if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node))
 		return (
-			node.operator === ts.SyntaxKind.PlusPlus ||
-			node.operator === ts.SyntaxKind.MinusMinus
+			node.operator === ts.SyntaxKind.PlusPlusToken ||
+			node.operator === ts.SyntaxKind.MinusMinusToken
 		);
 	if (ts.isDeleteExpression(node)) return true;
 	return false;

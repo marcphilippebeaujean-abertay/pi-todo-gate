@@ -12,9 +12,26 @@ import type { PrModule } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { Exec } from "./shared/command.ts";
 import type { EventHandler } from "./shared/events.ts";
-import type { SessionReader } from "./shared/session-state.ts";
+import type { SessionReader, SessionState } from "./shared/session-state.ts";
 
-export type { SessionReader, SessionRecord } from "./shared/session-state.ts";
+export type {
+	ExitProtocolModuleState,
+	FooterModuleState,
+	FooterStatusState,
+	GitState,
+	HerdrModuleState,
+	MergedPrState,
+	ModuleId,
+	ModuleState,
+	PrModuleState,
+	SessionMetadata,
+	SessionReader,
+	SessionRecord,
+	SessionState,
+	SessionStateSnapshot,
+	TodoistModuleState,
+	WorktreeModuleState,
+} from "./shared/session-state.ts";
 
 import type {
 	TaskClaimWorker,
@@ -23,85 +40,6 @@ import type {
 	TodoistProjectMapping,
 } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
-
-export interface GitState {
-	remoteOrigin?: string;
-	mergeCompletedAt?: string;
-	branch?: string | null;
-	isWorktree?: boolean;
-	worktreeRoot?: string | null;
-	mainRoot?: string | null;
-	hasUncommittedChanges?: boolean;
-}
-
-export interface SessionMetadata {
-	activeSessionId: string | null;
-	inheritedFromSessionId?: string;
-}
-
-export interface MergedPrState {
-	prUrl: string;
-	detectedAt: string;
-	reminderPending: boolean;
-}
-
-export interface PrModuleState {
-	prUrl?: string;
-	discoveryDisabled: boolean;
-	discoveryTestedUrls: string[];
-	mergedPrs: MergedPrState[];
-}
-
-export interface TodoistModuleState {
-	taskRef?: string;
-	taskName?: string;
-	taskUrl?: string;
-	todoistCompletionAttemptedAt?: string;
-	mergePromptedPrUrl?: string;
-}
-
-export interface HerdrModuleState {
-	herdrClaimReturnedSuccessfully?: string;
-}
-
-export interface WorktreeModuleState {
-	initialHead?: string;
-	initialStatus?: string;
-}
-
-export interface FooterStatusState {
-	footerType: string;
-	isLoading: boolean;
-	text: string;
-	isVisible: boolean;
-}
-
-export interface FooterModuleState {
-	footers: Record<string, FooterStatusState>;
-}
-
-export interface ExitProtocolModuleState {
-	active: boolean;
-}
-
-export interface ModuleState {
-	pr: PrModuleState;
-	todoist: TodoistModuleState;
-	herdr: HerdrModuleState;
-	worktree: WorktreeModuleState;
-	footer: FooterModuleState;
-	exitProtocol: ExitProtocolModuleState;
-}
-
-export type ModuleId = keyof ModuleState;
-
-export interface SessionState {
-	session: SessionMetadata;
-	gitState: GitState;
-	moduleState: ModuleState;
-}
-
-export type SessionStateSnapshot = SessionState;
 
 export function createSessionState(): SessionState {
 	return {

@@ -1,15 +1,17 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { PromptQueue } from "../prompt-queue.ts";
-import type {
-	JsonValue,
-	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
-import type { SessionRecord } from "../shared/session-state.ts";
-import type { GitState, SessionState, TodoistModuleState } from "../state.ts";
+import type {
+	GitState,
+	JsonValue,
+	ModuleStateDescriptor,
+	SessionRecord,
+	TodoistModuleState,
+} from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 
 export type MergeRequest = PrMergedEvent;
 
@@ -102,7 +104,9 @@ export type ProjectEntry = string | TodoistProjectSettings;
 export type TodoistState = TodoistModuleState;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	const isObjectValue = typeof value === "object" && value !== null;
+	const isArrayValue = Array.isArray(value);
+	return isObjectValue && !isArrayValue;
 }
 
 function isOptionalString(value: unknown): boolean {
@@ -110,7 +114,8 @@ function isOptionalString(value: unknown): boolean {
 }
 
 function restoreTodoistState(value: unknown): TodoistState {
-	if (!isRecord(value)) return {};
+	const isTodoistRecord = isRecord(value);
+	if (!isTodoistRecord) return {};
 	const keys = [
 		"taskRef",
 		"taskName",
@@ -118,8 +123,8 @@ function restoreTodoistState(value: unknown): TodoistState {
 		"todoistCompletionAttemptedAt",
 		"mergePromptedPrUrl",
 	] as const;
-	const isValid = keys.every((key) => isOptionalString(value[key]));
-	if (!isValid) return {};
+	const hasValidState = keys.every((key) => isOptionalString(value[key]));
+	if (!hasValidState) return {};
 	return {
 		...(value.taskRef === undefined
 			? {}

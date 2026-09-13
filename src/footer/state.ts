@@ -1,9 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { EventHandler } from "../shared/events.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
-} from "../session-state-persistence.ts";
-import type { EventHandler } from "../shared/events.ts";
+} from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 

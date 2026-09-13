@@ -45,7 +45,8 @@ export function isCurrentMerge(
 	const hasSamePr = prState.prUrl === prUrl;
 	const sameMergeIdentity = hasSameTask && hasSamePr;
 	const sameOperation = hasSameRevision && hasSamePrGeneration;
-	return isActive && sameOperation && sameMergeIdentity;
+	const identityChecks = [isActive, sameOperation, sameMergeIdentity];
+	return identityChecks.every(Boolean);
 }
 
 async function emitCurrentMerge(
@@ -61,7 +62,8 @@ async function emitCurrentMerge(
 	prUrl: string,
 	emitMerged: (prUrl: string) => Promise<void>,
 ): Promise<void> {
-	if (!isCurrentPrContext(getSession, session, context)) return;
+	const isCurrentContext = isCurrentPrContext(getSession, session, context);
+	if (!isCurrentContext) return;
 	const currentMerge = isCurrentMerge(
 		sessionState,
 		prState,
@@ -90,9 +92,13 @@ export async function handlePrToolResult(
 	const shouldIgnoreEvent = event.isError || event.toolName !== C.tool.bash;
 	if (shouldIgnoreEvent) return;
 	const session = getSession();
-	if (session === null || !isCurrentPrContext(getSession, session, ctx)) return;
+	const hasSession = session !== null;
+	if (!hasSession) return;
+	const isCurrentContext = isCurrentPrContext(getSession, session, ctx);
+	if (!isCurrentContext) return;
 	const command = bashCommand(event);
-	if (GIT_MUTATION_RE.test(command)) session.hasPerformedAnyGitMutations = true;
+	const isGitMutation = GIT_MUTATION_RE.test(command);
+	if (isGitMutation) session.hasPerformedAnyGitMutations = true;
 	const prUrl = prState.prUrl;
 	if (prUrl === undefined) return;
 	const taskRef = sessionState.moduleState.todoist.taskRef;
