@@ -31,6 +31,35 @@ function isSessionRecord(
 	return operations.getSession() === session;
 }
 
+function isCurrentMergeEvent(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	event: MergeRequest,
+): boolean {
+	const currentEpoch = operations.getLifecycleEpoch?.();
+	const isCurrentSession = isSessionRecord(operations, session);
+	const isSameSession = event.sessionId === session.sessionId;
+	const isSameEpoch =
+		currentEpoch === undefined || event.lifecycleEpoch === currentEpoch;
+	const isCurrentSessionAndEvent = isCurrentSession && isSameSession;
+	return isCurrentSessionAndEvent && isSameEpoch;
+}
+
+function mergeState(session: TodoistSession): {
+	taskName: string;
+	stateSnapshot: TodoistSession["state"];
+	workRevision: number;
+	operationGeneration: number;
+} {
+	const taskName = session.state.taskName ?? session.state.taskRef ?? "";
+	return {
+		taskName,
+		stateSnapshot: structuredClone(session.state),
+		workRevision: session.workRevision,
+		operationGeneration: session.operationGeneration,
+	};
+}
+
 function isCurrentEvent(
 	operations: TodoistOperations,
 	session: TodoistSession,
@@ -167,17 +196,19 @@ async function consumeMergedEvent(
 	if (alreadyCompleted) return;
 	const session = operations.getSession();
 	if (session === null) return;
+	const isCurrentMerge = isCurrentMergeEvent(operations, session, event);
+	if (!isCurrentMerge) return;
 	const hasInteractiveUi = session.context.hasUI;
 	if (!hasInteractiveUi) return;
 	const taskRef = session.state.taskRef;
 	if (taskRef === undefined) return;
-	const taskName = session.state.taskName ?? taskRef;
-	const stateSnapshot = structuredClone(session.state);
-	const workRevision = session.workRevision;
-	const operationGeneration = session.operationGeneration;
+	const { taskName, stateSnapshot, workRevision, operationGeneration } =
+		mergeState(session);
 	void operations.promptQueue
 		.enqueue(async (isCurrent) => {
-			const isCurrentBeforePrompt = isSessionRecord(operations, session);
+			const isCurrentBeforePrompt =
+				isSessionRecord(operations, session) &&
+				isCurrentMergeEvent(operations, session, event);
 			const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
 			if (isPromptStale) return;
 			const confirmed = await confirmTaskCompletion(
@@ -189,7 +220,9 @@ async function consumeMergedEvent(
 			if (!isConfirmed) return;
 			const isCurrentAfterPromptEpoch = isCurrent();
 			if (!isCurrentAfterPromptEpoch) return;
-			const isCurrentSessionAfterPrompt = isSessionRecord(operations, session);
+			const isCurrentSessionAfterPrompt =
+				isSessionRecord(operations, session) &&
+				isCurrentMergeEvent(operations, session, event);
 			if (!isCurrentSessionAfterPrompt) return;
 			const completeMergedTask = operations.completeMergedTask;
 			if (completeMergedTask === undefined) return;

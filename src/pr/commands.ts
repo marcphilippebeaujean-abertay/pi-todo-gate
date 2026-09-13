@@ -130,6 +130,8 @@ async function runMergeProtocol(
 	await dependencies.eventHandler.prMergedEvent.emit({
 		prUrl,
 		taskMarkedAsCompleted: false,
+		sessionId: session.sessionId,
+		lifecycleEpoch: dependencies.getLifecycleEpoch?.() ?? 0,
 	});
 	const isCurrentAfterEmit = currentSession(dependencies, session, generation);
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);

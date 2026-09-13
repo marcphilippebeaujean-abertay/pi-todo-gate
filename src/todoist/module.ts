@@ -124,6 +124,7 @@ class TodoistModuleImpl implements TodoistModule {
 		const operations = {
 			sessionState,
 			getSession: () => this.currentSession,
+			getLifecycleEpoch: this.getLifecycleEpoch,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
 			dependencies,

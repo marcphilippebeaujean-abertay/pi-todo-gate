@@ -131,6 +131,7 @@ export type TodoistSession = SessionRecord;
 export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
+	getLifecycleEpoch?: () => number;
 	todoist: TodoistModule;
 	promptQueue: PromptQueue;
 	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;

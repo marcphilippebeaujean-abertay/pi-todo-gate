@@ -16,6 +16,8 @@ import type {
 
 export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;
+	private sessionId: string | null = null;
+	private lifecycleEpoch = 0;
 	private readonly promptQueue: PromptQueue;
 	private readonly eventHandler: EventHandler;
 	private readonly getLifecycleEpoch: () => number;
@@ -29,11 +31,11 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, lifecycleEpoch }) => {
+			({ context, session, lifecycleEpoch }) => {
 				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
 				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 				if (!isCurrentEpoch) return;
-				this.sessionStart(context, activationEpoch);
+				this.sessionStart(context, activationEpoch, session?.sessionId);
 			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
@@ -41,11 +43,17 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		);
 	}
 
-	sessionStart(context: ExtensionContext, activationEpoch?: number): void {
+	sessionStart(
+		context: ExtensionContext,
+		activationEpoch?: number,
+		sessionId?: string,
+	): void {
 		const epoch = activationEpoch ?? this.getLifecycleEpoch();
 		const isCurrentEpoch = epoch === this.getLifecycleEpoch();
 		if (!isCurrentEpoch) return;
 		this.context = context;
+		this.sessionId = sessionId ?? null;
+		this.lifecycleEpoch = epoch;
 		const isCurrentActivation =
 			this.context === context && epoch === this.getLifecycleEpoch();
 		if (!isCurrentActivation) return;
@@ -57,6 +65,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 
 	deactivate(): void {
 		this.context = null;
+		this.sessionId = null;
 		this.request = null;
 		void this.eventHandler.moduleStateChangedEvent.emit({
 			moduleId: C.module.exitProtocol,
@@ -64,9 +73,15 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		});
 	}
 
-	private onPrMerged(_event: PrMergedEvent): void {
+	private onPrMerged(event: PrMergedEvent): void {
 		const context = this.context;
 		if (context === null) return;
+		const activeSessionId = this.sessionId;
+		const isCurrentSession =
+			activeSessionId === null || activeSessionId === event.sessionId;
+		const isCurrentEpoch = event.lifecycleEpoch === this.lifecycleEpoch;
+		const canEnqueue = isCurrentSession && isCurrentEpoch;
+		if (!canEnqueue) return;
 		const request: ExitRequest = createExitRequest();
 		this.request = request;
 		addWorktreeExitAction(request, this.worktree);

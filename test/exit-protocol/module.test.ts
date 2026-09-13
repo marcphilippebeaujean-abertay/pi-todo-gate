@@ -135,6 +135,8 @@ describe("exit protocol presenter", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -155,6 +157,8 @@ describe("exit protocol presenter", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 
@@ -175,6 +179,8 @@ describe("exit protocol presenter", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 
@@ -201,6 +207,8 @@ describe("exit protocol presenter", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		await Promise.resolve();
 		queue.reset();
@@ -231,6 +239,8 @@ describe("exit protocol presenter", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 

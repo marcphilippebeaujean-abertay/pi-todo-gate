@@ -104,6 +104,8 @@ describe("session shutdown", () => {
 		await root.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/42",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 
 		expect(enqueue).toHaveBeenCalledTimes(2);

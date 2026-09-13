@@ -90,7 +90,14 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 async function emit(runtime: TodoistOperations) {
-	const payload = { prUrl: PR_URL, taskMarkedAsCompleted: false };
+	const session = runtime.getSession();
+	if (session === null) throw new Error("session required for merge event");
+	const payload = {
+		prUrl: PR_URL,
+		taskMarkedAsCompleted: false,
+		sessionId: session.sessionId,
+		lifecycleEpoch: runtime.getLifecycleEpoch?.() ?? 0,
+	};
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
 	return payload;
@@ -119,6 +126,7 @@ async function runMergeCommand(
 		eventHandler: runtime.eventHandler,
 		exec: runtime.dependencies.exec,
 		getSession: runtime.getSession,
+		getLifecycleEpoch: () => 0,
 		getPrState: () => ({
 			operationGeneration: runtime.getSession()?.operationGeneration,
 		}),
@@ -134,6 +142,40 @@ async function runMergeCommand(
 }
 
 describe("Todoist merge consumer", () => {
+	it("ignores merge event after subscriber yields into newer session", async () => {
+		const events = createSharedEvents();
+		const queue = { enqueue: vi.fn(() => Promise.resolve(undefined)) };
+		const lifecycleEpoch = { value: 1 };
+		const sessionA = { sessionId: "session-a" } as SessionRecord;
+		const sessionB = { sessionId: "session-b" } as SessionRecord;
+		let activeSession: SessionRecord | null = sessionA;
+		let releaseSubscriber!: () => void;
+		const subscriberBlocked = new Promise<void>((resolve) => {
+			releaseSubscriber = resolve;
+		});
+		events.prMergedEvent.subscribe(async () => subscriberBlocked);
+		registerTodoistMergeConsumer({
+			eventHandler: events,
+			getSession: () => activeSession,
+			getLifecycleEpoch: () => lifecycleEpoch.value,
+			promptQueue: queue as unknown as PromptQueue,
+		} as unknown as TodoistOperations);
+
+		const delivery = events.prMergedEvent.emit({
+			prUrl: PR_URL,
+			taskMarkedAsCompleted: false,
+			sessionId: sessionA.sessionId,
+			lifecycleEpoch: 1,
+		});
+		await Promise.resolve();
+		activeSession = sessionB;
+		lifecycleEpoch.value = 2;
+		releaseSubscriber();
+		await delivery;
+
+		expect(queue.enqueue).not.toHaveBeenCalled();
+	});
+
 	it("consumes rejected completion prompt queue tasks", async () => {
 		const catchFailure = vi.fn();
 		const promptQueue = {

@@ -131,12 +131,23 @@ describe("merge protocol command", () => {
 		).toHaveBeenCalledOnce();
 		const emit = currentRuntime.eventHandler.prMergedEvent.emit as unknown as {
 			mock: {
-				calls: Array<[{ prUrl: string; taskMarkedAsCompleted: boolean }]>;
+				calls: Array<
+					[
+						{
+							prUrl: string;
+							taskMarkedAsCompleted: boolean;
+							sessionId: string;
+							lifecycleEpoch: number;
+						},
+					]
+				>;
 			};
 		};
 		expect(emit.mock.calls[0]?.[0]).toEqual({
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 	});
 

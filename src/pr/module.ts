@@ -5,7 +5,7 @@ import type {
 import type { PromptQueue } from "../prompt-queue.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { EventHandler } from "../shared/events.ts";
+import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import { branchTexts } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
 import type { SessionState } from "../state.ts";
@@ -98,7 +98,7 @@ class PrModuleImpl implements PrModule {
 			this.deactivateSession();
 		});
 		this.eventHandler.prMergedEvent.subscribe((event) =>
-			this.recordMerge(event.prUrl),
+			this.recordMerge(event),
 		);
 	}
 
@@ -472,16 +472,23 @@ class PrModuleImpl implements PrModule {
 			eventHandler: this.eventHandler,
 			exec: this.dependencies.exec,
 			getSession: () => this.currentSession,
+			getLifecycleEpoch: this.getLifecycleEpoch,
 			getPrState: () => this.state,
 			isCurrentOperation: this.isCurrentOperation.bind(this),
 			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
 		};
 	}
 
-	private async recordMerge(prUrl: string | null): Promise<void> {
-		if (prUrl === null) return;
+	private async recordMerge(event: PrMergedEvent): Promise<void> {
+		const session = this.currentSession;
+		if (session === null) return;
+		const isSameSession = session.sessionId === event.sessionId;
+		const isSameEpoch = this.getLifecycleEpoch() === event.lifecycleEpoch;
+		const isCurrentIdentity = isSameSession && isSameEpoch;
+		if (!isCurrentIdentity) return;
+		if (event.prUrl === null) return;
 		const recordedState = recordMergedPr(
-			{ ...this.state, prUrl },
+			{ ...this.state, prUrl: event.prUrl },
 			new Date().toISOString(),
 		);
 		const nextState = {
@@ -492,6 +499,10 @@ class PrModuleImpl implements PrModule {
 		if (!changed) return;
 		this.state = nextState;
 		await this.emitState(this.state);
+		const isCurrentAfterEmit =
+			this.currentSession === session &&
+			this.getLifecycleEpoch() === event.lifecycleEpoch;
+		if (!isCurrentAfterEmit) return;
 	}
 
 	private async handleToolResult(
@@ -504,11 +515,16 @@ class PrModuleImpl implements PrModule {
 			this.state,
 			event,
 			ctx,
-			(prUrl) =>
-				this.eventHandler.prMergedEvent.emit({
+			(prUrl) => {
+				const session = this.currentSession;
+				if (session === null) return Promise.resolve();
+				return this.eventHandler.prMergedEvent.emit({
 					prUrl,
 					taskMarkedAsCompleted: false,
-				}),
+					sessionId: session.sessionId,
+					lifecycleEpoch: this.getLifecycleEpoch(),
+				});
+			},
 			this.dependencies.exec ?? spawnExec,
 		);
 	}

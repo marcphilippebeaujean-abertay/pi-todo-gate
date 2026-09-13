@@ -71,6 +71,8 @@ describe("shared events", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 
 		expect(order).toEqual(["first", "second"]);

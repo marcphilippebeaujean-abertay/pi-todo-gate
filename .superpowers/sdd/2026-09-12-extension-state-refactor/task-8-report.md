@@ -11,6 +11,7 @@
 - Production wiring registers Todoist merge consumer before constructing Exit Protocol, making `prMergedEvent` subscriber order deterministic. Added production-wiring regression coverage.
 - Added lifecycle epoch/session guards to Worktree, PR, Todoist, and Exit Protocol activation. Shutdown during awaited Worktree inspection cannot reactivate stale module state or prompts. Added shutdown-during-activation regression coverage.
 - Todoist claim reset now occurs only after activation session/context/epoch guards pass. Added regression coverage proving stale activation cannot clear newer claim state.
+- `PrMergedEvent` now carries originating `sessionId` and `lifecycleEpoch`. PR recording, Todoist completion/prompt queueing, and Exit action enqueue all reject events crossing session or lifecycle boundaries. Added async subscriber/session-switch regression coverage.
 - Preserved one `prMergedEvent`, typed `Event<T>`, native tool-result bridge, direct awaited Exit Protocol → Worktree action, stable SessionState snapshots, Worktree/Footer ownership, deleted `src/application`, and lint boundary.
 
 ## Structural review
@@ -23,13 +24,13 @@
 
 ## Validation
 
-- `env -u PI_SUBAGENT_CHILD npm test` — passed; 51 files, 314 passed, 8 skipped.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed; 51 files, 315 passed, 8 skipped.
 - `npm run architecture` — passed; dependency cruiser: 189 modules / 686 dependencies, structure and production checks clean.
 - `npm run lint` — passed Biome and strict lint.
 - `npm run typecheck` — passed.
 - `git diff --check` — passed.
-- Targeted production wiring, shutdown race, Todoist stale-activation, PR, Worktree, and extension tests — passed.
-- Targeted `rg` checks — no forbidden identifiers/adapters, no custom event `.on()` calls, no WeakMap, no root callback injection, no aggregate work projection.
+- Targeted production wiring, shutdown race, Todoist stale-activation, cross-session merge delivery, PR, Exit, Worktree, and extension tests — passed.
+- Targeted `rg` checks — no forbidden identifiers/adapters, no custom event `.on()` calls, no WeakMap, no root callback injection, no aggregate work projection; one typed prMergedEvent channel remains.
 
 ## Commit
 
@@ -38,4 +39,5 @@ Pending final commit.
 ## Residual risks
 
 - Native PI and Node stream `.on(...)` calls remain intentionally because they are external APIs, not module event channels.
+- Existing asynchronous claim-proposal assertion can intermittently flake under parallel Vitest scheduling; repeated full run passed.
 - Previously skipped stale claim/completion race tests remain skipped because they require broader fixture repair; no failures hidden.

@@ -26,6 +26,7 @@ export interface PrCommandOptions {
 	readonly eventHandler: EventHandler;
 	readonly exec?: Exec;
 	readonly getSession: () => PrSession | null;
+	readonly getLifecycleEpoch?: () => number;
 	readonly getPrState: () => PrState;
 	readonly isCurrentOperation: (
 		session: PrSession,

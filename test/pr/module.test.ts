@@ -259,10 +259,11 @@ describe("PR module ownership", () => {
 				? { stdout: "/repo\n", stderr: "", code: 0 }
 				: { stdout: "", stderr: "", code: 0 };
 		});
+		const sessionState = createSessionState();
 		const module = createPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
-			sessionState: createSessionState(),
+			sessionState,
 			dependencies: { exec },
 		});
 
@@ -277,9 +278,27 @@ describe("PR module ownership", () => {
 				gitStatePatch: { remoteOrigin: "git@github.com:o/r.git" },
 			}),
 		]);
+		const session = {
+			sessionId: "session",
+			context: { cwd: "/repo", hasUI: false },
+			state: {},
+			project: { codingRoot: "/repo" },
+			allowPrDiscovery: true,
+			prDiscoveryTestedUrls: new Set<string>(),
+			handoffContext: false,
+			workChanged: false,
+			hasUncommittedChanges: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/state.ts").PrSession;
+		sessionState.sessionId = session.sessionId;
+		await module.activateSession(session);
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/42",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({
@@ -371,6 +390,8 @@ describe("PR module ownership", () => {
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/43",
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
 		});
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({

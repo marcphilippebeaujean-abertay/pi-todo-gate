@@ -110,6 +110,8 @@ export type SessionDeactivatedEvent = undefined;
 export interface PrMergedEvent {
 	prUrl: string | null;
 	taskMarkedAsCompleted: boolean;
+	sessionId: string;
+	lifecycleEpoch: number;
 }
 
 export interface EventHandler {
