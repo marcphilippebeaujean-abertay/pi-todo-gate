@@ -95,6 +95,8 @@ export interface ModuleState {
 	exitProtocol: ExitProtocolModuleState;
 }
 
+export type ModuleId = keyof ModuleState;
+
 export interface SessionState {
 	session: SessionMetadata;
 	gitState: GitState;
