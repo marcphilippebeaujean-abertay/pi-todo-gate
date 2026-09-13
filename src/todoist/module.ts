@@ -19,7 +19,6 @@ export * from "./state.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { GitState } from "../state.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
@@ -31,6 +30,7 @@ import type {
 	TodoistOperations,
 	TodoistSession,
 	TodoistState,
+	TodoistStateUpdateOptions,
 } from "./state.ts";
 
 class TodoistModuleImpl implements TodoistModule {
@@ -96,11 +96,23 @@ class TodoistModuleImpl implements TodoistModule {
 		this.taskClaim.session = undefined;
 	}
 
+	updateState(
+		state: TodoistState,
+		options: TodoistStateUpdateOptions,
+	): Promise<void> {
+		const previousTaskRef =
+			this.options.sessionState.moduleState.todoist.taskRef;
+		const taskIdentityChanged = previousTaskRef !== state.taskRef;
+		if (taskIdentityChanged && this.currentSession !== null)
+			this.currentSession.workRevision += 1;
+		return this.publishState.publish(state, options);
+	}
+
 	private updateTodoistState(
 		state: TodoistState,
-		options: { persist: boolean; gitStatePatch?: Partial<GitState> },
+		options: TodoistStateUpdateOptions,
 	): Promise<void> {
-		return this.publishState.publish(state, options);
+		return this.updateState(state, options);
 	}
 
 	private operations(): TodoistOperations {

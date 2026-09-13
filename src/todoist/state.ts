@@ -149,9 +149,18 @@ export const todoistStateDescriptor: ModuleStateDescriptor<"todoist"> = {
 	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
 };
 
+export interface TodoistStateUpdateOptions {
+	persist: boolean;
+	gitStatePatch?: Partial<GitState>;
+}
+
 export interface TodoistModule {
 	register(): void;
 	syncSessionState(session: TodoistSession): Promise<void>;
+	updateState(
+		state: TodoistState,
+		options: TodoistStateUpdateOptions,
+	): Promise<void>;
 	taskClaim: {
 		pending: boolean;
 		completed: boolean;
@@ -191,7 +200,7 @@ export interface TodoistOperations {
 	emitState(session: TodoistSession): Promise<void>;
 	updateTodoistState(
 		state: TodoistState,
-		options: { persist: boolean; gitStatePatch?: Partial<GitState> },
+		options: TodoistStateUpdateOptions,
 	): Promise<void>;
 	refreshFooterStatuses(session: TodoistSession): void;
 	completeMergedTask?(

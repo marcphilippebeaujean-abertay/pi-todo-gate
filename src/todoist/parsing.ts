@@ -285,6 +285,7 @@ const STATE_KEYS = new Set<keyof TodoistState>([
 	"taskRef",
 	"taskName",
 	"taskUrl",
+	"todoistCompletionAttemptedAt",
 	"mergePromptedPrUrl",
 ]);
 

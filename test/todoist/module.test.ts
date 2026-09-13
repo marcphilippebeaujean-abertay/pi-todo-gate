@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
+import { completeMergedTask } from "../../src/todoist/completion.ts";
 import {
+	applyTodoistStatePatch,
 	createTodoistModule,
 	isTodoistState,
 } from "../../src/todoist/module.ts";
-import type { TodoistSession } from "../../src/todoist/state.ts";
+import type {
+	TodoistSession,
+	TodoistState,
+	TodoistStateUpdateOptions,
+} from "../../src/todoist/state.ts";
 
 describe("Todoist module ownership", () => {
 	it("does not let stale activation reset newer claim state", async () => {
@@ -114,6 +121,96 @@ describe("Todoist module projection", () => {
 	});
 });
 
+describe("Todoist task identity", () => {
+	it("rejects stale completion after ABA task identity changes", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-a" };
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		registerModuleStateConsumer(events, sessionState, () => true);
+		const module = createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+		});
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		const operations = {
+			sessionState,
+			getSession: () => session,
+			getLifecycleEpoch: () => 0,
+			dependencies: {
+				createTodoistClient: () => ({
+					completeTask: async (_ref: string, isCurrent: () => boolean) => {
+						await module.updateState({ taskRef: "task-b" }, { persist: false });
+						await module.updateState({ taskRef: "task-a" }, { persist: false });
+						expect(isCurrent()).toBe(false);
+					},
+				}),
+			},
+			updateTodoistState: (
+				state: TodoistState,
+				options: TodoistStateUpdateOptions,
+			) => module.updateState(state, options),
+			refreshFooterStatuses: () => undefined,
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			todoist: module,
+		} as never;
+
+		const result = await completeMergedTask(
+			operations,
+			session,
+			session.context as never,
+			"task-a",
+			{ taskRef: "task-a", prUrl: sessionState.moduleState.pr.prUrl },
+			0,
+			0,
+		);
+
+		expect(result).toBe("failed");
+	});
+
+	it("increments revision across ABA task identity changes", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const session = {
+			context: { cwd: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			workRevision: 0,
+		} as unknown as TodoistSession;
+		registerModuleStateConsumer(events, sessionState, () => true);
+		const module = createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+		});
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		sessionState.moduleState.todoist = { taskRef: "task-a" };
+
+		await module.updateState({ taskRef: "task-b" }, { persist: false });
+		await module.updateState({ taskRef: "task-a" }, { persist: false });
+
+		expect(session.workRevision).toBe(2);
+	});
+});
+
 describe("isTodoistState", () => {
 	it("accepts task state and rejects PR-shaped state", () => {
 		expect(
@@ -123,9 +220,30 @@ describe("isTodoistState", () => {
 				taskUrl: "https://app.todoist.com/app/task/42",
 			}),
 		).toBe(true);
+		expect(
+			isTodoistState({ todoistCompletionAttemptedAt: "2026-01-01T00:00:00Z" }),
+		).toBe(true);
 		expect(isTodoistState({ prUrl: "https://github.com/o/r/pull/42" })).toBe(
 			false,
 		);
 		expect(isTodoistState({ taskRef: 42 })).toBe(false);
+	});
+
+	it("patches completion-attempted state", () => {
+		expect(
+			applyTodoistStatePatch(
+				{ taskRef: "42" },
+				{ todoistCompletionAttemptedAt: "2026-01-01T00:00:00Z" },
+			),
+		).toEqual({
+			taskRef: "42",
+			todoistCompletionAttemptedAt: "2026-01-01T00:00:00Z",
+		});
+		expect(
+			applyTodoistStatePatch(
+				{ todoistCompletionAttemptedAt: "old" },
+				{ todoistCompletionAttemptedAt: undefined },
+			),
+		).toEqual({});
 	});
 });
