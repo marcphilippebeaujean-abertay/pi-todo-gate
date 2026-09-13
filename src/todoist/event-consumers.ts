@@ -1,6 +1,6 @@
 import { spawnExec } from "../shared/command.ts";
 import { inspectProject } from "../shared/project.ts";
-import { applyStatePatch } from "../state.ts";
+import { applyStatePatch } from "../shared/session-state.ts";
 import {
 	CLAIM,
 	COMPLETED,

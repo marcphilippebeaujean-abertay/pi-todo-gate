@@ -16,7 +16,7 @@ export type LintRuleId =
 	| "repeated-field-checks"
 	| "prefer-switch-dispatch"
 	| "domain-types-outside-state"
-	| "no-extension-state-in-modules"
+	| "no-root-state-imports-in-modules"
 	| "event-types-outside-events"
 	| "event-types-location"
 	| "no-functions-in-data";
@@ -33,6 +33,7 @@ export interface LintContext {
 	sourceFile: ts.SourceFile;
 	diagnostics: LintDiagnostic[];
 	checker: ts.TypeChecker;
+	program: ts.Program;
 	config: LintConfig;
 }
 export type LintRule = (context: LintContext) => void;

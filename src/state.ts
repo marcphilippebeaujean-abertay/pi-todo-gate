@@ -17,6 +17,7 @@ import type {
 	SessionReader,
 	WorkState,
 } from "./shared/session-state.ts";
+import { WORK_STATE_KEYS } from "./shared/session-state.ts";
 
 export type {
 	SessionReader,
@@ -24,6 +25,7 @@ export type {
 	SessionStateSnapshot,
 	WorkState,
 } from "./shared/session-state.ts";
+export { applyStatePatch } from "./shared/session-state.ts";
 
 import type {
 	TaskClaimWorker,
@@ -50,17 +52,6 @@ const PI_TODO_GATE_STATE = "pi-todo-gate-state";
 const OBJECT_TYPE = "object";
 const STRING_TYPE = "string";
 
-const STATE_KEYS: readonly (keyof WorkState)[] = [
-	"remoteOrigin",
-	"prUrl",
-	"taskUrl",
-	"taskRef",
-	"taskName",
-	"inheritedFrom",
-	"mergeCompletedAt",
-	"todoistCompletionAttemptedAt",
-];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	const isObjectValue = typeof value === OBJECT_TYPE;
 	const isNullValue = value === null;
@@ -73,7 +64,7 @@ export function isWorkState(value: unknown): value is WorkState {
 	const isRecordValue = isRecord(value);
 	const record = isRecordValue ? value : null;
 	if (record === null) return false;
-	return STATE_KEYS.every(
+	return WORK_STATE_KEYS.every(
 		(key) => record[key] === undefined || typeof record[key] === STRING_TYPE,
 	);
 }
@@ -92,21 +83,6 @@ function stateFromEntry(entry: unknown): WorkState | null {
 
 export function emptyWorkState(): WorkState {
 	return {};
-}
-
-export function applyStatePatch(
-	state: WorkState,
-	patch: Partial<WorkState>,
-): WorkState {
-	const next: WorkState = { ...state };
-	for (const key of STATE_KEYS) {
-		const isMissingPatchKey: boolean = !Object.hasOwn(patch, key);
-		if (isMissingPatchKey) continue;
-		const value = patch[key];
-		if (value === undefined) delete next[key];
-		else next[key] = value;
-	}
-	return next;
 }
 
 export function latestState(entries: readonly unknown[]): WorkState {

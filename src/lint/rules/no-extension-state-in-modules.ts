@@ -3,29 +3,65 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const MODULE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/][^\\/]+\.ts$/;
-const ROOT_STATE_IMPORT = /(?:^|[\\/])\.\.?[\\/]state\.ts$/;
-const RULE_ID = "no-extension-state-in-modules" as const;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/].+\.ts$/;
+const ROOT_STATE_PATH = /[\\/]src[\\/]state\.ts$/;
+const RULE_ID = "no-root-state-imports-in-modules" as const;
 const MESSAGE =
-	"Submodules may import SessionState from root state.ts, but not ExtensionState";
+	"Scoped modules may import only SessionState from root state.ts";
 
-export const noExtensionStateInModules: LintRule = ({
+function isRootStateImport(
+	sourceFile: ts.SourceFile,
+	moduleSpecifier: string,
+	program: ts.Program,
+): boolean {
+	const resolvedModule = ts.resolveModuleName(
+		moduleSpecifier,
+		sourceFile.fileName,
+		program.getCompilerOptions(),
+		ts.sys,
+	).resolvedModule;
+	if (resolvedModule === undefined) return false;
+	const resolvedPath = resolvedModule.resolvedFileName.replaceAll("\\", "/");
+	return ROOT_STATE_PATH.test(resolvedPath);
+}
+
+function reportForbiddenBinding(
+	sourceFile: ts.SourceFile,
+	node: ts.Node,
+	diagnostics: Parameters<LintRule>[0]["diagnostics"],
+): void {
+	diagnostics.push(diagnostic(sourceFile, node, RULE_ID, MESSAGE, 1, 0));
+}
+
+export const noRootStateImportsInModules: LintRule = ({
 	sourceFile,
 	diagnostics,
+	program,
 }) => {
 	if (!MODULE_PATH.test(sourceFile.fileName)) return;
 	for (const statement of sourceFile.statements) {
 		if (!ts.isImportDeclaration(statement)) continue;
 		if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
-		if (!ROOT_STATE_IMPORT.test(statement.moduleSpecifier.text)) continue;
+		const isRootState = isRootStateImport(
+			sourceFile,
+			statement.moduleSpecifier.text,
+			program,
+		);
+		if (!isRootState) continue;
 		const clause = statement.importClause;
-		const namedBindings = clause?.namedBindings;
-		if (!namedBindings || !ts.isNamedImports(namedBindings)) continue;
+		if (clause === undefined) continue;
+		if (clause.name !== undefined)
+			reportForbiddenBinding(sourceFile, clause.name, diagnostics);
+		const namedBindings = clause.namedBindings;
+		if (namedBindings === undefined) continue;
+		if (ts.isNamespaceImport(namedBindings)) {
+			reportForbiddenBinding(sourceFile, namedBindings.name, diagnostics);
+			continue;
+		}
 		for (const element of namedBindings.elements) {
-			if (element.name.text !== "ExtensionState") continue;
-			diagnostics.push(
-				diagnostic(sourceFile, element.name, RULE_ID, MESSAGE, 1, 0),
-			);
+			const importedName = element.propertyName?.text ?? element.name.text;
+			if (importedName === "SessionState") continue;
+			reportForbiddenBinding(sourceFile, element.name, diagnostics);
 		}
 	}
 };

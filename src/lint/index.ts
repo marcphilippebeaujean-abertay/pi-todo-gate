@@ -11,7 +11,7 @@ import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
 import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts";
 import { noDefaultParameters } from "./rules/no-default-parameters.ts";
 import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state.ts";
-import { noExtensionStateInModules } from "./rules/no-extension-state-in-modules.ts";
+import { noRootStateImportsInModules } from "./rules/no-extension-state-in-modules.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
@@ -36,7 +36,7 @@ const RULES: readonly LintRule[] = [
 	eventTypesOutsideEvents,
 	eventTypesLocation,
 	noDomainTypesOutsideState,
-	noExtensionStateInModules,
+	noRootStateImportsInModules,
 	noFunctionsInData,
 	repeatedFieldChecks,
 	preferSwitchDispatch,
@@ -69,6 +69,7 @@ export function lintProgram(
 			sourceFile,
 			diagnostics,
 			checker,
+			program,
 			config: resolvedConfig,
 		};
 		for (const rule of RULES) rule(context);

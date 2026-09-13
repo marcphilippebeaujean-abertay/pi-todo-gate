@@ -9,7 +9,6 @@ import "./notifications.ts";
 import "./user-prompts.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
-import { createSessionState } from "../state.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type {
 	WorktreeModule,
@@ -46,7 +45,7 @@ export function createWorktreeModule(
 	const moduleDependencies = dependencies ?? {};
 	const context = moduleContext ?? {
 		eventHandler: optionsOrEvents,
-		sessionState: createSessionState(),
+		sessionState: { sessionId: null, gitState: {}, moduleState: {} },
 	};
 	return createWorktreeConsumer({
 		eventHandler: context.eventHandler,

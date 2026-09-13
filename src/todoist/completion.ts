@@ -3,7 +3,7 @@ import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
 import { enqueueSessionOperation } from "../shared/session-operations.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
-import { applyStatePatch } from "../state.ts";
+import { applyStatePatch } from "../shared/session-state.ts";
 import { createClient } from "./client.ts";
 import {
 	notifyCompletionFailure,

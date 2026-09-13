@@ -4,7 +4,6 @@ import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { createEventHandler } from "../shared/events.ts";
 import type { ModuleContext } from "../shared/module-context.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
-import { createSessionState } from "../state.ts";
 import "./commands.ts";
 import "./constants.ts";
 import "./state.ts";
@@ -82,7 +81,7 @@ export function createFooterModule(
 	const context = moduleContext ?? {
 		promptQueue: new PromptQueue(),
 		eventHandler: createEventHandler(),
-		sessionState: createSessionState(),
+		sessionState: { sessionId: null, gitState: {}, moduleState: {} },
 	};
 	return new FooterEventConsumer({
 		eventHandler: context.eventHandler,

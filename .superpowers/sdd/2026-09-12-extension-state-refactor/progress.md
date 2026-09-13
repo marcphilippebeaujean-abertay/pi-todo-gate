@@ -40,6 +40,6 @@ Ruling: continue one additional Task 6 fix pass beyond the nominal review loop b
 - Task 3: complete — `aa71adb`, `3b690ea`, `173acbf`, `ab0180d`; stable Git/session state, clone-safe and serialized snapshots, reset coverage; final re-review verdict OK; 286 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-3-report.md`
 - Task 4: complete — `f05b3a5`, `b9679c7`, `888fdcc`, `896a240`; PR ownership, complete facet snapshots, stale async guards, mid-session Git origin updates, and stale adapter removal; final re-review verdict OK; 290 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-4-report.md`
 - Task 5: complete — review fixes add serialized Worktree refresh validity, remove duplicate root status inspection, narrow unused constructor options, and pass Todoist narrow dependencies; 294 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-5-report.md`
-- Task 6: pending
-- Task 7: pending
+- Task 6: complete — `44d158ae`, `7a5bf93`, `12f4399`, `b3b23da`, `5ae67d1`, `e47e2d1`, `07d4004`; root lifecycle coordination, epochs/reset barriers, startup/handoff projection, Todoist shutdown reset, typed Worktree status, and deletion of `src/application/`; final re-review verdict OK; 296 tests passed / 8 skipped, lint/typecheck/architecture pass; report at `task-6-report.md`
+- Task 7: complete — root-state import lint boundary expanded to all scoped modules; forbidden bindings migrated to shared/module-local state; focused/full validation passed; report at `task-7-report.md`
 - Task 8: pending

@@ -6,12 +6,22 @@ import { describe, expect, it } from "vitest";
 import { lintProgram } from "../../src/lint/index.ts";
 
 const TEMP_PREFIX = "pi-todo-gate-extension-state-import-";
-const RULE_ID = "no-extension-state-in-modules";
+const RULE_ID = "no-root-state-imports-in-modules";
 
-async function lintModule(source: string) {
+async function lintModule(source: string, directoryName = "pr") {
 	const root = await mkdtemp(join(tmpdir(), TEMP_PREFIX));
-	const directory = join(root, "src", "pr");
+	const directory = join(root, "src", directoryName);
 	await mkdir(directory, { recursive: true });
+	await writeFile(
+		join(root, "src", "state.ts"),
+		[
+			"export interface SessionState {}",
+			"export interface ExtensionState {}",
+			"export interface SessionContext {}",
+			"export function applyStatePatch() {}",
+			"export function currentSessionContext() {}",
+		].join("\\n"),
+	);
 	const filePath = join(directory, "module.ts");
 	await writeFile(filePath, source);
 	const program = ts.createProgram([filePath], {
@@ -25,9 +35,14 @@ async function lintModule(source: string) {
 }
 
 describe(RULE_ID, () => {
-	it("rejects ExtensionState imports from submodules", async () => {
+	it.each([
+		"ExtensionState",
+		"SessionContext",
+		"applyStatePatch",
+		"currentSessionContext",
+	])("rejects %s imports from scoped modules", async (binding) => {
 		const diagnostics = await lintModule(
-			`import type { ExtensionState, SessionState } from "../state.ts";\n`,
+			`import type { ${binding} } from "../state.ts";\n`,
 		);
 
 		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
@@ -35,11 +50,42 @@ describe(RULE_ID, () => {
 		);
 	});
 
-	it("allows SessionState imports from submodules", async () => {
+	it("reports each forbidden root-state binding once", async () => {
 		const diagnostics = await lintModule(
-			`import type { SessionState } from "../state.ts";\n`,
+			`import { ExtensionState, SessionContext, applyStatePatch } from "../state.ts";\n`,
 		);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			3,
+		);
+	});
+
+	it("allows SessionState imports from every scoped module", async () => {
+		for (const directory of [
+			"pr",
+			"todoist",
+			"herdr",
+			"worktree",
+			"exit-protocol",
+			"footer",
+		]) {
+			const diagnostics = await lintModule(
+				`import type { SessionState } from "../state.ts";\n`,
+				directory,
+			);
+			expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual(
+				[],
+			);
+		}
+	});
+
+	it("rejects namespace root-state bindings", async () => {
+		const diagnostics = await lintModule(
+			`import * as rootState from "../state.ts";\n`,
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
 	});
 });
