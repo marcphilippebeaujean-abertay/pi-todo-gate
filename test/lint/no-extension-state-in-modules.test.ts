@@ -88,4 +88,30 @@ describe(RULE_ID, () => {
 			1,
 		);
 	});
+
+	it("rejects forbidden export aliases from root state", async () => {
+		const diagnostics = await lintModule(
+			`export { ExtensionState as E } from "../state.ts";\n`,
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("rejects root-state star re-exports", async () => {
+		const diagnostics = await lintModule(`export * from "../state.ts";\n`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("allows SessionState re-exports from root state", async () => {
+		const diagnostics = await lintModule(
+			`export { SessionState } from "../state.ts";\n`,
+		);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
+	});
 });

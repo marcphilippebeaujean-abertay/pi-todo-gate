@@ -32,3 +32,19 @@ No compatibility exception or main-only root import ruling needed. Scoped produc
 
 - Root `state.ts` continues to re-export `applyStatePatch` for existing callers/tests; no scoped module imports that re-export.
 - Existing compatibility factory overloads remain until no longer needed by later cleanup; their fallback state is module-local and does not cross root import boundary.
+
+## Review Follow-up
+
+- Extended rule inspection to root-state export declarations.
+- Explicit forbidden export aliases and namespace re-exports emit one diagnostic per forbidden binding.
+- Root-state star re-exports emit one diagnostic; `SessionState` re-exports remain allowed.
+- Added focused export-boundary tests.
+
+Validation after follow-up:
+
+- `npx vitest run test/lint/no-extension-state-in-modules.test.ts` — passed, 10 tests.
+- `npm run lint` — passed Biome and strict lint.
+- `npm run typecheck` — passed.
+- `npm run architecture` — passed, 191 modules / 703 dependencies.
+- `env -u PI_SUBAGENT_CHILD npm test` — passed, 51 files / 306 tests passed / 8 skipped.
+- `git diff --check` — passed.

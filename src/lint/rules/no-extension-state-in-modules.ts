@@ -33,6 +33,52 @@ function reportForbiddenBinding(
 	diagnostics.push(diagnostic(sourceFile, node, RULE_ID, MESSAGE, 1, 0));
 }
 
+function checkImportDeclaration(
+	sourceFile: ts.SourceFile,
+	statement: ts.ImportDeclaration,
+	diagnostics: Parameters<LintRule>[0]["diagnostics"],
+): void {
+	const clause = statement.importClause;
+	if (clause === undefined) return;
+	if (clause.name !== undefined)
+		reportForbiddenBinding(sourceFile, clause.name, diagnostics);
+	const namedBindings = clause.namedBindings;
+	if (namedBindings === undefined) return;
+	if (ts.isNamespaceImport(namedBindings)) {
+		reportForbiddenBinding(sourceFile, namedBindings.name, diagnostics);
+		return;
+	}
+	for (const element of namedBindings.elements) {
+		const importedName = element.propertyName?.text ?? element.name.text;
+		if (importedName === "SessionState") continue;
+		reportForbiddenBinding(sourceFile, element.name, diagnostics);
+	}
+}
+
+function checkExportDeclaration(
+	sourceFile: ts.SourceFile,
+	statement: ts.ExportDeclaration,
+	diagnostics: Parameters<LintRule>[0]["diagnostics"],
+): void {
+	const moduleSpecifier = statement.moduleSpecifier;
+	if (moduleSpecifier === undefined) return;
+	if (!ts.isStringLiteral(moduleSpecifier)) return;
+	const clause = statement.exportClause;
+	if (clause === undefined) {
+		reportForbiddenBinding(sourceFile, moduleSpecifier, diagnostics);
+		return;
+	}
+	if (ts.isNamespaceExport(clause)) {
+		reportForbiddenBinding(sourceFile, clause.name, diagnostics);
+		return;
+	}
+	for (const element of clause.elements) {
+		const exportedName = element.propertyName?.text ?? element.name.text;
+		if (exportedName === "SessionState") continue;
+		reportForbiddenBinding(sourceFile, element.name, diagnostics);
+	}
+}
+
 export const noRootStateImportsInModules: LintRule = ({
 	sourceFile,
 	diagnostics,
@@ -40,28 +86,19 @@ export const noRootStateImportsInModules: LintRule = ({
 }) => {
 	if (!MODULE_PATH.test(sourceFile.fileName)) return;
 	for (const statement of sourceFile.statements) {
-		if (!ts.isImportDeclaration(statement)) continue;
-		if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+		const isImport = ts.isImportDeclaration(statement);
+		const isExport = ts.isExportDeclaration(statement);
+		if (!isImport && !isExport) continue;
+		const moduleSpecifier = statement.moduleSpecifier;
+		if (moduleSpecifier === undefined || !ts.isStringLiteral(moduleSpecifier))
+			continue;
 		const isRootState = isRootStateImport(
 			sourceFile,
-			statement.moduleSpecifier.text,
+			moduleSpecifier.text,
 			program,
 		);
 		if (!isRootState) continue;
-		const clause = statement.importClause;
-		if (clause === undefined) continue;
-		if (clause.name !== undefined)
-			reportForbiddenBinding(sourceFile, clause.name, diagnostics);
-		const namedBindings = clause.namedBindings;
-		if (namedBindings === undefined) continue;
-		if (ts.isNamespaceImport(namedBindings)) {
-			reportForbiddenBinding(sourceFile, namedBindings.name, diagnostics);
-			continue;
-		}
-		for (const element of namedBindings.elements) {
-			const importedName = element.propertyName?.text ?? element.name.text;
-			if (importedName === "SessionState") continue;
-			reportForbiddenBinding(sourceFile, element.name, diagnostics);
-		}
+		if (isImport) checkImportDeclaration(sourceFile, statement, diagnostics);
+		else checkExportDeclaration(sourceFile, statement, diagnostics);
 	}
 };
