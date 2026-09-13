@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
+import { createModuleStatePublisher } from "../../src/event-publishers.ts";
 import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr/constants.ts";
-
 import type { ClaimWorkerRequest } from "../../src/herdr/module.ts";
 import {
 	CLAIM_WORKER_RESPONSE_TEMPLATE,
@@ -10,6 +11,8 @@ import {
 	installHerdrTabClaim,
 	type StartBackgroundWorker,
 } from "../../src/herdr/module.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 
 const WORKER_FAILED = "worker failed";
 const BLOCKS_TAB_NAMING_RETRY_FOR_DESCRIPTIVE_TAB =
@@ -197,6 +200,76 @@ describe("background Herdr tab claim", () => {
 			emitFailure(backgroundWorker.requests[0] as ClaimWorkerRequest);
 
 			expect(claimStates).toEqual([false, true, false]);
+		} finally {
+			restore();
+		}
+	});
+
+	it("awaits hidden spinner before publishing durable success marker", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const events = createSharedEvents();
+			const sessionState = createSessionState();
+			registerModuleStateConsumer(events, sessionState);
+			const publisher = createModuleStatePublisher(events, "herdr");
+			const updates: Array<{
+				moduleState: typeof sessionState.moduleState.herdr;
+				persist: boolean;
+			}> = [];
+			events.moduleStateChangedEvent.subscribe((update) => {
+				if (update.moduleId === "herdr")
+					updates.push({
+						moduleState: update.moduleState,
+						persist: update.persist,
+					});
+			});
+			const backgroundWorker = worker();
+			const state = { tabId: "w1:t1", label: "7" };
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: actionRunner(state, []),
+				startBackgroundWorker: backgroundWorker.start,
+				publishClaimInProgress: (claimInProgress) =>
+					publisher.publish(
+						{
+							...sessionState.moduleState.herdr,
+							claimInProgress,
+						},
+						{ persist: false },
+					),
+				onClaimReturnedSuccessfully: () =>
+					publisher.publish(
+						{
+							...sessionState.moduleState.herdr,
+							herdrClaimReturnedSuccessfully: "true",
+						},
+						{ persist: true },
+					),
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			updates.length = 0;
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim" },
+				context(),
+			);
+			await backgroundWorker.requests[0]?.events.claimCompletedEvent.emit({
+				attemptId: backgroundWorker.requests[0]?.attemptId ?? 0,
+				result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
+			});
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			expect(updates).toEqual([
+				{ moduleState: { claimInProgress: true }, persist: false },
+				{ moduleState: { claimInProgress: false }, persist: false },
+				{
+					moduleState: {
+						claimInProgress: false,
+						herdrClaimReturnedSuccessfully: "true",
+					},
+					persist: true,
+				},
+			]);
 		} finally {
 			restore();
 		}

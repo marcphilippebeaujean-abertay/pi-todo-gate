@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FOOTER_HERDR_TYPE } from "../../src/footer/constants.ts";
 import {
 	type FooterState,
 	type FooterUpdate,
@@ -73,6 +74,34 @@ describe("footer state serialization", () => {
 					text: null,
 				},
 			},
+		});
+	});
+
+	it("does not persist or restore active Herdr footer status", () => {
+		const state: FooterState = {
+			footers: {
+				[FOOTER_HERDR_TYPE]: {
+					footerType: FOOTER_HERDR_TYPE,
+					isLoading: true,
+					text: "Herdr: ⠋ working |",
+					isVisible: true,
+				},
+				task: visible,
+			},
+		};
+
+		const snapshot = serializeFooterState(state);
+		expect(snapshot).toEqual({
+			footers: {
+				task: {
+					footerType: "task",
+					isLoading: true,
+					text: "Todoist Task: work |",
+				},
+			},
+		});
+		expect(restoreFooterState(snapshot)).toEqual({
+			footers: { task: visible },
 		});
 	});
 

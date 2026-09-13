@@ -201,7 +201,7 @@ class HerdrTabClaimConsumer {
 		return this.activeAttempt?.attemptId === attemptId;
 	}
 
-	private completeClaim(event: ClaimCompletedEvent): void {
+	private async completeClaim(event: ClaimCompletedEvent): Promise<void> {
 		const attempt = this.activeAttempt;
 		const hasAttempt = attempt !== undefined;
 		if (!hasAttempt) return;
@@ -209,7 +209,7 @@ class HerdrTabClaimConsumer {
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
-		this.publishClaimInProgress(false);
+		const claimStatusUpdate = this.publishClaimInProgress(false);
 		try {
 			applyClaimResponse(this.commandRunner, attempt, event.result);
 		} catch (error) {
@@ -228,9 +228,11 @@ class HerdrTabClaimConsumer {
 			event.result,
 		);
 		if (isValidated) {
+			if (claimStatusUpdate instanceof Promise) await claimStatusUpdate;
 			this.hasValidatedClaim = true;
 			this.hasClaimReturnedSuccessfully = true;
-			this.onClaimReturnedSuccessfully?.(attempt.context);
+			const markerUpdate = this.onClaimReturnedSuccessfully?.(attempt.context);
+			if (markerUpdate instanceof Promise) await markerUpdate;
 			this.nextAttemptId = 0;
 			return;
 		}

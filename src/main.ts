@@ -159,7 +159,7 @@ function startExtensions(
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 		publishClaimInProgress: (claimInProgress) => {
 			const current = extensionState.sessionState.moduleState.herdr;
-			void herdrStatePublisher.publish(
+			return herdrStatePublisher.publish(
 				{ ...current, claimInProgress },
 				{ persist: false },
 			);
@@ -169,9 +169,10 @@ function startExtensions(
 				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED,
 		onClaimReturnedSuccessfully: () => {
 			const current = extensionState.sessionState.moduleState.herdr;
-			void herdrStatePublisher.publish(
+			return herdrStatePublisher.publish(
 				{
 					...current,
+					claimInProgress: false,
 					herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
 				},
 				{ persist: true },

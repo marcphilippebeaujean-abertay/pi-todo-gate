@@ -205,6 +205,37 @@ describe("footer module", () => {
 		);
 	});
 
+	it("hides Herdr spinner after transient claim completion", async () => {
+		const h = harness();
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
+		await footer.sessionStart({}, h.context());
+
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: true },
+			persist: false,
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: false },
+			persist: false,
+		});
+
+		expect(footer.getState().footers[FOOTER_HERDR_TYPE]).toEqual({
+			footerType: FOOTER_HERDR_TYPE,
+			isLoading: false,
+			text: "Herdr: ⠋ working |",
+			isVisible: false,
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: FOOTER_HERDR_TYPE,
+			text: undefined,
+		});
+	});
+
 	it("resets in-memory state when extension instance receives a new blank session", async () => {
 		const h = harness();
 		const footer = createFooterModule({

@@ -18,6 +18,7 @@ import {
 import {
 	FOOTER_EVENT_LABEL,
 	FOOTER_FOOTERS_LABEL,
+	FOOTER_HERDR_TYPE,
 	FOOTER_LOADING_FIELD,
 	FOOTER_PERSISTED_LABEL,
 	FOOTER_STATE_LABEL,
@@ -171,8 +172,9 @@ export function restoreFooterState(value: unknown): FooterState | null {
 	const restored: Record<string, FooterUpdate> = {};
 	for (const footer of Object.values(footers)) {
 		const parsed = parsePersistedFooter(footer);
-		const hasParsedFooter = parsed !== undefined;
-		if (hasParsedFooter) restored[parsed.footerType] = parsed;
+		const isTransientHerdrFooter = parsed?.footerType === FOOTER_HERDR_TYPE;
+		const hasPersistedFooter = parsed !== undefined && !isTransientHerdrFooter;
+		if (hasPersistedFooter) restored[parsed.footerType] = parsed;
 	}
 	return { footers: restored };
 }
@@ -185,7 +187,10 @@ function serializedText(event: FooterUpdate): string | null {
 
 export function serializeFooterState(state: FooterState): PersistedFooterState {
 	const footers: Record<string, PersistedFooterUpdate> = {};
-	for (const event of Object.values(state.footers)) {
+	const persistedFooters = Object.values(state.footers).filter(
+		(event) => event.footerType !== FOOTER_HERDR_TYPE,
+	);
+	for (const event of persistedFooters) {
 		footers[event.footerType] = {
 			footerType: event.footerType,
 			isLoading: event.isLoading,

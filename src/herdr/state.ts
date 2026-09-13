@@ -94,7 +94,7 @@ export interface HerdrTabOptions {
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	publishClaimInProgress?: (claimInProgress: boolean) => void;
+	publishClaimInProgress?: (claimInProgress: boolean) => void | Promise<void>;
 	hasClaimReturnedSuccessfully?: (ctx: ExtensionContext) => boolean;
-	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void;
+	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void | Promise<void>;
 }

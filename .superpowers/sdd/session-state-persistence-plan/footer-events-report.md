@@ -165,3 +165,117 @@ Checked 181 files in 35ms. No fixes applied.
 ```
 
 No staged or unstaged files remain after commit.
+
+## Fix round 1
+
+### Reviewer findings addressed
+
+1. Herdr completion now awaits transient `claimInProgress: false` publication before durable success marker publication. Main success payload explicitly carries `claimInProgress: false`. This prevents stale root state from reactivating spinner.
+2. Footer serializer and restorer exclude Herdr footer entry, so aggregate durable snapshots cannot restore active claim UI.
+
+### TDD red
+
+Regression command:
+
+```text
+env -u PI_SUBAGENT_CHILD npx vitest run test/herdr/tab-claim.test.ts test/footer/state.test.ts
+```
+
+Output:
+
+```text
+Test Files  2 failed (2)
+Tests  2 failed | 24 passed (26)
+FAIL test/herdr/tab-claim.test.ts > background Herdr tab claim > awaits hidden Herdr spinner before publishing durable success marker
+AssertionError: expected ... claimInProgress: false ... received ... claimInProgress: true ... persist: true
+FAIL test/footer/state.test.ts > footer state serialization > does not persist or restore active Herdr footer status
+AssertionError: expected ... footers: { pi-todo-gate-herdr, task } ... to equal ... footers: { task }
+```
+
+### TDD green
+
+Focused command after fixes:
+
+```text
+env -u PI_SUBAGENT_CHILD npx vitest run test/herdr/tab-claim.test.ts test/footer/state.test.ts test/footer/module.test.ts
+```
+
+```text
+Test Files  3 passed (3)
+Tests  35 passed (35)
+```
+
+Regression coverage now proves:
+
+- Herdr transient true/false updates use `persist: false`.
+- Durable success marker sees `claimInProgress: false` after transient state drains.
+- Footer renders Herdr spinner while active and hides it after false projection.
+- Active Herdr footer is absent from serialized durable footer snapshot and restored state.
+
+### Full validation
+
+`env -u PI_SUBAGENT_CHILD npm test`:
+
+```text
+✔ no dependency violations found (199 modules, 762 dependencies cruised)
+Test Files  56 passed (56)
+Tests  361 passed | 8 skipped (369)
+Start at 21:50:19
+```
+
+`npm run lint`:
+
+```text
+Checked 181 files in 35ms. No fixes applied.
+```
+
+`npm run typecheck`:
+
+```text
+(no output after tsc command; passed)
+```
+
+`git diff --check`:
+
+```text
+(passed; no whitespace errors)
+```
+
+`git status --short --branch` before fix commit:
+
+```text
+## cleanup-root-files...origin/cleanup-root-files [ahead 1]
+ M src/footer/state.ts
+ M src/herdr/event-consumers.ts
+ M src/herdr/state.ts
+ M src/main.ts
+ M test/footer/module.test.ts
+ M test/footer/state.test.ts
+ M test/herdr/tab-claim.test.ts
+```
+
+Fix commit: `fix: prevent Herdr spinner persistence race` (fix-round commit).
+
+Post-commit worktree is clean; branch ahead by two commits.
+
+### Post-fix commit verification
+
+Command:
+
+```text
+env -u PI_SUBAGENT_CHILD npm test && npm run lint && npm run typecheck && git diff --check && git status --short --branch && git log -2 --oneline
+```
+
+Output:
+
+```text
+✔ no dependency violations found (199 modules, 762 dependencies cruised)
+Test Files  56 passed (56)
+Tests  361 passed | 8 skipped (369)
+Checked 181 files in 35ms. No fixes applied.
+## cleanup-root-files...origin/cleanup-root-files [ahead 2]
+9d0e18e fix: prevent Herdr spinner persistence race
+ a379bfb refactor: route footer status through module state
+```
+
+No residual staged or unstaged files after verification.
