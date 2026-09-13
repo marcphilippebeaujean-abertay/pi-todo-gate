@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { FooterState, FooterUpdate } from "../../src/footer/state.ts";
 import {
+	type FooterState,
+	type FooterUpdate,
+	footerStateDescriptor,
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
@@ -19,6 +21,26 @@ const hidden: FooterUpdate = {
 	text: "Herdr: working |",
 	isVisible: false,
 };
+
+describe("footer state", () => {
+	it("provides common session-state descriptor", () => {
+		const state: FooterState = {
+			footers: {
+				task: {
+					footerType: "task",
+					isLoading: false,
+					text: "Task",
+					isVisible: true,
+				},
+			},
+		};
+
+		expect(footerStateDescriptor.id).toBe("footer");
+		expect(
+			footerStateDescriptor.restore(footerStateDescriptor.serialize(state)),
+		).toEqual(state);
+	});
+});
 
 describe("footer event parsing", () => {
 	it("returns an exact live event object", () => {

@@ -2,7 +2,12 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type {
+	JsonValue,
+	ModuleStateDescriptor,
+} from "../session-state-persistence.ts";
 import type { EventHandler } from "../shared/events.ts";
+import type { SessionState } from "../state.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
@@ -24,9 +29,7 @@ import {
 	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
 
-export interface FooterState {
-	footers: Record<string, FooterUpdate>;
-}
+export type FooterState = SessionState["moduleState"]["footer"];
 
 export interface PersistedFooterUpdate {
 	footerType: string;
@@ -47,7 +50,8 @@ export interface FooterModuleDependencies {
 
 export interface FooterModuleOptions {
 	eventHandler: EventHandler;
-	pi: ExtensionAPI;
+	sessionState: SessionState;
+	pi?: ExtensionAPI;
 	dependencies?: FooterModuleDependencies;
 }
 export interface FooterModule {
@@ -214,3 +218,11 @@ export function applyFooterUpdate(
 		},
 	};
 }
+
+export const footerStateDescriptor: ModuleStateDescriptor<"footer"> = {
+	id: "footer",
+	createInitialState: emptyFooterState,
+	restore: (value) => restoreFooterState(value) ?? emptyFooterState(),
+	serialize: (state): JsonValue =>
+		structuredClone(serializeFooterState(state)) as unknown as JsonValue,
+};

@@ -36,6 +36,7 @@ export function createExtensionState(
 	const stateUpdateEpoch = { value: 0 };
 	const footer = createFooterModule({
 		eventHandler,
+		sessionState,
 		pi,
 		dependencies: { openSession: dependencies.openSession },
 	});
@@ -70,6 +71,7 @@ export function createExtensionState(
 	const exitProtocol = createExitProtocolModule({
 		promptQueue,
 		eventHandler,
+		sessionState,
 		worktree,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
 	});

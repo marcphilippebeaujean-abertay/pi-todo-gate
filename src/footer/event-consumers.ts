@@ -1,11 +1,6 @@
-import {
-	type ExtensionAPI,
-	type ExtensionContext,
-	SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
-import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
 import { publishFooterState } from "./event-publishers.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import {
@@ -15,7 +10,6 @@ import {
 } from "./footer-rendering.ts";
 import type {
 	FooterModule,
-	FooterModuleDependencies,
 	FooterModuleOptions,
 	FooterState,
 } from "./state.ts";
@@ -23,40 +17,11 @@ import {
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
-	restoreFooterState,
-	serializeFooterState,
 } from "./state.ts";
-
-function customEntryData(entry: unknown, customType: string): unknown {
-	if (typeof entry !== "object") return undefined;
-	if (entry === null) return undefined;
-	if (Array.isArray(entry)) return undefined;
-	const candidate = entry as {
-		type?: unknown;
-		customType?: unknown;
-		data?: unknown;
-	};
-	const hasCustomType = candidate.type === FOOTER_CUSTOM_ENTRY_TYPE;
-	if (!hasCustomType) return undefined;
-	const matchesCustomType = candidate.customType === customType;
-	if (!matchesCustomType) return undefined;
-	return candidate.data;
-}
-
-function latestFooterState(entries: readonly unknown[]): FooterState | null {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const data = customEntryData(entries[index], FOOTER_STATE_TYPE);
-		if (data === undefined) continue;
-		const state = restoreFooterState(data);
-		if (state !== null) return state;
-	}
-	return null;
-}
 
 export class FooterEventConsumer implements FooterModule {
 	private readonly eventHandler: EventHandler;
-	private readonly pi: ExtensionAPI;
-	private readonly dependencies: FooterModuleDependencies;
+	private readonly sessionState: FooterModuleOptions["sessionState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private state = emptyFooterState();
@@ -68,13 +33,12 @@ export class FooterEventConsumer implements FooterModule {
 
 	constructor(options: FooterModuleOptions) {
 		this.eventHandler = options.eventHandler;
-		this.pi = options.pi;
-		this.dependencies = options.dependencies ?? {};
+		this.sessionState = options.sessionState;
 		this.eventHandler.footerUpdateEvent.subscribe((event) =>
 			this.update(event),
 		);
 		this.eventHandler.moduleStateChangedEvent.subscribe((event) =>
-			this.refreshFromModuleState(event.moduleId, event.moduleState),
+			this.refreshFromModuleState(event),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
 			({ context, previousSessionFile }) =>
@@ -86,30 +50,26 @@ export class FooterEventConsumer implements FooterModule {
 	}
 
 	private refreshFromModuleState(
-		moduleId: string,
-		moduleState: Record<string, unknown>,
+		event: import("../shared/events.ts").ModuleStateChangedEvent,
 	): void {
-		switch (moduleId) {
+		switch (event.moduleId) {
 			case C.module.pr: {
-				const pr = moduleState as { prUrl?: string };
-				this.currentPrUrl = pr.prUrl;
-				this.refreshPrStatus(pr.prUrl);
+				this.currentPrUrl = event.moduleState.prUrl;
+				this.refreshPrStatus(this.currentPrUrl);
 				return;
 			}
 			case C.module.worktree: {
-				const worktree = moduleState as { hasUncommittedChanges?: boolean };
-				this.hasUncommittedChanges = worktree.hasUncommittedChanges ?? false;
+				this.hasUncommittedChanges =
+					event.gitStatePatch?.hasUncommittedChanges ??
+					this.sessionState.gitState.hasUncommittedChanges ??
+					false;
 				this.refreshPrStatus(this.currentPrUrl);
 				return;
 			}
 			case C.module.todoist: {
-				const todoist = moduleState as {
-					taskUrl?: string;
-					taskName?: string;
-				};
-				this.currentTaskUrl = todoist.taskUrl;
-				this.currentTaskName = todoist.taskName;
-				this.refreshTaskStatus(todoist.taskUrl, todoist.taskName);
+				this.currentTaskUrl = event.moduleState.taskUrl;
+				this.currentTaskName = event.moduleState.taskName;
+				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
 				return;
 			}
 			default:
@@ -150,40 +110,17 @@ export class FooterEventConsumer implements FooterModule {
 		);
 	}
 
-	private appendState(): void {
-		this.pi.appendEntry(FOOTER_STATE_TYPE, serializeFooterState(this.state));
-	}
-
 	async sessionStart(
-		event: FooterSessionStartEvent,
+		_event: FooterSessionStartEvent,
 		nextContext: ExtensionContext,
 	): Promise<void> {
 		this.context = nextContext;
-		this.currentPrUrl = undefined;
-		this.currentTaskUrl = undefined;
-		this.currentTaskName = undefined;
-		this.hasUncommittedChanges = false;
-		this.state = emptyFooterState();
-		const currentState = latestFooterState(
-			nextContext.sessionManager.getBranch(),
-		);
-		if (currentState !== null) {
-			this.state = currentState;
-			this.display.start(nextContext, this.state);
-			return;
-		}
-		if (event.previousSessionFile === undefined) {
-			this.display.start(nextContext, this.state);
-			return;
-		}
-		const previous =
-			this.dependencies.openSession?.(event.previousSessionFile) ??
-			SessionManager.open(event.previousSessionFile);
-		const inherited = latestFooterState(previous.getBranch());
-		if (inherited !== null) {
-			this.state = inherited;
-			this.appendState();
-		}
+		this.currentPrUrl = this.sessionState.moduleState.pr.prUrl;
+		this.currentTaskUrl = this.sessionState.moduleState.todoist.taskUrl;
+		this.currentTaskName = this.sessionState.moduleState.todoist.taskName;
+		this.hasUncommittedChanges =
+			this.sessionState.gitState.hasUncommittedChanges ?? false;
+		this.state = structuredClone(this.sessionState.moduleState.footer);
 		this.display.start(nextContext, this.state);
 	}
 
@@ -203,7 +140,6 @@ export class FooterEventConsumer implements FooterModule {
 		if (shouldSkip) return;
 		this.state = applyFooterUpdate(this.state, parsed);
 		void publishFooterState(this.eventHandler, { ...this.getState() });
-		this.appendState();
 		this.display.update(this.state, parsed);
 	}
 

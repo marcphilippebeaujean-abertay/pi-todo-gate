@@ -121,6 +121,7 @@ describe("worktree event actions", () => {
 			{
 				moduleId: "worktree",
 				moduleState: {},
+				persist: false,
 				gitStatePatch: {},
 			},
 		]);
@@ -176,10 +177,11 @@ describe("worktree event actions", () => {
 	it("ignores stale concurrent status refresh results", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		const moduleUpdates: Array<{ hasUncommittedChanges?: boolean }> = [];
+		const moduleUpdates: Array<{
+			gitStatePatch?: { hasUncommittedChanges?: boolean };
+		}> = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
-			const state = update.moduleState as { hasUncommittedChanges?: boolean };
-			moduleUpdates.push(state);
+			moduleUpdates.push({ gitStatePatch: update.gitStatePatch });
 		});
 		let statusCalls = 0;
 		let releaseFirstRefresh!: () => void;
@@ -221,9 +223,13 @@ describe("worktree event actions", () => {
 		releaseFirstRefresh();
 		await Promise.all([first, second]);
 
-		expect(moduleUpdates.at(-1)?.hasUncommittedChanges).toBe(false);
+		expect(moduleUpdates.at(-1)?.gitStatePatch?.hasUncommittedChanges).toBe(
+			false,
+		);
 		expect(
-			moduleUpdates.filter((state) => state.hasUncommittedChanges).length,
+			moduleUpdates.filter(
+				(update) => update.gitStatePatch?.hasUncommittedChanges,
+			).length,
 		).toBe(0);
 	});
 

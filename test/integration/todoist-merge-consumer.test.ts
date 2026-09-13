@@ -219,6 +219,7 @@ describe("Todoist merge consumer", () => {
 		registerTodoistMergeConsumer(setupResult.runtime);
 		const exitModule = createExitProtocolModule({
 			eventHandler: setupResult.runtime.eventHandler,
+			sessionState: setupResult.runtime.sessionState,
 			promptQueue: setupResult.runtime.promptQueue,
 			worktree: {
 				getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),

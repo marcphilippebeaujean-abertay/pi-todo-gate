@@ -21,7 +21,7 @@ export const EXTENSION_CONSTANTS = {
 	module: {
 		footer: "footer",
 		worktree: "worktree",
-		exitProtocol: "exit-protocol",
+		exitProtocol: "exitProtocol",
 		work: "work",
 		pr: "pr",
 		todoist: "todoist",

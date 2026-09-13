@@ -3,14 +3,12 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import {
-	FOOTER_SPINNER_INTERVAL_MS,
-	FOOTER_STATE_TYPE,
-} from "../../src/footer/constants.ts";
+import { FOOTER_SPINNER_INTERVAL_MS } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
 import type { FooterUpdate } from "../../src/footer/state.ts";
 import { restoreFooterState } from "../../src/footer/state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 
 function harness(branch: unknown[] = []) {
 	const appended: unknown[] = [];
@@ -27,7 +25,14 @@ function harness(branch: unknown[] = []) {
 			},
 			sessionManager: { getBranch: () => sessionBranch },
 		}) as unknown as ExtensionContext;
-	return { pi, events: createSharedEvents(), appended, statusCalls, context };
+	return {
+		pi,
+		events: createSharedEvents(),
+		appended,
+		statusCalls,
+		context,
+		sessionState: createSessionState(),
+	};
 }
 
 const update: FooterUpdate = {
@@ -62,7 +67,11 @@ describe("footer module", () => {
 
 	it("starts a blank session without rendering default footers", async () => {
 		const h = harness();
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			sessionState: h.sessionState,
+		});
 
 		await footer.sessionStart({}, h.context());
 
@@ -75,7 +84,11 @@ describe("footer module", () => {
 		vi.useFakeTimers();
 		try {
 			const h = harness();
-			const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+			const footer = createFooterModule({
+				eventHandler: h.events,
+				pi: h.pi,
+				sessionState: h.sessionState,
+			});
 			await footer.sessionStart({}, h.context());
 
 			footer.update({
@@ -99,7 +112,11 @@ describe("footer module", () => {
 
 	it("persists updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
 		footer.update(update);
@@ -109,32 +126,7 @@ describe("footer module", () => {
 			{ key: update.footerType, text: update.text },
 			{ key: update.footerType, text: undefined },
 		]);
-		expect(h.appended).toEqual([
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: null,
-						},
-					},
-				},
-			},
-		]);
+		expect(h.appended).toEqual([]);
 		expect(footer.getState()).toEqual({
 			footers: { [update.footerType]: { ...update, isVisible: false } },
 		});
@@ -146,7 +138,11 @@ describe("footer module", () => {
 		h.events.moduleStateChangedEvent.subscribe((event) => {
 			updates.push(event);
 		});
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
 		footer.update(update);
@@ -155,13 +151,18 @@ describe("footer module", () => {
 			{
 				moduleId: "footer",
 				moduleState: { footers: { [update.footerType]: update } },
+				persist: false,
 			},
 		]);
 	});
 
 	it("throws when live module update receives invalid data", async () => {
 		const h = harness();
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
 		expect(() =>
@@ -172,118 +173,13 @@ describe("footer module", () => {
 		).toThrow(TypeError);
 	});
 
-	it("restores footer state from current session during resume", async () => {
-		const h = harness([
-			{
-				type: "custom",
-				customType: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-		]);
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
-
-		await footer.sessionStart({}, h.context());
-
-		expect(h.statusCalls).toEqual([
-			{ key: update.footerType, text: update.text },
-		]);
-		expect(h.appended).toEqual([]);
-	});
-
-	it("restarts spinner for a restored loading footer", async () => {
-		vi.useFakeTimers();
-		try {
-			const h = harness([
-				{
-					type: "custom",
-					customType: FOOTER_STATE_TYPE,
-					data: {
-						footers: {
-							[update.footerType]: {
-								footerType: update.footerType,
-								isLoading: true,
-								text: "Todoist Task: ⠋ loading |",
-							},
-						},
-					},
-				},
-			]);
-			const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
-
-			await footer.sessionStart({}, h.context());
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
-
-			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
-			footer.deactivate();
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it("inherits footer state from previous session during /new", async () => {
-		const previous = [
-			{
-				type: "custom",
-				customType: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-		];
-		const h = harness();
-		const footer = createFooterModule({
-			eventHandler: h.events,
-			pi: h.pi,
-			dependencies: {
-				openSession: () => ({ getBranch: () => previous }),
-			},
-		});
-
-		await footer.sessionStart(
-			{ previousSessionFile: "/sessions/previous.jsonl" },
-			h.context(),
-		);
-
-		expect(h.statusCalls).toEqual([
-			{ key: update.footerType, text: update.text },
-		]);
-		expect(h.appended).toEqual([
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-		]);
-	});
-
 	it("consumes typed footer updates through shared event channel", async () => {
 		const h = harness();
 		const events = createSharedEvents();
 		const footer = createFooterModule({
 			eventHandler: events,
 			pi: h.pi,
+			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
 
@@ -300,7 +196,11 @@ describe("footer module", () => {
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {
 		const h = harness();
-		const footer = createFooterModule({ eventHandler: h.events, pi: h.pi });
+		const footer = createFooterModule({
+			eventHandler: h.events,
+			pi: h.pi,
+			sessionState: h.sessionState,
+		});
 		const firstContext = h.context();
 		await footer.sessionStart({}, firstContext);
 		footer.update(update);

@@ -7,7 +7,7 @@ import {
 	hasUncommittedChanges as inspectDirtyStatus,
 	inspectProject,
 } from "../shared/project.ts";
-import type { SessionState } from "../state.ts";
+import type { GitState, SessionState } from "../state.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import {
 	publishWorktreeState,
@@ -106,15 +106,15 @@ class Worktree implements WorktreeModule {
 		await this.refreshStatus(context, generation, sequence);
 	}
 
-	private emitState(gitStatePatch?: Record<string, unknown>): void {
-		void publishWorktreeState(
-			this.eventHandler,
-			{
-				...(this.baseline ?? {}),
-				hasUncommittedChanges: this.hasUncommittedChanges,
-			},
-			gitStatePatch,
-		);
+	private emitState(gitStatePatch?: Partial<GitState>): void {
+		const moduleState =
+			this.baseline === null
+				? {}
+				: {
+						initialHead: this.baseline.initialHead,
+						initialStatus: this.baseline.initialStatus,
+					};
+		void publishWorktreeState(this.eventHandler, moduleState, gitStatePatch);
 	}
 
 	private emitFooterStatus(context: ExtensionContext): void {

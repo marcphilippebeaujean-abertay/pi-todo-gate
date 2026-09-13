@@ -21,6 +21,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private readonly promptQueue: PromptQueue;
 	private readonly eventHandler: EventHandler;
 	private readonly getLifecycleEpoch: () => number;
+	private readonly sessionState: ExitProtocolModuleOptions["sessionState"];
 	private readonly worktree: WorktreeModule | undefined;
 	private request: ExitRequest | null = null;
 
@@ -28,14 +29,19 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 		this.promptQueue = options.promptQueue;
 		this.eventHandler = options.eventHandler;
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
+		this.sessionState = options.sessionState;
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session, lifecycleEpoch }) => {
+			({ context, lifecycleEpoch }) => {
 				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
 				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 				if (!isCurrentEpoch) return;
-				this.sessionStart(context, activationEpoch, session?.sessionId);
+				this.sessionStart(
+					context,
+					activationEpoch,
+					this.sessionState.session.activeSessionId ?? undefined,
+				);
 			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>

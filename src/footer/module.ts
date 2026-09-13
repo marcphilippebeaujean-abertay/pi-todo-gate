@@ -1,5 +1,6 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { SessionRecord } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 import "./commands.ts";
 import "./constants.ts";
 import "./state.ts";
@@ -20,15 +21,16 @@ export { renderPrStatus, renderTaskStatusCompact as renderTodoistTaskStatus };
 
 export function refreshFooterStatuses(
 	footer: FooterModule,
-	session: SessionRecord,
+	sessionState: SessionState,
+	context: ExtensionContext,
 ): void {
 	footer.update({
 		footerType: C.status.pr,
 		isLoading: false,
 		text: renderPrStatus(
-			session.state.prUrl,
-			session.context.ui.theme,
-			session.hasUncommittedChanges,
+			sessionState.moduleState.pr.prUrl,
+			context.ui.theme,
+			sessionState.gitState.hasUncommittedChanges ?? false,
 		),
 		isVisible: true,
 	});
@@ -36,9 +38,9 @@ export function refreshFooterStatuses(
 		footerType: C.status.task,
 		isLoading: false,
 		text: renderTaskStatusCompact(
-			session.state.taskUrl,
-			session.context.ui.theme,
-			session.state.taskName,
+			sessionState.moduleState.todoist.taskUrl,
+			context.ui.theme,
+			sessionState.moduleState.todoist.taskName,
 		),
 		isVisible: true,
 	});
@@ -46,13 +48,18 @@ export function refreshFooterStatuses(
 
 export function updateWorkingTreeStatus(
 	footer: FooterModule,
-	session: SessionRecord,
+	sessionState: SessionState,
+	context: ExtensionContext,
 	hasUncommittedChanges: boolean,
 ): void {
 	const hasStatusChanged =
-		session.hasUncommittedChanges !== hasUncommittedChanges;
-	session.hasUncommittedChanges = hasUncommittedChanges;
-	if (hasStatusChanged) refreshFooterStatuses(footer, session);
+		sessionState.gitState.hasUncommittedChanges !== hasUncommittedChanges;
+	if (!hasStatusChanged) return;
+	const nextState: SessionState = {
+		...sessionState,
+		gitState: { ...sessionState.gitState, hasUncommittedChanges },
+	};
+	refreshFooterStatuses(footer, nextState, context);
 }
 
 export function createFooterModule(options: FooterModuleOptions): FooterModule {

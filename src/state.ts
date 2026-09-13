@@ -12,10 +12,7 @@ import type { PrModule } from "./pr/state.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { Exec } from "./shared/command.ts";
 import type { EventHandler } from "./shared/events.ts";
-import type {
-	SessionReader,
-	SessionRecord,
-} from "./shared/session-state.ts";
+import type { SessionReader } from "./shared/session-state.ts";
 
 export type { SessionReader, SessionRecord } from "./shared/session-state.ts";
 
@@ -73,6 +70,7 @@ export interface WorktreeModuleState {
 }
 
 export interface FooterStatusState {
+	footerType: string;
 	isLoading: boolean;
 	text: string;
 	isVisible: boolean;

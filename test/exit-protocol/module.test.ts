@@ -11,6 +11,7 @@ import {
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
+import { createSessionState } from "../../src/state.ts";
 
 const actions: ExitAction[] = [
 	{
@@ -130,6 +131,7 @@ describe("exit protocol presenter", () => {
 		});
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: new PromptQueue(),
 		});
 
@@ -137,8 +139,16 @@ describe("exit protocol presenter", () => {
 		module.deactivate();
 
 		expect(updates).toEqual([
-			{ moduleId: "exit-protocol", moduleState: { active: true } },
-			{ moduleId: "exit-protocol", moduleState: { active: false } },
+			{
+				moduleId: "exitProtocol",
+				moduleState: { active: true },
+				persist: false,
+			},
+			{
+				moduleId: "exitProtocol",
+				moduleState: { active: false },
+				persist: false,
+			},
 		]);
 	});
 
@@ -147,6 +157,7 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: new PromptQueue(),
 			worktree: worktree(),
 		});
@@ -169,6 +180,7 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: queue,
 			worktree: worktree(),
 		});
@@ -192,6 +204,7 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: queue,
 		});
 		module.sessionStart(ctx);
@@ -219,6 +232,7 @@ describe("exit protocol presenter", () => {
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: queue,
 			worktree: worktree(),
 		});
@@ -251,6 +265,7 @@ describe("exit protocol presenter", () => {
 		});
 		const module = createExitProtocolModule({
 			eventHandler: events,
+			sessionState: createSessionState(),
 			promptQueue: queue,
 			worktree: worktree(),
 		});
