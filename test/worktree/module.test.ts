@@ -4,6 +4,7 @@ import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
+import { worktreeStateDescriptor } from "../../src/worktree/state.ts";
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };
@@ -53,6 +54,16 @@ function context(cwd = "/repo/.worktrees/feature") {
 		},
 	} as unknown as ExtensionContext;
 }
+
+describe("worktree state", () => {
+	it("provides common session-state descriptor", () => {
+		const state = { initialHead: "abc", initialStatus: "" };
+		expect(worktreeStateDescriptor.id).toBe("worktree");
+		expect(
+			worktreeStateDescriptor.restore(worktreeStateDescriptor.serialize(state)),
+		).toEqual(state);
+	});
+});
 
 describe("worktree event actions", () => {
 	it("does not let an earlier start overwrite a later start", async () => {

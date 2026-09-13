@@ -1,7 +1,4 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { FOOTER_SPINNER_INTERVAL_MS } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
@@ -11,11 +8,7 @@ import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
 function harness(branch: unknown[] = []) {
-	const appended: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
-	const pi = {
-		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
-	} as unknown as ExtensionAPI;
 	const context = (sessionBranch = branch) =>
 		({
 			cwd: "/repo",
@@ -26,9 +19,7 @@ function harness(branch: unknown[] = []) {
 			sessionManager: { getBranch: () => sessionBranch },
 		}) as unknown as ExtensionContext;
 	return {
-		pi,
 		events: createSharedEvents(),
-		appended,
 		statusCalls,
 		context,
 		sessionState: createSessionState(),
@@ -69,14 +60,12 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createFooterModule({
 			eventHandler: h.events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 
 		await footer.sessionStart({}, h.context());
 
 		expect(h.statusCalls).toEqual([]);
-		expect(h.appended).toEqual([]);
 		expect(footer.getState()).toEqual({ footers: {} });
 	});
 
@@ -86,7 +75,6 @@ describe("footer module", () => {
 			const h = harness();
 			const footer = createFooterModule({
 				eventHandler: h.events,
-				pi: h.pi,
 				sessionState: h.sessionState,
 			});
 			await footer.sessionStart({}, h.context());
@@ -110,11 +98,10 @@ describe("footer module", () => {
 		}
 	});
 
-	it("persists updates and synchronizes visible and hidden states", async () => {
+	it("updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
 		const footer = createFooterModule({
 			eventHandler: h.events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
@@ -126,7 +113,6 @@ describe("footer module", () => {
 			{ key: update.footerType, text: update.text },
 			{ key: update.footerType, text: undefined },
 		]);
-		expect(h.appended).toEqual([]);
 		expect(footer.getState()).toEqual({
 			footers: { [update.footerType]: { ...update, isVisible: false } },
 		});
@@ -140,7 +126,6 @@ describe("footer module", () => {
 		});
 		const footer = createFooterModule({
 			eventHandler: h.events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
@@ -160,7 +145,6 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createFooterModule({
 			eventHandler: h.events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
@@ -178,7 +162,6 @@ describe("footer module", () => {
 		const events = createSharedEvents();
 		const footer = createFooterModule({
 			eventHandler: events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 		await footer.sessionStart({}, h.context());
@@ -198,7 +181,6 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createFooterModule({
 			eventHandler: h.events,
-			pi: h.pi,
 			sessionState: h.sessionState,
 		});
 		const firstContext = h.context();

@@ -1,7 +1,4 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
@@ -41,18 +38,9 @@ export interface PersistedFooterState {
 	footers: Record<string, PersistedFooterUpdate>;
 }
 
-export interface FooterSessionReader {
-	getBranch(): unknown[];
-}
-export interface FooterModuleDependencies {
-	openSession?: (path: string) => FooterSessionReader;
-}
-
 export interface FooterModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	pi?: ExtensionAPI;
-	dependencies?: FooterModuleDependencies;
 }
 export interface FooterModule {
 	sessionStart(

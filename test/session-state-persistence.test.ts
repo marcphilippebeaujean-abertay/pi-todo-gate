@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+	latestPersistedSessionState,
+	type ModuleStateDescriptor,
+	restoreSessionState,
+	serializeSessionState,
+} from "../src/session-state-persistence.ts";
+import {
 	createSessionState,
 	type ModuleId,
 	type ModuleState,
 	type SessionState,
 } from "../src/state.ts";
-import {
-	latestPersistedSessionState,
-	restoreSessionState,
-	serializeSessionState,
-	type ModuleStateDescriptor,
-} from "../src/session-state-persistence.ts";
 
 const STATE_ENTRY_TYPE = "custom";
 const STATE_CUSTOM_TYPE = "pi-todo-gate-state";
@@ -30,8 +30,8 @@ function descriptors(): {
 					discoveryTestedUrls: [
 						...new Set(
 							state.discoveryTestedUrls.filter(
-									(url): url is string =>
-										typeof url === "string" && url.length > 0,
+								(url): url is string =>
+									typeof url === "string" && url.length > 0,
 							),
 						),
 					],
@@ -113,6 +113,7 @@ function snapshot(): SessionState {
 		initialStatus: "",
 	};
 	state.moduleState.footer.footers.status = {
+		footerType: "status",
 		isLoading: false,
 		text: "ready",
 		isVisible: true,
@@ -144,7 +145,10 @@ describe("session state persistence", () => {
 			descriptors(),
 		);
 
-		expect(restored).toEqual({ ...original, session: { ...original.session, activeSessionId: null } });
+		expect(restored).toEqual({
+			...original,
+			session: { ...original.session, activeSessionId: null },
+		});
 	});
 
 	it("falls back to initialized state when root snapshot is malformed", () => {
@@ -199,7 +203,11 @@ describe("session state persistence", () => {
 				customType: STATE_CUSTOM_TYPE,
 				data: source,
 			},
-			{ type: STATE_ENTRY_TYPE, customType: STATE_CUSTOM_TYPE, data: { prUrl: "old" } },
+			{
+				type: STATE_ENTRY_TYPE,
+				customType: STATE_CUSTOM_TYPE,
+				data: { prUrl: "old" },
+			},
 			{ type: "message", data: source },
 			{
 				type: STATE_ENTRY_TYPE,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enqueueExitActions } from "../../src/exit-protocol/event-publishers.ts";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import {
+	exitProtocolStateDescriptor,
 	focusAction,
 	focusSubmit,
 	initialPickerState,
@@ -74,6 +75,18 @@ function context(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+});
+
+describe("exit protocol state", () => {
+	it("provides common session-state descriptor", () => {
+		const state = { active: true };
+		expect(exitProtocolStateDescriptor.id).toBe("exitProtocol");
+		expect(
+			exitProtocolStateDescriptor.restore(
+				exitProtocolStateDescriptor.serialize(state),
+			),
+		).toEqual(state);
+	});
 });
 
 describe("exit protocol picker state", () => {

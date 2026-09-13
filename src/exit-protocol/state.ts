@@ -1,5 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
+import type {
+	JsonValue,
+	ModuleStateDescriptor,
+} from "../session-state-persistence.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
 import type { SessionState } from "../state.ts";
@@ -25,6 +29,19 @@ export interface ExitProtocolModule {
 	sessionStart(ctx: ExtensionContext): void;
 	deactivate(): void;
 }
+
+export const exitProtocolStateDescriptor: ModuleStateDescriptor<"exitProtocol"> =
+	{
+		id: "exitProtocol",
+		createInitialState: () => ({ active: false }),
+		restore: (value) => {
+			if (typeof value !== "object" || value === null || Array.isArray(value))
+				return { active: false };
+			const active = (value as { active?: unknown }).active;
+			return typeof active === "boolean" ? { active } : { active: false };
+		},
+		serialize: (state): JsonValue => ({ active: state.active }),
+	};
 
 export interface ExitProtocolModuleOptions {
 	promptQueue: PromptQueue;

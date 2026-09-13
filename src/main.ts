@@ -37,8 +37,6 @@ export function createExtensionState(
 	const footer = createFooterModule({
 		eventHandler,
 		sessionState,
-		pi,
-		dependencies: { openSession: dependencies.openSession },
 	});
 	const worktree = createWorktreeModule({
 		eventHandler,
