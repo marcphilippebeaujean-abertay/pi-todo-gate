@@ -1,11 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
+	appendState,
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
+	replaceSessionState,
 } from "./event-consumer.ts";
 import { RootEventPublisher } from "./event-publishers.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
 import { createFooterModule } from "./footer/module.ts";
+import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import { createPrModule } from "./pr/module.ts";
 import { PromptQueue } from "./prompt-queue.ts";
@@ -122,6 +125,19 @@ function startExtensions(
 		commandRunner: dependencies.herdrCommandRunner,
 		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
 		onFooterUpdate: extensionState.footer.update.bind(extensionState.footer),
+		hasClaimReturnedSuccessfully: () =>
+			root.session?.state.herdrClaimReturnedSuccessfully ===
+			HERDR_CLAIM_RETURNED,
+		onClaimReturnedSuccessfully: () => {
+			const session = root.session;
+			if (session === null) return;
+			const nextState = {
+				...session.state,
+				herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
+			};
+			replaceSessionState(session, nextState);
+			appendState(root, nextState);
+		},
 	});
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }

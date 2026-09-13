@@ -9,6 +9,7 @@ export const WORK_STATE_KEYS: readonly (keyof WorkState)[] = [
 	"inheritedFrom",
 	"mergeCompletedAt",
 	"todoistCompletionAttemptedAt",
+	"herdrClaimReturnedSuccessfully",
 ];
 
 export interface GitState {
@@ -35,6 +36,7 @@ export interface WorkState {
 	inheritedFrom?: string;
 	mergeCompletedAt?: string;
 	todoistCompletionAttemptedAt?: string;
+	herdrClaimReturnedSuccessfully?: string;
 }
 
 export interface SessionRecord {

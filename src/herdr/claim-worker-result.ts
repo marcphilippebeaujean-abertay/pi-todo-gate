@@ -1,11 +1,7 @@
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
-import {
-	CLAIMED_STATUS,
-	HERDR_OBJECT_TYPE,
-	MAX_DIAGNOSTIC_BYTES,
-} from "./constants.ts";
+import { HERDR_OBJECT_TYPE, MAX_DIAGNOSTIC_BYTES } from "./constants.ts";
 
-import type { ClaimWorkerResponse, ClaimWorkerResult } from "./state.ts";
+import type { ClaimWorkerResponse } from "./state.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;
@@ -13,26 +9,26 @@ export function appendBounded(current: string, chunk: Buffer | string): string {
 	return exceedsLimit ? next.slice(-MAX_DIAGNOSTIC_BYTES) : next;
 }
 
-function claimResult(value: unknown): ClaimWorkerResult | undefined {
-	const isObject = typeof value === HERDR_OBJECT_TYPE;
+function claimResult(value: unknown): ClaimWorkerResponse | undefined {
 	const isNull = value === null;
-	const isInvalidValue = !isObject || isNull;
-	if (isInvalidValue) return undefined;
-	const result = value as Partial<ClaimWorkerResponse>;
-	const hasClaimedStatus = result.status === CLAIMED_STATUS;
-	const hasTabId = typeof result.tabId === "string";
-	const hasNonEmptyTabId = hasTabId && (result.tabId as string).trim() !== "";
-	const hasLabel = typeof result.label === "string";
-	const hasNonEmptyLabel = hasLabel && (result.label as string).trim() !== "";
-	if (!hasClaimedStatus) return undefined;
-	if (!hasNonEmptyTabId) return undefined;
-	if (!hasNonEmptyLabel) return undefined;
-	return { tabId: result.tabId as string, label: result.label as string };
+	if (isNull) return null;
+	const isObject = typeof value === HERDR_OBJECT_TYPE;
+	const isInvalidObject = !isObject || Array.isArray(value);
+	if (isInvalidObject) return undefined;
+	const result = value as Partial<Exclude<ClaimWorkerResponse, null>>;
+	const tabName = result.tabName;
+	const shouldMoveToNewTab = result.shouldMoveToNewTab;
+	const hasTabName = typeof tabName === "string";
+	const hasNonEmptyTabName = hasTabName && tabName.trim().length > 0;
+	const hasMoveFlag = typeof shouldMoveToNewTab === "boolean";
+	const isInvalidResult = !hasNonEmptyTabName || !hasMoveFlag;
+	if (isInvalidResult) return undefined;
+	return { tabName, shouldMoveToNewTab };
 }
 
 export function parseClaimResult(
 	stdout: string,
-): ClaimWorkerResult | undefined {
+): ClaimWorkerResponse | undefined {
 	for (const line of stdout.split(/\r?\n/).reverse()) {
 		const hasLine = line.trim().length > 0;
 		if (!hasLine) continue;
