@@ -78,7 +78,7 @@ export interface PrModule {
 	isDiscoveryAllowed(
 		stateEntry: Record<string, unknown> | null,
 		state: PrWorkState,
-		handoffContext: boolean,
+		hasPendingHandoffContext: boolean,
 	): boolean;
 	appendBeforeAgentPrompt(
 		ctx: ExtensionContext,

@@ -122,12 +122,12 @@ function inheritPreviousState(
 	project: { codingRoot: string },
 	stateEntry: Record<string, unknown> | null,
 	state: WorkState,
-): { state: WorkState; handoffContext: boolean } {
+): { state: WorkState; hasPendingHandoffContext: boolean } {
 	const hasStateEntry = stateEntry !== null;
 	const previousSessionFile = event.previousSessionFile;
 	const hasPreviousSession = previousSessionFile !== undefined;
 	if (hasStateEntry || !hasPreviousSession)
-		return { state, handoffContext: false };
+		return { state, hasPendingHandoffContext: false };
 	const previous: SessionReader =
 		root.dependencies.openSession?.(previousSessionFile) ??
 		SessionManager.open(previousSessionFile);
@@ -136,12 +136,12 @@ function inheritPreviousState(
 	const inherited = sameCodingProject
 		? extractInheritedState(previous.getBranch())
 		: null;
-	if (inherited === null) return { state, handoffContext: false };
+	if (inherited === null) return { state, hasPendingHandoffContext: false };
 	const inheritedState = {
 		...inherited,
 		inheritedFrom: previous.getSessionId(),
 	};
-	return { state: inheritedState, handoffContext: true };
+	return { state: inheritedState, hasPendingHandoffContext: true };
 }
 
 function manageActiveTools(root: Root, remove?: boolean): void {
@@ -186,7 +186,7 @@ async function activateConfigured(
 		stateEntry,
 		state,
 	);
-	const handoffContext = inherited.handoffContext;
+	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
 	const session: PrSession = {
 		sessionId: ctx.sessionManager.getSessionId(),
 		context: ctx,
@@ -195,11 +195,11 @@ async function activateConfigured(
 		allowPrDiscovery: root.pr.isDiscoveryAllowed(
 			stateEntry,
 			state,
-			handoffContext,
+			hasPendingHandoffContext,
 		),
 		prDiscoveryTestedUrls: new Set<string>(),
-		handoffContext,
-		workChanged: false,
+		hasPendingHandoffContext,
+		hasPerformedAnyGitMutations: false,
 		hasUncommittedChanges: false,
 		workRevision: 0,
 		operationGeneration: 0,
@@ -213,11 +213,13 @@ async function activateConfigured(
 	session.allowPrDiscovery = root.pr.isDiscoveryAllowed(
 		stateEntry,
 		state,
-		handoffContext,
+		hasPendingHandoffContext,
 	);
 	await root.publisher.publishSessionActivated({
 		context: ctx,
-		previousSessionFile: handoffContext ? event.previousSessionFile : undefined,
+		previousSessionFile: hasPendingHandoffContext
+			? event.previousSessionFile
+			: undefined,
 		session,
 		lifecycleEpoch: epoch,
 	});
@@ -226,7 +228,7 @@ async function activateConfigured(
 	return {
 		session,
 		branch,
-		inheritedState: handoffContext ? inherited.state : undefined,
+		inheritedState: hasPendingHandoffContext ? inherited.state : undefined,
 	};
 }
 
@@ -316,15 +318,16 @@ export async function handleBeforeAgentStart(
 	const session = root.session;
 	if (session === null) return undefined;
 	const messages: string[] = [];
-	if (session.handoffContext) {
+	if (session.hasPendingHandoffContext) {
 		messages.push(
 			`This is the task and PR that we were working on.\nTask: ${session.state.taskUrl ?? C.value.none}\nPR: ${session.state.prUrl ?? C.value.none}`,
 		);
-		session.handoffContext = false;
+		session.hasPendingHandoffContext = false;
 	}
 	if (session.state.taskRef === undefined)
 		root.todoist.maybeAnalyzeTaskClaim(session, event.prompt);
-	if (session.workChanged) await root.pr.appendBeforeAgentPrompt(ctx, messages);
+	if (session.hasPerformedAnyGitMutations)
+		await root.pr.appendBeforeAgentPrompt(ctx, messages);
 	if (messages.length === 0) return undefined;
 	return {
 		message: {

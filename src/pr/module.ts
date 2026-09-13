@@ -369,10 +369,10 @@ class PrModuleImpl implements PrModule {
 	isDiscoveryAllowed(
 		stateEntry: Record<string, unknown> | null,
 		state: PrWorkState,
-		handoffContext: boolean,
+		hasPendingHandoffContext: boolean,
 	): boolean {
 		const disabled = stateEntry?.prDiscoveryDisabled === true;
-		const notHandoff = !handoffContext;
+		const notHandoff = !hasPendingHandoffContext;
 		const discoveryEnabled = !disabled;
 		const hasPinnedPr = state.prUrl !== undefined;
 		const hasNoPinnedPr = !hasPinnedPr;

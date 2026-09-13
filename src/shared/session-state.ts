@@ -48,8 +48,8 @@ export interface SessionRecord {
 	state: WorkState;
 	allowPrDiscovery: boolean;
 	prDiscoveryTestedUrls: Set<string>;
-	handoffContext: boolean;
-	workChanged: boolean;
+	hasPendingHandoffContext: boolean;
+	hasPerformedAnyGitMutations: boolean;
 	hasUncommittedChanges: boolean;
 	workRevision: number;
 	operationGeneration: number;

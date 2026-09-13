@@ -93,7 +93,7 @@ export async function handlePrToolResult(
 	if (!canHandleSession) return;
 	const command = bashCommand(event);
 	const isGitMutation = GIT_MUTATION_RE.test(command);
-	if (isGitMutation) session.workChanged = true;
+	if (isGitMutation) session.hasPerformedAnyGitMutations = true;
 	const prUrl = session.state.prUrl;
 	if (prUrl === undefined) return;
 	const claimedPrUrl = prUrl;
