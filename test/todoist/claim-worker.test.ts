@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CommandResult } from "../../src/shared/command.ts";
+import { createTaskClaimWorker } from "../../src/todoist/event-publishers.ts";
 import {
-	createTaskClaimWorker,
 	parseResult,
 	type TaskClaimWorkerInput,
-} from "../../src/todoist/module.ts";
+} from "../../src/todoist/parsing.ts";
 
 const input: TaskClaimWorkerInput = {
 	sessionId: "session-current",

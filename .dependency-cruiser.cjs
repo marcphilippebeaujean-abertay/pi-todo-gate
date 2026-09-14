@@ -25,7 +25,6 @@ module.exports = {
 		{ name: "no-exit-protocol-to-pr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/pr/" } },
 		{ name: "no-exit-protocol-to-todoist", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/todoist/" } },
 		{ name: "no-exit-protocol-to-herdr", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/herdr/" } },
-		{ name: "no-exit-protocol-to-worktree", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/worktree/" } },
 		{ name: "no-exit-protocol-to-footer", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/footer/" } },
 		{ name: "no-footer-to-pr", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/pr/" } },
 		{ name: "no-footer-to-todoist", severity: "error", from: { path: "^src/footer/" }, to: { path: "^src/todoist/" } },
@@ -62,7 +61,10 @@ module.exports = {
 		{ name: "no-footer-test-to-herdr", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/herdr/" } },
 		{ name: "no-footer-test-to-worktree", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/worktree/" } },
 		{ name: "no-footer-test-to-exit-protocol", severity: "error", from: { path: "^test/footer/" }, to: { path: "^src/exit-protocol/" } },
-		{ name: "no-shared-to-scoped-domains", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/" } },
+		{ name: "no-shared-to-scoped-implementation", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/(?!module-state\\.ts$)[^/]+\\.ts$" } },
+		{ name: "no-shared-to-internal-state", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/internal-state\\.ts$" } },
+		{ name: "no-root-to-internal-state", severity: "error", from: { path: "^src/", pathNot: "^src/(shared|pr|todoist|herdr|worktree|exit-protocol|footer)/" }, to: { path: "^src/(pr|todoist|herdr|worktree|exit-protocol|footer)/internal-state\\.ts$" } },
+		{ name: "no-exit-protocol-to-worktree-internal-state", severity: "error", from: { path: "^src/exit-protocol/" }, to: { path: "^src/worktree/internal-state\\.ts$" } },
 		{ name: "no-scoped-domain-cycles", severity: "error", from: { path: "^src/" }, to: { circular: true, dependencyTypesNot: ["type-only"] } },
 		{ name: "no-orphans", severity: "error", from: { orphan: true, path: "^src/" }, to: {} },
 	],
@@ -80,10 +82,10 @@ module.exports = {
 			to: { path: "^src/pr/constants\\.ts$" },
 		},
 		{
-			name: "pr-module-requires-state",
+			name: "pr-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/pr/module\\.ts$" },
-			to: { path: "^src/pr/state\\.ts$" },
+			to: { path: "^src/pr/internal-state\\.ts$" },
 		},
 		{
 			name: "pr-module-requires-events",
@@ -128,10 +130,10 @@ module.exports = {
 			to: { path: "^src/todoist/constants\\.ts$" },
 		},
 		{
-			name: "todoist-module-requires-state",
+			name: "todoist-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/todoist/module\\.ts$" },
-			to: { path: "^src/todoist/state\\.ts$" },
+			to: { path: "^src/todoist/internal-state\\.ts$" },
 		},
 		{
 			name: "todoist-module-requires-events",
@@ -176,10 +178,10 @@ module.exports = {
 			to: { path: "^src/herdr/constants\\.ts$" },
 		},
 		{
-			name: "herdr-module-requires-state",
+			name: "herdr-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/herdr/module\\.ts$" },
-			to: { path: "^src/herdr/state\\.ts$" },
+			to: { path: "^src/herdr/internal-state\\.ts$" },
 		},
 		{
 			name: "herdr-module-requires-events",
@@ -224,10 +226,10 @@ module.exports = {
 			to: { path: "^src/worktree/constants\\.ts$" },
 		},
 		{
-			name: "worktree-module-requires-state",
+			name: "worktree-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/state\\.ts$" },
+			to: { path: "^src/worktree/internal-state\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-events",
@@ -240,12 +242,6 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
 			to: { path: "^src/worktree/event-consumers\\.ts$" },
-		},
-		{
-			name: "worktree-module-requires-event-publishers",
-			severity: "error",
-			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/event-publishers\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-user-prompts",
@@ -272,10 +268,10 @@ module.exports = {
 			to: { path: "^src/exit-protocol/constants\\.ts$" },
 		},
 		{
-			name: "exit-protocol-module-requires-state",
+			name: "exit-protocol-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/exit-protocol/module\\.ts$" },
-			to: { path: "^src/exit-protocol/state\\.ts$" },
+			to: { path: "^src/exit-protocol/internal-state\\.ts$" },
 		},
 		{
 			name: "exit-protocol-module-requires-events",
@@ -320,10 +316,10 @@ module.exports = {
 			to: { path: "^src/footer/constants\\.ts$" },
 		},
 		{
-			name: "footer-module-requires-state",
+			name: "footer-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/footer/module\\.ts$" },
-			to: { path: "^src/footer/state\\.ts$" },
+			to: { path: "^src/footer/internal-state\\.ts$" },
 		},
 		{
 			name: "footer-module-requires-events",

@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { handleClaimError } from "../claim-error.ts";
+import { handleClaimError } from "../shared/claim-error.ts";
 import type { Exec } from "../shared/command.ts";
 import { spawnExec } from "../shared/command.ts";
 import { buildPiWorkerArgs } from "../shared/pi-worker.ts";
@@ -26,12 +26,12 @@ import {
 	WARNING,
 	WORKER_ROLE,
 } from "./constants.ts";
-import { parseResult } from "./parsing.ts";
 import {
 	type TaskClaimWorker,
 	type TaskClaimWorkerInput,
 	TaskClaimWorkerResultSchema,
-} from "./state.ts";
+} from "./internal-state.ts";
+import { parseResult } from "./parsing.ts";
 
 function workerPrompt(input: TaskClaimWorkerInput): string {
 	return [

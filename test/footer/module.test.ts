@@ -1,22 +1,32 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import {
+	FOOTER_HERDR_TYPE,
 	FOOTER_SPINNER_INTERVAL_MS,
-	FOOTER_STATE_TYPE,
 } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
-import type { FooterUpdate } from "../../src/footer/state.ts";
-import { restoreFooterState } from "../../src/footer/state.ts";
+import type {
+	FooterModuleState,
+	FooterUpdate,
+} from "../../src/footer/module-state.ts";
+import { restoreFooterState } from "../../src/footer/module-state.ts";
+import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
+
+type TestFooterModule = {
+	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
+	update(event: unknown): void;
+	getState(): FooterModuleState;
+	deactivate(): void;
+};
+
+const createTestFooterModule = (
+	options: Parameters<typeof createFooterModule>[0],
+): TestFooterModule =>
+	createFooterModule(options) as unknown as TestFooterModule;
 
 function harness(branch: unknown[] = []) {
-	const appended: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
-	const pi = {
-		appendEntry: (type: string, data: unknown) => appended.push({ type, data }),
-	} as unknown as ExtensionAPI;
 	const context = (sessionBranch = branch) =>
 		({
 			cwd: "/repo",
@@ -26,7 +36,12 @@ function harness(branch: unknown[] = []) {
 			},
 			sessionManager: { getBranch: () => sessionBranch },
 		}) as unknown as ExtensionContext;
-	return { pi, appended, statusCalls, context };
+	return {
+		events: createSharedEvents(),
+		statusCalls,
+		context,
+		sessionState: createSessionState(),
+	};
 }
 
 const update: FooterUpdate = {
@@ -61,12 +76,17 @@ describe("footer module", () => {
 
 	it("starts a blank session without rendering default footers", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
 
-		await footer.sessionStart({}, h.context());
+		await h.events.sessionActivatedEvent.emit({
+			context: h.context(),
+			sessionId: "session",
+		});
 
 		expect(h.statusCalls).toEqual([]);
-		expect(h.appended).toEqual([]);
 		expect(footer.getState()).toEqual({ footers: {} });
 	});
 
@@ -74,7 +94,10 @@ describe("footer module", () => {
 		vi.useFakeTimers();
 		try {
 			const h = harness();
-			const footer = createFooterModule(h.pi);
+			const footer = createTestFooterModule({
+				eventHandler: h.events,
+				sessionState: h.sessionState,
+			});
 			await footer.sessionStart({}, h.context());
 
 			footer.update({
@@ -96,9 +119,12 @@ describe("footer module", () => {
 		}
 	});
 
-	it("persists updates and synchronizes visible and hidden states", async () => {
+	it("updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
 		footer.update(update);
@@ -108,40 +134,40 @@ describe("footer module", () => {
 			{ key: update.footerType, text: update.text },
 			{ key: update.footerType, text: undefined },
 		]);
-		expect(h.appended).toEqual([
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: null,
-						},
-					},
-				},
-			},
-		]);
 		expect(footer.getState()).toEqual({
 			footers: { [update.footerType]: { ...update, isVisible: false } },
 		});
 	});
 
+	it("publishes exact module state payload for footer updates", async () => {
+		const h = harness();
+		const updates: unknown[] = [];
+		h.events.moduleStateChangedEvent.subscribe((event) => {
+			updates.push(event);
+		});
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
+		await footer.sessionStart({}, h.context());
+
+		footer.update(update);
+
+		expect(updates).toEqual([
+			{
+				moduleId: "footer",
+				moduleState: { footers: { [update.footerType]: update } },
+				persist: false,
+			},
+		]);
+	});
+
 	it("throws when live module update receives invalid data", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
 		expect(() =>
@@ -152,111 +178,88 @@ describe("footer module", () => {
 		).toThrow(TypeError);
 	});
 
-	it("restores footer state from current session during resume", async () => {
-		const h = harness([
-			{
-				type: "custom",
-				customType: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-		]);
-		const footer = createFooterModule(h.pi);
-
+	it("derives all statuses from module state changes", async () => {
+		const h = harness();
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
 		await footer.sessionStart({}, h.context());
 
-		expect(h.statusCalls).toEqual([
-			{ key: update.footerType, text: update.text },
-		]);
-		expect(h.appended).toEqual([]);
-	});
-
-	it("restarts spinner for a restored loading footer", async () => {
-		vi.useFakeTimers();
-		try {
-			const h = harness([
-				{
-					type: "custom",
-					customType: FOOTER_STATE_TYPE,
-					data: {
-						footers: {
-							[update.footerType]: {
-								footerType: update.footerType,
-								isLoading: true,
-								text: "Todoist Task: ⠋ loading |",
-							},
-						},
-					},
-				},
-			]);
-			const footer = createFooterModule(h.pi);
-
-			await footer.sessionStart({}, h.context());
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
-
-			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
-			footer.deactivate();
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it("inherits footer state from previous session during /new", async () => {
-		const previous = [
-			{
-				type: "custom",
-				customType: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "pr",
+			moduleState: {
+				prUrl: "https://github.com/o/r/pull/42",
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
 			},
-		];
-		const h = harness();
-		const footer = createFooterModule(h.pi, {
-			openSession: () => ({ getBranch: () => previous }),
+			persist: false,
+			gitStatePatch: { hasUncommittedChanges: true },
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "todoist",
+			moduleState: {
+				taskUrl: "https://app.todoist.com/app/task/42",
+				taskName: "Fix footer",
+			},
+			persist: false,
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: true },
+			persist: false,
 		});
 
-		await footer.sessionStart(
-			{ previousSessionFile: "/sessions/previous.jsonl" },
-			h.context(),
+		expect(footer.getState().footers).toEqual(
+			expect.objectContaining({
+				"pi-todo-gate-pr": expect.objectContaining({ isVisible: true }),
+				"pi-todo-gate-task": expect.objectContaining({ isVisible: true }),
+				[FOOTER_HERDR_TYPE]: expect.objectContaining({
+					isLoading: true,
+					isVisible: true,
+				}),
+			}),
 		);
+	});
 
-		expect(h.statusCalls).toEqual([
-			{ key: update.footerType, text: update.text },
-		]);
-		expect(h.appended).toEqual([
-			{
-				type: FOOTER_STATE_TYPE,
-				data: {
-					footers: {
-						[update.footerType]: {
-							footerType: update.footerType,
-							isLoading: update.isLoading,
-							text: update.text,
-						},
-					},
-				},
-			},
-		]);
+	it("hides Herdr spinner after transient claim completion", async () => {
+		const h = harness();
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
+		await footer.sessionStart({}, h.context());
+
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: true },
+			persist: false,
+		});
+		await h.events.moduleStateChangedEvent.emit({
+			moduleId: "herdr",
+			moduleState: { claimInProgress: false },
+			persist: false,
+		});
+
+		expect(footer.getState().footers[FOOTER_HERDR_TYPE]).toEqual({
+			footerType: FOOTER_HERDR_TYPE,
+			isLoading: false,
+			text: "Herdr: ⠋ working |",
+			isVisible: false,
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: FOOTER_HERDR_TYPE,
+			text: undefined,
+		});
 	});
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {
 		const h = harness();
-		const footer = createFooterModule(h.pi);
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
 		const firstContext = h.context();
 		await footer.sessionStart({}, firstContext);
 		footer.update(update);

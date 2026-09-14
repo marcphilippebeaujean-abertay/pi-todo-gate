@@ -1,0 +1,187 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import type { PromptQueue } from "../prompt-queue.ts";
+import type { Exec } from "../shared/command.ts";
+import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
+import type { ExitActionResult } from "../shared/exit-actions.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
+
+export type MergeRequest = PrMergedEvent;
+
+export interface TodoistExec {
+	run(
+		args: readonly string[],
+	): Promise<import("../shared/command.ts").CommandResult>;
+}
+
+export interface TodoistClientLike {
+	completeTask(ref: string, isCurrent?: () => boolean): Promise<void>;
+}
+
+export interface TodoistClientFactoryDependencies {
+	exec?: Exec;
+	createTodoistClient?: (
+		ctx: ExtensionContext,
+		exec: Exec,
+	) => TodoistClientLike;
+}
+
+export type IsCurrentOperation = () => boolean;
+
+export interface TodoistTask {
+	id: string;
+	content: string;
+	description: string;
+	projectId: string;
+	sectionId?: string | null;
+	sectionName?: string | null;
+	url?: string;
+	webUrl?: string;
+}
+
+export type TaskClaimWorker = (
+	input: TaskClaimWorkerInput,
+) => Promise<TaskClaimWorkerResult>;
+
+export const TaskClaimWorkerInputSchema = Type.Object({
+	sessionId: Type.String({ minLength: 1 }),
+	prompt: Type.String(),
+	cwd: Type.String(),
+	projectRef: Type.String(),
+	prRef: Type.Union([Type.String(), Type.Null()]),
+	worktree: Type.Object({
+		isWorktree: Type.Boolean(),
+		root: Type.Union([Type.String(), Type.Null()]),
+		branch: Type.Union([Type.String(), Type.Null()]),
+	}),
+});
+
+export type TaskClaimWorkerInput = Type.Static<
+	typeof TaskClaimWorkerInputSchema
+>;
+
+export const TaskDataSchema = Type.Object({
+	title: Type.String({ minLength: 1 }),
+	description: Type.String(),
+	id: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+});
+
+export const TaskClaimWorkerResultSchema = Type.Object({
+	sessionId: Type.String({ minLength: 1 }),
+	action: Type.Union([Type.Literal("error"), Type.Literal("claim")]),
+	taskData: Type.Union([TaskDataSchema, Type.Null()]),
+	error: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+});
+
+export type TaskClaimWorkerResult = Type.Static<
+	typeof TaskClaimWorkerResultSchema
+>;
+
+export interface TodoistProjectSettings {
+	todoistProjectRef: string;
+	triggersOnlyOnWorktree?: boolean;
+}
+
+export interface TodoistProjectMapping {
+	projects: Record<string, string | TodoistProjectSettings>;
+}
+
+export interface ResolvedProject {
+	codingRoot: string;
+	todoistProjectRef: string;
+	triggersOnlyOnWorktree?: boolean;
+}
+
+export type ProjectEntry = string | TodoistProjectSettings;
+
+export interface TodoistModuleState {
+	taskRef?: string;
+	taskName?: string;
+	taskUrl?: string;
+	todoistCompletionAttemptedAt?: string;
+	mergePromptedPrUrl?: string;
+}
+
+export type TodoistState = TodoistModuleState;
+
+export interface TodoistStateUpdateOptions {
+	persist: boolean;
+	gitStatePatch?: Partial<SessionState["gitState"]>;
+}
+
+export interface TodoistTaskClaimController {
+	taskClaim: {
+		pending: boolean;
+		completed: boolean;
+		session?: TodoistSession;
+	};
+}
+
+export interface TodoistLifecycleConsumerOptions {
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	getSession: () => TodoistSession | null;
+	activateSession: (
+		session: TodoistSession,
+		sessionId: string,
+	) => Promise<void>;
+	resetSession: () => void;
+	maybeAnalyzeTaskClaim: (prompt: string) => void;
+}
+
+export interface TodoistModuleOptions {
+	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
+	loadConfig?: () => Promise<unknown>;
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	exec?: Exec;
+	taskClaimWorker?: TaskClaimWorker;
+	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	/** @deprecated pass module dependencies directly. */
+	dependencies?: {
+		exec?: Exec;
+		taskClaimWorker?: TaskClaimWorker;
+		createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	};
+}
+
+export type TodoistSession = SessionRecord;
+
+export interface TodoistCompletionSnapshot {
+	taskRef?: string;
+	prUrl?: string;
+}
+
+export interface TodoistOperations {
+	sessionState: SessionState;
+	getSession: () => TodoistSession | null;
+	projectRef: string;
+	todoist: TodoistTaskClaimController;
+	promptQueue: PromptQueue;
+	exec?: Exec;
+	taskClaimWorker?: TaskClaimWorker;
+	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	/** @deprecated accepted only by legacy test adapters. */
+	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;
+	eventHandler: EventHandler;
+	emitState(session: TodoistSession): Promise<void>;
+	updateTodoistState(
+		state: TodoistState,
+		options: TodoistStateUpdateOptions,
+	): Promise<void>;
+	completeMergedTask?(
+		session: TodoistSession,
+		taskRef: string,
+		stateSnapshot: TodoistCompletionSnapshot,
+		workRevision: number,
+		sessionId: string,
+	): Promise<ExitActionResult>;
+}
+
+export interface ClaimTaskData {
+	title: string;
+	description: string;
+	id: string;
+}

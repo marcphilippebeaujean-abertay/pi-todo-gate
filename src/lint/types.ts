@@ -1,5 +1,5 @@
 import type ts from "typescript";
-import type { LintConfig } from "../lint-config.ts";
+import type { LintConfig } from "./state.ts";
 export type LintRuleId =
 	| "commands-only-register"
 	| "no-worker-consumer-callbacks"
@@ -16,9 +16,15 @@ export type LintRuleId =
 	| "repeated-field-checks"
 	| "prefer-switch-dispatch"
 	| "domain-types-outside-state"
+	| "no-root-state-imports-in-modules"
 	| "event-types-outside-events"
 	| "event-types-location"
-	| "no-functions-in-data";
+	| "no-functions-in-data"
+	| "no-event-handler-emits-outside-publishers"
+	| "no-event-handler-subscriptions-in-modules"
+	| "module-state-contract"
+	| "no-internal-state-imports"
+	| "no-direct-module-state-write";
 export interface LintDiagnostic {
 	filePath: string;
 	line: number;
@@ -32,6 +38,7 @@ export interface LintContext {
 	sourceFile: ts.SourceFile;
 	diagnostics: LintDiagnostic[];
 	checker: ts.TypeChecker;
+	program: ts.Program;
 	config: LintConfig;
 }
 export type LintRule = (context: LintContext) => void;

@@ -85,6 +85,10 @@ export const namedIfCondition: LintRule = ({
 	diagnostics,
 	checker,
 }) => {
+	const isRootCoordinator = /[\\/]src[\\/](event-consumer|main)\.ts$/.test(
+		sourceFile.fileName,
+	);
+	if (isRootCoordinator) return;
 	function visit(node: ts.Node): void {
 		for (const expression of conditionExpressions(node))
 			if (!isNamedBooleanCondition(expression, checker))

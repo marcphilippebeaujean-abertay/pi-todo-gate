@@ -1,29 +1,24 @@
 import "./commands.ts";
 import "./constants.ts";
-import "./state.ts";
+import "./internal-state.ts";
 import "./events.ts";
 import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
-import type { SharedEvents } from "../shared/events.ts";
-import { PromptQueue } from "../shared/prompt-queue.ts";
 import { ExitProtocolConsumer } from "./event-consumers.ts";
-import type { ExitProtocolModule } from "./state.ts";
+import type { ExitProtocolModuleOptions } from "./internal-state.ts";
 
 export type {
 	ExitAction,
 	ExitActionId,
 	ExitActionResult,
 } from "../shared/exit-actions.ts";
-export * from "./events.ts";
-export * from "./state.ts";
-export * from "./user-prompts.ts";
+export * from "./module-state.ts";
+export type ExitProtocolModule = Record<never, never>;
 
 export function createExitProtocolModule(
-	events: SharedEvents,
-	promptQueue?: PromptQueue,
+	options: ExitProtocolModuleOptions,
 ): ExitProtocolModule {
-	const queue = promptQueue ?? new PromptQueue();
-	return new ExitProtocolConsumer(events, queue);
+	return new ExitProtocolConsumer(options);
 }

@@ -1,136 +1,135 @@
 import { describe, expect, it } from "vitest";
-import { createSharedEvents } from "../src/shared/events.ts";
-import type { ExitAction } from "../src/shared/exit-actions.ts";
-
-const action = (id: ExitAction["id"] = "remove-worktree"): ExitAction => ({
-	id,
-	label: id,
-	execute: async () => "completed",
-});
+import {
+	createModuleStatePublisher,
+	RootEventPublisher,
+} from "../src/event-publishers.ts";
+import { createSharedEvents, event } from "../src/shared/events.ts";
 
 describe("shared events", () => {
-	it("shares mutable merge completion state between listeners", async () => {
-		const events = createSharedEvents();
-		let observed = false;
-		events.on("prMerged", (request) => {
-			request.payload.taskMarkedAsCompleted = true;
+	it("delivers typed payloads and supports unsubscribe", async () => {
+		const channel = event<{ value: number }>();
+		const values: number[] = [];
+		const unsubscribe = channel.subscribe(({ value }) => {
+			values.push(value);
 		});
-		events.on("prMerged", (request) => {
-			observed = request.payload.taskMarkedAsCompleted === true;
-		});
-
-		await events.emit("prMerged", {
-			prUrl: "https://github.com/o/r/pull/1",
-			taskMarkedAsCompleted: false,
-		});
-
-		expect(observed).toBe(true);
-	});
-	it("collects actions before present listeners run", async () => {
-		const events = createSharedEvents();
-		const order: string[] = [];
-
-		events.on("prMerged", (request) => {
-			order.push("todoist");
-			request.addAction(action());
-		});
-		events.on(
-			"prMerged",
-			(request) => {
-				order.push(`present:${request.actions.length}`);
-			},
-			"present",
-		);
-
-		await events.emit("prMerged", {
-			prUrl: "https://github.com/o/r/pull/1",
-			taskMarkedAsCompleted: false,
-		});
-
-		expect(order).toEqual(["todoist", "present:1"]);
+		await channel.emit({ value: 1 });
+		unsubscribe();
+		await channel.emit({ value: 2 });
+		expect(values).toEqual([1]);
 	});
 
-	it("awaits asynchronous listeners in registration order", async () => {
-		const events = createSharedEvents();
+	it("awaits asynchronous subscribers in registration order", async () => {
+		const channel = event<string>();
 		const order: string[] = [];
-
-		events.on("prMerged", async () => {
+		channel.subscribe(async () => {
 			await Promise.resolve();
 			order.push("first");
 		});
-		events.on("prMerged", () => {
+		channel.subscribe(() => {
 			order.push("second");
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
+		await channel.emit("payload");
 
 		expect(order).toEqual(["first", "second"]);
 	});
 
-	it("continues after a listener throws", async () => {
-		const events = createSharedEvents();
+	it("snapshots subscribers and isolates callback failures", async () => {
+		const channel = event<void>();
 		const order: string[] = [];
-
-		events.on("prMerged", () => {
-			order.push("failed");
+		let unsubscribeSecond = (): void => undefined;
+		channel.subscribe(() => {
+			order.push("first");
+			unsubscribeSecond();
 			throw new Error("listener failed");
 		});
-		events.on("prMerged", (request) => {
-			order.push("continued");
-			request.addAction(action("remove-worktree"));
+		unsubscribeSecond = channel.subscribe(() => {
+			order.push("second");
 		});
-		events.on(
-			"prMerged",
-			(request) => {
-				order.push(`present:${request.actions.length}`);
+		channel.subscribe(() => {
+			order.push("third");
+		});
+
+		await channel.emit(undefined);
+
+		expect(order).toEqual(["first", "second", "third"]);
+	});
+
+	it("binds module publisher to its module ID", async () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const publisher = createModuleStatePublisher(events, "pr");
+
+		await publisher.publish(
+			{
+				prUrl: "https://github.com/o/r/pull/42",
+				discoveryDisabled: false,
+				discoveryTestedUrls: [],
+				mergedPrs: [],
 			},
-			"present",
+			{ persist: true },
 		);
 
-		await events.emit("prMerged", {
-			prUrl: "pr",
-			taskMarkedAsCompleted: false,
-		});
-
-		expect(order).toEqual(["failed", "continued", "present:1"]);
+		expect(updates).toEqual([
+			{
+				moduleId: "pr",
+				moduleState: {
+					prUrl: "https://github.com/o/r/pull/42",
+					discoveryDisabled: false,
+					discoveryTestedUrls: [],
+					mergedPrs: [],
+				},
+				persist: true,
+			},
+		]);
 	});
 
-	it("allows merge events to clear pinned PR URL", async () => {
+	it("publishes minimum PI registration context", async () => {
 		const events = createSharedEvents();
-		let observed: string | null | undefined;
-		events.on("prMerged", (request) => {
-			observed = request.payload.prUrl;
+		const publisher = new RootEventPublisher(events);
+		const pi = {} as never;
+		const payloads: unknown[] = [];
+		events.piToolRegistrationsBecameAvailableEvent.subscribe((payload) => {
+			payloads.push(payload);
 		});
 
-		await events.emit("prMerged", {
-			prUrl: null,
-			taskMarkedAsCompleted: false,
-		});
+		await publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 
-		expect(observed).toBeNull();
+		expect(payloads).toEqual([{ pi }]);
 	});
 
-	it("unsubscribes listeners and isolates separate emits", async () => {
+	it("exposes no footer-specific event channels", () => {
 		const events = createSharedEvents();
-		let calls = 0;
-		const unsubscribe = events.on("prMerged", (request) => {
-			calls += 1;
-			request.addAction(action());
+		expect(events).not.toHaveProperty("footerUpdateEvent");
+		expect(events).not.toHaveProperty("worktreeStatusEvent");
+	});
+
+	it("exposes one shared PR merge channel", () => {
+		const events = createSharedEvents();
+		expect(
+			Object.keys(events).filter((key) => key === "prMergedEvent"),
+		).toEqual(["prMergedEvent"]);
+	});
+
+	it("delivers merge payload to subscribers in registration order", async () => {
+		const events = createSharedEvents();
+		const order: string[] = [];
+		events.prMergedEvent.subscribe(() => {
+			order.push("first");
+		});
+		events.prMergedEvent.subscribe(() => {
+			order.push("second");
 		});
 
-		await events.emit("prMerged", {
-			prUrl: "one",
+		await events.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
 			taskMarkedAsCompleted: false,
-		});
-		unsubscribe();
-		await events.emit("prMerged", {
-			prUrl: "two",
-			taskMarkedAsCompleted: false,
+			sessionId: "session",
 		});
 
-		expect(calls).toBe(1);
+		expect(order).toEqual(["first", "second"]);
 	});
 });

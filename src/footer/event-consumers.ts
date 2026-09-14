@@ -1,99 +1,158 @@
-import {
-	type ExtensionAPI,
-	type ExtensionContext,
-	SessionManager,
-} from "@earendil-works/pi-coding-agent";
-import { FOOTER_CUSTOM_ENTRY_TYPE, FOOTER_STATE_TYPE } from "./constants.ts";
-import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
-import { FooterDisplay } from "./footer-rendering.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type {
-	FooterModule,
-	FooterModuleDependencies,
-	FooterState,
-} from "./state.ts";
+	EventHandler,
+	ModuleStateChangedEvent,
+} from "../shared/events.ts";
+import { FOOTER_HERDR_TYPE, FOOTER_HERDR_WORKING_STATUS } from "./constants.ts";
+import { publishFooterState } from "./event-publishers.ts";
+import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
+import {
+	FooterDisplay,
+	renderPrStatus,
+	renderTaskStatusCompact,
+} from "./footer-rendering.ts";
+import type { FooterModuleOptions } from "./internal-state.ts";
+import type { FooterModuleState as FooterState } from "./module-state.ts";
 import {
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
-	restoreFooterState,
-	serializeFooterState,
-} from "./state.ts";
+} from "./module-state.ts";
 
-function customEntryData(entry: unknown, customType: string): unknown {
-	if (typeof entry !== "object") return undefined;
-	if (entry === null) return undefined;
-	if (Array.isArray(entry)) return undefined;
-	const candidate = entry as {
-		type?: unknown;
-		customType?: unknown;
-		data?: unknown;
-	};
-	const hasCustomType = candidate.type === FOOTER_CUSTOM_ENTRY_TYPE;
-	if (!hasCustomType) return undefined;
-	const matchesCustomType = candidate.customType === customType;
-	if (!matchesCustomType) return undefined;
-	return candidate.data;
-}
-
-function latestFooterState(entries: readonly unknown[]): FooterState | null {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const data = customEntryData(entries[index], FOOTER_STATE_TYPE);
-		if (data === undefined) continue;
-		const state = restoreFooterState(data);
-		if (state !== null) return state;
-	}
-	return null;
-}
-
-export class FooterEventConsumer implements FooterModule {
+export class FooterEventConsumer {
+	private readonly eventHandler: EventHandler;
+	private readonly sessionState: FooterModuleOptions["sessionState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private state = emptyFooterState();
+	private currentPrUrl: string | undefined;
+	private currentTaskUrl: string | undefined;
+	private currentTaskName: string | undefined;
+	private hasUncommittedChanges = false;
 	private readonly display = new FooterDisplay();
 
-	constructor(
-		private readonly pi: ExtensionAPI,
-		private readonly dependencies: FooterModuleDependencies,
-	) {}
+	constructor(options: FooterModuleOptions) {
+		this.eventHandler = options.eventHandler;
+		this.sessionState = options.sessionState;
+		this.eventHandler.moduleStateChangedEvent.subscribe((event) =>
+			this.refreshFromModuleState(event),
+		);
+		this.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, previousSessionFile }) =>
+				this.sessionStart({ previousSessionFile }, context),
+		);
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.deactivate(),
+		);
+	}
 
-	private appendState(): void {
-		this.pi.appendEntry(FOOTER_STATE_TYPE, serializeFooterState(this.state));
+	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
+		this.hasUncommittedChanges =
+			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;
+		switch (event.moduleId) {
+			case C.module.pr:
+				this.currentPrUrl = event.moduleState.prUrl;
+				this.refreshPrStatus(this.currentPrUrl);
+				return;
+			case C.module.worktree:
+				this.refreshPrStatus(this.currentPrUrl);
+				return;
+			case C.module.todoist:
+				this.currentTaskUrl = event.moduleState.taskUrl;
+				this.currentTaskName = event.moduleState.taskName;
+				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
+				return;
+			case C.module.herdr:
+				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
+				return;
+			case C.module.footer: {
+				const hasSameState =
+					JSON.stringify(this.state) === JSON.stringify(event.moduleState);
+				if (hasSameState) return;
+				this.state = structuredClone(event.moduleState);
+				if (this.context === null) return;
+				for (const footer of Object.values(this.state.footers))
+					this.display.update(this.state, footer);
+				return;
+			}
+			default:
+				return;
+		}
+	}
+
+	private refreshPrStatus(url?: string): void {
+		if (this.context === null) return;
+		this.update({
+			footerType: C.status.pr,
+			isLoading: false,
+			text: renderPrStatus(
+				url,
+				this.context.ui.theme,
+				this.hasUncommittedChanges,
+			),
+			isVisible: true,
+		});
+		this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName, true);
+	}
+
+	private refreshHerdrStatus(claimInProgress: boolean): void {
+		this.update({
+			footerType: FOOTER_HERDR_TYPE,
+			isLoading: claimInProgress,
+			text: FOOTER_HERDR_WORKING_STATUS,
+			isVisible: claimInProgress,
+		});
+	}
+
+	private refreshTaskStatus(
+		url?: string,
+		taskName?: string,
+		force?: boolean,
+	): void {
+		if (this.context === null) return;
+		const shouldForce = force ?? false;
+		this.update(
+			{
+				footerType: C.status.task,
+				isLoading: false,
+				text: renderTaskStatusCompact(url, this.context.ui.theme, taskName),
+				isVisible: true,
+			},
+			shouldForce,
+		);
 	}
 
 	async sessionStart(
-		event: FooterSessionStartEvent,
+		_event: FooterSessionStartEvent,
 		nextContext: ExtensionContext,
 	): Promise<void> {
 		this.context = nextContext;
-		this.state = emptyFooterState();
-		const currentState = latestFooterState(
-			nextContext.sessionManager.getBranch(),
-		);
-		if (currentState !== null) {
-			this.state = currentState;
-			this.display.start(nextContext, this.state);
-			return;
-		}
-		if (event.previousSessionFile === undefined) {
-			this.display.start(nextContext, this.state);
-			return;
-		}
-		const previous =
-			this.dependencies.openSession?.(event.previousSessionFile) ??
-			SessionManager.open(event.previousSessionFile);
-		const inherited = latestFooterState(previous.getBranch());
-		if (inherited !== null) {
-			this.state = inherited;
-			this.appendState();
-		}
+		this.currentPrUrl = this.sessionState.moduleState.pr.prUrl;
+		this.currentTaskUrl = this.sessionState.moduleState.todoist.taskUrl;
+		this.currentTaskName = this.sessionState.moduleState.todoist.taskName;
+		this.hasUncommittedChanges =
+			this.sessionState.gitState.hasUncommittedChanges ?? false;
+		this.state = structuredClone(this.sessionState.moduleState.footer);
 		this.display.start(nextContext, this.state);
 	}
 
-	update(event: FooterUpdateEvent): void {
+	update(event: FooterUpdateEvent, force?: boolean): void {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
+		const previous = this.state.footers[parsed.footerType];
+		const hasPrevious = previous !== undefined;
+		const sameLoading = hasPrevious && previous.isLoading === parsed.isLoading;
+		const sameText = hasPrevious && previous.text === parsed.text;
+		const sameVisibility =
+			hasPrevious && previous.isVisible === parsed.isVisible;
+		const sameCore = sameLoading && sameText;
+		const isUnchanged = sameCore && sameVisibility;
+		const shouldForce = force ?? false;
+		const shouldSkip = isUnchanged && !shouldForce;
+		if (shouldSkip) return;
 		this.state = applyFooterUpdate(this.state, parsed);
-		this.appendState();
+		void publishFooterState(this.eventHandler, { ...this.getState() });
 		this.display.update(this.state, parsed);
 	}
 
@@ -111,6 +170,10 @@ export class FooterEventConsumer implements FooterModule {
 	deactivate(): void {
 		this.display.deactivate();
 		this.context = null;
+		this.currentPrUrl = undefined;
+		this.currentTaskUrl = undefined;
+		this.currentTaskName = undefined;
+		this.hasUncommittedChanges = false;
 		this.state = emptyFooterState();
 	}
 }

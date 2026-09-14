@@ -5,7 +5,7 @@ import {
 	STRING_TYPE,
 	TAB_GET_ARGS,
 } from "./constants.ts";
-import type { ClaimWorkerResponse, CommandRunner } from "./state.ts";
+import type { ClaimWorkerResponse, CommandRunner } from "./internal-state.ts";
 
 export function tabNameIsParseableAsInt(label: string | undefined): boolean {
 	if (label === undefined) return false;

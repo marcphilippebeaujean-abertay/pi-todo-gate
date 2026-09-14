@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { withWorkerMarker } from "../session.ts";
 import { buildPiWorkerArgs } from "./pi-worker.ts";
 import type {
 	PiWorkerHandle,
@@ -9,6 +8,7 @@ import type {
 	PiWorkerSpawner,
 } from "./pi-worker-data.ts";
 import { monitorPiWorker } from "./pi-worker-process.ts";
+import { withWorkerMarker } from "./session.ts";
 
 export type {
 	PiWorkerHandle,

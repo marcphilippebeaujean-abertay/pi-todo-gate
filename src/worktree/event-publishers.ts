@@ -1,14 +1,16 @@
-import type { ExitAction, ExitActionResult } from "../shared/exit-actions.ts";
-import { CLEANUP_ID } from "./constants.ts";
-import type { WorktreeBaseline } from "./state.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { SessionState } from "../state.ts";
 
-export function createCleanupAction(
-	worktree: WorktreeBaseline,
-	execute: () => Promise<ExitActionResult>,
-): ExitAction {
-	return {
-		id: CLEANUP_ID,
-		label: `Delete worktree "${worktree.worktreePath}" and local branch "${worktree.branch}"`,
-		execute,
-	};
+export function publishWorktreeState(
+	eventHandler: EventHandler,
+	moduleState: SessionState["moduleState"]["worktree"],
+	gitStatePatch?: Partial<SessionState["gitState"]>,
+): Promise<void> {
+	return eventHandler.moduleStateChangedEvent.emit({
+		moduleId: C.module.worktree,
+		moduleState,
+		persist: false,
+		...(gitStatePatch === undefined ? {} : { gitStatePatch }),
+	});
 }

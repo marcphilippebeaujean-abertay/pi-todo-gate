@@ -1,4 +1,5 @@
 import type { CommandResult, Exec } from "../shared/command.ts";
+import type { EventHandler } from "../shared/events.ts";
 import { queryCurrentPr, queryPinnedHead } from "./git.ts";
 
 const GIT_COMMAND = "git";
@@ -10,6 +11,7 @@ const REMOTE_HEAD_REF_PREFIX = "refs/remotes/";
 
 import { GH_KIND } from "./constants.ts";
 import type { MergeEvent } from "./events.ts";
+import type { ParsedMerge } from "./internal-state.ts";
 import {
 	ghMergeTargets,
 	gitMergeTargets,
@@ -17,7 +19,6 @@ import {
 	mergeCommand,
 	normalizedUrl,
 } from "./parsing.ts";
-import type { ParsedMerge } from "./state.ts";
 
 async function matchesGhMerge(
 	exec: Exec,
@@ -119,6 +120,18 @@ export async function matchesPinnedPr(
 	return isGhMerge
 		? matchesGhMerge(exec, cwd, parsed, pinned)
 		: matchesGitMerge(exec, cwd, parsed, pinned);
+}
+
+export function publishPrMerged(
+	eventHandler: EventHandler,
+	prUrl: string,
+	sessionId: string,
+): Promise<void> {
+	return eventHandler.prMergedEvent.emit({
+		prUrl,
+		taskMarkedAsCompleted: false,
+		sessionId,
+	});
 }
 
 export async function detectMerge(

@@ -29,7 +29,7 @@ async function lintModule(
 			"export interface EventPayload { value: string; }\n",
 		),
 		writeFile(
-			join(directory, "state.ts"),
+			join(directory, "internal-state.ts"),
 			"export interface StatePayload { value: string; }\nexport type StateRequest = { value: string };\n",
 		),
 		writeFile(filePath, source),
@@ -48,7 +48,7 @@ describe(RULE_ID, () => {
 	it("rejects state types on callbacks passed to event consumers", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 declare const events: {
 	on(
 		name: string,
@@ -79,7 +79,7 @@ events.on("event", (payload: { value: string }) => {});
 	it("checks named event-consumer callbacks", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 declare const events: {
 	on(name: string, listener: (payload: StatePayload) => void): void;
 };
@@ -94,7 +94,7 @@ events.on("event", onEvent);
 	it("checks bound event-consumer methods", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 declare const events: {
 	on(
 		name: string,
@@ -116,7 +116,7 @@ class Consumer {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
 			`import type { EventPayload } from "./events.ts";
-import type { StatePayload } from "./state.ts";
+import type { StatePayload } from "./internal-state.ts";
 declare const events: {
 	on(name: string, listener: (payload: EventPayload) => void): void;
 };
@@ -135,7 +135,7 @@ class Consumer {
 	it("allows private event-consumer utilities", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 function isCurrent(payload: StatePayload): boolean { return payload.value.length > 0; }
 `,
 		);
@@ -146,7 +146,7 @@ function isCurrent(payload: StatePayload): boolean { return payload.value.length
 	it("rejects state types on exported event publishers", async () => {
 		const diagnostics = await lintModule(
 			"event-publishers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 declare const events: { emit(name: string, payload: StatePayload): void };
 export function publish(payload: StatePayload): void { events.emit("event", payload); }
 `,
@@ -158,7 +158,7 @@ export function publish(payload: StatePayload): void { events.emit("event", payl
 	it("allows request contracts from state", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StateRequest } from "./state.ts";
+			`import type { StateRequest } from "./internal-state.ts";
 declare const events: {
 	on(name: string, listener: (request: StateRequest) => void): void;
 };
@@ -184,7 +184,7 @@ export function publish(payload: EventPayload): void { events.emit("event", payl
 	it("does not restrict constructor parameter types", async () => {
 		const diagnostics = await lintModule(
 			"event-consumers.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 class Consumer {
 	constructor(state: StatePayload) {}
 }
@@ -197,7 +197,7 @@ class Consumer {
 	it("does not apply to non-event files", async () => {
 		const diagnostics = await lintModule(
 			"commands.ts",
-			`import type { StatePayload } from "./state.ts";
+			`import type { StatePayload } from "./internal-state.ts";
 export function command(state: StatePayload): void {}
 `,
 		);

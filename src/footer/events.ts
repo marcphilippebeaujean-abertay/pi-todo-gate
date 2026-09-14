@@ -8,5 +8,3 @@ export interface FooterUpdateEvent {
 export interface FooterSessionStartEvent {
 	previousSessionFile?: string;
 }
-
-export type FooterEventSink = (event: FooterUpdateEvent) => void;

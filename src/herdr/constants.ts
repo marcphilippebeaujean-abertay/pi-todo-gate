@@ -1,7 +1,6 @@
-import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./state.ts";
+import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./internal-state.ts";
 
 export const MAX_DIAGNOSTIC_BYTES = 500;
-export const HERDR_MAX_CLAIM_ATTEMPTS = 3;
 export const HERDR_CLAIM_RETURNED = "true";
 export const HERDR_OBJECT_TYPE = "object";
 export const HERDR_COMMAND = "herdr";
@@ -29,13 +28,9 @@ export const NO_FOCUS_FLAG = "--no-focus";
 export const STRING_TYPE = "string";
 export const NUMERIC_LABEL = /^\d+$/;
 export const HERDR_ENVIRONMENT = "HERDR_ENV";
-export const HERDR_FOOTER_TYPE = "pi-todo-gate-herdr";
-export const HERDR_WORKING_STATUS = "Herdr: ⠋ working |";
 export const SESSION_START_EVENT = "session_start";
 export const BEFORE_AGENT_START_EVENT = "before_agent_start";
 export const SESSION_SHUTDOWN_EVENT = "session_shutdown";
-export const CLAIM_COMPLETED_EVENT = "claimCompleted";
-export const CLAIM_FAILED_EVENT = "claimFailed";
 export const HERDR = "Herdr";
 export const TAB_CLAIM_FAILED = "completed without claim evidence";
 export const TAB_CLAIM_ACTION_FAILED = "action failed";

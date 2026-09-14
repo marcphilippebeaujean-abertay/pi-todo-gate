@@ -1,22 +1,21 @@
 import "./commands.ts";
 import "./constants.ts";
-import "./state.ts";
 import "./events.ts";
-import "./parsing.ts";
-import "./git.ts";
-import "./event-consumers.ts";
 import "./event-publishers.ts";
-import "./user-prompts.ts";
+import "./git.ts";
 import "./notifications.ts";
+import "./parsing.ts";
+import "./state-tool.ts";
+import "./user-prompts.ts";
+import { PrConsumer } from "./event-consumers.ts";
+import type { PrModuleOptions } from "./internal-state.ts";
 
-export * from "./commands.ts";
 export { register as registerMergeProtocol } from "./commands.ts";
-export * from "./constants.ts";
-export * from "./event-consumers.ts";
-export * from "./event-publishers.ts";
-export * from "./events.ts";
-export * from "./git.ts";
-export * from "./notifications.ts";
-export * from "./parsing.ts";
-export * from "./state.ts";
-export * from "./user-prompts.ts";
+export * from "./module-state.ts";
+export type PrModule = Record<never, never>;
+
+export function createPrModule(options: PrModuleOptions): PrModule {
+	return new PrConsumer(options) as PrModule;
+}
+
+export { mergeProtocolSkillPath } from "./constants.ts";

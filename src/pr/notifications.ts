@@ -1,5 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import {
 	INACTIVE_MESSAGE,
 	MERGE_FAILED_PREFIX,

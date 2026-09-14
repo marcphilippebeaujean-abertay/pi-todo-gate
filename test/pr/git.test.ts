@@ -94,12 +94,9 @@ const REJECTS_AMBIGUOUS_MERGE_TARGETS = "rejects ambiguous merge targets";
 const GIT_MERGE_FEATURE_AUTH_OTHER = "git merge feature/auth other";
 
 import { describe, expect, it, vi } from "vitest";
-import {
-	findOpenPr,
-	findPrState,
-	matchesPinnedPr,
-	mergeCommand,
-} from "../../src/pr/module.ts";
+import { matchesPinnedPr } from "../../src/pr/event-publishers.ts";
+import { findOpenPr, findPrState } from "../../src/pr/git.ts";
+import { mergeCommand } from "../../src/pr/parsing.ts";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { inspectProject } from "../../src/shared/project.ts";
 

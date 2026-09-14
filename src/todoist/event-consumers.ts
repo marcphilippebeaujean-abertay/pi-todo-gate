@@ -1,5 +1,3 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import { applyStatePatch } from "../session-state.ts";
 import { spawnExec } from "../shared/command.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
@@ -20,91 +18,179 @@ import type {
 	ClaimTaskData,
 	MergeRequest,
 	TaskClaimWorkerResult,
-	TodoistRuntime,
+	TodoistCompletionSnapshot,
+	TodoistLifecycleConsumerOptions,
+	TodoistOperations,
 	TodoistSession,
-} from "./state.ts";
+	TodoistState,
+} from "./internal-state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
-function isActiveSession(
-	runtime: TodoistRuntime,
+export function registerTodoistLifecycleConsumers(
+	options: TodoistLifecycleConsumerOptions,
+): void {
+	options.eventHandler.sessionActivatedEvent.subscribe(
+		({ context, session, sessionId }) => {
+			const hasNoSession = session === undefined;
+			if (hasNoSession) return;
+			const isCurrentContext = session.context === context;
+			if (!isCurrentContext) return;
+			const isCurrentSession =
+				options.sessionState.session.activeSessionId === sessionId;
+			if (!isCurrentSession) return;
+			return options.activateSession(session, sessionId);
+		},
+	);
+	options.eventHandler.sessionResetEvent.subscribe(() =>
+		options.resetSession(),
+	);
+	options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+		options.resetSession(),
+	);
+	options.eventHandler.beforeAgentStartEvent.subscribe(
+		({ event, session, sessionId }) => {
+			const isCurrentContext =
+				options.getSession()?.context === session.context;
+			const isCurrentSessionId =
+				options.sessionState.session.activeSessionId === sessionId;
+			const hasTaskRef =
+				options.sessionState.moduleState.todoist.taskRef !== undefined;
+			const isCurrentSession = isCurrentContext && isCurrentSessionId;
+			if (!isCurrentSession) return;
+			if (hasTaskRef) return;
+			options.maybeAnalyzeTaskClaim(event.prompt);
+		},
+	);
+}
+
+function isSessionRecord(
+	operations: TodoistOperations,
 	session: TodoistSession,
 ): boolean {
-	return runtime.active === session;
+	return operations.getSession() === session;
+}
+
+function isCurrentMergeEvent(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	event: MergeRequest,
+): boolean {
+	const isCurrentSession = isSessionRecord(operations, session);
+	const isSameSession =
+		event.sessionId === operations.sessionState.session.activeSessionId;
+	return isCurrentSession && isSameSession;
+}
+
+function mergeState(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	sessionId: string,
+): {
+	taskName: string;
+	stateSnapshot: TodoistCompletionSnapshot;
+	workRevision: number;
+	sessionId: string;
+} {
+	const todoistState = operations.sessionState.moduleState.todoist;
+	const taskName = todoistState.taskName ?? todoistState.taskRef ?? "";
+	return {
+		taskName,
+		stateSnapshot: {
+			taskRef: todoistState.taskRef,
+			prUrl: operations.sessionState.moduleState.pr.prUrl,
+		},
+		workRevision: session.workRevision,
+		sessionId,
+	};
 }
 
 function isCurrentEvent(
-	runtime: TodoistRuntime,
+	operations: TodoistOperations,
 	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): boolean {
-	const operation = runtime.taskClaim;
-	const isCurrentSession = isActiveSession(runtime, session);
-	if (!isCurrentSession) return false;
+	const operation = operations.todoist.taskClaim;
+	const isCurrentSession = isSessionRecord(operations, session);
 	const isPending = operation.pending;
+	const isExpectedSession = operation.session === session;
+	const isExpectedEvent =
+		event.sessionId === operations.sessionState.session.activeSessionId;
+	const isExpectedResult = event.result.sessionId === event.sessionId;
+	if (!isCurrentSession) return false;
 	if (!isPending) return false;
-	const isExpectedWorker = operation.session === session;
-	if (!isExpectedWorker) return false;
-	return event.sessionId === session.sessionId;
+	if (!isExpectedSession) return false;
+	if (!isExpectedEvent) return false;
+	return isExpectedResult;
 }
 
 function claimTaskData(
 	result: TaskClaimWorkerResult,
 ): ClaimTaskData | undefined {
-	const isClaimAction = result.action === CLAIM;
-	if (!isClaimAction) return undefined;
-	const hasNoError = result.error === null;
-	if (!hasNoError) return undefined;
+	const isClaim = result.action === CLAIM;
+	const hasError = result.error !== null;
 	const taskData = result.taskData;
 	const hasTaskData = taskData !== null;
+	const id = taskData?.id;
+	const hasId = id !== null && id !== undefined;
+	if (!isClaim) return undefined;
+	if (hasError) return undefined;
 	if (!hasTaskData) return undefined;
-	const id = taskData.id;
-	if (id === null) return undefined;
-	const claimId = id as string;
-	return { ...taskData, id: claimId };
+	if (!hasId) return undefined;
+	return { ...taskData, id: id as string };
 }
 
-function persistClaim(
-	runtime: TodoistRuntime,
+async function persistClaim(
+	operations: TodoistOperations,
 	session: TodoistSession,
 	taskData: ClaimTaskData,
-): void {
-	runtime.replaceSessionState(
-		session,
-		applyStatePatch(session.state, {
-			taskRef: taskData.id,
-			taskName: taskData.title,
-			taskUrl: `${TASK_URL}${taskData.id}`,
-			mergeCompletedAt: undefined,
-			todoistCompletionAttemptedAt: undefined,
-		}),
-	);
-	runtime.appendState(session.state, session.allowPrDiscovery === false);
-	runtime.refreshFooterStatuses(session);
+	sessionId: string,
+): Promise<void> {
+	const isCurrent = () =>
+		operations.getSession() === session &&
+		operations.sessionState.session.activeSessionId === sessionId;
+	const isCurrentBeforePersist = isCurrent();
+	if (!isCurrentBeforePersist) return;
+	const current = operations.sessionState.moduleState.todoist;
+	const nextState: TodoistState = {
+		...current,
+		taskRef: taskData.id,
+		taskName: taskData.title,
+		taskUrl: `${TASK_URL}${taskData.id}`,
+		todoistCompletionAttemptedAt: undefined,
+	};
+	await operations.updateTodoistState(nextState, {
+		persist: true,
+		gitStatePatch: { mergeCompletedAt: undefined },
+	});
+	const isCurrentAfterPersist = isCurrent();
+	if (!isCurrentAfterPersist) return;
+	void operations.emitState(session);
 	notifyTaskAssigned(session.context);
 }
 
 export function handleTaskClaimResult(
-	runtime: TodoistRuntime,
+	operations: TodoistOperations,
 	session: TodoistSession,
 	event: TaskClaimResultEvent,
 ): void {
-	const isStale = !isCurrentEvent(runtime, session, event);
-	if (isStale) return;
-	runtime.taskClaim.pending = false;
-	runtime.taskClaim.session = undefined;
+	const isCurrentClaimEvent = isCurrentEvent(operations, session, event);
+	if (!isCurrentClaimEvent) return;
+	operations.todoist.taskClaim.pending = false;
+	operations.todoist.taskClaim.session = undefined;
 	const taskData = claimTaskData(event.result);
-	const hasClaim = taskData !== undefined;
-	if (hasClaim) {
-		runtime.taskClaim.completed = true;
-		const canPersist = session.state.taskRef === undefined;
-		if (canPersist) persistClaim(runtime, session, taskData);
+	const hasTaskData = taskData !== undefined;
+	if (hasTaskData) {
+		operations.todoist.taskClaim.completed = true;
+		const hasNoTaskRef =
+			operations.sessionState.moduleState.todoist.taskRef === undefined;
+		if (hasNoTaskRef)
+			void persistClaim(operations, session, taskData, event.sessionId);
 		return;
 	}
-	runtime.taskClaim.completed = false;
-	const isCurrentSession = isActiveSession(runtime, session);
+	operations.todoist.taskClaim.completed = false;
+	const isCurrentSession = isSessionRecord(operations, session);
 	if (!isCurrentSession) return;
-	const error = event.result.error ?? INVALID_RESULT;
-	notifyClaimFailure(session.context, error);
+	notifyClaimFailure(session.context, event.result.error ?? INVALID_RESULT);
 }
 
 function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
@@ -112,102 +198,168 @@ function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 }
 
 export async function runTaskClaim(
-	runtime: TodoistRuntime,
+	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
+	sessionId: string,
 ): Promise<void> {
+	const isCurrentSessionId = () =>
+		operations.sessionState.session.activeSessionId === sessionId;
 	try {
-		const exec = runtime.dependencies.exec ?? spawnExec;
+		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 		const worktree = await inspectProject(exec, session.context.cwd);
+		const isCurrentSession = operations.getSession() === session;
+		const isCurrentRootSessionId = isCurrentSessionId();
+		if (!isCurrentSession) return;
+		if (!isCurrentRootSessionId) return;
+		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
+		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
+		if (shouldSkipOrdinaryCheckout) {
+			operations.todoist.taskClaim.pending = false;
+			operations.todoist.taskClaim.session = undefined;
+			return;
+		}
 		const worker =
-			runtime.dependencies.taskClaimWorker ?? createTaskClaimWorker(exec);
+			operations.taskClaimWorker ??
+			operations.dependencies?.taskClaimWorker ??
+			createTaskClaimWorker(exec);
 		const result = await worker({
-			sessionId: session.sessionId,
+			sessionId,
 			prompt,
 			cwd: session.context.cwd,
-			projectRef: session.project.todoistProjectRef,
-			prRef: session.state.prUrl ?? null,
+			projectRef: operations.projectRef,
+			prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 			worktree,
 		});
-		handleTaskClaimResult(runtime, session, {
+		const isCurrentResultSessionId = isCurrentSessionId();
+		if (!isCurrentResultSessionId) return;
+		handleTaskClaimResult(operations, session, {
 			sessionId: result.sessionId,
 			result,
 		});
 	} catch (error) {
+		const isCurrentErrorSessionId = isCurrentSessionId();
+		if (!isCurrentErrorSessionId) return;
 		const message = error instanceof Error ? error.message : String(error);
-		handleTaskClaimResult(runtime, session, {
-			sessionId: session.sessionId,
-			result: errorResult(session.sessionId, message || UNKNOWN_ERROR),
+		handleTaskClaimResult(operations, session, {
+			sessionId,
+			result: errorResult(sessionId, message || UNKNOWN_ERROR),
 		});
 	}
 }
 
 export function maybeAnalyzeTaskClaim(
-	runtime: TodoistRuntime,
+	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
 ): void {
-	const canStart =
-		runtime.active === session && session.state.taskRef === undefined;
-	const unavailableSession = !canStart;
-	if (unavailableSession) return;
-	const operation = runtime.taskClaim;
-	const isAlreadyHandled = operation.pending || operation.completed;
-	if (isAlreadyHandled) return;
+	const expectedSessionId = operations.sessionState.session.activeSessionId;
+	if (expectedSessionId === null) return;
+	const isCurrentSession = operations.getSession() === session;
+	const isCurrentRootSession =
+		operations.sessionState.session.activeSessionId === expectedSessionId;
+	const hasTaskRef =
+		operations.sessionState.moduleState.todoist.taskRef !== undefined;
+	if (!isCurrentSession) return;
+	if (!isCurrentRootSession) return;
+	if (hasTaskRef) return;
+	const operation = operations.todoist.taskClaim;
+	const claimAlreadyHandled = operation.pending || operation.completed;
+	if (claimAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(runtime, session, prompt);
+	void runTaskClaim(operations, session, prompt, expectedSessionId);
+}
+
+async function completeMergedTaskAfterPrompt(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	event: MergeRequest,
+	taskRef: string,
+	taskName: string,
+	stateSnapshot: TodoistCompletionSnapshot,
+	workRevision: number,
+	sessionId: string,
+	isCurrent: () => boolean,
+): Promise<void> {
+	const isCurrentBeforePrompt =
+		isSessionRecord(operations, session) &&
+		isCurrentMergeEvent(operations, session, event);
+	const isPromptCurrent = isCurrentBeforePrompt && isCurrent();
+	if (!isPromptCurrent) return;
+	const confirmed = await confirmTaskCompletion(
+		session.context,
+		taskName,
+		taskRef,
+	);
+	const isConfirmed = confirmed === true;
+	const isCurrentAfterConfirm = isCurrent();
+	const shouldSkipCompletion = !isConfirmed || !isCurrentAfterConfirm;
+	if (shouldSkipCompletion) return;
+	const isCurrentSession = isSessionRecord(operations, session);
+	const isCurrentMergeAfterConfirm = isCurrentMergeEvent(
+		operations,
+		session,
+		event,
+	);
+	const isCurrentCompletion = isCurrentSession && isCurrentMergeAfterConfirm;
+	if (!isCurrentCompletion) return;
+	const completeMergedTask = operations.completeMergedTask;
+	const hasCompletionHandler = completeMergedTask !== undefined;
+	if (!hasCompletionHandler) return;
+	const result = await completeMergedTask(
+		session,
+		taskRef,
+		stateSnapshot,
+		workRevision,
+		sessionId,
+	);
+	const isCompleted = result === COMPLETED;
+	if (isCompleted) event.taskMarkedAsCompleted = true;
 }
 
 async function consumeMergedEvent(
-	runtime: TodoistRuntime,
-	request: MergeRequest,
+	operations: TodoistOperations,
+	event: MergeRequest,
 ): Promise<void> {
-	const alreadyCompleted = request.payload.taskMarkedAsCompleted === true;
-	if (alreadyCompleted) return;
-	const session = runtime.active;
-	if (session === null) return;
+	const isAlreadyCompleted = event.taskMarkedAsCompleted === true;
+	if (isAlreadyCompleted) return;
+	const session = operations.getSession();
+	const hasNoSession = session === null;
+	if (hasNoSession) return;
+	const isCurrentMerge = isCurrentMergeEvent(operations, session, event);
+	if (!isCurrentMerge) return;
 	const hasInteractiveUi = session.context.hasUI;
 	if (!hasInteractiveUi) return;
-	const taskRef = session.state.taskRef;
-	if (taskRef === undefined) return;
-	const taskName = session.state.taskName ?? taskRef;
-	const stateSnapshot = structuredClone(session.state);
-	const workRevision = session.workRevision;
-	const operationGeneration = session.operationGeneration;
-	void runtime.promptQueue
-		.enqueue(async (isCurrent) => {
-			const isCurrentBeforePrompt = isActiveSession(runtime, session);
-			const isPromptStale = !isCurrentBeforePrompt || !isCurrent();
-			if (isPromptStale) return;
-			const confirmed = await confirmTaskCompletion(
-				session.context,
-				taskName,
-				taskRef,
-			);
-			const isConfirmed = confirmed === true;
-			if (!isConfirmed) return;
-			const isCurrentAfterPromptEpoch = isCurrent();
-			if (!isCurrentAfterPromptEpoch) return;
-			const isCurrentSessionAfterPrompt = isActiveSession(runtime, session);
-			if (!isCurrentSessionAfterPrompt) return;
-			const result = await runtime.completeMergedTask(
+	const taskRef = operations.sessionState.moduleState.todoist.taskRef;
+	const hasNoTaskRef = taskRef === undefined;
+	if (hasNoTaskRef) return;
+	const { taskName, stateSnapshot, workRevision, sessionId } = mergeState(
+		operations,
+		session,
+		event.sessionId,
+	);
+	void operations.promptQueue
+		.enqueue((isCurrent) =>
+			completeMergedTaskAfterPrompt(
+				operations,
 				session,
+				event,
 				taskRef,
+				taskName,
 				stateSnapshot,
 				workRevision,
-				operationGeneration,
-			);
-			const completed = result === COMPLETED;
-			if (completed) request.payload.taskMarkedAsCompleted = true;
-		})
+				sessionId,
+				isCurrent,
+			),
+		)
 		.catch(() => undefined);
 }
 
-export function registerTodoistMergeConsumer(runtime: TodoistRuntime): void {
-	runtime.events.on(
-		C.event.prMerged,
-		consumeMergedEvent.bind(null, runtime),
-		C.value.collect,
+export function registerTodoistMergeConsumer(
+	operations: TodoistOperations,
+): void {
+	operations.eventHandler.prMergedEvent.subscribe(
+		consumeMergedEvent.bind(null, operations),
 	);
 }

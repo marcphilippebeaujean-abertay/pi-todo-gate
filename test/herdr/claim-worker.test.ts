@@ -1,13 +1,13 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import {
-	type ClaimWorkerRequest,
-	createHerdrEvents,
-	startClaimWorker,
-	type WorkerProcess,
-	type WorkerSpawner,
-} from "../../src/herdr/module.ts";
+import { startClaimWorker } from "../../src/herdr/event-publishers.ts";
+import { createHerdrEvents } from "../../src/herdr/events.ts";
+import type {
+	ClaimWorkerRequest,
+	WorkerProcess,
+	WorkerSpawner,
+} from "../../src/herdr/internal-state.ts";
 
 class FakeProcess extends EventEmitter implements WorkerProcess {
 	readonly stdout = new PassThrough();
@@ -31,12 +31,11 @@ function setup() {
 	const events = createHerdrEvents();
 	const completed = vi.fn();
 	const failed = vi.fn();
-	events.on("claimCompleted", completed);
-	events.on("claimFailed", failed);
+	events.claimCompletedEvent.subscribe(completed);
+	events.claimFailedEvent.subscribe(failed);
 	const request: ClaimWorkerRequest = {
 		prompt: "Fix dialog",
 		instructions: "Claim tab",
-		attemptId: 1,
 		events,
 	};
 	return {
@@ -110,7 +109,6 @@ describe("startClaimWorker", () => {
 		setupState.process.emit("close", 0);
 
 		expect(setupState.completed).toHaveBeenCalledWith({
-			attemptId: 1,
 			result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
 		});
 		expect(setupState.failed).not.toHaveBeenCalled();
@@ -134,7 +132,6 @@ describe("startClaimWorker", () => {
 		setupState.process.emit("close", 0);
 
 		expect(setupState.completed).toHaveBeenCalledWith({
-			attemptId: 1,
 			result: null,
 		});
 	});
@@ -149,7 +146,6 @@ describe("startClaimWorker", () => {
 
 		expect(setupState.completed).not.toHaveBeenCalled();
 		expect(setupState.failed).toHaveBeenCalledWith({
-			attemptId: 1,
 			message: "completed without claim evidence",
 			workerFailed: true,
 		});
@@ -174,7 +170,6 @@ describe("startClaimWorker", () => {
 		retry.process.emit("close", 1);
 		expect(retry.failed).toHaveBeenCalledOnce();
 		expect(retry.failed).toHaveBeenCalledWith({
-			attemptId: 1,
 			message: expect.stringContaining("worker"),
 			workerFailed: true,
 		});
