@@ -10,7 +10,6 @@ import "./user-prompts.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type { WorktreeModuleOptions } from "./internal-state.ts";
 
-export * from "./events.ts";
 export * from "./module-state.ts";
 export interface WorktreeInfo {
 	worktreePath: string;

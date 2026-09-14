@@ -50,7 +50,6 @@ const BOUNDED_PR_NUMBER = "#12345…";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
-import type { FooterTheme } from "../../src/footer/internal-state.ts";
 import {
 	createFooterFactory,
 	Footer,
@@ -59,7 +58,8 @@ import {
 	renderPrLabel,
 	renderPrStatus,
 	renderTaskStatus,
-} from "../../src/footer/module.ts";
+} from "../../src/footer/footer-rendering.ts";
+import type { FooterTheme } from "../../src/footer/internal-state.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);

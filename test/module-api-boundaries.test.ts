@@ -31,9 +31,16 @@ describe("module API boundaries", () => {
 	});
 
 	it("does not wildcard-export implementation facets", async () => {
-		const entrypoints = ["pr", "todoist", "herdr", "exit-protocol"];
+		const entrypoints = [
+			"pr",
+			"todoist",
+			"herdr",
+			"exit-protocol",
+			"footer",
+			"worktree",
+		];
 		const forbidden =
-			/export \* from "\.\/(commands|git|parsing|runtime|notifications|user-prompts|claim-worker-result|events)\.ts"/;
+			/export \* from "\.\/(commands|git|parsing|runtime|notifications|user-prompts|claim-worker-result|events|footer-rendering)\.ts"/;
 		for (const entrypoint of entrypoints) {
 			const source = await readFile(`src/${entrypoint}/module.ts`, "utf8");
 			expect(source, entrypoint).not.toMatch(forbidden);
