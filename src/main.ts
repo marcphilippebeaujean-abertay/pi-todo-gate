@@ -174,7 +174,7 @@ function startExtensions(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
 ): void {
-	const moduleDependencies = dependencies as unknown as ModuleSetupDependencies;
+	const moduleDependencies: ModuleSetupDependencies = dependencies;
 	const extensionState = createExtensionState(pi, dependencies);
 	const herdrStatePublisher = createModuleStatePublisher(
 		extensionState.eventHandler,

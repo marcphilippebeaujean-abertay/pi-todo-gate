@@ -151,3 +151,39 @@ PASS.
 Self-review confirmed no `export *` of scoped implementation event consumer/publisher facets from PR, Herdr, or Todoist entrypoints; no Worktree git-helper entrypoint exports; no public lifecycle methods restored. Fix round committed as `d23abbdc37029ed4b699e36df2a97082a6e2c31a`.
 
 No staged files remain.
+
+## Fix round 2 re-review blocker
+
+Replaced `startExtensions` broad `dependencies as unknown as ModuleSetupDependencies` cast with direct typed assignment matching `createExtensionState`. Task 5 lifecycle work remains deferred.
+
+### Fix-round 2 commands and output
+
+```text
+npx vitest run test/extensions test/pr test/todoist test/worktree test/footer test/exit-protocol test/herdr
+```
+
+PASS — 21 test files, 208 passed, 8 skipped.
+
+```text
+npm run typecheck
+```
+
+PASS — `tsc --noEmit`.
+
+```text
+npm run architecture
+```
+
+PASS — no dependency violations; 211 modules, 814 dependencies cruised.
+
+```text
+npm run lint:strict && npm run lint:biome
+```
+
+PASS — strict lint passed; Biome checked 193 files with no diagnostics.
+
+```text
+git diff --check
+```
+
+PASS. Self-review confirms no broad unknown cast remains in `src/main.ts`; no staged files before commit.
