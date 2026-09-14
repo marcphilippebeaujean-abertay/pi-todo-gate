@@ -111,7 +111,9 @@ describe("session shutdown", () => {
 			registerTool: vi.fn(),
 			on: vi.fn(),
 		} as never;
-		const state = createExtensionState(pi, {});
+		const state = createExtensionState(pi, {
+			loadConfig: async () => ({ projects: { "/repo": "42" } }),
+		});
 		const root = (
 			state as typeof state & {
 				root: Parameters<typeof handleSessionStart>[0];
