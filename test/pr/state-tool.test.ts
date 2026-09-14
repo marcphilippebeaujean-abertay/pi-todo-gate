@@ -62,6 +62,32 @@ describe("PR state tool", () => {
 		);
 	});
 
+	it("persists set_pr when same URL enables explicit pinning", async () => {
+		const state = {
+			...createSessionState().moduleState.pr,
+			prUrl: PR_URL,
+			discoveryDisabled: false,
+		};
+		const { deps, updatePrState } = dependencies(
+			state,
+			"git@github.com:o/r.git",
+		);
+
+		await executeStateTool(
+			deps,
+			"tool-call",
+			{ action: "set_pr", url: PR_URL },
+			undefined,
+			undefined,
+			{} as never,
+		);
+
+		expect(updatePrState).toHaveBeenCalledWith(
+			expect.objectContaining({ prUrl: PR_URL, discoveryDisabled: true }),
+			true,
+		);
+	});
+
 	it("rejects set_pr from a different Git remote", async () => {
 		const state = createSessionState().moduleState.pr;
 		const { deps, updatePrState } = dependencies(

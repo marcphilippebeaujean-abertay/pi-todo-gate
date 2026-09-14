@@ -44,13 +44,19 @@ async function setPrAction(
 		dependencies.getRemoteOrigin() ?? null,
 	);
 	if (url === null) throw new Error(C.message.invalidPr);
+	const nextDiscoveryDisabled = true;
 	const prChanged = currentState.prUrl !== url;
+	const discoveryFlagChanged =
+		currentState.discoveryDisabled !== nextDiscoveryDisabled;
 	const nextState: PrState = {
 		...currentState,
 		prUrl: url,
-		discoveryDisabled: true,
+		discoveryDisabled: nextDiscoveryDisabled,
 	};
-	await dependencies.updatePrState(nextState, prChanged);
+	await dependencies.updatePrState(
+		nextState,
+		prChanged || discoveryFlagChanged,
+	);
 	await dependencies.syncPrState?.(session);
 	return extensionResult(`Pinned PR ${url}`);
 }

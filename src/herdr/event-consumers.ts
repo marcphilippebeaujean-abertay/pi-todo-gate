@@ -97,7 +97,6 @@ class HerdrTabClaimConsumer {
 	private tabId: string | undefined;
 	private paneId: string | undefined;
 	private claimContext: ExtensionContext | undefined;
-	private lifecycleEpoch = 0;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
 		this.commandRunner =
@@ -122,7 +121,6 @@ class HerdrTabClaimConsumer {
 	}
 
 	private sessionStart(_event: unknown, ctx: ExtensionContext): void {
-		this.lifecycleEpoch += 1;
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.claimContext = undefined;
@@ -184,30 +182,6 @@ class HerdrTabClaimConsumer {
 		}
 	}
 
-	private isCurrentLifecycle(epoch: number): boolean {
-		return this.lifecycleEpoch === epoch;
-	}
-
-	private awaitClaimStatusUpdate(
-		update: void | Promise<void>,
-	): Promise<void> | undefined {
-		const isAsyncUpdate = update instanceof Promise;
-		if (!isAsyncUpdate) return undefined;
-		return update;
-	}
-
-	private async publishSuccessfulClaim(
-		context: ExtensionContext,
-		completionEpoch: number,
-	): Promise<void> {
-		const isStale = !this.isCurrentLifecycle(completionEpoch);
-		if (isStale) return;
-		this.hasValidatedClaim = true;
-		this.hasClaimReturnedSuccessfully = true;
-		const markerUpdate = this.onClaimReturnedSuccessfully?.(context);
-		if (markerUpdate instanceof Promise) await markerUpdate;
-	}
-
 	private async completeClaim(event: ClaimCompletedEvent): Promise<void> {
 		const isWorkerDispatched = this.herdrBackgroundWorkerDispatched;
 		const isWorkerReturned = this.herdrBackgroundWorkerReturned;
@@ -216,15 +190,10 @@ class HerdrTabClaimConsumer {
 		const context = this.claimContext;
 		const hasClaimContext = context !== undefined;
 		if (!hasClaimContext) return;
-		const completionEpoch = this.lifecycleEpoch;
 		this.herdrBackgroundWorkerReturned = true;
 		this.worker = undefined;
 		this.claimContext = undefined;
 		const claimStatusUpdate = this.publishClaimInProgress(false);
-		const statusUpdatePromise = this.awaitClaimStatusUpdate(claimStatusUpdate);
-		if (statusUpdatePromise !== undefined) await statusUpdatePromise;
-		const isStaleAfterStatusUpdate = !this.isCurrentLifecycle(completionEpoch);
-		if (isStaleAfterStatusUpdate) return;
 		try {
 			applyClaimResponse(
 				this.commandRunner,
@@ -243,13 +212,15 @@ class HerdrTabClaimConsumer {
 			this.paneId,
 			event.result,
 		);
-		if (!isValidated) {
-			const isStaleAfterValidation = !this.isCurrentLifecycle(completionEpoch);
-			if (isStaleAfterValidation) return;
-			notifyHerdrFailure(context, TAB_CLAIM_FAILED);
+		if (isValidated) {
+			if (claimStatusUpdate instanceof Promise) await claimStatusUpdate;
+			this.hasValidatedClaim = true;
+			this.hasClaimReturnedSuccessfully = true;
+			const markerUpdate = this.onClaimReturnedSuccessfully?.(context);
+			if (markerUpdate instanceof Promise) await markerUpdate;
 			return;
 		}
-		await this.publishSuccessfulClaim(context, completionEpoch);
+		notifyHerdrFailure(context, TAB_CLAIM_FAILED);
 	}
 
 	private failClaim(event: ClaimFailedEvent): void {
@@ -268,7 +239,6 @@ class HerdrTabClaimConsumer {
 	}
 
 	private sessionShutdown(): void {
-		this.lifecycleEpoch += 1;
 		this.worker?.cancel();
 		this.worker = undefined;
 		this.claimContext = undefined;

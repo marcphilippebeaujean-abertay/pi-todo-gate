@@ -99,6 +99,45 @@ describe("shared event adaptation", () => {
 });
 
 describe("session shutdown", () => {
+	it("does not return handoff context after shutdown during before-agent emission", async () => {
+		const root = rootWithConfig(async () => ({ projects: {} }));
+		const contextValue = context("/repo");
+		const session = {
+			context: contextValue,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: true,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationQueue: Promise.resolve(),
+			sessionId: "session",
+		};
+		root.session = session as never;
+		root.sessionState.session.activeSessionId = "session";
+		let release!: () => void;
+		let markStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		root.eventHandler.beforeAgentStartEvent.subscribe(async () => {
+			markStarted();
+			await blocked;
+		});
+
+		const result = handleBeforeAgentStart(
+			root,
+			{ prompt: "prompt" } as never,
+			contextValue,
+		);
+		await started;
+		handleSessionShutdown(root);
+		release();
+
+		expect(await result).toBeUndefined();
+	});
+
 	it("wires Todoist merge handling before Exit Protocol prompts", async () => {
 		const confirm = vi.fn(async () => false);
 		const custom = vi.fn(async () => undefined);

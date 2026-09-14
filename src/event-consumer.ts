@@ -281,6 +281,7 @@ export async function handleBeforeAgentStart(
 		sessionId,
 		messages,
 	});
+	if (root.sessionState.session.activeSessionId !== sessionId) return undefined;
 	if (messages.length === 0) return undefined;
 	return {
 		message: {
