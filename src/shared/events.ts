@@ -105,6 +105,7 @@ export type SessionDeactivatedEvent = undefined;
 
 export interface InitialPrDiscoveryEvent {
 	branch: readonly unknown[];
+	lifecycleEpoch: number;
 }
 
 export interface MessageEndEventPayload {
@@ -115,6 +116,7 @@ export interface BeforeAgentStartEventPayload {
 	event: BeforeAgentStartEvent;
 	context: ExtensionContext;
 	session: SessionRecord;
+	lifecycleEpoch: number;
 	messages: string[];
 }
 

@@ -449,6 +449,32 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
+	it("cancels active worker through session-shutdown subscription", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const cancel = vi.fn();
+			const start = vi.fn(() => ({ cancel }));
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim" },
+				context(),
+			);
+			await pi.handlers.get("session_shutdown")?.[0]?.(
+				{ reason: "new" },
+				context(),
+			);
+
+			expect(cancel).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
 	it("does not restart a successful claim after a new session", async () => {
 		const restore = herdrEnvironment();
 		try {

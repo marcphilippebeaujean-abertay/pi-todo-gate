@@ -81,7 +81,10 @@ describe("footer module", () => {
 			sessionState: h.sessionState,
 		});
 
-		await footer.sessionStart({}, h.context());
+		await h.events.sessionActivatedEvent.emit({
+			context: h.context(),
+			lifecycleEpoch: 0,
+		});
 
 		expect(h.statusCalls).toEqual([]);
 		expect(footer.getState()).toEqual({ footers: {} });

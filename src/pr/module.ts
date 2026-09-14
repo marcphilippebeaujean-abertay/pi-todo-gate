@@ -348,34 +348,93 @@ class PrModuleImpl {
 		await this.persistPrIfAvailable(branchTexts(branch).join("\n"));
 	}
 
+	private isCurrentBeforeAgentRequest(
+		session: PrSession,
+		ctx: ExtensionContext,
+		epoch: number,
+		generation: number,
+	): boolean {
+		const isCurrentSession = this.currentSession === session;
+		const isCurrentGeneration = this.generation === generation;
+		const isCurrentEpoch = this.getLifecycleEpoch() === epoch;
+		const isCurrentContext = session.context === ctx;
+		if (!isCurrentSession) return false;
+		if (!isCurrentGeneration) return false;
+		if (!isCurrentEpoch) return false;
+		if (!isCurrentContext) return false;
+		return true;
+	}
+
 	private async appendBeforeAgentPrompt(
 		ctx: ExtensionContext,
 		messages: string[],
+		expectedSession?: PrSession | null,
+		expectedEpoch?: number,
+		expectedGeneration?: number,
 	): Promise<void> {
-		const session = this.currentSession;
-		const operationGeneration = this.generation;
-		const discoveredOrigin =
-			session === null
-				? null
-				: await this.ensureRemoteOrigin(session, operationGeneration);
-		const originDiscoveryFailed = session !== null && discoveredOrigin === null;
-		if (originDiscoveryFailed) return;
+		const session = expectedSession ?? this.currentSession;
+		const epoch = expectedEpoch ?? this.getLifecycleEpoch();
+		const generation = expectedGeneration ?? this.generation;
+		if (session === null) return;
+		const isCurrentBeforeInspection = this.isCurrentBeforeAgentRequest(
+			session,
+			ctx,
+			epoch,
+			generation,
+		);
+		if (!isCurrentBeforeInspection) return;
+		const discoveredOrigin = await this.ensureRemoteOrigin(session, generation);
+		if (discoveredOrigin === null) return;
 		const worktree = await inspectProject(
 			this.dependencies.exec ?? spawnExec,
 			ctx.cwd,
 		);
+		const isCurrentAfterInspection = this.isCurrentBeforeAgentRequest(
+			session,
+			ctx,
+			epoch,
+			generation,
+		);
+		if (!isCurrentAfterInspection) return;
 		const branch = worktree.branch;
 		const remoteOrigin = discoveredOrigin ?? worktree.remoteOrigin;
 		const hasWorktreeBranch = worktree.isWorktree && branch !== null;
+		if (!hasWorktreeBranch) return;
 		const hasRemoteOrigin = remoteOrigin !== null;
-		const canInspectPr = hasWorktreeBranch && hasRemoteOrigin;
-		if (!canInspectPr) return;
+		if (!hasRemoteOrigin) return;
+		await this.appendPrPrompt(
+			ctx,
+			messages,
+			session,
+			epoch,
+			generation,
+			branch,
+			remoteOrigin,
+		);
+	}
+
+	private async appendPrPrompt(
+		ctx: ExtensionContext,
+		messages: string[],
+		session: PrSession,
+		epoch: number,
+		generation: number,
+		branch: string,
+		remoteOrigin: string,
+	): Promise<void> {
 		const result = await findOpenPr(
 			this.dependencies.exec ?? spawnExec,
 			ctx.cwd,
 			branch,
 			remoteOrigin,
 		);
+		const isCurrentAfterDiscovery = this.isCurrentBeforeAgentRequest(
+			session,
+			ctx,
+			epoch,
+			generation,
+		);
+		if (!isCurrentAfterDiscovery) return;
 		switch (result.state.toLowerCase()) {
 			case C.value.unknown:
 				messages.push(C.message.lookupUnavailable);
@@ -390,7 +449,14 @@ class PrModuleImpl {
 
 	private handleInitialPrDiscovery({
 		branch,
+		lifecycleEpoch,
 	}: InitialPrDiscoveryEvent): Promise<void> {
+		const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
+		const hasPinnedPr = this.state.prUrl !== undefined;
+		const isDiscoveryDisabled = this.state.discoveryDisabled;
+		if (!isCurrentEpoch) return Promise.resolve();
+		if (hasPinnedPr) return Promise.resolve();
+		if (isDiscoveryDisabled) return Promise.resolve();
 		return this.persistInitialPr(branch);
 	}
 
@@ -400,12 +466,23 @@ class PrModuleImpl {
 
 	private handleBeforeAgentStart({
 		context,
+		session,
+		lifecycleEpoch,
 		messages,
 	}: BeforeAgentStartEventPayload): Promise<void> {
-		const hasPerformedGitMutations =
-			this.currentSession?.hasPerformedAnyGitMutations ?? false;
+		const hasPerformedGitMutations = session.hasPerformedAnyGitMutations;
+		const isCurrentSession = this.currentSession === session;
+		const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
 		if (!hasPerformedGitMutations) return Promise.resolve();
-		return this.appendBeforeAgentPrompt(context, messages);
+		if (!isCurrentSession) return Promise.resolve();
+		if (!isCurrentEpoch) return Promise.resolve();
+		return this.appendBeforeAgentPrompt(
+			context,
+			messages,
+			session,
+			lifecycleEpoch,
+			this.generation,
+		);
 	}
 
 	private isCurrentOperation(_session: PrSession, generation: number): boolean {

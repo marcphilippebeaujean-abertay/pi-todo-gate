@@ -70,13 +70,15 @@ class TodoistModuleImpl {
 			this.resetTaskClaim();
 		});
 		this.options.eventHandler.beforeAgentStartEvent.subscribe(
-			({ event, session }) => {
-				if (this.options.sessionState.moduleState.todoist.taskRef !== undefined)
-					return;
-				this.maybeAnalyzeTaskClaim(
-					this.currentSession ?? session,
-					event.prompt,
-				);
+			({ event, session, lifecycleEpoch }) => {
+				const isCurrentSession = this.currentSession === session;
+				const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
+				const hasTaskRef =
+					this.options.sessionState.moduleState.todoist.taskRef !== undefined;
+				if (!isCurrentSession) return;
+				if (!isCurrentEpoch) return;
+				if (hasTaskRef) return;
+				this.maybeAnalyzeTaskClaim(session, event.prompt, lifecycleEpoch);
 			},
 		);
 		this.register();
@@ -182,11 +184,15 @@ class TodoistModuleImpl {
 		registerTodoistMergeConsumer(operations);
 	}
 
-	private maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void {
+	private maybeAnalyzeTaskClaim(
+		session: TodoistSession,
+		prompt: string,
+		lifecycleEpoch: number,
+	): void {
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
-		analyzeTaskClaim(operations, session, prompt);
+		analyzeTaskClaim(operations, session, prompt, lifecycleEpoch);
 	}
 }
 

@@ -154,6 +154,7 @@ export async function runTaskClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
+	lifecycleEpoch: number,
 ): Promise<void> {
 	try {
 		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
@@ -170,11 +171,17 @@ export async function runTaskClaim(
 			prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 			worktree,
 		});
+		const isCurrentEpoch =
+			(operations.getLifecycleEpoch?.() ?? lifecycleEpoch) === lifecycleEpoch;
+		if (!isCurrentEpoch) return;
 		handleTaskClaimResult(operations, session, {
 			sessionId: result.sessionId,
 			result,
 		});
 	} catch (error) {
+		const isCurrentEpoch =
+			(operations.getLifecycleEpoch?.() ?? lifecycleEpoch) === lifecycleEpoch;
+		if (!isCurrentEpoch) return;
 		const message = error instanceof Error ? error.message : String(error);
 		handleTaskClaimResult(operations, session, {
 			sessionId: operations.sessionState.session.activeSessionId ?? "",
@@ -190,10 +197,13 @@ export function maybeAnalyzeTaskClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
+	lifecycleEpoch?: number,
 ): void {
-	const canStart =
-		operations.getSession() === session &&
-		operations.sessionState.moduleState.todoist.taskRef === undefined;
+	const epoch = lifecycleEpoch ?? operations.getLifecycleEpoch?.() ?? 0;
+	const isCurrentSession = operations.getSession() === session;
+	const hasTaskRef =
+		operations.sessionState.moduleState.todoist.taskRef !== undefined;
+	const canStart = isCurrentSession && !hasTaskRef;
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
 	const operation = operations.todoist.taskClaim;
@@ -201,7 +211,7 @@ export function maybeAnalyzeTaskClaim(
 	if (isAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(operations, session, prompt);
+	void runTaskClaim(operations, session, prompt, epoch);
 }
 
 async function consumeMergedEvent(

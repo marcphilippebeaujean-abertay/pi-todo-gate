@@ -205,11 +205,11 @@ async function publishInitialPrDiscovery(
 	epoch: number,
 	branch: readonly unknown[],
 ): Promise<void> {
-	const canDiscoverInitialPr =
-		!root.sessionState.moduleState.pr.discoveryDisabled &&
-		root.sessionState.moduleState.pr.prUrl === undefined;
-	if (canDiscoverInitialPr && isCurrentEpoch(root, epoch))
-		await root.eventHandler.initialPrDiscoveryEvent.emit({ branch });
+	if (!isCurrentEpoch(root, epoch)) return;
+	await root.eventHandler.initialPrDiscoveryEvent.emit({
+		branch,
+		lifecycleEpoch: epoch,
+	});
 }
 
 export async function handleSessionStart(
@@ -270,6 +270,7 @@ export async function handleBeforeAgentStart(
 ): Promise<BeforeAgentStartResultEvent | undefined> {
 	const session = root.session;
 	if (session === null) return undefined;
+	const lifecycleEpoch = root.lifecycleEpoch.value;
 	const messages: string[] = [];
 	if (session.hasPendingHandoffContext) {
 		const todoistState = root.sessionState.moduleState.todoist;
@@ -283,6 +284,7 @@ export async function handleBeforeAgentStart(
 		event,
 		context: ctx,
 		session,
+		lifecycleEpoch,
 		messages,
 	});
 	if (messages.length === 0) return undefined;

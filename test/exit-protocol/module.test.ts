@@ -146,20 +146,23 @@ describe("exit protocol presenter", () => {
 		expect(catchFailure).toHaveBeenCalledOnce();
 	});
 
-	it("publishes exact active and inactive module state payloads", () => {
+	it("publishes exact active and inactive module state payloads", async () => {
 		const events = createSharedEvents();
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((event) => {
 			updates.push(event);
 		});
-		const module = createTestExitProtocolModule({
+		createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: new PromptQueue(),
 		});
 
-		module.sessionStart(context());
-		module.deactivate();
+		await events.sessionActivatedEvent.emit({
+			context: context(),
+			lifecycleEpoch: 0,
+		});
+		await events.sessionDeactivatedEvent.emit(undefined);
 
 		expect(updates).toEqual([
 			{

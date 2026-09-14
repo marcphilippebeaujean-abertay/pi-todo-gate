@@ -102,6 +102,50 @@ describe("Todoist module ownership", () => {
 		});
 	});
 
+	it("ignores before-agent events from stale lifecycle epochs", async () => {
+		const events = createSharedEvents();
+		const lifecycleEpoch = { value: 1 };
+		const worker = vi.fn(async () => ({
+			sessionId: "session",
+			action: "error" as const,
+			taskData: null,
+			error: "not a task" as string | null,
+		}));
+		const sessionState = createSessionState();
+		const oldContext = { cwd: "/old", hasUI: false } as never;
+		const newContext = { cwd: "/new", hasUI: false } as never;
+		const oldSession = { context: oldContext } as unknown as TodoistSession;
+		const newSession = { context: newContext } as unknown as TodoistSession;
+		createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			getLifecycleEpoch: () => lifecycleEpoch.value,
+			taskClaimWorker: worker,
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+		});
+		lifecycleEpoch.value = 2;
+		await events.sessionActivatedEvent.emit({
+			context: newContext,
+			session: newSession,
+			lifecycleEpoch: 2,
+		});
+		await events.beforeAgentStartEvent.emit({
+			event: { prompt: "stale prompt" } as never,
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+			messages: [],
+		});
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
 	it("starts task-claim analysis from shared before-agent events", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
@@ -138,6 +182,7 @@ describe("Todoist module ownership", () => {
 			event: { prompt: "claim this task" } as never,
 			context: session.context,
 			session,
+			lifecycleEpoch: 0,
 			messages: [],
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));

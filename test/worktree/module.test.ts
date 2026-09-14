@@ -127,6 +127,30 @@ describe("worktree event actions", () => {
 		});
 	});
 
+	it("starts from shared session-activated event", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{
+			command: string;
+			args: string[];
+			cwd?: string;
+		}> = [];
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+			exec: projectResult("abc", "def", "", "", commands),
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: context(),
+			lifecycleEpoch: 0,
+		});
+
+		expect(module.getWorktreeInfo()).toEqual({
+			worktreePath: "/repo/.worktrees/feature",
+			branch: "feature",
+		});
+	});
+
 	it("publishes exact reset payload on deactivate", () => {
 		const events = createSharedEvents();
 		const updates: unknown[] = [];

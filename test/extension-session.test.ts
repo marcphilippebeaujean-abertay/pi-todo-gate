@@ -91,6 +91,7 @@ describe("shared event adaptation", () => {
 			event: { prompt: "prompt" },
 			context: contextValue,
 			session,
+			lifecycleEpoch: 0,
 			messages: [],
 		});
 	});

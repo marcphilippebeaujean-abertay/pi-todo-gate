@@ -775,23 +775,99 @@ describe("PR module ownership", () => {
 				return { stdout: "worktree /repo\n", stderr: "", code: 0 };
 			return { stdout: "[]", stderr: "", code: 0 };
 		});
-		const module = createTestPrModule({
+		createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
 		});
-		await module.activateSession(session);
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
 		const messages: string[] = [];
-		await module.appendBeforeAgentPrompt(
-			{ cwd: "/repo", hasUI: false } as never,
+		await events.beforeAgentStartEvent.emit({
+			event: { prompt: "prompt" } as never,
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
 			messages,
-		);
+		});
 
 		expect(updates).toContainEqual(
 			expect.objectContaining({
 				gitStatePatch: { remoteOrigin: "git@github.com:o/r.git" },
 			}),
 		);
+	});
+
+	it("ignores stale before-agent prompt contributions after session changes", async () => {
+		const events = createEventHandler();
+		const lifecycleEpoch = { value: 1 };
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "old";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		const oldContext = { cwd: "/repo", hasUI: false } as never;
+		const oldSession = {
+			context: oldContext,
+			hasPerformedAnyGitMutations: true,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+		const newContext = { cwd: "/new", hasUI: false } as never;
+		const newSession = {
+			context: newContext,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+		let releaseInspection!: () => void;
+		const inspectionBlocked = new Promise<void>((resolve) => {
+			releaseInspection = resolve;
+		});
+		const exec = vi.fn(async (_command: string, args: string[]) => {
+			if (args[0] === "rev-parse") await inspectionBlocked;
+			if (args[0] === "rev-parse")
+				return { stdout: "/repo\n", stderr: "", code: 0 };
+			if (args[0] === "branch")
+				return { stdout: "feature\n", stderr: "", code: 0 };
+			if (args[0] === "worktree")
+				return { stdout: "worktree /repo\n", stderr: "", code: 0 };
+			return { stdout: "[]", stderr: "", code: 0 };
+		});
+		createTestPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			getLifecycleEpoch: () => lifecycleEpoch.value,
+			dependencies: { exec },
+		});
+		await events.sessionActivatedEvent.emit({
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+		});
+		const messages: string[] = [];
+		const beforeAgent = events.beforeAgentStartEvent.emit({
+			event: { prompt: "prompt" } as never,
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+			messages,
+		});
+		await Promise.resolve();
+		lifecycleEpoch.value = 2;
+		await events.sessionActivatedEvent.emit({
+			context: newContext,
+			session: newSession,
+			lifecycleEpoch: 2,
+		});
+		releaseInspection();
+		await beforeAgent;
+
+		expect(messages).toEqual([]);
 	});
 });
