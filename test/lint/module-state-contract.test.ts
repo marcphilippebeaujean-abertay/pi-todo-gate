@@ -58,7 +58,13 @@ export interface PrModuleState extends BadState {}
 
 		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
 		expect(findings).toHaveLength(5);
-		expect(findings.map(({ line }) => line)).toEqual([3, 4, 5, 6, 8]);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 3, column: 12 },
+			{ line: 4, column: 11 },
+			{ line: 5, column: 8 },
+			{ line: 6, column: 10 },
+			{ line: 8, column: 1 },
+		]);
 	});
 
 	it("follows aliases, unions, arrays, and index signatures", async () => {
@@ -72,9 +78,13 @@ export interface PrModuleState {
 }
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			3,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(3);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 2, column: 24 },
+			{ line: 6, column: 27 },
+			{ line: 7, column: 18 },
+		]);
 	});
 
 	it("accepts literal values and readonly arrays", async () => {
@@ -111,9 +121,9 @@ declare const descriptor: ModuleStateDescriptor<"pr", PublicData>;
 void descriptor;
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			1,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]).toMatchObject({ line: 3, column: 9 });
 	});
 
 	it("checks inline descriptor state types", async () => {
@@ -128,7 +138,13 @@ void descriptor;
 
 		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
 		expect(findings).toHaveLength(5);
-		expect(findings.map(({ line }) => line)).toEqual([2, 5, 5, 5, 5]);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 2, column: 1 },
+			{ line: 5, column: 10 },
+			{ line: 5, column: 26 },
+			{ line: 5, column: 46 },
+			{ line: 5, column: 69 },
+		]);
 	});
 
 	it("does not inspect files outside module-state.ts", async () => {

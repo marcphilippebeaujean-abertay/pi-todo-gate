@@ -55,9 +55,14 @@ export interface ModuleState {
 }
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			4,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(4);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 4, column: 11 },
+			{ line: 5, column: 8 },
+			{ line: 6, column: 12 },
+			{ line: 7, column: 11 },
+		]);
 	});
 
 	it("rejects one diagnostic per property with multiple forbidden types", async () => {
@@ -86,9 +91,12 @@ export interface ModuleState {
 }
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			2,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(2);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 3, column: 17 },
+			{ line: 4, column: 2 },
+		]);
 	});
 
 	it("rejects class instances reachable from module state", async () => {
@@ -102,8 +110,11 @@ export interface ModuleState {
 }
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			2,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(2);
+		expect(findings.map(({ line, column }) => ({ line, column }))).toEqual([
+			{ line: 2, column: 1 },
+			{ line: 4, column: 10 },
+		]);
 	});
 });
