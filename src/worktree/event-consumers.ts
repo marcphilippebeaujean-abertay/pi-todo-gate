@@ -54,15 +54,18 @@ class Worktree implements WorktreeConsumer {
 
 	async sessionStart(
 		nextContext: ExtensionContext,
-		sessionId: string,
+		expectedSessionId: string,
 	): Promise<void> {
+		const isCurrentActivation =
+			this.sessionState.session.activeSessionId === expectedSessionId;
+		if (!isCurrentActivation) return;
 		this.refreshSequence += 1;
 		const initializationSequence = ++this.initializationSequence;
 		this.context = nextContext;
 		this.baseline = null;
 		await this.initializeSession(
 			nextContext,
-			sessionId,
+			expectedSessionId,
 			initializationSequence,
 		);
 	}

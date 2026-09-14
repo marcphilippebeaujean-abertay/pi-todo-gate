@@ -155,6 +155,26 @@ describe("worktree event actions", () => {
 		});
 	});
 
+	it("preserves new baseline after delayed stale activation", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "new";
+		const ctx = context();
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			exec: projectResult("abc", "def", "", "", []),
+		});
+
+		await module.sessionStart(ctx, "new");
+		await module.sessionStart(ctx, "old");
+
+		expect(module.getWorktreeInfo()).toEqual({
+			worktreePath: "/repo/.worktrees/feature",
+			branch: "feature",
+		});
+	});
+
 	it("publishes exact reset payload on deactivate", () => {
 		const events = createSharedEvents();
 		const updates: unknown[] = [];
@@ -316,6 +336,9 @@ describe("worktree event actions", () => {
 			releaseConfirm = resolve;
 		});
 		const ctx = context();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const changeDirectory = vi.fn();
 		const confirm = vi.fn(async () => {
 			await confirmBlocked;
 			return true;
@@ -325,8 +348,8 @@ describe("worktree event actions", () => {
 			eventHandler: events,
 			sessionState,
 			dependencies: {
-				exec: projectResult("abc", "abc", "", " M dirty\\n", []),
-				changeDirectory: vi.fn(),
+				exec: projectResult("abc", "abc", "", " M dirty\\n", commands),
+				changeDirectory,
 			},
 		});
 		await module.sessionStart(ctx, "old");
@@ -338,5 +361,14 @@ describe("worktree event actions", () => {
 
 		expect(await cleanup).toBe("failed");
 		expect(module.getWorktreeInfo()).not.toBeNull();
+		expect(
+			commands.filter(
+				({ args }) =>
+					(args[0] === "worktree" && args[1] === "remove") ||
+					(args[0] === "branch" && args[1] === "-D"),
+			),
+		).toEqual([]);
+		expect(changeDirectory).not.toHaveBeenCalled();
+		expect(ctx.ui.notify).not.toHaveBeenCalled();
 	});
 });
