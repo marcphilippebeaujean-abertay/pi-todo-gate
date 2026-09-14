@@ -1,4 +1,3 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ExitProtocolModuleState } from "./exit-protocol/module-state.ts";
 import type { FooterModuleState } from "./footer/module-state.ts";
 import type { HerdrModuleState } from "./herdr/module-state.ts";
@@ -90,8 +89,3 @@ export interface RootDependencies {
 }
 
 export type { ExtensionDependencies } from "./extension-dependencies.ts";
-
-export interface ExtensionState {
-	pi: ExtensionAPI;
-	sessionState: SessionState;
-}

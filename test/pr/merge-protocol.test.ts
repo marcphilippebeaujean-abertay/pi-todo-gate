@@ -59,8 +59,8 @@ function createRuntime(
 		exec,
 		getSession: () => activeSession.current,
 		getPrState: () => sessionState.moduleState.pr,
-		isCurrentSession: (current: SessionRecord, sessionId: string) =>
-			current.sessionId === sessionId,
+		isCurrentSession: (_current: SessionRecord, sessionId: string) =>
+			sessionState.session.activeSessionId === sessionId,
 		enqueueSessionOperation: <T>(
 			_session: SessionRecord,
 			operation: () => Promise<T>,

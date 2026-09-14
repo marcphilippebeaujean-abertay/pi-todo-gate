@@ -297,6 +297,16 @@ describe("Todoist module ownership", () => {
 			error: "not a task" as string | null,
 		}));
 		createTodoistModule({
+			loadConfig: async () => ({
+				projects: {
+					"/old": "project",
+					"/new": "project",
+					"/repo": {
+						todoistProjectRef: "project",
+						triggersOnlyOnWorktree: false,
+					},
+				},
+			}),
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -326,6 +336,50 @@ describe("Todoist module ownership", () => {
 			}),
 		);
 	});
+
+	it("does not claim tasks from ordinary checkouts by default", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", triggersOnlyOnWorktree: true },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		const worker = vi.fn(async () => ({
+			sessionId: "session",
+			action: "error" as const,
+			taskData: null,
+			error: "not a task" as string | null,
+		}));
+		createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			exec: async () => ({ stdout: "", stderr: "", code: 1 }),
+			taskClaimWorker: worker,
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			sessionId: "session",
+			session,
+		});
+		await events.beforeAgentStartEvent.emit({
+			event: { prompt: "ordinary checkout" } as never,
+			context: session.context,
+			sessionId: "session",
+			session,
+			messages: [],
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).not.toHaveBeenCalled();
+	});
 });
 
 describe("Todoist module projection", () => {
@@ -347,7 +401,7 @@ describe("Todoist module projection", () => {
 			eventHandler: events,
 			sessionState,
 		});
-		const session = { sessionId: "session" } as TodoistSession;
+		const session = {} as unknown as TodoistSession;
 
 		await module.syncSessionState(session);
 

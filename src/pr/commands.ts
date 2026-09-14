@@ -119,7 +119,11 @@ async function runMergeProtocol(
 		notifyNoPr(ctx);
 		return;
 	}
-	const sessionId = session.sessionId;
+	const sessionId = dependencies.sessionState.session.activeSessionId;
+	if (sessionId === null) {
+		notifyInactive(ctx);
+		return;
+	}
 	const enqueue = dependencies.enqueueSessionOperation;
 	const merged = await enqueue(
 		session,

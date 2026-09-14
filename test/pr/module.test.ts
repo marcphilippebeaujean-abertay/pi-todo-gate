@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { isCurrentMerge } from "../../src/pr/event-consumers.ts";
 import { createPrModule } from "../../src/pr/module.ts";
 import { prStateDescriptor } from "../../src/pr/module-state.ts";
@@ -549,6 +550,8 @@ describe("PR module ownership", () => {
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		registerModuleStateConsumer(events, sessionState);
 		await module.activateSession(session);
 		await events.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/42",
@@ -567,6 +570,7 @@ describe("PR module ownership", () => {
 				}),
 			}),
 		);
+		expect(sessionState.moduleState.pr.prUrl).toBeUndefined();
 	});
 
 	it("guards merge results by session ID and PR state", async () => {

@@ -289,7 +289,14 @@ function latestModuleState(
 	return value as Record<string, unknown>;
 }
 
-const config = (projects: Record<string, string>) => ({ projects });
+const config = (projects: Record<string, string>) => ({
+	projects: Object.fromEntries(
+		Object.entries(projects).map(([path, todoistProjectRef]) => [
+			path,
+			{ todoistProjectRef, triggersOnlyOnWorktree: false },
+		]),
+	),
+});
 
 async function start(
 	h: ReturnType<typeof harness>,

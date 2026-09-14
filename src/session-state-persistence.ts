@@ -59,6 +59,22 @@ function isGitState(value: unknown): value is GitState {
 	return validityChecks.every(Boolean);
 }
 
+function restoreGitState(value: GitState): GitState {
+	const restored: GitState = {};
+	if (value.remoteOrigin !== undefined)
+		restored.remoteOrigin = value.remoteOrigin;
+	if (value.mergeCompletedAt !== undefined)
+		restored.mergeCompletedAt = value.mergeCompletedAt;
+	if (value.branch !== undefined) restored.branch = value.branch;
+	if (value.isWorktree !== undefined) restored.isWorktree = value.isWorktree;
+	if (value.worktreeRoot !== undefined)
+		restored.worktreeRoot = value.worktreeRoot;
+	if (value.mainRoot !== undefined) restored.mainRoot = value.mainRoot;
+	if (value.hasUncommittedChanges !== undefined)
+		restored.hasUncommittedChanges = value.hasUncommittedChanges;
+	return restored;
+}
+
 function isPersistedSessionState(
 	value: unknown,
 ): value is PersistedSessionState {
@@ -157,7 +173,7 @@ export function restoreSessionState(
 
 	restored.session.inheritedFromSessionId =
 		value.session.inheritedFromSessionId;
-	restored.gitState = structuredClone(value.gitState);
+	restored.gitState = restoreGitState(value.gitState);
 	restored.moduleState = restoreModuleState(value.moduleState, descriptors);
 	return restored;
 }

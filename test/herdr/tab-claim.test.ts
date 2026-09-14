@@ -330,6 +330,49 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
+	it("does not publish success after shutdown during claim status update", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			let claimStarted = false;
+			let releaseStatus!: () => void;
+			const statusBlocked = new Promise<void>((resolve) => {
+				releaseStatus = resolve;
+			});
+			const onClaimReturnedSuccessfully = vi.fn();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: backgroundWorker.start,
+				publishClaimInProgress: (claimInProgress) => {
+					if (claimInProgress) {
+						claimStarted = true;
+						return;
+					}
+					return claimStarted ? statusBlocked : undefined;
+				},
+				onClaimReturnedSuccessfully,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "claim" },
+				context(),
+			);
+			const completion =
+				backgroundWorker.requests[0]?.events.claimCompletedEvent.emit({
+					result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
+				});
+			await Promise.resolve();
+			await pi.handlers.get("session_shutdown")?.[0]?.({}, context());
+			releaseStatus();
+			await completion;
+
+			expect(onClaimReturnedSuccessfully).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
+
 	it("derives worker response instructions from typed response template", () => {
 		expect(TAB_CLAIM_INSTRUCTIONS).toContain(
 			JSON.stringify(CLAIM_WORKER_RESPONSE_TEMPLATE),

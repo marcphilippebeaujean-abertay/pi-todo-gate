@@ -151,7 +151,7 @@ class TodoistModuleImpl implements TodoistModule {
 
 	private async syncSessionState(session: TodoistSession): Promise<void> {
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
-		const hasCurrentSessionId = activeSessionId === session.sessionId;
+		const hasCurrentSessionId = activeSessionId !== null;
 		const currentSession = this.currentSession;
 		const hasCurrentSession =
 			currentSession === null || currentSession === session;

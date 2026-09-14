@@ -84,6 +84,7 @@ function isCurrentMergeEvent(
 function mergeState(
 	operations: TodoistOperations,
 	session: TodoistSession,
+	sessionId: string,
 ): {
 	taskName: string;
 	stateSnapshot: TodoistCompletionSnapshot;
@@ -99,7 +100,7 @@ function mergeState(
 			prUrl: operations.sessionState.moduleState.pr.prUrl,
 		},
 		workRevision: session.workRevision,
-		sessionId: session.sessionId,
+		sessionId,
 	};
 }
 
@@ -211,6 +212,13 @@ export async function runTaskClaim(
 		const isCurrentRootSessionId = isCurrentSessionId();
 		if (!isCurrentSession) return;
 		if (!isCurrentRootSessionId) return;
+		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
+		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
+		if (shouldSkipOrdinaryCheckout) {
+			operations.todoist.taskClaim.pending = false;
+			operations.todoist.taskClaim.session = undefined;
+			return;
+		}
 		const worker =
 			operations.taskClaimWorker ??
 			operations.dependencies?.taskClaimWorker ??
@@ -245,7 +253,8 @@ export function maybeAnalyzeTaskClaim(
 	session: TodoistSession,
 	prompt: string,
 ): void {
-	const expectedSessionId = session.sessionId;
+	const expectedSessionId = operations.sessionState.session.activeSessionId;
+	if (expectedSessionId === null) return;
 	const isCurrentSession = operations.getSession() === session;
 	const isCurrentRootSession =
 		operations.sessionState.session.activeSessionId === expectedSessionId;
@@ -328,6 +337,7 @@ async function consumeMergedEvent(
 	const { taskName, stateSnapshot, workRevision, sessionId } = mergeState(
 		operations,
 		session,
+		event.sessionId,
 	);
 	void operations.promptQueue
 		.enqueue((isCurrent) =>

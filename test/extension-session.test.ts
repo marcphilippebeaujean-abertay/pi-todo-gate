@@ -71,6 +71,7 @@ describe("shared event adaptation", () => {
 			operationQueue: Promise.resolve(),
 		};
 		root.session = session as never;
+		root.sessionState.session.activeSessionId = "session";
 		const messageEndEmit = vi.spyOn(root.eventHandler.messageEndEvent, "emit");
 		const beforeAgentStartEmit = vi.spyOn(
 			root.eventHandler.beforeAgentStartEvent,
@@ -416,6 +417,62 @@ describe("session shutdown", () => {
 			gitState: {},
 			moduleState: createSessionState().moduleState,
 		});
+	});
+
+	it("does not let stale inherited activation overwrite newer session", async () => {
+		let loadCalls = 0;
+		let markPreviousLookupStarted!: () => void;
+		let releasePreviousLookup!: () => void;
+		const previousLookupStarted = new Promise<void>((resolve) => {
+			markPreviousLookupStarted = resolve;
+		});
+		const previousLookupBlocked = new Promise<void>((resolve) => {
+			releasePreviousLookup = resolve;
+		});
+		const root = rootWithConfig(
+			async () => {
+				loadCalls += 1;
+				if (loadCalls === 2) {
+					markPreviousLookupStarted();
+					await previousLookupBlocked;
+				}
+				return { projects: { "/repo": "project" } };
+			},
+			async () => ({ stdout: "", stderr: "", code: 1 }),
+			() => ({
+				getCwd: () => "/repo",
+				getSessionId: () => "previous",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todo-gate-state",
+						data: {
+							schemaVersion: 1,
+							session: {},
+							gitState: { branch: "inherited" },
+							moduleState: { todoist: { taskRef: "stale" } },
+						},
+					},
+				],
+			}),
+		);
+		const staleStart = handleSessionStart(
+			root,
+			{ type: "session_start", previousSessionFile: "previous" } as never,
+			context("/repo", [], "stale"),
+		);
+		await previousLookupStarted;
+		const currentStart = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo", [], "current"),
+		);
+		releasePreviousLookup();
+		await Promise.all([staleStart, currentStart]);
+
+		expect(root.sessionState.session.activeSessionId).toBe("current");
+		expect(root.sessionState.gitState.branch).not.toBe("inherited");
+		expect(root.sessionState.moduleState.todoist.taskRef).not.toBe("stale");
 	});
 
 	it("does not resurrect module state when activation shuts down", async () => {

@@ -81,7 +81,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 		) => {
 			const isCurrent = () =>
 				runtime.getSession() === targetSession &&
-				targetSession.sessionId === sessionId;
+				runtime.sessionState.session.activeSessionId === sessionId;
 			if (!isCurrent()) return "failed" as const;
 			try {
 				await completeTask(taskRef, isCurrent);
@@ -102,7 +102,7 @@ async function emit(runtime: TodoistOperations) {
 	const payload = {
 		prUrl: PR_URL,
 		taskMarkedAsCompleted: false,
-		sessionId: runtime.getSession()?.sessionId ?? "",
+		sessionId: runtime.sessionState.session.activeSessionId ?? "",
 	};
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
@@ -133,7 +133,8 @@ async function runMergeCommand(
 		exec: runtime.dependencies.exec,
 		getSession: runtime.getSession,
 		getPrState: () => runtime.sessionState.moduleState.pr,
-		isCurrentSession: (session, sessionId) => session.sessionId === sessionId,
+		isCurrentSession: (_session, sessionId) =>
+			runtime.sessionState.session.activeSessionId === sessionId,
 		enqueueSessionOperation: (_session, operation) =>
 			runtime.promptQueue
 				.enqueue(operation)
@@ -305,7 +306,7 @@ describe("Todoist merge consumer", () => {
 	it("does not complete a task after operation invalidation", async () => {
 		const setupResult = setup();
 		setupResult.confirm.mockImplementation(async () => {
-			setupResult.session.sessionId = "new-session";
+			setupResult.runtime.sessionState.session.activeSessionId = "new-session";
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
@@ -369,7 +370,7 @@ describe("Todoist merge consumer", () => {
 			) => {
 				const isCurrent = () =>
 					runtime.getSession() === targetSession &&
-					targetSession.sessionId === sessionId;
+					runtime.sessionState.session.activeSessionId === sessionId;
 				if (!isCurrent()) return "failed" as const;
 				await completeTask(taskRef, isCurrent);
 				return isCurrent() ? ("completed" as const) : ("failed" as const);

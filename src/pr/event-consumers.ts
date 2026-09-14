@@ -169,7 +169,6 @@ export class PrConsumer {
 	private currentSession: PrSession | null = null;
 	private readonly dependencies: PrModuleDependencies;
 	private registrationsAvailable = false;
-	private state: PrState;
 	private readonly publishState;
 
 	constructor(options: PrModuleOptions) {
@@ -180,12 +179,15 @@ export class PrConsumer {
 		this.dependencies = options.dependencies ?? {
 			exec: options.exec,
 		};
-		this.state = structuredClone(this.sessionState.moduleState.pr);
 		this.publishState = createModuleStatePublisher(
 			this.eventHandler,
 			C.module.pr,
 		);
 		this.subscribeEvents();
+	}
+
+	private get state(): PrState {
+		return this.sessionState.moduleState.pr;
 	}
 
 	private subscribeEvents(): void {
@@ -206,7 +208,7 @@ export class PrConsumer {
 				if (!isCurrentContext) return;
 				if (isDifferentActiveSession) return;
 				this.currentSession = session;
-				await this.activateSession(session);
+				await this.activateSession(session, expectedSessionId);
 				const latestActiveSessionId = this.sessionState.session.activeSessionId;
 				const isStaleActivation = latestActiveSessionId !== expectedSessionId;
 				if (isStaleActivation) return;
@@ -250,42 +252,41 @@ export class PrConsumer {
 		});
 	}
 
-	private async activateSession(session: PrSession): Promise<void> {
+	private async activateSession(
+		session: PrSession,
+		expectedSessionId?: string,
+	): Promise<void> {
 		this.currentSession = session;
 		const nextState = prStateFromSession(
 			this.sessionState.moduleState.pr,
 			this.sessionState.moduleState.pr.discoveryDisabled === true,
 			this.sessionState.moduleState.pr.discoveryTestedUrls ?? [],
 		);
-		this.state = nextState;
 		await this.emitState(nextState, { persist: false });
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasCurrentSessionId = activeSessionId === session.sessionId;
+		const activationSessionId = expectedSessionId ?? activeSessionId;
+		const hasCurrentSessionId =
+			activationSessionId !== null && activeSessionId === activationSessionId;
 		const hasCurrentSession = this.currentSession === session;
 		const isCurrentActivation = hasCurrentSession && hasCurrentSessionId;
 		if (!isCurrentActivation) return;
-		this.state = nextState;
 	}
 
 	private deactivateSession(): void {
 		this.currentSession = null;
-		this.state = {
-			...this.sessionState.moduleState.pr,
-			discoveryDisabled: true,
-			discoveryTestedUrls: [],
-			mergedPrs: [],
-		};
 	}
 
 	private async syncSessionState(session: PrSession): Promise<void> {
-		const isCurrent = this.isCurrentSession(session, session.sessionId);
+		const sessionId = this.sessionState.session.activeSessionId;
+		if (sessionId === null) return;
+		const isCurrent = this.isCurrentSession(session, sessionId);
 		if (!isCurrent) return;
-		this.state = prStateFromSession(
+		const nextState = prStateFromSession(
 			this.sessionState.moduleState.pr,
 			this.sessionState.moduleState.pr.discoveryDisabled === true,
 			this.sessionState.moduleState.pr.discoveryTestedUrls ?? [],
 		);
-		await this.emitState(this.state, { persist: false });
+		await this.emitState(nextState, { persist: false });
 	}
 
 	private async initializeRemoteOrigin(
@@ -336,7 +337,8 @@ export class PrConsumer {
 		const hasPinnedPr = this.state.prUrl !== undefined;
 		const shouldSkipDiscovery = !canDiscover || hasPinnedPr;
 		if (shouldSkipDiscovery) return;
-		const sessionId = session.sessionId;
+		const sessionId = this.sessionState.session.activeSessionId;
+		if (sessionId === null) return;
 		const remoteOrigin = await this.ensureRemoteOrigin(session, sessionId);
 		if (remoteOrigin === null) return;
 		const exec = this.dependencies.exec ?? spawnExec;
@@ -387,11 +389,11 @@ export class PrConsumer {
 		const alreadyTested =
 			this.state.discoveryTestedUrls?.includes(url) === true;
 		if (alreadyTested) return;
-		this.state = {
+		const nextState = {
 			...this.state,
 			discoveryTestedUrls: [...(this.state.discoveryTestedUrls ?? []), url],
 		};
-		await this.emitState(this.state, { persist: true });
+		await this.emitState(nextState, { persist: true });
 	}
 
 	private async persistCandidate(
@@ -424,13 +426,13 @@ export class PrConsumer {
 		const testedUrls = this.state.discoveryTestedUrls ?? [];
 		const hasAlreadyTested = testedUrls.includes(url);
 		const nextTestedUrls = hasAlreadyTested ? testedUrls : [...testedUrls, url];
-		this.state = {
+		const nextState = {
 			...this.state,
 			prUrl: url,
 			discoveryDisabled: true,
 			discoveryTestedUrls: nextTestedUrls,
 		};
-		await this.emitState(this.state, { persist: true });
+		await this.emitState(nextState, { persist: true });
 		return true;
 	}
 
@@ -462,10 +464,11 @@ export class PrConsumer {
 		expectedSessionId?: string,
 	): Promise<void> {
 		const session = expectedSession ?? this.currentSession;
-		const sessionId = expectedSessionId ?? session?.sessionId;
+		const sessionId =
+			expectedSessionId ?? this.sessionState.session.activeSessionId;
 		const hasNoSession = session === null;
 		if (hasNoSession) return;
-		const hasNoSessionId = sessionId === undefined;
+		const hasNoSessionId = sessionId === undefined || sessionId === null;
 		if (hasNoSessionId) return;
 		const isCurrentBeforeInspection = this.isCurrentBeforeAgentRequest(
 			session,
@@ -588,7 +591,6 @@ export class PrConsumer {
 		persist: boolean,
 	): Promise<void> {
 		const normalizedState = normalizePrState(nextState);
-		this.state = normalizedState;
 		await this.publishState.publish(normalizedState, { persist });
 	}
 
@@ -615,11 +617,12 @@ export class PrConsumer {
 			{ ...this.state, prUrl: event.prUrl },
 			new Date().toISOString(),
 		);
-		const nextState = { ...this.state, ...recordedState };
-		const changed = nextState !== this.state;
+		const currentState = this.state;
+		const { prUrl: _activePrUrl, ...stateWithoutActivePr } = currentState;
+		const nextState = { ...stateWithoutActivePr, ...recordedState };
+		const changed = nextState !== currentState;
 		if (!changed) return;
-		this.state = nextState;
-		await this.emitState(this.state, { persist: true });
+		await this.emitState(nextState, { persist: true });
 		const activeSessionId = this.sessionState.session.activeSessionId;
 		const isCurrentAfterEmit =
 			this.currentSession === session && activeSessionId === event.sessionId;

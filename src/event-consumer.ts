@@ -155,6 +155,7 @@ async function activateConfigured(
 		persisted !== null,
 		restored,
 	);
+	if (!isCurrentSession(root, sessionId)) return null;
 	const state = inherited.state;
 	root.sessionState.session = {
 		...state.session,
@@ -169,7 +170,6 @@ async function activateConfigured(
 		hasPendingHandoffContext,
 		hasPerformedAnyGitMutations: false,
 		workRevision: 0,
-		sessionId,
 		operationQueue: Promise.resolve(),
 	};
 	root.session = session;
@@ -263,7 +263,8 @@ export async function handleBeforeAgentStart(
 ): Promise<BeforeAgentStartResultEvent | undefined> {
 	const session = root.session;
 	if (session === null) return undefined;
-	const sessionId = session.sessionId;
+	const sessionId = root.sessionState.session.activeSessionId;
+	if (sessionId === null) return undefined;
 	const messages: string[] = [];
 	if (session.hasPendingHandoffContext) {
 		const todoistState = root.sessionState.moduleState.todoist;
