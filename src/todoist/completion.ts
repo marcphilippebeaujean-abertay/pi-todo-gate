@@ -84,10 +84,12 @@ async function completeMergedTaskNow(
 	const shouldSkipCompletion = isStaleCompletion;
 	if (shouldSkipCompletion) return C.exit.failed;
 	try {
-		await createClient(ctx, operations.dependencies).completeTask(
-			taskRef,
-			isCurrent,
-		);
+		await createClient(ctx, {
+			exec: operations.exec ?? operations.dependencies.exec,
+			createTodoistClient:
+				operations.createTodoistClient ??
+				operations.dependencies.createTodoistClient,
+		}).completeTask(taskRef, isCurrent);
 		const isStaleSuccess = !isCurrent();
 		if (isStaleSuccess) return C.exit.failed;
 		await recordSuccessfulCompletion(operations, ctx);

@@ -3,7 +3,7 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
-import type { ModuleState } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 import type { WorktreeModule } from "../worktree/state.ts";
 import type { ExitRequest } from "./state.ts";
 import { presentExitActions } from "./user-prompts.ts";
@@ -12,7 +12,7 @@ export function publishExitProtocolState(
 	eventHandler: EventHandler,
 	active: boolean,
 ): Promise<void> {
-	const moduleState: ModuleState["exitProtocol"] = { active };
+	const moduleState: SessionState["moduleState"]["exitProtocol"] = { active };
 	return eventHandler.moduleStateChangedEvent.emit({
 		moduleId: C.module.exitProtocol,
 		moduleState,

@@ -25,17 +25,18 @@ import type {
 } from "./shared/events.ts";
 import { textOf } from "./shared/extension-message.ts";
 import type { SessionReader } from "./shared/session-state.ts";
-import { createSessionState, type SessionState } from "./state.ts";
+import {
+	createSessionState,
+	type RootDependencies,
+	type SessionState,
+} from "./state.ts";
 import { loadConfig, resolveConfiguredProject } from "./todoist/config.ts";
 import type { TodoistModule, TodoistProjectMapping } from "./todoist/state.ts";
 import type { WorktreeModule } from "./worktree/state.ts";
 
 export interface RootComposition {
 	pi: ExtensionAPI;
-	dependencies: {
-		loadConfig?: (path?: string) => Promise<TodoistProjectMapping>;
-		openSession?: (path: string) => SessionReader;
-	};
+	dependencies: RootDependencies;
 	eventHandler: EventHandler;
 	promptQueue: PromptQueue;
 	sessionState: SessionState;
@@ -226,7 +227,9 @@ export async function handleSessionStart(
 	deactivateUnconfigured(root);
 	await root.publisher.publishSessionReset();
 	if (!isCurrentEpoch(root, epoch)) return;
-	const config = await (root.dependencies.loadConfig ?? loadConfig)();
+	const config = (await (
+		root.dependencies.loadConfig ?? loadConfig
+	)()) as TodoistProjectMapping;
 	if (!isCurrentEpoch(root, epoch)) return;
 	const project = resolveConfiguredProject(ctx.cwd, config);
 	if (project === null) {

@@ -1,5 +1,5 @@
+import type { GitState, ModuleId, ModuleState } from "../state.ts";
 import type { ModuleStateChangedEvent } from "./events.ts";
-import type { GitState, ModuleId, ModuleState } from "./session-state.ts";
 
 type ModuleStatePublisherOptions = {
 	persist: boolean;

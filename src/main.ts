@@ -1,4 +1,7 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import {
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
@@ -8,38 +11,80 @@ import {
 	RootEventPublisher,
 } from "./event-publishers.ts";
 import { createExitProtocolModule } from "./exit-protocol/module.ts";
+import type { ExitProtocolModule } from "./exit-protocol/state.ts";
 import { exitProtocolStateDescriptor } from "./exit-protocol/state.ts";
+import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
 import { createFooterModule } from "./footer/module.ts";
+import type { FooterModule } from "./footer/state.ts";
 import { footerStateDescriptor } from "./footer/state.ts";
 import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
+import type { CommandRunner, WorkerSpawner } from "./herdr/state.ts";
 import { herdrStateDescriptor } from "./herdr/state.ts";
 import { createPrModule } from "./pr/module.ts";
+import type { PrModule } from "./pr/state.ts";
 import { prStateDescriptor } from "./pr/state.ts";
 import { PromptQueue } from "./prompt-queue.ts";
 import {
 	type ModuleStateDescriptors,
 	serializeSessionState,
 } from "./session-state-persistence.ts";
+import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
+import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
 import { isSubagent } from "./shared/session.ts";
-import {
-	createSessionState,
-	type ExtensionDependencies,
-	type ExtensionState,
-} from "./state.ts";
+import { createSessionState } from "./state.ts";
 import { createTodoistModule } from "./todoist/module.ts";
+import type {
+	TaskClaimWorker,
+	TodoistClientLike,
+	TodoistModule,
+} from "./todoist/state.ts";
 import { todoistStateDescriptor } from "./todoist/state.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 import { worktreeStateDescriptor } from "./worktree/state.ts";
 
-export type { ExtensionDependencies } from "./state.ts";
+export interface ExtensionDependencies extends BaseExtensionDependencies {
+	createTodoistClient?: (
+		ctx: ExtensionContext,
+		exec: Exec,
+	) => TodoistClientLike;
+	taskClaimWorker?: TaskClaimWorker;
+	herdrCommandRunner?: CommandRunner;
+	herdrSpawnWorker?: WorkerSpawner;
+}
+
+interface ExtensionState {
+	pi: ExtensionAPI;
+	sessionState: import("./state.ts").SessionState;
+	promptQueue: PromptQueue;
+	eventHandler: EventHandler;
+	footer: FooterModule;
+	pr: PrModule;
+	todoist: TodoistModule;
+	worktree: import("./worktree/state.ts").WorktreeModule;
+	exitProtocol: ExitProtocolModule;
+}
+
+interface ModuleSetupDependencies {
+	exec?: Exec;
+	createTodoistClient?: (
+		ctx: ExtensionContext,
+		exec: Exec,
+	) => TodoistClientLike;
+	taskClaimWorker?: TaskClaimWorker;
+	herdrCommandRunner?: CommandRunner;
+	herdrSpawnWorker?: WorkerSpawner;
+}
 
 export function createExtensionState(
 	pi: ExtensionAPI,
-	dependencies: ExtensionDependencies,
+	dependencies?: ExtensionDependencies,
 ): ExtensionState {
+	const providedDependencies = dependencies ?? {};
+	const moduleDependencies =
+		providedDependencies as unknown as ModuleSetupDependencies;
 	const eventHandler = createEventHandler();
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
@@ -67,7 +112,7 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
-		dependencies: { exec: dependencies.exec },
+		exec: moduleDependencies.exec,
 	});
 	const pr = createPrModule({
 		pi,
@@ -75,7 +120,7 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
-		dependencies: { exec: dependencies.exec },
+		exec: moduleDependencies.exec,
 	});
 	const todoist = createTodoistModule({
 		pi,
@@ -83,11 +128,9 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
-		dependencies: {
-			exec: dependencies.exec,
-			taskClaimWorker: dependencies.taskClaimWorker,
-			createTodoistClient: dependencies.createTodoistClient,
-		},
+		exec: moduleDependencies.exec,
+		taskClaimWorker: moduleDependencies.taskClaimWorker,
+		createTodoistClient: moduleDependencies.createTodoistClient,
 	});
 	// Register Todoist merge consumer before Exit Protocol subscribes to prMergedEvent.
 	todoist.register();
@@ -100,7 +143,6 @@ export function createExtensionState(
 	});
 	const extensionState = {
 		pi,
-		dependencies,
 		sessionState,
 		promptQueue,
 		eventHandler,
@@ -112,7 +154,10 @@ export function createExtensionState(
 	} as ExtensionState;
 	const root = {
 		pi,
-		dependencies,
+		dependencies: {
+			loadConfig: providedDependencies.loadConfig,
+			openSession: providedDependencies.openSession,
+		},
 		eventHandler,
 		promptQueue,
 		sessionState,
@@ -136,6 +181,7 @@ function startExtensions(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
 ): void {
+	const moduleDependencies = dependencies as unknown as ModuleSetupDependencies;
 	const extensionState = createExtensionState(pi, dependencies);
 	const herdrStatePublisher = createModuleStatePublisher(
 		extensionState.eventHandler,
@@ -155,8 +201,8 @@ function startExtensions(
 	);
 	registerExtensionEventConsumers(root);
 	installHerdrTabClaim(pi, {
-		commandRunner: dependencies.herdrCommandRunner,
-		startBackgroundWorker: dependencies.herdrStartBackgroundWorker,
+		commandRunner: moduleDependencies.herdrCommandRunner,
+		spawnWorker: moduleDependencies.herdrSpawnWorker,
 		publishClaimInProgress: (claimInProgress) => {
 			const current = extensionState.sessionState.moduleState.herdr;
 			return herdrStatePublisher.publish(

@@ -5,14 +5,14 @@ import type {
 	ModuleStateDescriptor,
 	ModuleStateDescriptors,
 	SessionState,
-} from "./shared/session-state.ts";
+} from "./state.ts";
 import { createSessionState } from "./state.ts";
 
 export type {
 	JsonValue,
 	ModuleStateDescriptor,
 	ModuleStateDescriptors,
-} from "./shared/session-state.ts";
+} from "./state.ts";
 
 const CUSTOM_ENTRY_TYPE = "custom";
 const STATE_CUSTOM_TYPE = "pi-todo-gate-state";

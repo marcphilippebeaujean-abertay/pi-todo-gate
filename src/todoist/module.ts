@@ -120,7 +120,13 @@ class TodoistModuleImpl implements TodoistModule {
 	}
 
 	private operations(): TodoistOperations {
-		const dependencies = this.options.dependencies ?? {};
+		const legacyDependencies = this.options.dependencies ?? {};
+		const exec = this.options.exec ?? legacyDependencies.exec;
+		const taskClaimWorker =
+			this.options.taskClaimWorker ?? legacyDependencies.taskClaimWorker;
+		const createTodoistClient =
+			this.options.createTodoistClient ??
+			legacyDependencies.createTodoistClient;
 		const sessionState = this.options.sessionState;
 		const operations = {
 			sessionState,
@@ -128,12 +134,14 @@ class TodoistModuleImpl implements TodoistModule {
 			getLifecycleEpoch: this.getLifecycleEpoch,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
-			dependencies,
+			exec,
+			taskClaimWorker,
+			createTodoistClient,
 			eventHandler: this.options.eventHandler,
 			emitState: this.syncSessionState.bind(this),
 			updateTodoistState: this.updateTodoistState.bind(this),
 			completeMergedTask: undefined,
-		} as TodoistOperations;
+		} as unknown as TodoistOperations;
 		if (operations.completeMergedTask === undefined)
 			operations.completeMergedTask = (
 				session,

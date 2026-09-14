@@ -3,41 +3,15 @@ import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
-import type {
-	HerdrModuleState,
-	JsonValue,
-	ModuleStateDescriptor,
-} from "../shared/session-state.ts";
 import type { HerdrEvents } from "./events.ts";
 
+export type { HerdrModuleState } from "./module-state.ts";
+
+import type { HerdrModuleState } from "./module-state.ts";
+
+export { herdrStateDescriptor } from "./module-state.ts";
+
 export type HerdrState = HerdrModuleState;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObjectValue = typeof value === "object" && value !== null;
-	const isArrayValue = Array.isArray(value);
-	return isObjectValue && !isArrayValue;
-}
-
-function restoreHerdrState(value: unknown): HerdrState {
-	const isHerdrRecord = isRecord(value);
-	if (!isHerdrRecord) return {};
-	const marker = value.herdrClaimReturnedSuccessfully;
-	const hasInvalidMarker = marker !== undefined && typeof marker !== "string";
-	if (hasInvalidMarker) return {};
-	const hasMarker = marker !== undefined;
-	if (hasMarker) return { herdrClaimReturnedSuccessfully: marker as string };
-	return {};
-}
-
-export const herdrStateDescriptor: ModuleStateDescriptor<"herdr"> = {
-	id: "herdr",
-	createInitialState: () => ({}),
-	restore: restoreHerdrState,
-	serialize: (state): JsonValue => {
-		const { claimInProgress: _claimInProgress, ...durableState } = state;
-		return structuredClone(durableState) as JsonValue;
-	},
-};
 
 export interface ClaimWorkerResponseData {
 	tabName: string;

@@ -7,7 +7,6 @@ import {
 	hasUncommittedChanges as inspectDirtyStatus,
 	inspectProject,
 } from "../shared/project.ts";
-import type { GitState } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
 import { publishWorktreeState } from "./event-publishers.ts";
@@ -41,8 +40,9 @@ class Worktree implements WorktreeModule {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
 		const dependencies = options.dependencies ?? {};
-		this.exec = dependencies.exec ?? spawnExec;
-		this.changeDirectory = dependencies.changeDirectory ?? process.chdir;
+		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
+		this.changeDirectory =
+			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
@@ -104,7 +104,7 @@ class Worktree implements WorktreeModule {
 		await this.refreshStatus(context, generation, sequence);
 	}
 
-	private emitState(gitStatePatch?: Partial<GitState>): void {
+	private emitState(gitStatePatch?: Partial<SessionState["gitState"]>): void {
 		const moduleState =
 			this.baseline === null
 				? {}

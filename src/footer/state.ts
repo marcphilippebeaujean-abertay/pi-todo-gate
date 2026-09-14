@@ -27,7 +27,18 @@ import {
 	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
 
-export type FooterState = SessionState["moduleState"]["footer"];
+export interface FooterStatusState {
+	footerType: string;
+	isLoading: boolean;
+	text: string;
+	isVisible: boolean;
+}
+
+export interface FooterModuleState {
+	footers: Record<string, FooterStatusState>;
+}
+
+export type FooterState = FooterModuleState;
 
 export interface PersistedFooterUpdate {
 	footerType: string;
@@ -212,7 +223,10 @@ export function applyFooterUpdate(
 	};
 }
 
-export const footerStateDescriptor: ModuleStateDescriptor<"footer"> = {
+export const footerStateDescriptor: ModuleStateDescriptor<
+	"footer",
+	FooterModuleState
+> = {
 	id: "footer",
 	createInitialState: emptyFooterState,
 	restore: (value) => restoreFooterState(value) ?? emptyFooterState(),

@@ -75,7 +75,9 @@ class PrModuleImpl implements PrModule {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
 		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
-		this.dependencies = options.dependencies ?? {};
+		this.dependencies = options.dependencies ?? {
+			exec: options.exec,
+		};
 		this.state = structuredClone(this.sessionState.moduleState.pr);
 		this.publishState = createModuleStatePublisher(
 			this.eventHandler,

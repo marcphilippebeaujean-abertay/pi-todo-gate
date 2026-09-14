@@ -20,6 +20,7 @@ export const CANONICAL_FACETS = [
 	"user-prompts.ts",
 	"notifications.ts",
 	"module.ts",
+	"module-state.ts",
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {

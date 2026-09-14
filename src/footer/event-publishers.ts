@@ -1,10 +1,10 @@
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
-import type { ModuleState } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
 
 export function publishFooterState(
 	eventHandler: EventHandler,
-	moduleState: ModuleState["footer"],
+	moduleState: SessionState["moduleState"]["footer"],
 ): Promise<void> {
 	return eventHandler.moduleStateChangedEvent.emit({
 		moduleId: C.module.footer,

@@ -156,10 +156,12 @@ export async function runTaskClaim(
 	prompt: string,
 ): Promise<void> {
 	try {
-		const exec = operations.dependencies.exec ?? spawnExec;
+		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 		const worktree = await inspectProject(exec, session.context.cwd);
 		const worker =
-			operations.dependencies.taskClaimWorker ?? createTaskClaimWorker(exec);
+			operations.taskClaimWorker ??
+			operations.dependencies?.taskClaimWorker ??
+			createTaskClaimWorker(exec);
 		const result = await worker({
 			sessionId: operations.sessionState.session.activeSessionId ?? "",
 			prompt,

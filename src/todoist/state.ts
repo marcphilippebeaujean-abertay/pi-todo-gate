@@ -4,13 +4,7 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
-import type {
-	GitState,
-	JsonValue,
-	ModuleStateDescriptor,
-	SessionRecord,
-	TodoistModuleState,
-} from "../shared/session-state.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 
 export type MergeRequest = PrMergedEvent;
@@ -101,62 +95,20 @@ export interface ResolvedProject {
 
 export type ProjectEntry = string | TodoistProjectSettings;
 
+export interface TodoistModuleState {
+	taskRef?: string;
+	taskName?: string;
+	taskUrl?: string;
+	todoistCompletionAttemptedAt?: string;
+	mergePromptedPrUrl?: string;
+}
+
 export type TodoistState = TodoistModuleState;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObjectValue = typeof value === "object" && value !== null;
-	const isArrayValue = Array.isArray(value);
-	return isObjectValue && !isArrayValue;
-}
-
-function isOptionalString(value: unknown): boolean {
-	return value === undefined || typeof value === "string";
-}
-
-function restoreTodoistState(value: unknown): TodoistState {
-	const isTodoistRecord = isRecord(value);
-	if (!isTodoistRecord) return {};
-	const keys = [
-		"taskRef",
-		"taskName",
-		"taskUrl",
-		"todoistCompletionAttemptedAt",
-		"mergePromptedPrUrl",
-	] as const;
-	const hasValidState = keys.every((key) => isOptionalString(value[key]));
-	if (!hasValidState) return {};
-	return {
-		...(value.taskRef === undefined
-			? {}
-			: { taskRef: value.taskRef as string }),
-		...(value.taskName === undefined
-			? {}
-			: { taskName: value.taskName as string }),
-		...(value.taskUrl === undefined
-			? {}
-			: { taskUrl: value.taskUrl as string }),
-		...(value.todoistCompletionAttemptedAt === undefined
-			? {}
-			: {
-					todoistCompletionAttemptedAt:
-						value.todoistCompletionAttemptedAt as string,
-				}),
-		...(value.mergePromptedPrUrl === undefined
-			? {}
-			: { mergePromptedPrUrl: value.mergePromptedPrUrl as string }),
-	};
-}
-
-export const todoistStateDescriptor: ModuleStateDescriptor<"todoist"> = {
-	id: "todoist",
-	createInitialState: () => ({}),
-	restore: restoreTodoistState,
-	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
-};
+export { todoistStateDescriptor } from "./module-state.ts";
 
 export interface TodoistStateUpdateOptions {
 	persist: boolean;
-	gitStatePatch?: Partial<GitState>;
+	gitStatePatch?: Partial<SessionState["gitState"]>;
 }
 
 export interface TodoistModule {
@@ -180,6 +132,10 @@ export interface TodoistModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	getLifecycleEpoch?: () => number;
+	exec?: Exec;
+	taskClaimWorker?: TaskClaimWorker;
+	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	/** @deprecated pass module dependencies directly. */
 	dependencies?: {
 		exec?: Exec;
 		taskClaimWorker?: TaskClaimWorker;
@@ -200,6 +156,10 @@ export interface TodoistOperations {
 	getLifecycleEpoch?: () => number;
 	todoist: TodoistModule;
 	promptQueue: PromptQueue;
+	exec?: Exec;
+	taskClaimWorker?: TaskClaimWorker;
+	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
+	/** @deprecated accepted only by legacy test adapters. */
 	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;
 	eventHandler: EventHandler;
 	emitState(session: TodoistSession): Promise<void>;

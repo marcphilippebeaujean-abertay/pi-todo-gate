@@ -5,116 +5,17 @@ import type {
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
-import type {
-	JsonValue,
-	ModuleStateDescriptor,
-	PrModuleState,
-	SessionRecord,
-} from "../shared/session-state.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
+
+export type { MergedPrState, PrModuleState } from "./module-state.ts";
+
+import type { MergedPrState, PrModuleState } from "./module-state.ts";
+
+export { normalizePrState, prStateDescriptor } from "./module-state.ts";
 
 export type PrState = PrModuleState;
 export type PrStatePatch = Partial<PrState>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObjectValue = typeof value === "object" && value !== null;
-	const isArrayValue = Array.isArray(value);
-	return isObjectValue && !isArrayValue;
-}
-
-function normalizeUrl(value: unknown): string | undefined {
-	const isEmpty = typeof value !== "string" || value.trim() === "";
-	if (isEmpty) return undefined;
-	return value;
-}
-
-function testedStrings(values: unknown[]): string[] {
-	return [
-		...new Set(
-			values.flatMap((value) => {
-				const url = normalizeUrl(value);
-				return url === undefined ? [] : [url];
-			}),
-		),
-	];
-}
-
-function isMergedPr(value: unknown): value is MergedPr {
-	const isMergedPrRecord = isRecord(value);
-	if (!isMergedPrRecord) return false;
-	const validityChecks = [
-		typeof value.prUrl === "string",
-		typeof value.detectedAt === "string",
-		typeof value.reminderPending === "boolean",
-	];
-	return validityChecks.every(Boolean);
-}
-
-function restorePrState(value: unknown): PrModuleState {
-	const isPrRecord = isRecord(value);
-	if (!isPrRecord) return initialPrState();
-	const hasValidPrUrl =
-		value.prUrl === undefined || typeof value.prUrl === "string";
-	const hasValidDiscoveryDisabled =
-		typeof value.discoveryDisabled === "boolean";
-	const testedUrlsValue = value.discoveryTestedUrls;
-	const hasTestedUrlsArray = Array.isArray(testedUrlsValue);
-	const hasValidTestedUrls = hasTestedUrlsArray
-		? (testedUrlsValue as unknown[]).every((entry) => typeof entry === "string")
-		: false;
-	const mergedPrsValue = value.mergedPrs;
-	const hasMergedPrsArray = Array.isArray(mergedPrsValue);
-	const hasValidMergedPrs = hasMergedPrsArray
-		? (mergedPrsValue as unknown[]).every(isMergedPr)
-		: false;
-	const validityChecks = [
-		hasValidPrUrl,
-		hasValidDiscoveryDisabled,
-		hasValidTestedUrls,
-		hasValidMergedPrs,
-	];
-	const hasValidState = validityChecks.every(Boolean);
-	if (!hasValidState) return initialPrState();
-	const discoveryDisabled = value.discoveryDisabled as boolean;
-	const discoveryTestedUrls = value.discoveryTestedUrls as unknown[];
-	const mergedPrs = value.mergedPrs as MergedPr[];
-	const prUrl = normalizeUrl(value.prUrl);
-	return {
-		...(prUrl === undefined ? {} : { prUrl }),
-		discoveryDisabled,
-		discoveryTestedUrls: testedStrings(discoveryTestedUrls),
-		mergedPrs,
-	};
-}
-
-export function normalizePrState(state: PrModuleState): PrModuleState {
-	const prUrl = normalizeUrl(state.prUrl);
-	return {
-		...(prUrl === undefined ? {} : { prUrl }),
-		discoveryDisabled: state.discoveryDisabled,
-		discoveryTestedUrls: testedStrings(state.discoveryTestedUrls),
-		mergedPrs: state.mergedPrs,
-	};
-}
-
-function initialPrState(): PrModuleState {
-	return { discoveryDisabled: false, discoveryTestedUrls: [], mergedPrs: [] };
-}
-
-export const prStateDescriptor: ModuleStateDescriptor<"pr"> = {
-	id: "pr",
-	createInitialState: initialPrState,
-	restore: restorePrState,
-	serialize: (state): JsonValue => {
-		const prUrl = normalizeUrl(state.prUrl);
-		return structuredClone({
-			...(prUrl === undefined ? {} : { prUrl }),
-			discoveryDisabled: state.discoveryDisabled,
-			discoveryTestedUrls: testedStrings(state.discoveryTestedUrls),
-			mergedPrs: state.mergedPrs,
-		}) as unknown as JsonValue;
-	},
-};
 
 export type PrSession = SessionRecord;
 
@@ -160,6 +61,8 @@ export interface PrModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	getLifecycleEpoch?: () => number;
+	exec?: Exec;
+	/** @deprecated pass exec directly. */
 	dependencies?: PrModuleDependencies;
 }
 
@@ -190,11 +93,7 @@ export interface OpenPrInfo {
 	url: string | null;
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
-export interface MergedPr {
-	prUrl: string;
-	detectedAt: string;
-	reminderPending: boolean;
-}
+export interface MergedPr extends MergedPrState {}
 export interface PrSessionIdentity {
 	workRevision: number;
 	prUrl: string | undefined;

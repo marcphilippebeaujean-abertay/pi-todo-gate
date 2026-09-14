@@ -14,6 +14,10 @@ import {
 	EXIT_SUBMIT_KEY,
 } from "./constants.ts";
 
+export interface ExitProtocolModuleState {
+	active: boolean;
+}
+
 export interface ExitRequest {
 	readonly actions: readonly ExitAction[];
 	addAction(action: ExitAction): void;
@@ -30,21 +34,23 @@ export interface ExitProtocolModule {
 	deactivate(): void;
 }
 
-export const exitProtocolStateDescriptor: ModuleStateDescriptor<"exitProtocol"> =
-	{
-		id: "exitProtocol",
-		createInitialState: () => ({ active: false }),
-		restore: (value) => {
-			const isObjectValue = typeof value === "object" && value !== null;
-			const isArrayValue = Array.isArray(value);
-			const isInvalidValue = !isObjectValue || isArrayValue;
-			if (isInvalidValue) return { active: false };
-			const active = (value as { active?: unknown }).active;
-			const hasValidActive = typeof active === "boolean";
-			return hasValidActive ? { active } : { active: false };
-		},
-		serialize: (state): JsonValue => ({ active: state.active }),
-	};
+export const exitProtocolStateDescriptor: ModuleStateDescriptor<
+	"exitProtocol",
+	ExitProtocolModuleState
+> = {
+	id: "exitProtocol",
+	createInitialState: () => ({ active: false }),
+	restore: (value) => {
+		const isObjectValue = typeof value === "object" && value !== null;
+		const isArrayValue = Array.isArray(value);
+		const isInvalidValue = !isObjectValue || isArrayValue;
+		if (isInvalidValue) return { active: false };
+		const active = (value as { active?: unknown }).active;
+		const hasValidActive = typeof active === "boolean";
+		return hasValidActive ? { active } : { active: false };
+	},
+	serialize: (state): JsonValue => ({ active: state.active }),
+};
 
 export interface ExitProtocolModuleOptions {
 	promptQueue: PromptQueue;
