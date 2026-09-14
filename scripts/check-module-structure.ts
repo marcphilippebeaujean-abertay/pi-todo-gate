@@ -37,6 +37,17 @@ function isAllowedFacet(domain: string, name: string): boolean {
 	);
 }
 
+function missingFacetMessage(facet: string): string {
+	switch (facet) {
+		case "module-state.ts":
+			return "missing module-state facet";
+		case "internal-state.ts":
+			return "missing internal-state facet";
+		default:
+			return "missing canonical file";
+	}
+}
+
 export interface StructureIssue {
 	domain: string;
 	path: string;
@@ -257,7 +268,7 @@ export async function checkModuleStructure(
 			issues.push({
 				domain,
 				path: relative(root, facetPath),
-				message: "missing canonical file",
+				message: missingFacetMessage(facet),
 				correction: `create ${relative(root, facetPath)} (export {} is valid)`,
 			});
 		}

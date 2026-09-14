@@ -67,6 +67,29 @@ describe("module structure checker", () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
 	});
 
+	it("reports facet-specific missing diagnostics", async () => {
+		const root = await validFixture();
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "pr", "module-state.ts"),
+		);
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "footer", "internal-state.ts"),
+		);
+
+		expect(await checkModuleStructure(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: "src/pr/module-state.ts",
+					message: "missing module-state facet",
+				}),
+				expect.objectContaining({
+					path: "src/footer/internal-state.ts",
+					message: "missing internal-state facet",
+				}),
+			]),
+		);
+	});
+
 	it("rejects reintroduced legacy application directory", async () => {
 		const root = await validFixture();
 		await mkdir(join(root, "src", "application"), { recursive: true });
