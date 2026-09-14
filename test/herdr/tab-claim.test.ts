@@ -220,17 +220,18 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it("accepts active first-prompt response after lifecycle epoch changes", async () => {
+	it("accepts active first-prompt response despite lifecycle epoch changes", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
 			const lifecycleEpoch = { value: 1 };
+			const getLifecycleEpoch = vi.fn(() => lifecycleEpoch.value);
 			const commands: string[] = [];
 			const claimStates: boolean[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
 				commandRunner: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
-				getLifecycleEpoch: () => lifecycleEpoch.value,
+				getLifecycleEpoch,
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
 					claimStates.push(claimInProgress);
@@ -255,6 +256,7 @@ describe("background Herdr tab claim", () => {
 				result: { tabName: "late-result", shouldMoveToNewTab: false },
 			});
 
+			expect(getLifecycleEpoch).not.toHaveBeenCalled();
 			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 			expect(commands).toContain("herdr tab rename w1:t1 dialog-editor");
 			expect(commands).not.toContain("herdr tab rename w1:t1 late-result");
@@ -373,27 +375,40 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it("blocks tab naming retry after invalid claim evidence", async () => {
+	it("suppresses duplicate result and failure after invalid claim response", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
+			const commands: string[] = [];
+			const claimContext = context();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				commandRunner: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
-			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("session_start")?.[0]?.({}, claimContext);
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "fix dialog editor" },
-				context(),
+				claimContext,
 			);
-			emitClaim(backgroundWorker.requests[0] as ClaimWorkerRequest, "7");
-			await pi.handlers.get("before_agent_start")?.[0]?.(
-				{ prompt: "retry dialog editor" },
-				context(),
-			);
+			const request = backgroundWorker.requests[0];
+			if (request === undefined) throw new Error("worker request missing");
+			await request.events.claimCompletedEvent.emit({
+				result: { tabName: "7", shouldMoveToNewTab: false },
+			});
+			await request.events.claimCompletedEvent.emit({
+				result: { tabName: "late-result", shouldMoveToNewTab: false },
+			});
+			await request.events.claimFailedEvent.emit({
+				message: "late failure",
+				workerFailed: true,
+			});
 
 			expect(backgroundWorker.start).toHaveBeenCalledOnce();
+			expect(
+				commands.filter((command) => command.includes("tab rename")),
+			).toEqual(["herdr tab rename w1:t1 7"]);
+			expect(claimContext.ui.notify).toHaveBeenCalledOnce();
 		} finally {
 			restore();
 		}
