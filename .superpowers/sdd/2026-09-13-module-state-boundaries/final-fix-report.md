@@ -44,4 +44,4 @@ Closed final review findings for module-state boundaries without resetting or di
 ## Residual concerns
 
 - Worker event epoch fields remain optional for compatibility with direct legacy worker adapters; production-created workers always receive the current epoch, and monotonic IDs provide the cross-session safety invariant.
-- Existing branch commits remain intact; final fix wave is contained in single follow-up commit (`fix: close final module boundary review findings`); final commit hash is reported with this artifact handoff.
+- Existing branch commits remain intact; final fix wave is contained in commit `819075a` (`fix: close final module boundary review findings`).
