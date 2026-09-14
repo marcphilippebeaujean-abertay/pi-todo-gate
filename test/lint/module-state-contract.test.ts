@@ -56,9 +56,9 @@ class RuntimeHandle {}
 export interface PrModuleState extends BadState {}
 `);
 
-		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			5,
-		);
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(5);
+		expect(findings.map(({ line }) => line)).toEqual([3, 4, 5, 6, 8]);
 	});
 
 	it("follows aliases, unions, arrays, and index signatures", async () => {
@@ -77,6 +77,31 @@ export interface PrModuleState {
 		);
 	});
 
+	it("accepts literal values and readonly arrays", async () => {
+		const diagnostics = await lintModuleStateSource(`
+export interface PrModuleState {
+	status: "pending";
+	count: 1 | 2;
+	flags: true | false;
+	tags: readonly string[];
+}
+`);
+
+		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toEqual([]);
+	});
+
+	it("rejects timer values", async () => {
+		const diagnostics = await lintModuleStateSource(`
+export interface PrModuleState {
+	timer: Timer;
+}
+`);
+
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(1);
+		expect(findings[0]?.line).toBe(3);
+	});
+
 	it("checks state types referenced by descriptors", async () => {
 		const diagnostics = await lintModuleStateSource(`
 interface PublicData {
@@ -89,6 +114,21 @@ void descriptor;
 		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
 			1,
 		);
+	});
+
+	it("checks inline descriptor state types", async () => {
+		const diagnostics = await lintModuleStateSource(`
+class RuntimeHandle {}
+declare const descriptor: ModuleStateDescriptor<
+	"pr",
+	{ date: Date; callback: () => void; handle: RuntimeHandle; worker: Worker }
+>;
+void descriptor;
+`);
+
+		const findings = diagnostics.filter(({ ruleId }) => ruleId === RULE_ID);
+		expect(findings).toHaveLength(5);
+		expect(findings.map(({ line }) => line)).toEqual([2, 5, 5, 5, 5]);
 	});
 
 	it("does not inspect files outside module-state.ts", async () => {

@@ -26,6 +26,7 @@ const FORBIDDEN_NAMES = new Set([
 	"Function",
 	"ExtensionContext",
 	"Timeout",
+	"Timer",
 	"Worker",
 	"Date",
 	"RegExp",
@@ -102,11 +103,24 @@ function collectType(
 		);
 	if (ts.isParenthesizedTypeNode(node))
 		return collectType(node.type, checker, seen);
-	if (
-		ts.isLiteralTypeNode(node) &&
-		node.literal.kind === ts.SyntaxKind.NullKeyword
-	)
-		return [];
+	if (ts.isTypeOperatorNode(node)) {
+		if (node.operator === ts.SyntaxKind.ReadonlyKeyword)
+			return collectType(node.type, checker, seen);
+		return [node];
+	}
+	if (ts.isLiteralTypeNode(node)) {
+		switch (node.literal.kind) {
+			case ts.SyntaxKind.StringLiteral:
+			case ts.SyntaxKind.NoSubstitutionTemplateLiteral:
+			case ts.SyntaxKind.NumericLiteral:
+			case ts.SyntaxKind.TrueKeyword:
+			case ts.SyntaxKind.FalseKeyword:
+			case ts.SyntaxKind.NullKeyword:
+				return [];
+			default:
+				return [node];
+		}
+	}
 	switch (node.kind) {
 		case ts.SyntaxKind.StringKeyword:
 		case ts.SyntaxKind.NumberKeyword:
@@ -187,27 +201,24 @@ function collectDeclaration(
 
 function collectStateDeclarations(
 	sourceFile: ts.SourceFile,
-	checker: ts.TypeChecker,
 ): Array<ts.InterfaceDeclaration | ts.TypeAliasDeclaration> {
-	const declarations = new Set<
-		ts.InterfaceDeclaration | ts.TypeAliasDeclaration
-	>(sourceFile.statements.filter(isStateDeclaration));
+	return sourceFile.statements.filter(isStateDeclaration);
+}
+
+function collectDescriptorStateTypes(sourceFile: ts.SourceFile): ts.TypeNode[] {
+	const stateTypes: ts.TypeNode[] = [];
 	function visit(node: ts.Node): void {
 		if (
 			ts.isTypeReferenceNode(node) &&
 			node.typeName.getText().split(".").at(-1) === "ModuleStateDescriptor"
 		) {
 			const stateType = node.typeArguments?.[1];
-			if (stateType !== undefined && ts.isTypeReferenceNode(stateType)) {
-				const declaration = localTypeDeclaration(stateType, checker);
-				if (declaration !== null && !ts.isClassDeclaration(declaration))
-					declarations.add(declaration);
-			}
+			if (stateType !== undefined) stateTypes.push(stateType);
 		}
 		ts.forEachChild(node, visit);
 	}
 	visit(sourceFile);
-	return [...declarations];
+	return stateTypes;
 }
 
 export const moduleStateContract: LintRule = ({
@@ -227,15 +238,27 @@ export const moduleStateContract: LintRule = ({
 			}
 		}
 	}
-	for (const declaration of collectStateDeclarations(sourceFile, checker)) {
-		for (const offense of collectDeclaration(
-			declaration,
-			checker,
-			new Set<ts.Declaration>(),
-		)) {
+	const reportOffenses = (offenses: ts.Node[]): void => {
+		for (const offense of offenses) {
 			if (reported.has(offense)) continue;
 			reported.add(offense);
 			diagnostics.push(diagnostic(sourceFile, offense, RULE_ID, MESSAGE, 1, 0));
 		}
+	};
+	for (const declaration of collectStateDeclarations(sourceFile))
+		reportOffenses(
+			collectDeclaration(declaration, checker, new Set<ts.Declaration>()),
+		);
+	for (const stateType of collectDescriptorStateTypes(sourceFile)) {
+		const offenses = ts.isTypeReferenceNode(stateType)
+			? (() => {
+					const declaration = localTypeDeclaration(stateType, checker);
+					if (declaration === null)
+						return collectType(stateType, checker, new Set());
+					if (ts.isClassDeclaration(declaration)) return [stateType];
+					return collectDeclaration(declaration, checker, new Set());
+				})()
+			: collectType(stateType, checker, new Set());
+		reportOffenses(offenses);
 	}
 };
