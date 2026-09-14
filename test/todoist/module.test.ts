@@ -9,11 +9,11 @@ import type {
 	TodoistState,
 	TodoistStateUpdateOptions,
 } from "../../src/todoist/internal-state.ts";
+import { createTodoistModule as createTodoistModuleFactory } from "../../src/todoist/module.ts";
 import {
 	applyTodoistStatePatch,
-	createTodoistModule as createTodoistModuleFactory,
 	isTodoistState,
-} from "../../src/todoist/module.ts";
+} from "../../src/todoist/parsing.ts";
 
 type TestTodoistModule = {
 	taskClaim: {
@@ -61,6 +61,32 @@ describe("Todoist module ownership", () => {
 		expect(await module.resolveSessionProject("/repo/src")).toEqual({
 			codingRoot: "/repo",
 			triggersOnlyOnWorktree: false,
+		});
+	});
+
+	it("ignores malformed injected project entries safely", async () => {
+		const module = createTodoistModuleFactory({
+			loadConfig: async () => ({
+				projects: {
+					"/null": null,
+					"/number": 42,
+					"/array": [],
+					"/missing": { triggersOnlyOnWorktree: false },
+					"/valid": { todoistProjectRef: "project" },
+				},
+			}),
+			promptQueue: new PromptQueue(),
+			eventHandler: createSharedEvents(),
+			sessionState: createSessionState(),
+		});
+
+		expect(await module.resolveSessionProject("/null")).toBeNull();
+		expect(await module.resolveSessionProject("/number")).toBeNull();
+		expect(await module.resolveSessionProject("/array")).toBeNull();
+		expect(await module.resolveSessionProject("/missing")).toBeNull();
+		expect(await module.resolveSessionProject("/valid")).toEqual({
+			codingRoot: "/valid",
+			triggersOnlyOnWorktree: true,
 		});
 	});
 
@@ -323,6 +349,53 @@ describe("Todoist module projection", () => {
 				persist: false,
 			}),
 		]);
+	});
+});
+
+describe("Todoist module integration", () => {
+	it("completes merged task with default module dependencies", async () => {
+		const events = createSharedEvents();
+		const promptQueue = new PromptQueue();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = {
+			taskRef: "task-1",
+			taskName: "Implement feature",
+		};
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const completeTask = vi.fn(async () => undefined);
+		const module = createTodoistModuleFactory({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			promptQueue,
+			eventHandler: events,
+			sessionState,
+		});
+		const session = {
+			context: {
+				cwd: "/repo",
+				hasUI: true,
+				ui: { confirm: vi.fn(async () => true), notify: vi.fn() },
+			},
+			project: { codingRoot: "/repo" },
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		await events.prMergedEvent.emit({
+			prUrl: sessionState.moduleState.pr.prUrl,
+			taskMarkedAsCompleted: false,
+			sessionId: "session",
+			lifecycleEpoch: 0,
+		});
+		await promptQueue.drain();
+		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		void module;
 	});
 });
 

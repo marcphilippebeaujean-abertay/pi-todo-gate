@@ -9,11 +9,12 @@ import "./event-publishers.ts";
 import "./user-prompts.ts";
 import "./notifications.ts";
 
-export * from "./client.ts";
-export * from "./commands.ts";
-export * from "./events.ts";
+export { TodoistClient } from "./client.ts";
 export * from "./module-state.ts";
-export * from "./parsing.ts";
+export {
+	TodoistError,
+	TodoistOperationCancelled,
+} from "./parsing.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
@@ -34,6 +35,7 @@ import type {
 } from "./internal-state.ts";
 import {
 	loadConfig as loadTodoistConfig,
+	parseProjectEntry,
 	resolveConfiguredProject,
 } from "./parsing.ts";
 
@@ -44,6 +46,12 @@ export interface SessionProject {
 
 export interface TodoistModule {
 	resolveSessionProject(cwd: string): Promise<SessionProject | null>;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+	const isValueRecord = isRecord(value);
+	if (!isValueRecord) return null;
+	return value;
 }
 
 class TodoistModuleImpl implements TodoistModule {
@@ -110,9 +118,20 @@ class TodoistModuleImpl implements TodoistModule {
 		const loaded = hasConfigLoader
 			? await this.options.loadConfig?.()
 			: await loadTodoistConfig();
-		const hasProjectMapping = isRecord(loaded) && isRecord(loaded.projects);
-		if (!hasProjectMapping) return { projects: {} };
-		return loaded as unknown as TodoistProjectMapping;
+		const loadedRecord = recordValue(loaded);
+		const hasLoadedRecord = loadedRecord !== null;
+		if (!hasLoadedRecord) return { projects: {} };
+		const projectRecord = recordValue(loadedRecord.projects);
+		const hasProjectRecord = projectRecord !== null;
+		if (!hasProjectRecord) return { projects: {} };
+		const projects: TodoistProjectMapping["projects"] = {};
+		for (const [path, project] of Object.entries(projectRecord)) {
+			const parsed = parseProjectEntry(path, project);
+			const hasParsedProject = parsed !== null;
+			if (!hasParsedProject) continue;
+			projects[parsed[0]] = parsed[1];
+		}
+		return { projects };
 	}
 
 	private async resolveConfiguredProject(
@@ -206,7 +225,7 @@ class TodoistModuleImpl implements TodoistModule {
 			this.options.createTodoistClient ??
 			legacyDependencies.createTodoistClient;
 		const sessionState = this.options.sessionState;
-		const operations = {
+		const operations: TodoistOperations = {
 			sessionState,
 			getSession: () => this.currentSession,
 			projectRef: this.currentProjectRef,
@@ -219,8 +238,13 @@ class TodoistModuleImpl implements TodoistModule {
 			eventHandler: this.options.eventHandler,
 			emitState: this.syncSessionState.bind(this),
 			updateTodoistState: this.updateTodoistState.bind(this),
+			dependencies: {
+				exec,
+				taskClaimWorker,
+				createTodoistClient,
+			},
 			completeMergedTask: undefined,
-		} as unknown as TodoistOperations;
+		};
 		if (operations.completeMergedTask === undefined)
 			operations.completeMergedTask = (
 				session,
@@ -265,5 +289,5 @@ class TodoistModuleImpl implements TodoistModule {
 export function createTodoistModule(
 	options: TodoistModuleOptions,
 ): TodoistModule {
-	return new TodoistModuleImpl(options) as unknown as TodoistModule;
+	return new TodoistModuleImpl(options);
 }

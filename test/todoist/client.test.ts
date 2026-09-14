@@ -57,12 +57,12 @@ const TASK_COMPLETE = "task complete";
 
 import { describe, expect, it } from "vitest";
 import type { CommandResult } from "../../src/shared/command.ts";
+import { TodoistClient } from "../../src/todoist/client.ts";
 import type { TodoistExec } from "../../src/todoist/internal-state.ts";
 import {
-	TodoistClient,
 	TodoistError,
 	TodoistOperationCancelled,
-} from "../../src/todoist/module.ts";
+} from "../../src/todoist/parsing.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),

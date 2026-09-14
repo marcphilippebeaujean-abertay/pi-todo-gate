@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { isCurrentMerge } from "../../src/pr/event-consumers.ts";
+import { createPrModule } from "../../src/pr/module.ts";
+import { prStateDescriptor } from "../../src/pr/module-state.ts";
 import {
-	createPrModule,
 	firstUnmergedGithubPrUrl,
 	isPrState,
 	markRemindersDelivered,
 	mergedUrls,
-	prStateDescriptor,
 	recordMergedPr,
 	removeMergedPr,
-} from "../../src/pr/module.ts";
+} from "../../src/pr/parsing.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createEventHandler } from "../../src/shared/events.ts";

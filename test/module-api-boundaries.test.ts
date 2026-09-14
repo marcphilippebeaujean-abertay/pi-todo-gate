@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { createExitProtocolModule } from "../src/exit-protocol/module.ts";
 import type { createFooterModule } from "../src/footer/module.ts";
@@ -27,5 +28,15 @@ void ({} as PublicWorktree).sessionStart;
 describe("module API boundaries", () => {
 	it("exposes cleanup capability without lifecycle methods", () => {
 		expect(cleanup).toBeDefined();
+	});
+
+	it("does not wildcard-export implementation facets", async () => {
+		const entrypoints = ["pr", "todoist", "herdr", "exit-protocol"];
+		const forbidden =
+			/export \* from "\.\/(commands|git|parsing|runtime|notifications|user-prompts|claim-worker-result|events)\.ts"/;
+		for (const entrypoint of entrypoints) {
+			const source = await readFile(`src/${entrypoint}/module.ts`, "utf8");
+			expect(source, entrypoint).not.toMatch(forbidden);
+		}
 	});
 });

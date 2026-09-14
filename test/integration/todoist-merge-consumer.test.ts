@@ -5,8 +5,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
+import { register } from "../../src/pr/commands.ts";
 import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
-import { register } from "../../src/pr/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";

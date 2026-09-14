@@ -14,9 +14,7 @@ export type {
 	ExitActionId,
 	ExitActionResult,
 } from "../shared/exit-actions.ts";
-export * from "./events.ts";
 export * from "./module-state.ts";
-export * from "./user-prompts.ts";
 export type ExitProtocolModule = Record<never, never>;
 
 export function createExitProtocolModule(

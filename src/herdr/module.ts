@@ -18,15 +18,9 @@ import { isInsideHerdr } from "./runtime.ts";
 
 export type HerdrModule = Record<never, never>;
 
-export * from "./claim-worker-result.ts";
-export * from "./commands.ts";
-
 import { installHerdrTabClaim } from "./event-consumers.ts";
 
-export * from "./events.ts";
 export * from "./module-state.ts";
-export * from "./runtime.ts";
-export * from "./tab-validation.ts";
 
 export function createHerdrModule(
 	pi: Parameters<typeof installHerdrTabClaim>[0],
@@ -40,6 +34,7 @@ export function createHerdrModule(
 	);
 	const tabOptions: HerdrTabOptions = {
 		commandRunner: options.commandRunner,
+		getLifecycleEpoch: options.getLifecycleEpoch,
 		spawnWorker: options.spawnWorker,
 		publishClaimInProgress: (claimInProgress) =>
 			statePublisher.publish(

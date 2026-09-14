@@ -11,4 +11,4 @@ export {
 	parentDirectory,
 	parseConfig,
 	resolveConfiguredProject,
-} from "./module.ts";
+} from "./parsing.ts";

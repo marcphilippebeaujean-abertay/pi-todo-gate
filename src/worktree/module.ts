@@ -27,5 +27,5 @@ export interface WorktreeCleanup {
 export function createWorktreeModule(
 	options: WorktreeModuleOptions,
 ): WorktreeCleanup {
-	return createWorktreeConsumer(options) as unknown as WorktreeCleanup;
+	return createWorktreeConsumer(options);
 }

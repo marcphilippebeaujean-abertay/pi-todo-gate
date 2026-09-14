@@ -89,10 +89,12 @@ class HerdrTabClaimConsumer {
 		HerdrTabOptions["publishClaimInProgress"]
 	>;
 	private readonly events: HerdrEvents;
+	private readonly getLifecycleEpoch: () => number;
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
 	private nextAttemptId = 0;
+	private sessionAttemptCount = 0;
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
 	private herdrGateClaimProcessed = false;
@@ -101,6 +103,7 @@ class HerdrTabClaimConsumer {
 	private tabId: string | undefined;
 	private paneId: string | undefined;
 	private activeAttempt: TabClaimAttempt | undefined;
+	private sessionLifecycleEpoch = 0;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
 		this.commandRunner =
@@ -117,6 +120,7 @@ class HerdrTabClaimConsumer {
 		this.publishClaimInProgress =
 			options.publishClaimInProgress ?? (() => undefined);
 		this.events = events;
+		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.events.claimCompletedEvent.subscribe(this.completeClaim.bind(this));
 		this.events.claimFailedEvent.subscribe(this.failClaim.bind(this));
 		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
@@ -130,6 +134,7 @@ class HerdrTabClaimConsumer {
 		this.activeAttempt = undefined;
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
+		this.sessionLifecycleEpoch = this.getLifecycleEpoch();
 		this.herdrAvailable = isInsideHerdr();
 		const storedClaim = this.shouldHaveStoredClaim(ctx);
 		this.hasClaimReturnedSuccessfully = storedClaim;
@@ -168,22 +173,26 @@ class HerdrTabClaimConsumer {
 		const isProcessedOrWorking = hasProcessedGate || hasWorker;
 		const shouldSkip = isUnavailableOrClaimed || isProcessedOrWorking;
 		if (shouldSkip) return;
-		const hasAttemptsRemaining = this.nextAttemptId < HERDR_MAX_CLAIM_ATTEMPTS;
+		const hasAttemptsRemaining =
+			this.sessionAttemptCount < HERDR_MAX_CLAIM_ATTEMPTS;
 		if (!hasAttemptsRemaining) return;
 		const attempt: TabClaimAttempt = {
 			attemptId: ++this.nextAttemptId,
+			lifecycleEpoch: this.sessionLifecycleEpoch,
 			initialLabel: this.initialLabel,
 			tabId: this.tabId,
 			paneId: this.paneId,
 			context: ctx,
 		};
 		this.activeAttempt = attempt;
+		this.sessionAttemptCount += 1;
 		this.herdrGateClaimProcessed = true;
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
 				instructions: TAB_CLAIM_INSTRUCTIONS,
 				attemptId: attempt.attemptId,
+				lifecycleEpoch: attempt.lifecycleEpoch,
 				events: this.events,
 			});
 			this.publishClaimInProgress(true);
@@ -197,15 +206,28 @@ class HerdrTabClaimConsumer {
 		}
 	}
 
-	private isCurrentAttempt(attemptId: number): boolean {
-		return this.activeAttempt?.attemptId === attemptId;
+	private isCurrentAttempt(
+		attemptId: number,
+		lifecycleEpoch?: number,
+	): boolean {
+		const attempt = this.activeAttempt;
+		const hasAttempt = attempt !== undefined;
+		if (!hasAttempt) return false;
+		const isMatchingAttempt = attempt.attemptId === attemptId;
+		if (!isMatchingAttempt) return false;
+		const isCurrentEpoch =
+			lifecycleEpoch === undefined || lifecycleEpoch === attempt.lifecycleEpoch;
+		return isCurrentEpoch;
 	}
 
 	private async completeClaim(event: ClaimCompletedEvent): Promise<void> {
 		const attempt = this.activeAttempt;
 		const hasAttempt = attempt !== undefined;
 		if (!hasAttempt) return;
-		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
+		const isCurrentAttempt = this.isCurrentAttempt(
+			event.attemptId,
+			event.lifecycleEpoch,
+		);
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
@@ -233,7 +255,7 @@ class HerdrTabClaimConsumer {
 			this.hasClaimReturnedSuccessfully = true;
 			const markerUpdate = this.onClaimReturnedSuccessfully?.(attempt.context);
 			if (markerUpdate instanceof Promise) await markerUpdate;
-			this.nextAttemptId = 0;
+			this.sessionAttemptCount = 0;
 			return;
 		}
 		this.herdrGateClaimProcessed = true;
@@ -244,7 +266,10 @@ class HerdrTabClaimConsumer {
 		const attempt = this.activeAttempt;
 		const hasAttempt = attempt !== undefined;
 		if (!hasAttempt) return;
-		const isCurrentAttempt = this.isCurrentAttempt(event.attemptId);
+		const isCurrentAttempt = this.isCurrentAttempt(
+			event.attemptId,
+			event.lifecycleEpoch,
+		);
 		if (!isCurrentAttempt) return;
 		this.worker = undefined;
 		this.activeAttempt = undefined;
@@ -267,7 +292,7 @@ class HerdrTabClaimConsumer {
 		this.hasClaimReturnedSuccessfully = false;
 		this.herdrGateClaimProcessed = false;
 		this.herdrAvailable = false;
-		this.nextAttemptId = 0;
+		this.sessionAttemptCount = 0;
 	}
 }
 

@@ -26,6 +26,7 @@ export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
 	attemptId: number;
+	lifecycleEpoch?: number;
 	events: HerdrEvents;
 }
 
@@ -41,6 +42,7 @@ export interface CwdReference {
 
 export interface TabClaimAttempt {
 	attemptId: number;
+	lifecycleEpoch: number;
 	initialLabel: string | undefined;
 	tabId: string | undefined;
 	paneId: string | undefined;
@@ -69,6 +71,7 @@ export interface HerdrModuleSetupOptions {
 
 export interface HerdrTabOptions {
 	commandRunner?: CommandRunner;
+	getLifecycleEpoch?: () => number;
 	cwd?: string;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;

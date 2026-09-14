@@ -155,6 +155,9 @@ function emitClaim(
 ): void {
 	void request.events.claimCompletedEvent.emit({
 		attemptId: request.attemptId,
+		...(request.lifecycleEpoch === undefined
+			? {}
+			: { lifecycleEpoch: request.lifecycleEpoch }),
 		result: { tabName: label, shouldMoveToNewTab },
 	});
 }
@@ -766,7 +769,7 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it("stops numeric-tab retries at the maximum and resets attempt ids after success", async () => {
+	it("stops numeric-tab retries at the maximum and keeps attempt ids unique", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
@@ -808,7 +811,14 @@ describe("background Herdr tab claim", () => {
 				{ prompt: "new session" },
 				context(),
 			);
-			expect(successWorker.requests[1]?.attemptId).toBe(1);
+			expect(successWorker.requests[1]?.attemptId).toBe(2);
+
+			const oldRequest = successWorker.requests[0];
+			if (oldRequest === undefined) throw new Error("old request missing");
+			emitClaim(oldRequest, "stale-old-session");
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(successWorker.requests[1]?.attemptId).toBe(2);
+			emitClaim(successWorker.requests[1] as ClaimWorkerRequest);
 		} finally {
 			restore();
 		}

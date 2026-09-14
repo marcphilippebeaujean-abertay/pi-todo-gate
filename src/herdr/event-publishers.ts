@@ -33,11 +33,17 @@ export function startClaimWorker(
 			onResult: (result) =>
 				void request.events.claimCompletedEvent.emit({
 					attemptId: request.attemptId,
+					...(request.lifecycleEpoch === undefined
+						? {}
+						: { lifecycleEpoch: request.lifecycleEpoch }),
 					result,
 				}),
 			onFailure: (message) =>
 				void request.events.claimFailedEvent.emit({
 					attemptId: request.attemptId,
+					...(request.lifecycleEpoch === undefined
+						? {}
+						: { lifecycleEpoch: request.lifecycleEpoch }),
 					message: claimFailureMessage(message),
 					workerFailed: true,
 				}),

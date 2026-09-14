@@ -20,7 +20,10 @@ import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
 import { handlePrToolResult } from "./event-consumers.ts";
+import "./events.ts";
 import "./event-publishers.ts";
+import "./notifications.ts";
+import "./user-prompts.ts";
 import { findOpenPr, isGithubPrAvailable } from "./git.ts";
 import type {
 	OriginRequest,
@@ -35,16 +38,9 @@ import { normalizePrState } from "./module-state.ts";
 import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import { installStateTool } from "./state-tool.ts";
 
-export * from "./commands.ts";
 export { register as registerMergeProtocol } from "./commands.ts";
-export * from "./constants.ts";
-export * from "./events.ts";
-export * from "./git.ts";
 export * from "./module-state.ts";
 export type PrModule = Record<never, never>;
-export * from "./notifications.ts";
-export * from "./parsing.ts";
-export * from "./user-prompts.ts";
 
 function prStateFromSession(
 	state: PrState,
@@ -653,7 +649,7 @@ class PrModuleImpl {
 }
 
 export function createPrModule(options: PrModuleOptions): PrModule {
-	return new PrModuleImpl(options) as unknown as PrModule;
+	return new PrModuleImpl(options);
 }
 
 export { mergeProtocolSkillPath };
