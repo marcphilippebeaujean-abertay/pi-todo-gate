@@ -276,7 +276,8 @@ class HerdrTabClaimConsumer {
 		this.publishClaimInProgress(false);
 		const isWorkerFailure = event.workerFailed;
 		const isNumericTab = tabNameIsParseableAsInt(this.initialLabel);
-		const hasAttemptsRemaining = this.nextAttemptId < HERDR_MAX_CLAIM_ATTEMPTS;
+		const hasAttemptsRemaining =
+			this.sessionAttemptCount < HERDR_MAX_CLAIM_ATTEMPTS;
 		const canRetry = isNumericTab && hasAttemptsRemaining;
 		const shouldTriggerRetry = isWorkerFailure && canRetry;
 		this.herdrGateClaimProcessed = !shouldTriggerRetry;

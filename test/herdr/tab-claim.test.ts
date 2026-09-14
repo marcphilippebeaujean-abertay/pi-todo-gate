@@ -769,6 +769,43 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
+	it("resets numeric-tab retry limit for later sessions", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const pi = fakePi();
+			const backgroundWorker = worker();
+			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+				commandRunner: ordinaryRunner("7"),
+				startBackgroundWorker: backgroundWorker.start,
+			});
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			for (let attempt = 0; attempt < 3; attempt += 1) {
+				await pi.handlers.get("before_agent_start")?.[0]?.(
+					{ prompt: `first session ${attempt}` },
+					context(),
+				);
+				emitFailure(backgroundWorker.requests[attempt] as ClaimWorkerRequest);
+			}
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "first session after limit" },
+				context(),
+			);
+			expect(backgroundWorker.start).toHaveBeenCalledTimes(3);
+
+			await pi.handlers.get("session_shutdown")?.[0]?.({}, context());
+			await pi.handlers.get("session_start")?.[0]?.({}, context());
+			await pi.handlers.get("before_agent_start")?.[0]?.(
+				{ prompt: "later session retry" },
+				context(),
+			);
+
+			expect(backgroundWorker.start).toHaveBeenCalledTimes(4);
+			expect(backgroundWorker.requests[3]?.attemptId).toBe(4);
+		} finally {
+			restore();
+		}
+	});
+
 	it("stops numeric-tab retries at the maximum and keeps attempt ids unique", async () => {
 		const restore = herdrEnvironment();
 		try {
