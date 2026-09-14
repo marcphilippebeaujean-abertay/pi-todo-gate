@@ -1,3 +1,4 @@
+import { isRecord } from "../shared/records.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
@@ -9,11 +10,6 @@ export interface TodoistModuleState {
 	taskUrl?: string;
 	todoistCompletionAttemptedAt?: string;
 	mergePromptedPrUrl?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === "object" && value !== null;
-	return isObject && !Array.isArray(value);
 }
 
 function restoreTodoistState(value: unknown): TodoistModuleState {

@@ -1,3 +1,4 @@
+import { isRecord } from "./shared/records.ts";
 import type {
 	GitState,
 	ModuleId,
@@ -17,7 +18,6 @@ export type {
 const CUSTOM_ENTRY_TYPE = "custom";
 const STATE_CUSTOM_TYPE = "pi-todo-gate-state";
 const CURRENT_SCHEMA_VERSION = 1;
-const OBJECT_TYPE = "object";
 const STRING_TYPE = "string";
 const BOOLEAN_TYPE = "boolean";
 
@@ -28,12 +28,6 @@ export interface PersistedSessionState {
 	};
 	gitState: GitState;
 	moduleState: ModuleState;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === OBJECT_TYPE && value !== null;
-	const isArray = Array.isArray(value);
-	return isObject && !isArray;
 }
 
 function isOptionalValue(

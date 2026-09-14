@@ -1,3 +1,4 @@
+import { isRecord } from "../shared/records.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
@@ -6,11 +7,6 @@ import type {
 export interface HerdrModuleState {
 	claimInProgress?: boolean;
 	herdrClaimReturnedSuccessfully?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === "object" && value !== null;
-	return isObject && !Array.isArray(value);
 }
 
 function restoreHerdrState(value: unknown): HerdrModuleState {

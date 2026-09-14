@@ -1,3 +1,4 @@
+import { isRecord } from "../shared/records.ts";
 import type {
 	JsonValue,
 	ModuleStateDescriptor,
@@ -14,11 +15,6 @@ export interface PrModuleState {
 	discoveryDisabled: boolean;
 	discoveryTestedUrls: string[];
 	mergedPrs: MergedPrState[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	const isObject = typeof value === "object" && value !== null;
-	return isObject && !Array.isArray(value);
 }
 
 function normalizeUrl(value: unknown): string | undefined {

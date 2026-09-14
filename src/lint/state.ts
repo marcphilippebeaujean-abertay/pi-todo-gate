@@ -2,6 +2,7 @@ const LINT_CONFIG_JSON = "lint.config.json";
 const UTF8_ENCODING = "utf8";
 
 import { readFile } from "node:fs/promises";
+import { isRecord } from "../shared/records.ts";
 
 export interface LintConfig {
 	maxCyclomaticComplexity: number;
@@ -26,10 +27,6 @@ const CONFIG_KEYS: readonly (keyof LintConfig)[] = [
 	"maxNestedFunctionDepth",
 	"maxBooleanChecks",
 ];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isPositiveInteger(value: unknown): value is number {
 	return typeof value === "number" && Number.isInteger(value) && value > 0;
