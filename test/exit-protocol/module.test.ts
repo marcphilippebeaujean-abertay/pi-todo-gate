@@ -15,14 +15,24 @@ import type { ExitAction } from "../../src/shared/exit-actions.ts";
 import { createSessionState } from "../../src/state.ts";
 
 type TestExitProtocolModule = {
-	sessionStart(context: unknown): void;
+	sessionStart(context: unknown, sessionId?: string): void;
 	deactivate(): void;
 };
 
 const createTestExitProtocolModule = (
 	options: Parameters<typeof createExitProtocolModule>[0],
-): TestExitProtocolModule =>
-	createExitProtocolModule(options) as unknown as TestExitProtocolModule;
+): TestExitProtocolModule => {
+	const module = createExitProtocolModule(
+		options,
+	) as unknown as TestExitProtocolModule;
+	return {
+		...module,
+		sessionStart(context, sessionId = "session") {
+			options.sessionState.session.activeSessionId = sessionId;
+			module.sessionStart(context, sessionId);
+		},
+	};
+};
 
 const actions: ExitAction[] = [
 	{
@@ -148,13 +158,15 @@ describe("exit protocol presenter", () => {
 
 	it("publishes exact active and inactive module state payloads", async () => {
 		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((event) => {
 			updates.push(event);
 		});
 		createTestExitProtocolModule({
 			eventHandler: events,
-			sessionState: createSessionState(),
+			sessionState,
 			promptQueue: new PromptQueue(),
 		});
 
@@ -176,6 +188,30 @@ describe("exit protocol presenter", () => {
 				persist: false,
 			},
 		]);
+	});
+
+	it("rejects events when root session ID is missing", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		const ctx = context();
+		createTestExitProtocolModule({
+			eventHandler: events,
+			sessionState,
+			promptQueue: new PromptQueue(),
+			worktree: worktree(),
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: ctx,
+			sessionId: "session",
+		});
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+			sessionId: "session",
+		});
+
+		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
 
 	it("uses injected lifecycle dependencies", async () => {

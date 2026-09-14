@@ -83,13 +83,12 @@ class TodoistModuleImpl implements TodoistModule {
 				if (hasNoSession) return;
 				const isCurrentContext = session.context === context;
 				if (!isCurrentContext) return;
-				const currentSessionId = sessionId ?? session.sessionId;
+				const expectedSessionId = sessionId;
 				const activeSessionId =
 					this.options.sessionState.session.activeSessionId;
-				const isDifferentActiveSession =
-					activeSessionId !== null && activeSessionId !== currentSessionId;
-				if (isDifferentActiveSession) return;
-				return this.activateSession(session, currentSessionId);
+				const isCurrentSession = activeSessionId === expectedSessionId;
+				if (!isCurrentSession) return;
+				return this.activateSession(session, expectedSessionId);
 			},
 		);
 		this.options.eventHandler.sessionResetEvent.subscribe(() =>
@@ -103,15 +102,13 @@ class TodoistModuleImpl implements TodoistModule {
 	private subscribeBeforeAgentStart(): void {
 		this.options.eventHandler.beforeAgentStartEvent.subscribe(
 			({ event, session, sessionId }) => {
-				const currentSessionId = sessionId ?? session.sessionId;
+				const expectedSessionId = sessionId;
 				const activeSessionId =
 					this.options.sessionState.session.activeSessionId;
-				const hasNoActiveSession = activeSessionId === null;
-				const hasCurrentSessionId = activeSessionId === currentSessionId;
+				const hasCurrentSessionId = activeSessionId === expectedSessionId;
 				const isCurrentContext =
 					this.currentSession?.context === session.context;
-				const isCurrentRootSession = hasNoActiveSession || hasCurrentSessionId;
-				const isCurrentSession = isCurrentContext && isCurrentRootSession;
+				const isCurrentSession = isCurrentContext && hasCurrentSessionId;
 				const hasTaskRef =
 					this.options.sessionState.moduleState.todoist.taskRef !== undefined;
 				if (!isCurrentSession) return;
@@ -176,9 +173,8 @@ class TodoistModuleImpl implements TodoistModule {
 			: await this.resolveConfiguredProject(session.context.cwd);
 		this.pendingProjects.delete(session.context.cwd);
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
 		const hasCurrentSessionId = activeSessionId === sessionId;
-		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
+		const isCurrentSession = hasCurrentSessionId;
 		const hasResolvedProject = resolved !== null;
 		const canActivate = hasResolvedProject && isCurrentSession;
 		if (!canActivate) return;
@@ -190,13 +186,11 @@ class TodoistModuleImpl implements TodoistModule {
 
 	private async syncSessionState(session: TodoistSession): Promise<void> {
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
 		const hasCurrentSessionId = activeSessionId === session.sessionId;
 		const currentSession = this.currentSession;
 		const hasCurrentSession =
 			currentSession === null || currentSession === session;
-		const hasCurrentRootSession = hasNoActiveSession || hasCurrentSessionId;
-		const isCurrentSession = hasCurrentSession && hasCurrentRootSession;
+		const isCurrentSession = hasCurrentSession && hasCurrentSessionId;
 		if (!isCurrentSession) return;
 		await this.publishState.publish(
 			this.options.sessionState.moduleState.todoist,

@@ -14,9 +14,12 @@ import { createSessionState, type SessionRecord } from "../../src/state.ts";
 
 const createTestExitProtocolModule = createExitProtocolModule as unknown as (
 	options: Parameters<typeof createExitProtocolModule>[0],
-) => { sessionStart(context: unknown): void };
+) => { sessionStart(context: unknown, sessionId: string): void };
 
-import { registerTodoistMergeConsumer } from "../../src/todoist/event-consumers.ts";
+import {
+	maybeAnalyzeTaskClaim,
+	registerTodoistMergeConsumer,
+} from "../../src/todoist/event-consumers.ts";
 import type {
 	TodoistCompletionSnapshot,
 	TodoistOperations,
@@ -174,6 +177,21 @@ describe("Todoist merge consumer", () => {
 		expect(queue.enqueue).not.toHaveBeenCalled();
 	});
 
+	it("rejects task worker when root session ID is missing", async () => {
+		const setupResult = setup();
+		setupResult.runtime.sessionState.session.activeSessionId = null;
+		const worker = vi.fn();
+		const operations = {
+			...setupResult.runtime,
+			taskClaimWorker: worker,
+		} as unknown as TodoistOperations;
+
+		maybeAnalyzeTaskClaim(operations, setupResult.session, "claim this");
+		await Promise.resolve();
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
 	it("consumes rejected completion prompt queue tasks", async () => {
 		const catchFailure = vi.fn();
 		const promptQueue = {
@@ -227,6 +245,7 @@ describe("Todoist merge consumer", () => {
 		});
 		exitModule.sessionStart(
 			setupResult.session.context as unknown as ExtensionContext,
+			"session",
 		);
 		await emit(setupResult.runtime);
 

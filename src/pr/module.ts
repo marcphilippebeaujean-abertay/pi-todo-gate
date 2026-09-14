@@ -92,19 +92,16 @@ class PrModuleImpl {
 			async ({ context, session, sessionId }) => {
 				const hasNoSession = session === undefined;
 				if (hasNoSession) return;
-				const currentSessionId = sessionId ?? session.sessionId;
+				const expectedSessionId = sessionId;
 				const activeSessionId = this.sessionState.session.activeSessionId;
-				const isDifferentActiveSession =
-					activeSessionId !== null && activeSessionId !== currentSessionId;
+				const isDifferentActiveSession = activeSessionId !== expectedSessionId;
 				const isCurrentContext = session.context === context;
 				if (!isCurrentContext) return;
 				if (isDifferentActiveSession) return;
 				this.currentSession = session;
 				await this.activateSession(session);
 				const latestActiveSessionId = this.sessionState.session.activeSessionId;
-				const isStaleActivation =
-					latestActiveSessionId !== null &&
-					latestActiveSessionId !== currentSessionId;
+				const isStaleActivation = latestActiveSessionId !== expectedSessionId;
 				if (isStaleActivation) return;
 				await this.initializeRemoteOrigin(
 					context,
@@ -156,13 +153,9 @@ class PrModuleImpl {
 		this.state = nextState;
 		await this.emitState(nextState, { persist: false });
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
 		const hasCurrentSessionId = activeSessionId === session.sessionId;
-		const hasCurrentSessionIdOrNoActive =
-			hasNoActiveSession || hasCurrentSessionId;
 		const hasCurrentSession = this.currentSession === session;
-		const isCurrentActivation =
-			hasCurrentSession && hasCurrentSessionIdOrNoActive;
+		const isCurrentActivation = hasCurrentSession && hasCurrentSessionId;
 		if (!isCurrentActivation) return;
 		this.state = nextState;
 	}
@@ -439,9 +432,7 @@ class PrModuleImpl {
 		sessionId,
 	}: InitialPrDiscoveryEvent): Promise<void> {
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
-		const hasCurrentSessionId = activeSessionId === sessionId;
-		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
+		const isCurrentSession = activeSessionId === sessionId;
 		const hasPinnedPr = this.state.prUrl !== undefined;
 		const isDiscoveryDisabled = this.state.discoveryDisabled;
 		if (!isCurrentSession) return Promise.resolve();
@@ -461,21 +452,18 @@ class PrModuleImpl {
 		messages,
 	}: BeforeAgentStartEventPayload): Promise<void> {
 		const hasPerformedGitMutations = session.hasPerformedAnyGitMutations;
-		const currentSessionId = sessionId ?? session.sessionId;
+		const expectedSessionId = sessionId;
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
-		const hasCurrentSessionId = activeSessionId === currentSessionId;
-		const hasCurrentSessionIdOrNoActive =
-			hasNoActiveSession || hasCurrentSessionId;
+		const hasCurrentSessionId = activeSessionId === expectedSessionId;
 		const hasCurrentSession = this.currentSession === session;
-		const isCurrentSession = hasCurrentSession && hasCurrentSessionIdOrNoActive;
+		const isCurrentSession = hasCurrentSession && hasCurrentSessionId;
 		if (!hasPerformedGitMutations) return Promise.resolve();
 		if (!isCurrentSession) return Promise.resolve();
 		return this.appendBeforeAgentPrompt(
 			context,
 			messages,
 			session,
-			currentSessionId,
+			expectedSessionId,
 		);
 	}
 
@@ -525,33 +513,33 @@ class PrModuleImpl {
 		if (!changed) return;
 		this.state = nextState;
 		await this.emitState(this.state, { persist: true });
-		const currentSessionId = this.sessionState.session.activeSessionId;
+		const activeSessionId = this.sessionState.session.activeSessionId;
 		const isCurrentAfterEmit =
-			this.currentSession === session && currentSessionId === event.sessionId;
+			this.currentSession === session && activeSessionId === event.sessionId;
 		if (!isCurrentAfterEmit) return;
 	}
 
 	private async handleToolResult(
-		event: Parameters<typeof handlePrToolResult>[5],
+		event: Parameters<typeof handlePrToolResult>[4],
 		ctx: ExtensionContext,
 	): Promise<void> {
-		const session = this.currentSession;
-		if (session === null) return;
+		const expectedSessionId = this.sessionState.session.activeSessionId;
+		if (expectedSessionId === null) return;
 		await handlePrToolResult(
-			() => session,
+			() => this.currentSession,
 			this.sessionState,
 			this.state,
-			session.sessionId,
-			this.sessionState.session.activeSessionId ?? "",
+			expectedSessionId,
 			event,
 			ctx,
 			(prUrl) => {
-				const session = this.currentSession;
-				if (session === null) return Promise.resolve();
+				const isCurrentAfterMatch =
+					this.sessionState.session.activeSessionId === expectedSessionId;
+				if (!isCurrentAfterMatch) return Promise.resolve();
 				return this.eventHandler.prMergedEvent.emit({
 					prUrl,
 					taskMarkedAsCompleted: false,
-					sessionId: session.sessionId,
+					sessionId: expectedSessionId,
 				});
 			},
 			this.dependencies.exec ?? spawnExec,
@@ -595,9 +583,7 @@ class PrModuleImpl {
 	): boolean {
 		const sameSession = this.currentSession === session;
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
-		const hasSameActiveSession = activeSessionId === identity.sessionId;
-		const sameRootSession = hasNoActiveSession || hasSameActiveSession;
+		const sameRootSession = activeSessionId === identity.sessionId;
 		const sameWorkRevision = session.workRevision === identity.workRevision;
 		const samePrUrl = this.state.prUrl === identity.prUrl;
 		const sameDiscoveryEligibility =

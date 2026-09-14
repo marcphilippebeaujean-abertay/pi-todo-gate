@@ -28,28 +28,19 @@ export class ExitProtocolConsumer {
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, sessionId }) => {
-				this.sessionStart(
-					context,
-					sessionId ?? this.sessionState.session.activeSessionId ?? "",
-				);
-			},
+			({ context, sessionId }) => this.sessionStart(context, sessionId),
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);
 	}
 
-	sessionStart(context: ExtensionContext, sessionId?: string): void {
-		const session = this.sessionState.session;
-		const activeSessionId = session.activeSessionId;
-		const currentSessionId = sessionId ?? activeSessionId ?? "";
-		const hasNoActiveSession = activeSessionId === null;
-		const hasCurrentSessionId = activeSessionId === currentSessionId;
-		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
+	sessionStart(context: ExtensionContext, expectedSessionId: string): void {
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const isCurrentSession = activeSessionId === expectedSessionId;
 		if (!isCurrentSession) return;
 		this.context = context;
-		this.sessionId = currentSessionId || null;
+		this.sessionId = expectedSessionId;
 		void publishExitProtocolState(this.eventHandler, true);
 	}
 
@@ -66,11 +57,9 @@ export class ExitProtocolConsumer {
 	): boolean {
 		const isCurrentContext = this.context === context;
 		const rootSessionId = this.sessionState.session.activeSessionId;
-		const hasNoRootSession = rootSessionId === null;
 		const hasMatchingSession =
 			this.sessionId === sessionId && rootSessionId === sessionId;
-		const isCurrentId = hasNoRootSession || hasMatchingSession;
-		return isCurrentContext && isCurrentId;
+		return isCurrentContext && hasMatchingSession;
 	}
 
 	private onPrMerged(event: PrMergedEvent): void {

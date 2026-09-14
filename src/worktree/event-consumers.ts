@@ -23,8 +23,6 @@ import type {
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
-const LEGACY_SESSION_ID = "legacy";
-
 class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
@@ -47,13 +45,7 @@ class Worktree implements WorktreeConsumer {
 			this.consumeToolResult(event, context),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, sessionId }) => {
-				const currentSessionId =
-					sessionId ??
-					this.sessionState.session.activeSessionId ??
-					LEGACY_SESSION_ID;
-				return this.sessionStart(context, currentSessionId);
-			},
+			({ context, sessionId }) => this.sessionStart(context, sessionId),
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
@@ -78,10 +70,8 @@ class Worktree implements WorktreeConsumer {
 	private isCurrentSession(ctx: ExtensionContext, sessionId: string): boolean {
 		const isCurrentContext = this.context === ctx;
 		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasNoActiveSession = activeSessionId === null;
 		const hasCurrentSessionId = activeSessionId === sessionId;
-		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
-		return isCurrentContext && isCurrentSession;
+		return isCurrentContext && hasCurrentSessionId;
 	}
 
 	private async consumeToolResult(
@@ -100,10 +90,10 @@ class Worktree implements WorktreeConsumer {
 		const shouldRefresh = isFileMutation || isBashTool;
 		const shouldSkipRefresh = !shouldRefresh;
 		if (shouldSkipRefresh) return;
-		const sessionId =
-			this.sessionState.session.activeSessionId ?? LEGACY_SESSION_ID;
+		const expectedSessionId = this.sessionState.session.activeSessionId;
+		if (expectedSessionId === null) return;
 		const sequence = ++this.refreshSequence;
-		await this.refreshStatus(context, sessionId, sequence);
+		await this.refreshStatus(context, expectedSessionId, sequence);
 	}
 
 	private emitState(gitStatePatch?: Partial<SessionState["gitState"]>): void {
@@ -211,9 +201,9 @@ class Worktree implements WorktreeConsumer {
 		if (context === null) return Promise.resolve(FAILED);
 		const worktree = this.baseline;
 		if (worktree === null) return Promise.resolve(FAILED);
-		const sessionId =
-			this.sessionState.session.activeSessionId ?? LEGACY_SESSION_ID;
-		return this.executeCleanup(context, sessionId, worktree);
+		const expectedSessionId = this.sessionState.session.activeSessionId;
+		if (expectedSessionId === null) return Promise.resolve(FAILED);
+		return this.executeCleanup(context, expectedSessionId, worktree);
 	}
 
 	private async executeCleanup(
@@ -267,6 +257,10 @@ class Worktree implements WorktreeConsumer {
 				this.isCurrentSession(context, sessionId) &&
 				isCurrentWorktree(this.baseline, worktree),
 		});
+		const isCurrentAfterCleanup =
+			this.isCurrentSession(context, sessionId) &&
+			isCurrentWorktree(this.baseline, worktree);
+		if (!isCurrentAfterCleanup) return FAILED;
 		const worktreeWasRemoved = cleanupState.value;
 		if (worktreeWasRemoved) this.baseline = null;
 		const cleanupCompleted = result === COMPLETED;

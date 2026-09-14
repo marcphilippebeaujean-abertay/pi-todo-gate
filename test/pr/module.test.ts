@@ -629,7 +629,6 @@ describe("PR module ownership", () => {
 				session,
 				2,
 				"session",
-				"session",
 				"task",
 				"https://github.com/o/r/pull/42",
 			),
@@ -640,7 +639,6 @@ describe("PR module ownership", () => {
 				sessionState.moduleState.pr,
 				session,
 				2,
-				"session",
 				"session",
 				"task",
 				"https://github.com/o/r/pull/43",
@@ -653,7 +651,6 @@ describe("PR module ownership", () => {
 				session,
 				2,
 				"other",
-				"session",
 				"task",
 				"https://github.com/o/r/pull/43",
 			),
@@ -678,6 +675,62 @@ describe("PR module ownership", () => {
 				}),
 			}),
 		);
+	});
+
+	it("rejects delayed tool results after a new session starts", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "old";
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const context = { cwd: "/repo", hasUI: false } as never;
+		const session = {
+			sessionId: "old",
+			context,
+			project: { codingRoot: "/repo" },
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+		let releaseMatch!: () => void;
+		const matchBlocked = new Promise<void>((resolve) => {
+			releaseMatch = resolve;
+		});
+		const exec = vi.fn(async (_command: string, args: string[]) => {
+			if (args[0] === "pr") await matchBlocked;
+			return {
+				stdout: JSON.stringify({
+					url: "https://github.com/o/r/pull/42",
+					headRefName: "feature",
+				}),
+				stderr: "",
+				code: 0,
+			};
+		});
+		const mergedEvents: unknown[] = [];
+		events.prMergedEvent.subscribe((event) => {
+			mergedEvents.push(event);
+		});
+		const module = createTestPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		await module.activateSession(session);
+		const result = events.toolResultEvent.emit({
+			event: {
+				toolName: C.tool.bash,
+				isError: false,
+				input: { command: "gh pr merge 42" },
+			} as never,
+			context,
+		});
+		await Promise.resolve();
+		sessionState.session.activeSessionId = "new";
+		releaseMatch();
+		await result;
+
+		expect(mergedEvents).toEqual([]);
 	});
 
 	it("rejects stale remote-origin discovery", async () => {

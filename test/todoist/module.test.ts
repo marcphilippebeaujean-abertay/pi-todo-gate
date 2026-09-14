@@ -336,6 +336,7 @@ describe("Todoist module projection", () => {
 			updates.push(update);
 		});
 		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
 		sessionState.moduleState.todoist = {
 			taskRef: "42",
 			taskName: "Implement feature",
@@ -346,7 +347,7 @@ describe("Todoist module projection", () => {
 			eventHandler: events,
 			sessionState,
 		});
-		const session = {} as TodoistSession;
+		const session = { sessionId: "session" } as TodoistSession;
 
 		await module.syncSessionState(session);
 

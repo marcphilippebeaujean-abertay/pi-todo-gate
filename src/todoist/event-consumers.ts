@@ -207,18 +207,21 @@ export function maybeAnalyzeTaskClaim(
 	session: TodoistSession,
 	prompt: string,
 ): void {
-	const sessionId = session.sessionId;
+	const expectedSessionId = session.sessionId;
 	const isCurrentSession = operations.getSession() === session;
+	const isCurrentRootSession =
+		operations.sessionState.session.activeSessionId === expectedSessionId;
 	const hasTaskRef =
 		operations.sessionState.moduleState.todoist.taskRef !== undefined;
-	const cannotAnalyze = !isCurrentSession || hasTaskRef;
-	if (cannotAnalyze) return;
+	if (!isCurrentSession) return;
+	if (!isCurrentRootSession) return;
+	if (hasTaskRef) return;
 	const operation = operations.todoist.taskClaim;
 	const claimAlreadyHandled = operation.pending || operation.completed;
 	if (claimAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(operations, session, prompt, sessionId);
+	void runTaskClaim(operations, session, prompt, expectedSessionId);
 }
 
 async function completeMergedTaskAfterPrompt(

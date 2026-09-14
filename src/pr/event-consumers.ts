@@ -32,19 +32,18 @@ export function isCurrentMerge(
 	prState: PrState,
 	session: PrSession,
 	workRevision: number,
-	sessionId: string,
-	currentSessionId: string,
+	expectedSessionId: string,
 	taskRef: string | undefined,
 	prUrl: string,
 ): boolean {
-	const isActive = sessionState.session.activeSessionId !== null;
+	const activeSessionId = sessionState.session.activeSessionId;
+	const hasSameRootSession = activeSessionId === expectedSessionId;
 	const hasSameRevision = session.workRevision === workRevision;
-	const hasSameSession = sessionId === currentSessionId;
 	const hasSameTask = sessionState.moduleState.todoist.taskRef === taskRef;
 	const hasSamePr = prState.prUrl === prUrl;
 	const sameMergeIdentity = hasSameTask && hasSamePr;
-	const sameSessionAndRevision = hasSameRevision && hasSameSession;
-	const identityChecks = [isActive, sameSessionAndRevision, sameMergeIdentity];
+	const sameSessionAndRevision = hasSameRevision && hasSameRootSession;
+	const identityChecks = [sameSessionAndRevision, sameMergeIdentity];
 	return identityChecks.every(Boolean);
 }
 
@@ -55,8 +54,7 @@ async function emitCurrentMerge(
 	session: PrSession,
 	context: ExtensionContext,
 	workRevision: number,
-	sessionId: string,
-	currentSessionId: string,
+	expectedSessionId: string,
 	taskRef: string | undefined,
 	prUrl: string,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -68,8 +66,7 @@ async function emitCurrentMerge(
 		prState,
 		session,
 		workRevision,
-		sessionId,
-		currentSessionId,
+		expectedSessionId,
 		taskRef,
 		prUrl,
 	);
@@ -80,8 +77,7 @@ export async function handlePrToolResult(
 	getSession: () => PrSession | null,
 	sessionState: SessionState,
 	prState: PrState,
-	sessionId: string,
-	currentSessionId: string,
+	expectedSessionId: string,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -107,7 +103,10 @@ export async function handlePrToolResult(
 		command,
 		prUrl,
 	);
-	if (!isPinnedPr) return;
+	const isCurrentAfterMatch =
+		sessionState.session.activeSessionId === expectedSessionId;
+	const shouldIgnoreResult = !isCurrentAfterMatch || !isPinnedPr;
+	if (shouldIgnoreResult) return;
 	await emitCurrentMerge(
 		getSession,
 		sessionState,
@@ -115,8 +114,7 @@ export async function handlePrToolResult(
 		session,
 		ctx,
 		session.workRevision,
-		sessionId,
-		currentSessionId,
+		expectedSessionId,
 		taskRef,
 		prUrl,
 		emitMerged,
