@@ -31,9 +31,39 @@ type TestTodoistModule = {
 const createTodoistModule = (
 	options: Parameters<typeof createTodoistModuleFactory>[0],
 ): TestTodoistModule =>
-	createTodoistModuleFactory(options) as unknown as TestTodoistModule;
+	createTodoistModuleFactory({
+		loadConfig: async () => ({
+			projects: {
+				"/old": "project",
+				"/new": "project",
+				"/repo": "project",
+			},
+		}),
+		...options,
+	}) as unknown as TestTodoistModule;
 
 describe("Todoist module ownership", () => {
+	it("projects configured data without exposing mapping details", async () => {
+		const module = createTodoistModuleFactory({
+			loadConfig: async () => ({
+				projects: {
+					"/repo": {
+						todoistProjectRef: "project",
+						triggersOnlyOnWorktree: false,
+					},
+				},
+			}),
+			promptQueue: new PromptQueue(),
+			eventHandler: createSharedEvents(),
+			sessionState: createSessionState(),
+		});
+
+		expect(await module.resolveSessionProject("/repo/src")).toEqual({
+			codingRoot: "/repo",
+			triggersOnlyOnWorktree: false,
+		});
+	});
+
 	it("does not let stale activation reset newer claim state", async () => {
 		const events = createSharedEvents();
 		const lifecycleEpoch = { value: 1 };
@@ -215,7 +245,7 @@ describe("Todoist module ownership", () => {
 		sessionState.session.activeSessionId = "session";
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			project: { codingRoot: "/repo" },
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
@@ -305,7 +335,7 @@ describe("Todoist task identity", () => {
 		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			project: { codingRoot: "/repo" },
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
@@ -362,7 +392,7 @@ describe("Todoist task identity", () => {
 		sessionState.session.activeSessionId = "session";
 		const session = {
 			context: { cwd: "/repo" },
-			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			project: { codingRoot: "/repo" },
 			workRevision: 0,
 		} as unknown as TodoistSession;
 		registerModuleStateConsumer(events, sessionState, () => true);

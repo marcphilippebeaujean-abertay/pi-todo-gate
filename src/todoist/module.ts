@@ -51,7 +51,7 @@ class TodoistModuleImpl implements TodoistModule {
 	private readonly publishState;
 	private currentSession: TodoistSession | null = null;
 	private currentProjectRef = "";
-	private readonly resolvedProjects = new Map<string, ResolvedProject | null>();
+	private readonly pendingProjects = new Map<string, ResolvedProject | null>();
 	readonly taskClaim = {
 		pending: false,
 		completed: false,
@@ -80,11 +80,13 @@ class TodoistModuleImpl implements TodoistModule {
 		this.options.eventHandler.sessionResetEvent.subscribe(() => {
 			this.currentSession = null;
 			this.currentProjectRef = "";
+			this.pendingProjects.clear();
 			this.resetTaskClaim();
 		});
 		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() => {
 			this.currentSession = null;
 			this.currentProjectRef = "";
+			this.pendingProjects.clear();
 			this.resetTaskClaim();
 		});
 		this.options.eventHandler.beforeAgentStartEvent.subscribe(
@@ -113,20 +115,16 @@ class TodoistModuleImpl implements TodoistModule {
 		return loaded as unknown as TodoistProjectMapping;
 	}
 
-	private async configuredProject(
+	private async resolveConfiguredProject(
 		cwd: string,
 	): Promise<ResolvedProject | null> {
-		const cached = this.resolvedProjects.get(cwd);
-		const hasCachedProject = this.resolvedProjects.has(cwd);
-		if (hasCachedProject) return cached ?? null;
 		const config = await this.loadProjectMapping();
-		const resolved = resolveConfiguredProject(cwd, config);
-		this.resolvedProjects.set(cwd, resolved);
-		return resolved;
+		return resolveConfiguredProject(cwd, config);
 	}
 
 	async resolveSessionProject(cwd: string): Promise<SessionProject | null> {
-		const resolved = await this.configuredProject(cwd);
+		const resolved = await this.resolveConfiguredProject(cwd);
+		this.pendingProjects.set(cwd, resolved);
 		if (resolved === null) return null;
 		return {
 			codingRoot: resolved.codingRoot,
@@ -138,29 +136,11 @@ class TodoistModuleImpl implements TodoistModule {
 		session: import("../shared/session-state.ts").SessionRecord,
 		activationEpoch: number,
 	): Promise<void> {
-		const rawProject = session.project;
-		const legacyProject = (rawProject ?? {
-			codingRoot: session.context.cwd,
-		}) as {
-			codingRoot: string;
-			todoistProjectRef?: unknown;
-			triggersOnlyOnWorktree?: boolean;
-		};
-		const hasLegacyProjectRef =
-			typeof legacyProject.todoistProjectRef === "string";
-		const hasSessionProject = rawProject !== undefined;
-		const resolved = hasLegacyProjectRef
-			? {
-					codingRoot: legacyProject.codingRoot,
-					todoistProjectRef: legacyProject.todoistProjectRef as string,
-					triggersOnlyOnWorktree: legacyProject.triggersOnlyOnWorktree,
-				}
-			: hasSessionProject
-				? await this.configuredProject(session.context.cwd)
-				: {
-						codingRoot: session.context.cwd,
-						todoistProjectRef: "",
-					};
+		const hasPendingProject = this.pendingProjects.has(session.context.cwd);
+		const resolved = hasPendingProject
+			? (this.pendingProjects.get(session.context.cwd) ?? null)
+			: await this.resolveConfiguredProject(session.context.cwd);
+		this.pendingProjects.delete(session.context.cwd);
 		const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 		const hasResolvedProject = resolved !== null;
 		const canActivate = hasResolvedProject && isCurrentEpoch;

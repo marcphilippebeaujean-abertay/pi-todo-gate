@@ -85,6 +85,7 @@ export function createSessionState(): SessionState {
 }
 
 export interface RootDependencies {
+	loadConfig?: (path?: string) => Promise<unknown>;
 	openSession?: (path: string) => SessionReader;
 }
 

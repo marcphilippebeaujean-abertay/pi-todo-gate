@@ -10,6 +10,7 @@ import {
 	type CommandRunner,
 	type StartBackgroundWorker,
 } from "../../src/herdr/internal-state.ts";
+import { createHerdrModule } from "../../src/herdr/module.ts";
 import { herdrStateDescriptor } from "../../src/herdr/module-state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -58,6 +59,22 @@ function herdrEnvironment(): () => void {
 		else process.env.HERDR_PANE_ID = previousPane;
 	};
 }
+
+it("does not register unavailable Herdr setup", () => {
+	const previousHerdr = process.env.HERDR_ENV;
+	delete process.env.HERDR_ENV;
+	const pi = fakePi();
+	const sessionState = createSessionState();
+	createHerdrModule(pi as unknown as ExtensionAPI, {
+		eventHandler: createSharedEvents(),
+		sessionState,
+	});
+	if (previousHerdr === undefined) delete process.env.HERDR_ENV;
+	else process.env.HERDR_ENV = previousHerdr;
+
+	expect(pi.handlers).toEqual(new Map());
+	expect(sessionState.moduleState.herdr).toEqual({});
+});
 
 function worktreeRunner(commands: string[] = []): CommandRunner {
 	return (command, args) => {

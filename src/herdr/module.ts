@@ -14,6 +14,7 @@ import type {
 	HerdrModuleSetupOptions,
 	HerdrTabOptions,
 } from "./internal-state.ts";
+import { isInsideHerdr } from "./runtime.ts";
 
 export type HerdrModule = Record<never, never>;
 
@@ -31,6 +32,8 @@ export function createHerdrModule(
 	pi: Parameters<typeof installHerdrTabClaim>[0],
 	options: HerdrModuleSetupOptions,
 ): HerdrModule {
+	const isUnavailable = !isInsideHerdr();
+	if (isUnavailable) return {};
 	const statePublisher = createModuleStatePublisher(
 		options.eventHandler,
 		"herdr",
