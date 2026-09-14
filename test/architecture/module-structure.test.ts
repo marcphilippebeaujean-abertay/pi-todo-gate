@@ -52,7 +52,12 @@ describe("module structure checker", () => {
 		expect(config).toContain("no-shared-to-scoped-implementation");
 		expect(config).toContain("no-shared-to-internal-state");
 		expect(config).toContain("no-root-to-internal-state");
+		expect(config).toContain("no-exit-protocol-to-worktree-internal-state");
 		expect(config).toContain("(?!module-state\\\\.ts$)");
+		expect(config).toContain("pathNot:");
+		expect(config).toContain(
+			"^src/(shared|pr|todoist|herdr|worktree|exit-protocol|footer)/",
+		);
 	});
 
 	it("requires every scoped module to define module-state.ts and internal-state.ts", async () => {

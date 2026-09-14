@@ -35,11 +35,16 @@ function sourceDomain(
 	return null;
 }
 
+interface InternalStateTarget {
+	domain: ScopedDomain;
+	path: string;
+}
+
 function resolveInternalState(
 	sourceFile: ts.SourceFile,
 	moduleSpecifier: string,
 	program: ts.Program,
-): ScopedDomain | undefined {
+): InternalStateTarget | undefined {
 	const resolvedModule = ts.resolveModuleName(
 		moduleSpecifier,
 		sourceFile.fileName,
@@ -50,18 +55,22 @@ function resolveInternalState(
 	const match = normalizedPath(resolvedModule.resolvedFileName).match(
 		INTERNAL_STATE_PATTERN,
 	);
-	return match?.[1] as ScopedDomain | undefined;
+	if (match === null) return undefined;
+	const domain = match[1] as ScopedDomain;
+	return { domain, path: `src/${domain}/internal-state.ts` };
 }
 
 function reportImport(
 	sourceFile: ts.SourceFile,
 	node: ts.Node,
-	domain: ScopedDomain,
+	target: InternalStateTarget,
 	diagnostics: Parameters<LintRule>[0]["diagnostics"],
 ): void {
 	const category = sourceDomain(sourceFile.fileName);
 	const message =
-		category === "shared" ? SHARED_MESSAGE : `${PRIVATE_MESSAGE} (${domain})`;
+		category === "shared"
+			? `${SHARED_MESSAGE} (${target.path})`
+			: `${PRIVATE_MESSAGE} (${target.path})`;
 	diagnostics.push(diagnostic(sourceFile, node, RULE_ID, message, 1, 0));
 }
 
@@ -79,12 +88,12 @@ export const noInternalStateImports: LintRule = ({
 		const moduleSpecifier = statement.moduleSpecifier;
 		if (moduleSpecifier === undefined || !ts.isStringLiteral(moduleSpecifier))
 			continue;
-		const domain = resolveInternalState(
+		const target = resolveInternalState(
 			sourceFile,
 			moduleSpecifier.text,
 			program,
 		);
-		if (domain === undefined || category === domain) continue;
-		reportImport(sourceFile, moduleSpecifier, domain, diagnostics);
+		if (target === undefined || category === target.domain) continue;
+		reportImport(sourceFile, moduleSpecifier, target, diagnostics);
 	}
 };

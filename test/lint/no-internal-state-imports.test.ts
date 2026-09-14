@@ -12,6 +12,7 @@ async function lintSource(
 	sourcePath: string,
 	moduleSpecifier: string,
 	modulePath: string,
+	statement = "import type { State } from",
 ): Promise<ReturnType<typeof lintProgram>> {
 	const root = await mkdtemp(join(tmpdir(), TEMP_PREFIX));
 	const sourceFilePath = join(root, "src", sourcePath);
@@ -20,7 +21,7 @@ async function lintSource(
 	await mkdir(dirname(targetFilePath), { recursive: true });
 	await writeFile(
 		sourceFilePath,
-		`import type { State } from ${JSON.stringify(moduleSpecifier)};\n`,
+		`${statement} ${JSON.stringify(moduleSpecifier)};\n`,
 	);
 	await writeFile(
 		targetFilePath,
@@ -61,13 +62,14 @@ describe(RULE_ID, () => {
 		expect(ruleDiagnostics(diagnostics)).toEqual([
 			expect.objectContaining({
 				ruleId: RULE_ID,
-				message:
-					"Shared code may import module-state.ts, not internal-state.ts",
+				message: expect.stringMatching(
+					/Shared code may import module-state\.ts, not internal-state\.ts \(src\/pr\/internal-state\.ts\)/,
+				),
 			}),
 		]);
 	});
 
-	it("rejects root imports of internal-state.ts", async () => {
+	it("rejects root imports of internal-state.ts and identifies target path", async () => {
 		const diagnostics = await lintSource(
 			"main.ts",
 			"./pr/internal-state.ts",
@@ -75,11 +77,30 @@ describe(RULE_ID, () => {
 		);
 
 		expect(ruleDiagnostics(diagnostics)).toEqual([
-			expect.objectContaining({ ruleId: RULE_ID }),
+			expect.objectContaining({
+				ruleId: RULE_ID,
+				message: expect.stringContaining("src/pr/internal-state.ts"),
+			}),
 		]);
 	});
 
-	it("rejects sibling-module imports of internal-state.ts", async () => {
+	it("rejects re-exports of internal-state.ts and identifies target path", async () => {
+		const diagnostics = await lintSource(
+			"main.ts",
+			"./pr/internal-state.ts",
+			"pr/internal-state.ts",
+			"export * from",
+		);
+
+		expect(ruleDiagnostics(diagnostics)).toEqual([
+			expect.objectContaining({
+				ruleId: RULE_ID,
+				message: expect.stringContaining("src/pr/internal-state.ts"),
+			}),
+		]);
+	});
+
+	it("rejects sibling-module imports of internal-state.ts and identifies target path", async () => {
 		const diagnostics = await lintSource(
 			"todoist/module.ts",
 			"../pr/internal-state.ts",
@@ -87,7 +108,10 @@ describe(RULE_ID, () => {
 		);
 
 		expect(ruleDiagnostics(diagnostics)).toEqual([
-			expect.objectContaining({ ruleId: RULE_ID }),
+			expect.objectContaining({
+				ruleId: RULE_ID,
+				message: expect.stringContaining("src/pr/internal-state.ts"),
+			}),
 		]);
 	});
 
