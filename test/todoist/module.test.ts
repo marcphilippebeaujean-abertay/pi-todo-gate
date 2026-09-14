@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
@@ -100,6 +100,55 @@ describe("Todoist module ownership", () => {
 			completed: false,
 			session: undefined,
 		});
+	});
+
+	it("starts task-claim analysis from shared before-agent events", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		const worker = vi.fn(async (input: { sessionId: string }) => ({
+			sessionId: input.sessionId,
+			action: "error" as const,
+			taskData: null,
+			error: "not a task" as string | null,
+		}));
+		createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			exec: async () => ({ stdout: "", stderr: "", code: 1 }),
+			taskClaimWorker: worker,
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		await events.beforeAgentStartEvent.emit({
+			event: { prompt: "claim this task" } as never,
+			context: session.context,
+			session,
+			messages: [],
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).toHaveBeenCalledWith(
+			expect.objectContaining({
+				prompt: "claim this task",
+				projectRef: "project",
+				prRef: null,
+			}),
+		);
 	});
 });
 

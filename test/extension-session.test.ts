@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	handleBeforeAgentStart,
+	handleMessageEnd,
 	handleSessionShutdown,
 	handleSessionStart,
 	registerModuleStateConsumer,
@@ -54,6 +56,45 @@ function rootWithConfig(
 	);
 	return root;
 }
+
+describe("shared event adaptation", () => {
+	it("publishes message-end and before-agent events instead of calling modules", async () => {
+		const root = rootWithConfig(async () => ({ projects: {} }));
+		const contextValue = context("/repo");
+		const session = {
+			context: contextValue,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		};
+		root.session = session as never;
+		const messageEndEmit = vi.spyOn(root.eventHandler.messageEndEvent, "emit");
+		const beforeAgentStartEmit = vi.spyOn(
+			root.eventHandler.beforeAgentStartEvent,
+			"emit",
+		);
+
+		await handleMessageEnd(root, { message: "message" } as never);
+		await handleBeforeAgentStart(
+			root,
+			{ prompt: "prompt" } as never,
+			contextValue,
+		);
+
+		expect(messageEndEmit).toHaveBeenCalledWith({
+			event: { message: "message" },
+		});
+		expect(beforeAgentStartEmit).toHaveBeenCalledWith({
+			event: { prompt: "prompt" },
+			context: contextValue,
+			session,
+			messages: [],
+		});
+	});
+});
 
 describe("session shutdown", () => {
 	it("wires Todoist merge handling before Exit Protocol prompts", async () => {

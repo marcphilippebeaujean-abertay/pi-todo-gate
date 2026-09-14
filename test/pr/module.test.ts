@@ -363,6 +363,57 @@ describe("PR module ownership", () => {
 		expect(registerTool).toHaveBeenCalledOnce();
 	});
 
+	it("discovers PRs from shared message-end events", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const exec = vi.fn(async () => ({
+			stdout: JSON.stringify({ url: "https://github.com/o/r/pull/42" }),
+			stderr: "",
+			code: 0,
+		}));
+		createTestPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		await events.messageEndEvent.emit({
+			event: { message: "https://github.com/o/r/pull/42" } as never,
+		});
+
+		expect(updates).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					moduleId: "pr",
+					moduleState: expect.objectContaining({
+						prUrl: "https://github.com/o/r/pull/42",
+					}),
+				}),
+			]),
+		);
+	});
+
 	it("emits remote origin through module state and shared Git state", async () => {
 		const events = createEventHandler();
 		const updates: unknown[] = [];
