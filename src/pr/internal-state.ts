@@ -17,13 +17,8 @@ export interface PrCommandOptions {
 	readonly eventHandler: EventHandler;
 	readonly exec?: Exec;
 	readonly getSession: () => PrSession | null;
-	readonly getLifecycleEpoch?: () => number;
 	readonly getPrState: () => PrState;
-	readonly getOperationGeneration: () => number;
-	readonly isCurrentOperation: (
-		session: PrSession,
-		generation: number,
-	) => boolean;
+	readonly isCurrentSession: (session: PrSession, sessionId: string) => boolean;
 	readonly enqueueSessionOperation: <T>(
 		session: PrSession,
 		operation: () => Promise<T>,
@@ -53,7 +48,6 @@ export interface PrModuleOptions {
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getLifecycleEpoch?: () => number;
 	exec?: Exec;
 	/** @deprecated pass exec directly. */
 	dependencies?: PrModuleDependencies;
@@ -68,12 +62,10 @@ export interface PrSessionIdentity {
 	workRevision: number;
 	prUrl: string | undefined;
 	discoveryDisabled: boolean;
-	operationGeneration: number;
+	sessionId: string;
 }
 
 export interface OriginRequest {
-	operationGeneration: number;
-	lifecycleEpoch: number;
 	sessionId: string | null;
 	session?: PrSession;
 	identity?: PrSessionIdentity;

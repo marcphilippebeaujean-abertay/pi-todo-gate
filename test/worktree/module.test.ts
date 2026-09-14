@@ -142,7 +142,7 @@ describe("worktree event actions", () => {
 
 		await events.sessionActivatedEvent.emit({
 			context: context(),
-			lifecycleEpoch: 0,
+			sessionId: "session",
 		});
 
 		expect(module.getWorktreeInfo()).toEqual({

@@ -46,7 +46,7 @@ function createRuntime(
 		hasPendingHandoffContext: false,
 		hasPerformedAnyGitMutations: false,
 		workRevision: 0,
-		operationGeneration: 0,
+		sessionId: "session",
 		operationQueue: Promise.resolve(),
 	} as unknown as SessionRecord;
 	const activeSession = { current: session };
@@ -59,10 +59,8 @@ function createRuntime(
 		exec,
 		getSession: () => activeSession.current,
 		getPrState: () => sessionState.moduleState.pr,
-		getOperationGeneration: () =>
-			activeSession.current?.operationGeneration ?? 0,
-		isCurrentOperation: (current: SessionRecord, generation: number) =>
-			current.operationGeneration === generation,
+		isCurrentSession: (current: SessionRecord, sessionId: string) =>
+			current.sessionId === sessionId,
 		enqueueSessionOperation: <T>(
 			_session: SessionRecord,
 			operation: () => Promise<T>,
@@ -142,7 +140,6 @@ describe("merge protocol command", () => {
 							prUrl: string;
 							taskMarkedAsCompleted: boolean;
 							sessionId: string;
-							lifecycleEpoch: number;
 						},
 					]
 				>;
@@ -152,7 +149,6 @@ describe("merge protocol command", () => {
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 	});
 

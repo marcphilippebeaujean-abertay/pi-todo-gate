@@ -15,7 +15,7 @@ function session(): SessionRecord {
 		hasPendingHandoffContext: false,
 		hasPerformedAnyGitMutations: false,
 		workRevision: 0,
-		operationGeneration: 0,
+		sessionId: "session-1",
 		operationQueue: Promise.resolve(),
 	};
 }

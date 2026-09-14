@@ -55,7 +55,6 @@ function recordValue(value: unknown): Record<string, unknown> | null {
 }
 
 class TodoistModuleImpl implements TodoistModule {
-	private readonly getLifecycleEpoch: () => number;
 	private readonly publishState;
 	private currentSession: TodoistSession | null = null;
 	private currentProjectRef = "";
@@ -68,49 +67,65 @@ class TodoistModuleImpl implements TodoistModule {
 	private registered = false;
 
 	constructor(private readonly options: TodoistModuleOptions) {
-		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.publishState = createModuleStatePublisher(
 			this.options.eventHandler,
 			C.module.todoist,
 		);
+		this.subscribeSessionLifecycle();
+		this.subscribeBeforeAgentStart();
+		this.register();
+	}
+
+	private subscribeSessionLifecycle(): void {
 		this.options.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session, lifecycleEpoch }) => {
-				const hasSession = session !== undefined;
-				if (!hasSession) return;
+			({ context, session, sessionId }) => {
+				const hasNoSession = session === undefined;
+				if (hasNoSession) return;
 				const isCurrentContext = session.context === context;
 				if (!isCurrentContext) return;
-				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
-				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
-				if (!isCurrentEpoch) return;
-				return this.activateSession(session, activationEpoch);
+				const currentSessionId = sessionId ?? session.sessionId;
+				const activeSessionId =
+					this.options.sessionState.session.activeSessionId;
+				const isDifferentActiveSession =
+					activeSessionId !== null && activeSessionId !== currentSessionId;
+				if (isDifferentActiveSession) return;
+				return this.activateSession(session, currentSessionId);
 			},
 		);
-		this.options.eventHandler.sessionResetEvent.subscribe(() => {
-			this.currentSession = null;
-			this.currentProjectRef = "";
-			this.pendingProjects.clear();
-			this.resetTaskClaim();
-		});
-		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() => {
-			this.currentSession = null;
-			this.currentProjectRef = "";
-			this.pendingProjects.clear();
-			this.resetTaskClaim();
-		});
+		this.options.eventHandler.sessionResetEvent.subscribe(() =>
+			this.resetSession(),
+		);
+		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			this.resetSession(),
+		);
+	}
+
+	private subscribeBeforeAgentStart(): void {
 		this.options.eventHandler.beforeAgentStartEvent.subscribe(
-			({ event, session, lifecycleEpoch }) => {
-				const isCurrentSession =
+			({ event, session, sessionId }) => {
+				const currentSessionId = sessionId ?? session.sessionId;
+				const activeSessionId =
+					this.options.sessionState.session.activeSessionId;
+				const hasNoActiveSession = activeSessionId === null;
+				const hasCurrentSessionId = activeSessionId === currentSessionId;
+				const isCurrentContext =
 					this.currentSession?.context === session.context;
-				const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
+				const isCurrentRootSession = hasNoActiveSession || hasCurrentSessionId;
+				const isCurrentSession = isCurrentContext && isCurrentRootSession;
 				const hasTaskRef =
 					this.options.sessionState.moduleState.todoist.taskRef !== undefined;
 				if (!isCurrentSession) return;
-				if (!isCurrentEpoch) return;
 				if (hasTaskRef) return;
-				this.maybeAnalyzeTaskClaim(event.prompt, lifecycleEpoch);
+				this.maybeAnalyzeTaskClaim(event.prompt);
 			},
 		);
-		this.register();
+	}
+
+	private resetSession(): void {
+		this.currentSession = null;
+		this.currentProjectRef = "";
+		this.pendingProjects.clear();
+		this.resetTaskClaim();
 	}
 
 	private async loadProjectMapping(): Promise<TodoistProjectMapping> {
@@ -153,34 +168,36 @@ class TodoistModuleImpl implements TodoistModule {
 
 	private async activateSession(
 		session: import("../shared/session-state.ts").SessionRecord,
-		activationEpoch: number,
+		sessionId: string,
 	): Promise<void> {
 		const hasPendingProject = this.pendingProjects.has(session.context.cwd);
 		const resolved = hasPendingProject
 			? (this.pendingProjects.get(session.context.cwd) ?? null)
 			: await this.resolveConfiguredProject(session.context.cwd);
 		this.pendingProjects.delete(session.context.cwd);
-		const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+		const activeSessionId = this.options.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === sessionId;
+		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
 		const hasResolvedProject = resolved !== null;
-		const canActivate = hasResolvedProject && isCurrentEpoch;
+		const canActivate = hasResolvedProject && isCurrentSession;
 		if (!canActivate) return;
 		this.resetTaskClaim();
 		this.currentSession = session;
 		this.currentProjectRef = resolved.todoistProjectRef;
-		await this.syncSessionState(session, activationEpoch);
+		await this.syncSessionState(session);
 	}
 
-	private async syncSessionState(
-		session: TodoistSession,
-		activationEpoch?: number,
-	): Promise<void> {
-		const hasExplicitEpoch = activationEpoch !== undefined;
-		const epoch = activationEpoch ?? this.getLifecycleEpoch();
-		const isCurrentSession =
-			this.currentSession === session || !hasExplicitEpoch;
-		const isCurrentActivation =
-			isCurrentSession && epoch === this.getLifecycleEpoch();
-		if (!isCurrentActivation) return;
+	private async syncSessionState(session: TodoistSession): Promise<void> {
+		const activeSessionId = this.options.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === session.sessionId;
+		const currentSession = this.currentSession;
+		const hasCurrentSession =
+			currentSession === null || currentSession === session;
+		const hasCurrentRootSession = hasNoActiveSession || hasCurrentSessionId;
+		const isCurrentSession = hasCurrentSession && hasCurrentRootSession;
+		if (!isCurrentSession) return;
 		await this.publishState.publish(
 			this.options.sessionState.moduleState.todoist,
 			{ persist: false },
@@ -229,7 +246,6 @@ class TodoistModuleImpl implements TodoistModule {
 			sessionState,
 			getSession: () => this.currentSession,
 			projectRef: this.currentProjectRef,
-			getLifecycleEpoch: this.getLifecycleEpoch,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
 			exec,
@@ -251,7 +267,7 @@ class TodoistModuleImpl implements TodoistModule {
 				taskRef,
 				snapshot,
 				revision,
-				generation,
+				sessionId,
 			) =>
 				completeMergedTask(
 					operations,
@@ -260,7 +276,7 @@ class TodoistModuleImpl implements TodoistModule {
 					taskRef,
 					snapshot,
 					revision,
-					generation,
+					sessionId,
 				);
 		return operations;
 	}
@@ -276,13 +292,13 @@ class TodoistModuleImpl implements TodoistModule {
 		registerTodoistMergeConsumer(operations);
 	}
 
-	private maybeAnalyzeTaskClaim(prompt: string, lifecycleEpoch: number): void {
+	private maybeAnalyzeTaskClaim(prompt: string): void {
 		const session = this.currentSession;
 		if (session === null) return;
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
-		analyzeTaskClaim(operations, session, prompt, lifecycleEpoch);
+		analyzeTaskClaim(operations, session, prompt);
 	}
 }
 

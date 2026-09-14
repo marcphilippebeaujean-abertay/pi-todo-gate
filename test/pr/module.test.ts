@@ -390,14 +390,14 @@ describe("PR module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		await events.messageEndEvent.emit({
 			event: { message: "https://github.com/o/r/pull/42" } as never,
@@ -441,18 +441,18 @@ describe("PR module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		await events.initialPrDiscoveryEvent.emit({
 			branch: [{ type: "message", text: "https://github.com/o/r/pull/42" }],
-			lifecycleEpoch: 0,
+			sessionId: "session",
 		});
 
 		expect(updates).toEqual(
@@ -488,19 +488,19 @@ describe("PR module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		updates.length = 0;
 		await events.initialPrDiscoveryEvent.emit({
 			branch: [{ type: "message", text: "https://github.com/o/r/pull/42" }],
-			lifecycleEpoch: 0,
+			sessionId: "session",
 		});
 
 		expect(updates).toEqual([]);
@@ -545,7 +545,7 @@ describe("PR module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
@@ -554,7 +554,6 @@ describe("PR module ownership", () => {
 			prUrl: "https://github.com/o/r/pull/42",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({
@@ -570,7 +569,7 @@ describe("PR module ownership", () => {
 		);
 	});
 
-	it("guards merge results by stable session and PR generations", async () => {
+	it("guards merge results by session ID and PR state", async () => {
 		const events = createEventHandler();
 		const sessionState = createSessionState();
 		const session = {
@@ -579,7 +578,7 @@ describe("PR module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 2,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
@@ -629,8 +628,8 @@ describe("PR module ownership", () => {
 				sessionState.moduleState.pr,
 				session,
 				2,
-				0,
-				0,
+				"session",
+				"session",
 				"task",
 				"https://github.com/o/r/pull/42",
 			),
@@ -641,8 +640,8 @@ describe("PR module ownership", () => {
 				sessionState.moduleState.pr,
 				session,
 				2,
-				0,
-				0,
+				"session",
+				"session",
 				"task",
 				"https://github.com/o/r/pull/43",
 			),
@@ -653,8 +652,8 @@ describe("PR module ownership", () => {
 				sessionState.moduleState.pr,
 				session,
 				2,
-				1,
-				0,
+				"other",
+				"session",
 				"task",
 				"https://github.com/o/r/pull/43",
 			),
@@ -669,7 +668,6 @@ describe("PR module ownership", () => {
 			prUrl: "https://github.com/o/r/pull/43",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		expect(updates.at(-1)).toEqual(
 			expect.objectContaining({
@@ -696,7 +694,6 @@ describe("PR module ownership", () => {
 			hasPerformedAnyGitMutations: false,
 			hasUncommittedChanges: false,
 			workRevision: 0,
-			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "old";
@@ -750,7 +747,6 @@ describe("PR module ownership", () => {
 			hasPerformedAnyGitMutations: false,
 			hasUncommittedChanges: false,
 			workRevision: 0,
-			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "old";
@@ -800,7 +796,6 @@ describe("PR module ownership", () => {
 			hasPerformedAnyGitMutations: false,
 			hasUncommittedChanges: false,
 			workRevision: 0,
-			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
@@ -848,7 +843,6 @@ describe("PR module ownership", () => {
 			hasPerformedAnyGitMutations: true,
 			hasUncommittedChanges: false,
 			workRevision: 0,
-			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
@@ -886,15 +880,15 @@ describe("PR module ownership", () => {
 		});
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		const messages: string[] = [];
 		await events.beforeAgentStartEvent.emit({
 			event: { prompt: "prompt" } as never,
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 			messages,
 		});
 
@@ -908,7 +902,6 @@ describe("PR module ownership", () => {
 
 	it("ignores stale before-agent prompt contributions after session changes", async () => {
 		const events = createEventHandler();
-		const lifecycleEpoch = { value: 1 };
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "old";
 		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
@@ -917,7 +910,7 @@ describe("PR module ownership", () => {
 			context: oldContext,
 			hasPerformedAnyGitMutations: true,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "old",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		const newContext = { cwd: "/new", hasUI: false } as never;
@@ -925,7 +918,7 @@ describe("PR module ownership", () => {
 			context: newContext,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "new",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		let releaseInspection!: () => void;
@@ -946,28 +939,27 @@ describe("PR module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getLifecycleEpoch: () => lifecycleEpoch.value,
 			dependencies: { exec },
 		});
 		await events.sessionActivatedEvent.emit({
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 		});
 		const messages: string[] = [];
 		const beforeAgent = events.beforeAgentStartEvent.emit({
 			event: { prompt: "prompt" } as never,
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 			messages,
 		});
 		await Promise.resolve();
-		lifecycleEpoch.value = 2;
+		sessionState.session.activeSessionId = "new";
 		await events.sessionActivatedEvent.emit({
 			context: newContext,
+			sessionId: "new",
 			session: newSession,
-			lifecycleEpoch: 2,
 		});
 		releaseInspection();
 		await beforeAgent;

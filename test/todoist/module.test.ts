@@ -92,41 +92,43 @@ describe("Todoist module ownership", () => {
 
 	it("does not let stale activation reset newer claim state", async () => {
 		const events = createSharedEvents();
-		const lifecycleEpoch = { value: 1 };
+		const sessionState = createSessionState();
 		let releaseOldActivation!: () => void;
 		const oldActivationBlocked = new Promise<void>((resolve) => {
 			releaseOldActivation = resolve;
 		});
 		events.sessionActivatedEvent.subscribe(
-			async ({ lifecycleEpoch: epoch }) => {
-				if (epoch === 1) await oldActivationBlocked;
+			async ({ sessionId: activationId }) => {
+				if (activationId === "old") await oldActivationBlocked;
 			},
 		);
 		const module = createTodoistModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
-			sessionState: createSessionState(),
-			getLifecycleEpoch: () => lifecycleEpoch.value,
+			sessionState,
 		});
 		const oldContext = { cwd: "/old" } as never;
 		const newContext = { cwd: "/new" } as never;
 		const oldSession = {
 			context: oldContext,
+			sessionId: "old",
 		} as unknown as TodoistSession;
 		const newSession = {
 			context: newContext,
+			sessionId: "new",
 		} as unknown as TodoistSession;
+		sessionState.session.activeSessionId = "old";
 		const oldActivation = events.sessionActivatedEvent.emit({
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 		});
 		await Promise.resolve();
-		lifecycleEpoch.value = 2;
+		sessionState.session.activeSessionId = "new";
 		await events.sessionActivatedEvent.emit({
 			context: newContext,
+			sessionId: "new",
 			session: newSession,
-			lifecycleEpoch: 2,
 		});
 		module.taskClaim.pending = true;
 		module.taskClaim.session = newSession;
@@ -158,9 +160,8 @@ describe("Todoist module ownership", () => {
 		});
 	});
 
-	it("ignores before-agent events from stale lifecycle epochs", async () => {
+	it("ignores before-agent events from stale session IDs", async () => {
 		const events = createSharedEvents();
-		const lifecycleEpoch = { value: 1 };
 		const worker = vi.fn(async () => ({
 			sessionId: "session",
 			action: "error" as const,
@@ -170,32 +171,38 @@ describe("Todoist module ownership", () => {
 		const sessionState = createSessionState();
 		const oldContext = { cwd: "/old", hasUI: false } as never;
 		const newContext = { cwd: "/new", hasUI: false } as never;
-		const oldSession = { context: oldContext } as unknown as TodoistSession;
-		const newSession = { context: newContext } as unknown as TodoistSession;
+		const oldSession = {
+			context: oldContext,
+			sessionId: "old",
+		} as unknown as TodoistSession;
+		const newSession = {
+			context: newContext,
+			sessionId: "new",
+		} as unknown as TodoistSession;
+		sessionState.session.activeSessionId = "old";
 		createTodoistModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getLifecycleEpoch: () => lifecycleEpoch.value,
 			taskClaimWorker: worker,
 		});
 
 		await events.sessionActivatedEvent.emit({
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 		});
-		lifecycleEpoch.value = 2;
+		sessionState.session.activeSessionId = "new";
 		await events.sessionActivatedEvent.emit({
 			context: newContext,
+			sessionId: "new",
 			session: newSession,
-			lifecycleEpoch: 2,
 		});
 		await events.beforeAgentStartEvent.emit({
 			event: { prompt: "stale prompt" } as never,
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 			messages: [],
 		});
 
@@ -204,14 +211,20 @@ describe("Todoist module ownership", () => {
 
 	it("does not start stale worker after session changes during inspection", async () => {
 		const events = createSharedEvents();
-		const lifecycleEpoch = { value: 1 };
 		const sessionState = createSessionState();
 		const oldContext = { cwd: "/old", hasUI: false } as never;
 		const newContext = { cwd: "/new", hasUI: false } as never;
-		const oldSession = { context: oldContext } as unknown as TodoistSession;
-		const newSession = { context: newContext } as unknown as TodoistSession;
+		const oldSession = {
+			context: oldContext,
+			sessionId: "old",
+		} as unknown as TodoistSession;
+		const newSession = {
+			context: newContext,
+			sessionId: "new",
+		} as unknown as TodoistSession;
+		sessionState.session.activeSessionId = "old";
 		const worker = vi.fn(async () => ({
-			sessionId: "session",
+			sessionId: "old",
 			action: "error" as const,
 			taskData: null,
 			error: "not a task" as string | null,
@@ -235,29 +248,28 @@ describe("Todoist module ownership", () => {
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
-			getLifecycleEpoch: () => lifecycleEpoch.value,
 			exec,
 			taskClaimWorker: worker,
 		});
 
 		await events.sessionActivatedEvent.emit({
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 		});
 		const beforeAgent = events.beforeAgentStartEvent.emit({
 			event: { prompt: "stale prompt" } as never,
 			context: oldContext,
+			sessionId: "old",
 			session: oldSession,
-			lifecycleEpoch: 1,
 			messages: [],
 		});
 		await inspectionStarted;
-		lifecycleEpoch.value = 2;
+		sessionState.session.activeSessionId = "new";
 		await events.sessionActivatedEvent.emit({
 			context: newContext,
+			sessionId: "new",
 			session: newSession,
-			lifecycleEpoch: 2,
 		});
 		releaseInspection();
 		await beforeAgent;
@@ -275,7 +287,7 @@ describe("Todoist module ownership", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as TodoistSession;
 		const worker = vi.fn(async (input: { sessionId: string }) => ({
@@ -294,14 +306,14 @@ describe("Todoist module ownership", () => {
 
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		await events.beforeAgentStartEvent.emit({
 			event: { prompt: "claim this task" } as never,
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 			messages: [],
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -379,19 +391,18 @@ describe("Todoist module integration", () => {
 			},
 			project: { codingRoot: "/repo" },
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as TodoistSession;
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		await events.prMergedEvent.emit({
 			prUrl: sessionState.moduleState.pr.prUrl,
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await promptQueue.drain();
 		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
@@ -410,7 +421,7 @@ describe("Todoist task identity", () => {
 			context: { cwd: "/repo", hasUI: false },
 			project: { codingRoot: "/repo" },
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as TodoistSession;
 		registerModuleStateConsumer(events, sessionState, () => true);
@@ -421,13 +432,12 @@ describe("Todoist task identity", () => {
 		});
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		const operations = {
 			sessionState,
 			getSession: () => session,
-			getLifecycleEpoch: () => 0,
 			dependencies: {
 				createTodoistClient: () => ({
 					completeTask: async (_ref: string, isCurrent: () => boolean) => {
@@ -453,7 +463,7 @@ describe("Todoist task identity", () => {
 			"task-a",
 			{ taskRef: "task-a", prUrl: sessionState.moduleState.pr.prUrl },
 			0,
-			0,
+			"session",
 		);
 
 		expect(result).toBe("failed");
@@ -466,6 +476,7 @@ describe("Todoist task identity", () => {
 		const session = {
 			context: { cwd: "/repo" },
 			project: { codingRoot: "/repo" },
+			sessionId: "session",
 			workRevision: 0,
 		} as unknown as TodoistSession;
 		registerModuleStateConsumer(events, sessionState, () => true);
@@ -476,8 +487,8 @@ describe("Todoist task identity", () => {
 		});
 		await events.sessionActivatedEvent.emit({
 			context: session.context,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		sessionState.moduleState.todoist = { taskRef: "task-a" };
 

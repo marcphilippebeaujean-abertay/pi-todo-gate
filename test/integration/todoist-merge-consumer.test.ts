@@ -50,7 +50,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 			},
 		},
 		workRevision: 0,
-		operationGeneration: 0,
+		sessionId: "session",
 		operationQueue: Promise.resolve(),
 		...sessionOverrides,
 	} as unknown as SessionRecord;
@@ -74,11 +74,11 @@ function setup(overrides: Record<string, unknown> = {}) {
 			taskRef: string,
 			_stateSnapshot: TodoistCompletionSnapshot,
 			_workRevision: number,
-			generation: number,
+			sessionId: string,
 		) => {
 			const isCurrent = () =>
 				runtime.getSession() === targetSession &&
-				targetSession.operationGeneration === generation;
+				targetSession.sessionId === sessionId;
 			if (!isCurrent()) return "failed" as const;
 			try {
 				await completeTask(taskRef, isCurrent);
@@ -99,8 +99,7 @@ async function emit(runtime: TodoistOperations) {
 	const payload = {
 		prUrl: PR_URL,
 		taskMarkedAsCompleted: false,
-		sessionId: runtime.sessionState.session.activeSessionId ?? "",
-		lifecycleEpoch: runtime.getLifecycleEpoch?.() ?? 0,
+		sessionId: runtime.getSession()?.sessionId ?? "",
 	};
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
@@ -130,12 +129,8 @@ async function runMergeCommand(
 		eventHandler: runtime.eventHandler,
 		exec: runtime.dependencies.exec,
 		getSession: runtime.getSession,
-		getLifecycleEpoch: () => 0,
 		getPrState: () => runtime.sessionState.moduleState.pr,
-		getOperationGeneration: () =>
-			runtime.getSession()?.operationGeneration ?? 0,
-		isCurrentOperation: (session, generation) =>
-			session.operationGeneration === generation,
+		isCurrentSession: (session, sessionId) => session.sessionId === sessionId,
 		enqueueSessionOperation: (_session, operation) =>
 			runtime.promptQueue
 				.enqueue(operation)
@@ -149,7 +144,6 @@ describe("Todoist merge consumer", () => {
 	it("ignores merge event after subscriber yields into newer session", async () => {
 		const events = createSharedEvents();
 		const queue = { enqueue: vi.fn(() => Promise.resolve(undefined)) };
-		const lifecycleEpoch = { value: 1 };
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session-a";
 		const sessionA = {} as SessionRecord;
@@ -164,7 +158,6 @@ describe("Todoist merge consumer", () => {
 			sessionState,
 			eventHandler: events,
 			getSession: () => activeSession,
-			getLifecycleEpoch: () => lifecycleEpoch.value,
 			promptQueue: queue as unknown as PromptQueue,
 		} as unknown as TodoistOperations);
 
@@ -172,11 +165,9 @@ describe("Todoist merge consumer", () => {
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
 			sessionId: "session-a",
-			lifecycleEpoch: 1,
 		});
 		await Promise.resolve();
 		activeSession = sessionB;
-		lifecycleEpoch.value = 2;
 		releaseSubscriber();
 		await delivery;
 
@@ -295,7 +286,7 @@ describe("Todoist merge consumer", () => {
 	it("does not complete a task after operation invalidation", async () => {
 		const setupResult = setup();
 		setupResult.confirm.mockImplementation(async () => {
-			setupResult.session.operationGeneration += 1;
+			setupResult.session.sessionId = "new-session";
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
@@ -332,7 +323,7 @@ describe("Todoist merge consumer", () => {
 		const session = {
 			context,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as SessionRecord;
 
@@ -355,11 +346,11 @@ describe("Todoist merge consumer", () => {
 				taskRef: string,
 				_stateSnapshot: TodoistCompletionSnapshot,
 				_workRevision: number,
-				generation: number,
+				sessionId: string,
 			) => {
 				const isCurrent = () =>
 					runtime.getSession() === targetSession &&
-					targetSession.operationGeneration === generation;
+					targetSession.sessionId === sessionId;
 				if (!isCurrent()) return "failed" as const;
 				await completeTask(taskRef, isCurrent);
 				return isCurrent() ? ("completed" as const) : ("failed" as const);

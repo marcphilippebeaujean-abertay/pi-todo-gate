@@ -11,7 +11,7 @@ import { createExtensionState } from "../src/main.ts";
 import { type EventHandler, event } from "../src/shared/events.ts";
 import { createSessionState } from "../src/state.ts";
 
-function context(cwd: string, branch: unknown[] = []) {
+function context(cwd: string, branch: unknown[] = [], sessionId = "session") {
 	return {
 		cwd,
 		mode: "print",
@@ -19,7 +19,7 @@ function context(cwd: string, branch: unknown[] = []) {
 		ui: { setFooter: vi.fn(), theme: { fg: vi.fn() } },
 		sessionManager: {
 			getBranch: () => branch,
-			getSessionId: () => "session",
+			getSessionId: () => sessionId,
 		},
 	} as never;
 }
@@ -67,7 +67,7 @@ describe("shared event adaptation", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		};
 		root.session = session as never;
@@ -91,7 +91,7 @@ describe("shared event adaptation", () => {
 			event: { prompt: "prompt" },
 			context: contextValue,
 			session,
-			lifecycleEpoch: 0,
+			sessionId: "session",
 			messages: [],
 		});
 	});
@@ -128,7 +128,7 @@ describe("session shutdown", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../src/pr/internal-state.ts").PrSession;
 		root.session = session;
@@ -138,14 +138,13 @@ describe("session shutdown", () => {
 		root.sessionState.moduleState.todoist.taskName = "Task";
 		await root.eventHandler.sessionActivatedEvent.emit({
 			context: activationContext,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: 0,
 		});
 		await root.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/42",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 
 		expect(enqueue).toHaveBeenCalledTimes(2);
@@ -179,7 +178,6 @@ describe("session shutdown", () => {
 		const runtime = {
 			eventHandler,
 			publisher: new RootEventPublisher(eventHandler),
-			lifecycleEpoch: { value: 0 },
 			promptQueue: { reset: vi.fn() },
 			sessionState: {
 				...createSessionState(),
@@ -444,15 +442,15 @@ describe("session shutdown", () => {
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
-			operationGeneration: 0,
+			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../src/pr/internal-state.ts").PrSession;
 		root.session = session;
 		root.sessionState.session.activeSessionId = "session";
 		const activation = root.eventHandler.sessionActivatedEvent.emit({
 			context: activationContext,
+			sessionId: "session",
 			session,
-			lifecycleEpoch: root.lifecycleEpoch.value,
 		});
 		await started;
 		handleSessionShutdown(root);
@@ -485,7 +483,7 @@ describe("session shutdown", () => {
 		const second = handleSessionStart(
 			root,
 			{ type: "session_start" } as never,
-			context("/repo"),
+			context("/repo", [], "new-session"),
 		);
 		releaseFirst({ projects: { "/repo": "project" } });
 		await Promise.all([first, second]);

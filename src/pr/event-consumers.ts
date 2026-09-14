@@ -32,20 +32,19 @@ export function isCurrentMerge(
 	prState: PrState,
 	session: PrSession,
 	workRevision: number,
-	operationGeneration: number,
-	currentOperationGeneration: number,
+	sessionId: string,
+	currentSessionId: string,
 	taskRef: string | undefined,
 	prUrl: string,
 ): boolean {
 	const isActive = sessionState.session.activeSessionId !== null;
 	const hasSameRevision = session.workRevision === workRevision;
-	const hasSamePrGeneration =
-		operationGeneration === currentOperationGeneration;
+	const hasSameSession = sessionId === currentSessionId;
 	const hasSameTask = sessionState.moduleState.todoist.taskRef === taskRef;
 	const hasSamePr = prState.prUrl === prUrl;
 	const sameMergeIdentity = hasSameTask && hasSamePr;
-	const sameOperation = hasSameRevision && hasSamePrGeneration;
-	const identityChecks = [isActive, sameOperation, sameMergeIdentity];
+	const sameSessionAndRevision = hasSameRevision && hasSameSession;
+	const identityChecks = [isActive, sameSessionAndRevision, sameMergeIdentity];
 	return identityChecks.every(Boolean);
 }
 
@@ -56,8 +55,8 @@ async function emitCurrentMerge(
 	session: PrSession,
 	context: ExtensionContext,
 	workRevision: number,
-	operationGeneration: number,
-	currentOperationGeneration: number,
+	sessionId: string,
+	currentSessionId: string,
 	taskRef: string | undefined,
 	prUrl: string,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -69,8 +68,8 @@ async function emitCurrentMerge(
 		prState,
 		session,
 		workRevision,
-		operationGeneration,
-		currentOperationGeneration,
+		sessionId,
+		currentSessionId,
 		taskRef,
 		prUrl,
 	);
@@ -81,8 +80,8 @@ export async function handlePrToolResult(
 	getSession: () => PrSession | null,
 	sessionState: SessionState,
 	prState: PrState,
-	operationGeneration: number,
-	currentOperationGeneration: number,
+	sessionId: string,
+	currentSessionId: string,
 	event: ToolResultEvent,
 	ctx: ExtensionContext,
 	emitMerged: (prUrl: string) => Promise<void>,
@@ -116,8 +115,8 @@ export async function handlePrToolResult(
 		session,
 		ctx,
 		session.workRevision,
-		operationGeneration,
-		currentOperationGeneration,
+		sessionId,
+		currentSessionId,
 		taskRef,
 		prUrl,
 		emitMerged,

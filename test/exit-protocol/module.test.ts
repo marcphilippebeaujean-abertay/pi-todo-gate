@@ -160,7 +160,7 @@ describe("exit protocol presenter", () => {
 
 		await events.sessionActivatedEvent.emit({
 			context: context(),
-			lifecycleEpoch: 0,
+			sessionId: "session",
 		});
 		await events.sessionDeactivatedEvent.emit(undefined);
 
@@ -193,7 +193,6 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -216,7 +215,6 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 
@@ -239,7 +237,6 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 
@@ -268,7 +265,6 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await Promise.resolve();
 		queue.reset();
@@ -301,7 +297,6 @@ describe("exit protocol presenter", () => {
 			prUrl: "pr",
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
-			lifecycleEpoch: 0,
 		});
 		await queue.drain();
 

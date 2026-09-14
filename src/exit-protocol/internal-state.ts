@@ -25,7 +25,6 @@ export interface ExitProtocolModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getLifecycleEpoch?: () => number;
 	worktree?: WorktreeCleanup;
 }
 

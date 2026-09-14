@@ -15,10 +15,8 @@ import type {
 export class ExitProtocolConsumer {
 	private context: ExtensionContext | null = null;
 	private sessionId: string | null = null;
-	private lifecycleEpoch = 0;
 	private readonly promptQueue: PromptQueue;
 	private readonly eventHandler: EventHandler;
-	private readonly getLifecycleEpoch: () => number;
 	private readonly sessionState: ExitProtocolModuleOptions["sessionState"];
 	private readonly worktree: WorktreeCleanup | undefined;
 	private request: ExitRequest | null = null;
@@ -26,19 +24,14 @@ export class ExitProtocolConsumer {
 	constructor(options: ExitProtocolModuleOptions) {
 		this.promptQueue = options.promptQueue;
 		this.eventHandler = options.eventHandler;
-		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.sessionState = options.sessionState;
 		this.worktree = options.worktree;
 		this.eventHandler.prMergedEvent.subscribe(this.onPrMerged.bind(this));
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, lifecycleEpoch }) => {
-				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
-				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
-				if (!isCurrentEpoch) return;
+			({ context, sessionId }) => {
 				this.sessionStart(
 					context,
-					activationEpoch,
-					this.sessionState.session.activeSessionId ?? undefined,
+					sessionId ?? this.sessionState.session.activeSessionId ?? "",
 				);
 			},
 		);
@@ -47,20 +40,16 @@ export class ExitProtocolConsumer {
 		);
 	}
 
-	sessionStart(
-		context: ExtensionContext,
-		activationEpoch?: number,
-		sessionId?: string,
-	): void {
-		const epoch = activationEpoch ?? this.getLifecycleEpoch();
-		const isCurrentEpoch = epoch === this.getLifecycleEpoch();
-		if (!isCurrentEpoch) return;
+	sessionStart(context: ExtensionContext, sessionId?: string): void {
+		const session = this.sessionState.session;
+		const activeSessionId = session.activeSessionId;
+		const currentSessionId = sessionId ?? activeSessionId ?? "";
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === currentSessionId;
+		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
+		if (!isCurrentSession) return;
 		this.context = context;
-		this.sessionId = sessionId ?? null;
-		this.lifecycleEpoch = epoch;
-		const isCurrentActivation =
-			this.context === context && epoch === this.getLifecycleEpoch();
-		if (!isCurrentActivation) return;
+		this.sessionId = currentSessionId || null;
 		void publishExitProtocolState(this.eventHandler, true);
 	}
 
@@ -71,25 +60,32 @@ export class ExitProtocolConsumer {
 		void publishExitProtocolState(this.eventHandler, false);
 	}
 
+	private isCurrentSession(
+		context: ExtensionContext,
+		sessionId: string,
+	): boolean {
+		const isCurrentContext = this.context === context;
+		const rootSessionId = this.sessionState.session.activeSessionId;
+		const hasNoRootSession = rootSessionId === null;
+		const hasMatchingSession =
+			this.sessionId === sessionId && rootSessionId === sessionId;
+		const isCurrentId = hasNoRootSession || hasMatchingSession;
+		return isCurrentContext && isCurrentId;
+	}
+
 	private onPrMerged(event: PrMergedEvent): void {
 		const context = this.context;
 		if (context === null) return;
-		const activeSessionId = this.sessionId;
-		const isCurrentSession =
-			activeSessionId === null || activeSessionId === event.sessionId;
-		const isCurrentEpoch = event.lifecycleEpoch === this.lifecycleEpoch;
-		const canEnqueue = isCurrentSession && isCurrentEpoch;
-		if (!canEnqueue) return;
+		const sessionId = event.sessionId;
+		const isCurrentSession = this.isCurrentSession(context, sessionId);
+		if (!isCurrentSession) return;
 		const request: ExitRequest = createExitRequest();
 		this.request = request;
 		addWorktreeExitAction(request, this.worktree);
 		const currentRequest = this.request;
 		if (currentRequest === null) return;
-		enqueueExitActions(
-			this.promptQueue,
-			context,
-			currentRequest,
-			() => this.context === context,
+		enqueueExitActions(this.promptQueue, context, currentRequest, () =>
+			this.isCurrentSession(context, sessionId),
 		);
 	}
 }

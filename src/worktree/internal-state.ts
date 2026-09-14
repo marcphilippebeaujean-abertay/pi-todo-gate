@@ -22,7 +22,6 @@ export interface WorktreeModuleDependencies {
 export interface WorktreeModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getLifecycleEpoch?: () => number;
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
 	/** @deprecated pass module dependencies directly. */

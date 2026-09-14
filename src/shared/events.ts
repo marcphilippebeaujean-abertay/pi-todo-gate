@@ -97,15 +97,15 @@ export interface SessionStateChangedEvent {
 export type SessionResetEvent = undefined;
 export interface SessionActivatedEvent {
 	context: ExtensionContext;
+	sessionId: string;
 	previousSessionFile?: string;
 	session?: SessionRecord;
-	lifecycleEpoch?: number;
 }
 export type SessionDeactivatedEvent = undefined;
 
 export interface InitialPrDiscoveryEvent {
 	branch: readonly unknown[];
-	lifecycleEpoch: number;
+	sessionId: string;
 }
 
 export interface MessageEndEventPayload {
@@ -116,7 +116,7 @@ export interface BeforeAgentStartEventPayload {
 	event: BeforeAgentStartEvent;
 	context: ExtensionContext;
 	session: SessionRecord;
-	lifecycleEpoch: number;
+	sessionId: string;
 	messages: string[];
 }
 
@@ -124,7 +124,6 @@ export interface PrMergedEvent {
 	prUrl: string | null;
 	taskMarkedAsCompleted: boolean;
 	sessionId: string;
-	lifecycleEpoch: number;
 }
 
 export interface PiToolRegistrationsBecameAvailableEvent {

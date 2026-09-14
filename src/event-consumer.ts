@@ -45,7 +45,6 @@ export interface RootComposition {
 	exitProtocol: ExitProtocolModule;
 	session: SessionRecord | null;
 	publisher: RootEventPublisher;
-	lifecycleEpoch: { value: number };
 	stateUpdateEpoch: { value: number };
 	stateUpdatesDrained: () => Promise<void>;
 	stateDescriptors: ModuleStateDescriptors;
@@ -72,9 +71,6 @@ export function resetSessionState(
 }
 
 function deactivate(root: Root): void {
-	const session = root.session;
-	const hasSession = session !== null && session !== undefined;
-	if (hasSession) session.operationGeneration += 1;
 	root.session = null;
 	resetSessionState(root.sessionState, root.stateUpdateEpoch);
 	void root.publisher.publishSessionDeactivated();
@@ -127,13 +123,17 @@ function manageActiveTools(root: Root, remove?: boolean): void {
 	root.pi.setActiveTools([...active, C.tool.state]);
 }
 
-function isCurrentEpoch(root: Root, epoch: number): boolean {
-	return root.lifecycleEpoch.value === epoch;
+export function getActiveSessionId(root: Root): string | null {
+	return root.sessionState.session.activeSessionId;
+}
+
+export function isCurrentSession(root: Root, sessionId: string): boolean {
+	return getActiveSessionId(root) === sessionId;
 }
 
 async function activateConfigured(
 	root: Root,
-	epoch: number,
+	sessionId: string,
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 	project: SessionProject,
@@ -169,7 +169,7 @@ async function activateConfigured(
 		hasPendingHandoffContext,
 		hasPerformedAnyGitMutations: false,
 		workRevision: 0,
-		operationGeneration: 0,
+		sessionId,
 		operationQueue: Promise.resolve(),
 	};
 	root.session = session;
@@ -179,33 +179,33 @@ async function activateConfigured(
 			? event.previousSessionFile
 			: undefined,
 		session,
-		lifecycleEpoch: epoch,
+		sessionId,
 	});
-	if (!isCurrentEpoch(root, epoch)) return null;
+	if (!isCurrentSession(root, sessionId)) return null;
 	return { session, branch, hasPendingHandoffContext };
 }
 
 async function persistInheritedState(
 	root: Root,
-	epoch: number,
+	sessionId: string,
 	hasPendingHandoffContext: boolean,
 ): Promise<boolean> {
 	if (!hasPendingHandoffContext) return true;
-	if (!isCurrentEpoch(root, epoch)) return false;
+	if (!isCurrentSession(root, sessionId)) return false;
 	await root.persistSessionState(root.sessionState);
 	await root.stateUpdatesDrained();
-	return isCurrentEpoch(root, epoch);
+	return isCurrentSession(root, sessionId);
 }
 
 async function publishInitialPrDiscovery(
 	root: Root,
-	epoch: number,
+	sessionId: string,
 	branch: readonly unknown[],
 ): Promise<void> {
-	if (!isCurrentEpoch(root, epoch)) return;
+	if (!isCurrentSession(root, sessionId)) return;
 	await root.eventHandler.initialPrDiscoveryEvent.emit({
 		branch,
-		lifecycleEpoch: epoch,
+		sessionId,
 	});
 }
 
@@ -214,33 +214,39 @@ export async function handleSessionStart(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	const epoch = root.lifecycleEpoch.value + 1;
-	root.lifecycleEpoch.value = epoch;
+	const sessionId = ctx.sessionManager.getSessionId();
 	deactivateUnconfigured(root);
+	root.sessionState.session.activeSessionId = sessionId;
 	await root.publisher.publishSessionReset();
-	if (!isCurrentEpoch(root, epoch)) return;
+	if (!isCurrentSession(root, sessionId)) return;
 	const project = await root.todoist.resolveSessionProject(ctx.cwd);
-	if (!isCurrentEpoch(root, epoch)) return;
+	if (!isCurrentSession(root, sessionId)) return;
 	if (project === null) {
 		resetSessionState(root.sessionState, root.stateUpdateEpoch);
 		manageActiveTools(root, true);
 		return;
 	}
-	const activated = await activateConfigured(root, epoch, event, ctx, project);
-	if (activated === null || !isCurrentEpoch(root, epoch)) return;
+	const activated = await activateConfigured(
+		root,
+		sessionId,
+		event,
+		ctx,
+		project,
+	);
+	if (activated === null || !isCurrentSession(root, sessionId)) return;
 	const { branch, hasPendingHandoffContext } = activated;
 	await root.stateUpdatesDrained();
-	if (!isCurrentEpoch(root, epoch)) return;
+	if (!isCurrentSession(root, sessionId)) return;
 	const inheritedStateReady = await persistInheritedState(
 		root,
-		epoch,
+		sessionId,
 		hasPendingHandoffContext,
 	);
 	if (!inheritedStateReady) return;
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
-	await publishInitialPrDiscovery(root, epoch, branch);
-	if (!isCurrentEpoch(root, epoch)) return;
+	await publishInitialPrDiscovery(root, sessionId, branch);
+	if (!isCurrentSession(root, sessionId)) return;
 }
 
 export async function handleMessageEnd(
@@ -257,7 +263,7 @@ export async function handleBeforeAgentStart(
 ): Promise<BeforeAgentStartResultEvent | undefined> {
 	const session = root.session;
 	if (session === null) return undefined;
-	const lifecycleEpoch = root.lifecycleEpoch.value;
+	const sessionId = session.sessionId;
 	const messages: string[] = [];
 	if (session.hasPendingHandoffContext) {
 		const todoistState = root.sessionState.moduleState.todoist;
@@ -271,7 +277,7 @@ export async function handleBeforeAgentStart(
 		event,
 		context: ctx,
 		session,
-		lifecycleEpoch,
+		sessionId,
 		messages,
 	});
 	if (messages.length === 0) return undefined;
@@ -285,7 +291,6 @@ export async function handleBeforeAgentStart(
 }
 
 export function handleSessionShutdown(root: Root): void {
-	root.lifecycleEpoch.value += 1;
 	deactivate(root);
 }
 

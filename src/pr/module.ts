@@ -61,10 +61,8 @@ class PrModuleImpl {
 	private readonly sessionState: SessionState;
 	private currentSession: PrSession | null = null;
 	private readonly dependencies: PrModuleDependencies;
-	private readonly getLifecycleEpoch: () => number;
 	private registrationsAvailable = false;
 	private state: PrState;
-	private generation = -1;
 	private readonly publishState;
 
 	constructor(options: PrModuleOptions) {
@@ -72,7 +70,6 @@ class PrModuleImpl {
 		this.pi = options.pi;
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.dependencies = options.dependencies ?? {
 			exec: options.exec,
 		};
@@ -92,17 +89,22 @@ class PrModuleImpl {
 			this.registerPiTools.bind(this),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			async ({ context, session, lifecycleEpoch }) => {
-				const hasSession = session !== undefined;
-				if (!hasSession) return;
+			async ({ context, session, sessionId }) => {
+				const hasNoSession = session === undefined;
+				if (hasNoSession) return;
+				const currentSessionId = sessionId ?? session.sessionId;
+				const activeSessionId = this.sessionState.session.activeSessionId;
+				const isDifferentActiveSession =
+					activeSessionId !== null && activeSessionId !== currentSessionId;
 				const isCurrentContext = session.context === context;
 				if (!isCurrentContext) return;
-				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
-				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
-				if (!isCurrentEpoch) return;
+				if (isDifferentActiveSession) return;
 				this.currentSession = session;
-				await this.activateSession(session, activationEpoch);
-				const isStaleActivation = this.getLifecycleEpoch() !== activationEpoch;
+				await this.activateSession(session);
+				const latestActiveSessionId = this.sessionState.session.activeSessionId;
+				const isStaleActivation =
+					latestActiveSessionId !== null &&
+					latestActiveSessionId !== currentSessionId;
 				if (isStaleActivation) return;
 				await this.initializeRemoteOrigin(
 					context,
@@ -144,13 +146,8 @@ class PrModuleImpl {
 		});
 	}
 
-	private async activateSession(
-		session: PrSession,
-		activationEpoch?: number,
-	): Promise<void> {
-		const epoch = activationEpoch ?? this.getLifecycleEpoch();
+	private async activateSession(session: PrSession): Promise<void> {
 		this.currentSession = session;
-		this.generation += 1;
 		const nextState = prStateFromSession(
 			this.sessionState.moduleState.pr,
 			this.sessionState.moduleState.pr.discoveryDisabled === true,
@@ -158,15 +155,20 @@ class PrModuleImpl {
 		);
 		this.state = nextState;
 		await this.emitState(nextState, { persist: false });
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === session.sessionId;
+		const hasCurrentSessionIdOrNoActive =
+			hasNoActiveSession || hasCurrentSessionId;
+		const hasCurrentSession = this.currentSession === session;
 		const isCurrentActivation =
-			this.currentSession === session && epoch === this.getLifecycleEpoch();
+			hasCurrentSession && hasCurrentSessionIdOrNoActive;
 		if (!isCurrentActivation) return;
 		this.state = nextState;
 	}
 
 	private deactivateSession(): void {
 		this.currentSession = null;
-		this.generation += 1;
 		this.state = {
 			...this.sessionState.moduleState.pr,
 			discoveryDisabled: true,
@@ -176,7 +178,7 @@ class PrModuleImpl {
 	}
 
 	private async syncSessionState(session: PrSession): Promise<void> {
-		const isCurrent = this.isCurrentSession(session, this.generation);
+		const isCurrent = this.isCurrentSession(session, session.sessionId);
 		if (!isCurrent) return;
 		this.state = prStateFromSession(
 			this.sessionState.moduleState.pr,
@@ -190,10 +192,7 @@ class PrModuleImpl {
 		ctx: ExtensionContext,
 		remoteOrigin?: string,
 	): Promise<string | undefined> {
-		const operationGeneration = this.generation;
 		const request: OriginRequest = {
-			operationGeneration,
-			lifecycleEpoch: this.getLifecycleEpoch(),
 			sessionId: this.sessionState.session.activeSessionId,
 		};
 		const hasRemoteOrigin = remoteOrigin !== undefined;
@@ -237,11 +236,8 @@ class PrModuleImpl {
 		const hasPinnedPr = this.state.prUrl !== undefined;
 		const shouldSkipDiscovery = !canDiscover || hasPinnedPr;
 		if (shouldSkipDiscovery) return;
-		const operationGeneration = this.generation;
-		const remoteOrigin = await this.ensureRemoteOrigin(
-			session,
-			operationGeneration,
-		);
+		const sessionId = session.sessionId;
+		const remoteOrigin = await this.ensureRemoteOrigin(session, sessionId);
 		if (remoteOrigin === null) return;
 		const exec = this.dependencies.exec ?? spawnExec;
 		for (const url of githubPrUrls(text, remoteOrigin)) {
@@ -250,7 +246,7 @@ class PrModuleImpl {
 				url,
 				remoteOrigin,
 				exec,
-				operationGeneration,
+				sessionId,
 			);
 			if (persisted) return;
 		}
@@ -258,20 +254,18 @@ class PrModuleImpl {
 
 	private async ensureRemoteOrigin(
 		session: PrSession,
-		operationGeneration: number,
+		sessionId: string,
 	): Promise<string | null> {
 		const knownOrigin = this.sessionState.gitState.remoteOrigin;
 		if (knownOrigin !== undefined) return knownOrigin;
-		const identity = this.captureSessionIdentity(session, operationGeneration);
+		const identity = this.captureSessionIdentity(session, sessionId);
 		const isCurrentBeforeDiscovery = this.isSameSessionIdentity(
 			session,
 			identity,
 		);
 		if (!isCurrentBeforeDiscovery) return null;
 		const remoteOrigin = await this.discoverRemoteOrigin(session.context, {
-			operationGeneration,
-			lifecycleEpoch: this.getLifecycleEpoch(),
-			sessionId: this.sessionState.session.activeSessionId,
+			sessionId,
 			session,
 			identity,
 		});
@@ -305,12 +299,12 @@ class PrModuleImpl {
 		url: string,
 		remoteOrigin: string,
 		exec: Exec,
-		operationGeneration: number,
+		sessionId: string,
 	): Promise<boolean> {
 		const alreadyTested =
 			this.state.discoveryTestedUrls?.includes(url) === true;
 		if (alreadyTested) return false;
-		const identity = this.captureSessionIdentity(session, operationGeneration);
+		const identity = this.captureSessionIdentity(session, sessionId);
 		const isAvailable = await isGithubPrAvailable(
 			exec,
 			session.context.cwd,
@@ -347,39 +341,40 @@ class PrModuleImpl {
 	private isCurrentBeforeAgentRequest(
 		session: PrSession,
 		ctx: ExtensionContext,
-		epoch: number,
-		generation: number,
+		sessionId: string,
 	): boolean {
 		const isCurrentSession = this.currentSession === session;
-		const isCurrentGeneration = this.generation === generation;
-		const isCurrentEpoch = this.getLifecycleEpoch() === epoch;
+		const isCurrentRootSession =
+			this.sessionState.session.activeSessionId === sessionId;
 		const isCurrentContext = session.context === ctx;
-		if (!isCurrentSession) return false;
-		if (!isCurrentGeneration) return false;
-		if (!isCurrentEpoch) return false;
-		if (!isCurrentContext) return false;
-		return true;
+		const identityChecks = [
+			isCurrentSession,
+			isCurrentRootSession,
+			isCurrentContext,
+		];
+		return identityChecks.every(Boolean);
 	}
 
 	private async appendBeforeAgentPrompt(
 		ctx: ExtensionContext,
 		messages: string[],
 		expectedSession?: PrSession | null,
-		expectedEpoch?: number,
-		expectedGeneration?: number,
+		expectedSessionId?: string,
 	): Promise<void> {
 		const session = expectedSession ?? this.currentSession;
-		const epoch = expectedEpoch ?? this.getLifecycleEpoch();
-		const generation = expectedGeneration ?? this.generation;
-		if (session === null) return;
+		const sessionId = expectedSessionId ?? session?.sessionId;
+		const hasNoSession = session === null;
+		if (hasNoSession) return;
+		const hasNoSessionId = sessionId === undefined;
+		if (hasNoSessionId) return;
 		const isCurrentBeforeInspection = this.isCurrentBeforeAgentRequest(
 			session,
 			ctx,
-			epoch,
-			generation,
+			sessionId,
 		);
-		if (!isCurrentBeforeInspection) return;
-		const discoveredOrigin = await this.ensureRemoteOrigin(session, generation);
+		const shouldSkipInspection = !isCurrentBeforeInspection;
+		if (shouldSkipInspection) return;
+		const discoveredOrigin = await this.ensureRemoteOrigin(session, sessionId);
 		if (discoveredOrigin === null) return;
 		const worktree = await inspectProject(
 			this.dependencies.exec ?? spawnExec,
@@ -388,8 +383,7 @@ class PrModuleImpl {
 		const isCurrentAfterInspection = this.isCurrentBeforeAgentRequest(
 			session,
 			ctx,
-			epoch,
-			generation,
+			sessionId,
 		);
 		if (!isCurrentAfterInspection) return;
 		const branch = worktree.branch;
@@ -402,8 +396,7 @@ class PrModuleImpl {
 			ctx,
 			messages,
 			session,
-			epoch,
-			generation,
+			sessionId,
 			branch,
 			remoteOrigin,
 		);
@@ -413,8 +406,7 @@ class PrModuleImpl {
 		ctx: ExtensionContext,
 		messages: string[],
 		session: PrSession,
-		epoch: number,
-		generation: number,
+		sessionId: string,
 		branch: string,
 		remoteOrigin: string,
 	): Promise<void> {
@@ -427,8 +419,7 @@ class PrModuleImpl {
 		const isCurrentAfterDiscovery = this.isCurrentBeforeAgentRequest(
 			session,
 			ctx,
-			epoch,
-			generation,
+			sessionId,
 		);
 		if (!isCurrentAfterDiscovery) return;
 		switch (result.state.toLowerCase()) {
@@ -445,12 +436,15 @@ class PrModuleImpl {
 
 	private handleInitialPrDiscovery({
 		branch,
-		lifecycleEpoch,
+		sessionId,
 	}: InitialPrDiscoveryEvent): Promise<void> {
-		const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === sessionId;
+		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
 		const hasPinnedPr = this.state.prUrl !== undefined;
 		const isDiscoveryDisabled = this.state.discoveryDisabled;
-		if (!isCurrentEpoch) return Promise.resolve();
+		if (!isCurrentSession) return Promise.resolve();
 		if (hasPinnedPr) return Promise.resolve();
 		if (isDiscoveryDisabled) return Promise.resolve();
 		return this.persistInitialPr(branch);
@@ -463,26 +457,26 @@ class PrModuleImpl {
 	private handleBeforeAgentStart({
 		context,
 		session,
-		lifecycleEpoch,
+		sessionId,
 		messages,
 	}: BeforeAgentStartEventPayload): Promise<void> {
 		const hasPerformedGitMutations = session.hasPerformedAnyGitMutations;
-		const isCurrentSession = this.currentSession === session;
-		const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
+		const currentSessionId = sessionId ?? session.sessionId;
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === currentSessionId;
+		const hasCurrentSessionIdOrNoActive =
+			hasNoActiveSession || hasCurrentSessionId;
+		const hasCurrentSession = this.currentSession === session;
+		const isCurrentSession = hasCurrentSession && hasCurrentSessionIdOrNoActive;
 		if (!hasPerformedGitMutations) return Promise.resolve();
 		if (!isCurrentSession) return Promise.resolve();
-		if (!isCurrentEpoch) return Promise.resolve();
 		return this.appendBeforeAgentPrompt(
 			context,
 			messages,
 			session,
-			lifecycleEpoch,
-			this.generation,
+			currentSessionId,
 		);
-	}
-
-	private isCurrentOperation(_session: PrSession, generation: number): boolean {
-		return this.generation === generation;
 	}
 
 	private enqueueSessionOperation<T>(
@@ -509,10 +503,8 @@ class PrModuleImpl {
 			eventHandler: this.eventHandler,
 			exec: this.dependencies.exec,
 			getSession: () => this.currentSession,
-			getLifecycleEpoch: this.getLifecycleEpoch,
 			getPrState: () => this.state,
-			getOperationGeneration: () => this.generation,
-			isCurrentOperation: this.isCurrentOperation.bind(this),
+			isCurrentSession: this.isCurrentSession.bind(this),
 			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
 		};
 	}
@@ -520,10 +512,8 @@ class PrModuleImpl {
 	private async recordMerge(event: PrMergedEvent): Promise<void> {
 		const session = this.currentSession;
 		if (session === null) return;
-		const isSameSession =
+		const isCurrentIdentity =
 			this.sessionState.session.activeSessionId === event.sessionId;
-		const isSameEpoch = this.getLifecycleEpoch() === event.lifecycleEpoch;
-		const isCurrentIdentity = isSameSession && isSameEpoch;
 		if (!isCurrentIdentity) return;
 		if (event.prUrl === null) return;
 		const recordedState = recordMergedPr(
@@ -535,9 +525,9 @@ class PrModuleImpl {
 		if (!changed) return;
 		this.state = nextState;
 		await this.emitState(this.state, { persist: true });
+		const currentSessionId = this.sessionState.session.activeSessionId;
 		const isCurrentAfterEmit =
-			this.currentSession === session &&
-			this.getLifecycleEpoch() === event.lifecycleEpoch;
+			this.currentSession === session && currentSessionId === event.sessionId;
 		if (!isCurrentAfterEmit) return;
 	}
 
@@ -545,12 +535,14 @@ class PrModuleImpl {
 		event: Parameters<typeof handlePrToolResult>[5],
 		ctx: ExtensionContext,
 	): Promise<void> {
+		const session = this.currentSession;
+		if (session === null) return;
 		await handlePrToolResult(
-			() => this.currentSession,
+			() => session,
 			this.sessionState,
 			this.state,
-			this.generation,
-			this.generation,
+			session.sessionId,
+			this.sessionState.session.activeSessionId ?? "",
 			event,
 			ctx,
 			(prUrl) => {
@@ -559,8 +551,7 @@ class PrModuleImpl {
 				return this.eventHandler.prMergedEvent.emit({
 					prUrl,
 					taskMarkedAsCompleted: false,
-					sessionId: this.sessionState.session.activeSessionId ?? "",
-					lifecycleEpoch: this.getLifecycleEpoch(),
+					sessionId: session.sessionId,
 				});
 			},
 			this.dependencies.exec ?? spawnExec,
@@ -568,10 +559,8 @@ class PrModuleImpl {
 	}
 
 	private isCurrentOriginRequest(request: OriginRequest): boolean {
-		const isCurrentLifecycle =
-			this.getLifecycleEpoch() === request.lifecycleEpoch;
-		const isCurrentGeneration = this.generation === request.operationGeneration;
 		const isCurrentRootSession =
+			request.sessionId !== null &&
 			this.sessionState.session.activeSessionId === request.sessionId;
 		const guardedSession = request.session;
 		const guardedIdentity = request.identity;
@@ -585,22 +574,18 @@ class PrModuleImpl {
 					guardedSession as PrSession,
 					guardedIdentity as PrSessionIdentity,
 				);
-		const currentLifecycleAndGeneration =
-			isCurrentLifecycle && isCurrentGeneration;
-		const currentRequest =
-			currentLifecycleAndGeneration && isCurrentRootSession;
-		return currentRequest && isCurrentSession;
+		return isCurrentRootSession && isCurrentSession;
 	}
 
 	private captureSessionIdentity(
 		session: PrSession,
-		operationGeneration: number,
+		sessionId: string,
 	): PrSessionIdentity {
 		return {
 			workRevision: session.workRevision,
 			prUrl: this.state.prUrl,
 			discoveryDisabled: this.state.discoveryDisabled === true,
-			operationGeneration,
+			sessionId,
 		};
 	}
 
@@ -609,24 +594,22 @@ class PrModuleImpl {
 		identity: PrSessionIdentity,
 	): boolean {
 		const sameSession = this.currentSession === session;
-		const sameRootSession = this.sessionState.session.activeSessionId !== null;
-		const sameGeneration = this.generation === identity.operationGeneration;
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasSameActiveSession = activeSessionId === identity.sessionId;
+		const sameRootSession = hasNoActiveSession || hasSameActiveSession;
 		const sameWorkRevision = session.workRevision === identity.workRevision;
 		const samePrUrl = this.state.prUrl === identity.prUrl;
 		const sameDiscoveryEligibility =
 			this.state.discoveryDisabled === identity.discoveryDisabled;
 		const sameSessionAndRoot = sameSession && sameRootSession;
 		const samePrIdentity = samePrUrl && sameDiscoveryEligibility;
-		const currentSessionAndGeneration = sameSessionAndRoot && sameGeneration;
 		const currentWorkAndPr = sameWorkRevision && samePrIdentity;
-		return currentSessionAndGeneration && currentWorkAndPr;
+		return sameSessionAndRoot && currentWorkAndPr;
 	}
 
-	private isCurrentSession(
-		session: PrSession,
-		operationGeneration: number,
-	): boolean {
-		const identity = this.captureSessionIdentity(session, operationGeneration);
+	private isCurrentSession(session: PrSession, sessionId: string): boolean {
+		const identity = this.captureSessionIdentity(session, sessionId);
 		return this.isSameSessionIdentity(session, identity);
 	}
 

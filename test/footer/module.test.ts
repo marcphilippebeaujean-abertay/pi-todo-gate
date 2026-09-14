@@ -83,7 +83,7 @@ describe("footer module", () => {
 
 		await h.events.sessionActivatedEvent.emit({
 			context: h.context(),
-			lifecycleEpoch: 0,
+			sessionId: "session",
 		});
 
 		expect(h.statusCalls).toEqual([]);

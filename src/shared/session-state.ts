@@ -24,8 +24,8 @@ export interface SessionRecord {
 	};
 	hasPendingHandoffContext: boolean;
 	hasPerformedAnyGitMutations: boolean;
+	sessionId: string;
 	workRevision: number;
-	operationGeneration: number;
 	operationQueue: Promise<void>;
 }
 

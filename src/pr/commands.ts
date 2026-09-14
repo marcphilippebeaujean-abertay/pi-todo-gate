@@ -22,12 +22,12 @@ import { confirmMerge } from "./user-prompts.ts";
 function currentSession(
 	dependencies: PrCommandOptions,
 	session: PrSession,
-	generation: number,
+	sessionId: string,
 ): boolean {
 	const activeSession = dependencies.getSession();
 	const current =
 		activeSession === session &&
-		dependencies.isCurrentOperation(session, generation);
+		dependencies.isCurrentSession(session, sessionId);
 	return dependencies.sessionState.session.activeSessionId !== null && current;
 }
 
@@ -40,12 +40,12 @@ async function mergeNow(
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
-	generation: number,
+	sessionId: string,
 ): Promise<boolean> {
 	const isCurrentBeforeCommand = currentSession(
 		dependencies,
 		session,
-		generation,
+		sessionId,
 	);
 	if (!isCurrentBeforeCommand) return false;
 	const exec = dependencies.exec ?? spawnExec;
@@ -56,7 +56,7 @@ async function mergeNow(
 		const isCurrentAfterFailure = currentSession(
 			dependencies,
 			session,
-			generation,
+			sessionId,
 		);
 		if (!isCurrentAfterFailure) return false;
 		const detail = failureDetail(
@@ -68,7 +68,7 @@ async function mergeNow(
 	const isCurrentAfterCommand = currentSession(
 		dependencies,
 		session,
-		generation,
+		sessionId,
 	);
 	if (!isCurrentAfterCommand) return false;
 	const commandFailed = result.code !== 0;
@@ -84,17 +84,17 @@ async function confirmAndMerge(
 	session: PrSession,
 	ctx: ExtensionCommandContext,
 	prUrl: string,
-	generation: number,
+	sessionId: string,
 ): Promise<boolean> {
 	const confirmed = await confirmMerge(ctx, prUrl);
 	if (!confirmed) return false;
 	const isCurrentAfterConfirm = currentSession(
 		dependencies,
 		session,
-		generation,
+		sessionId,
 	);
 	if (!isCurrentAfterConfirm) return false;
-	return mergeNow(dependencies, session, ctx, prUrl, generation);
+	return mergeNow(dependencies, session, ctx, prUrl, sessionId);
 }
 
 async function runMergeProtocol(
@@ -118,22 +118,21 @@ async function runMergeProtocol(
 		notifyNoPr(ctx);
 		return;
 	}
-	const generation = dependencies.getOperationGeneration();
+	const sessionId = session.sessionId;
 	const enqueue = dependencies.enqueueSessionOperation;
 	const merged = await enqueue(
 		session,
-		confirmAndMerge.bind(null, dependencies, session, ctx, prUrl, generation),
+		confirmAndMerge.bind(null, dependencies, session, ctx, prUrl, sessionId),
 	);
-	const isCurrentAfterMerge = currentSession(dependencies, session, generation);
+	const isCurrentAfterMerge = currentSession(dependencies, session, sessionId);
 	const shouldStop = !merged || !isCurrentAfterMerge;
 	if (shouldStop) return;
 	await dependencies.eventHandler.prMergedEvent.emit({
 		prUrl,
 		taskMarkedAsCompleted: false,
-		sessionId: dependencies.sessionState.session.activeSessionId ?? "",
-		lifecycleEpoch: dependencies.getLifecycleEpoch?.() ?? 0,
+		sessionId,
 	});
-	const isCurrentAfterEmit = currentSession(dependencies, session, generation);
+	const isCurrentAfterEmit = currentSession(dependencies, session, sessionId);
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
 }
 

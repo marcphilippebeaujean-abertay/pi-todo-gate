@@ -23,18 +23,18 @@ import type {
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
+const LEGACY_SESSION_ID = "legacy";
+
 class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
-	private readonly getLifecycleEpoch: () => number;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private hasUncommittedChanges = false;
-	private sessionGeneration = 0;
 	private refreshSequence = 0;
-	private sessionLifecycleEpoch = 0;
+	private initializationSequence = 0;
 
 	constructor(options: WorktreeModuleOptions) {
 		this.eventHandler = options.eventHandler;
@@ -43,16 +43,16 @@ class Worktree implements WorktreeConsumer {
 		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
 		this.changeDirectory =
 			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
-		this.getLifecycleEpoch = options.getLifecycleEpoch ?? (() => 0);
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, lifecycleEpoch }) => {
-				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
-				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
-				if (!isCurrentEpoch) return;
-				return this.sessionStart(context, activationEpoch);
+			({ context, sessionId }) => {
+				const currentSessionId =
+					sessionId ??
+					this.sessionState.session.activeSessionId ??
+					LEGACY_SESSION_ID;
+				return this.sessionStart(context, currentSessionId);
 			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
@@ -62,25 +62,26 @@ class Worktree implements WorktreeConsumer {
 
 	async sessionStart(
 		nextContext: ExtensionContext,
-		activationEpoch?: number,
+		sessionId: string,
 	): Promise<void> {
-		const epoch = activationEpoch ?? this.getLifecycleEpoch();
-		const generation = ++this.sessionGeneration;
 		this.refreshSequence += 1;
-		this.sessionLifecycleEpoch = epoch;
+		const initializationSequence = ++this.initializationSequence;
 		this.context = nextContext;
 		this.baseline = null;
-		await this.initializeSession(nextContext, generation);
+		await this.initializeSession(
+			nextContext,
+			sessionId,
+			initializationSequence,
+		);
 	}
 
-	private isCurrentSession(ctx: ExtensionContext, generation: number): boolean {
+	private isCurrentSession(ctx: ExtensionContext, sessionId: string): boolean {
 		const isCurrentContext = this.context === ctx;
-		const isCurrentGeneration = this.sessionGeneration === generation;
-		const isCurrentContextAndGeneration =
-			isCurrentContext && isCurrentGeneration;
-		const isCurrentEpoch =
-			this.sessionLifecycleEpoch === this.getLifecycleEpoch();
-		return isCurrentContextAndGeneration && isCurrentEpoch;
+		const activeSessionId = this.sessionState.session.activeSessionId;
+		const hasNoActiveSession = activeSessionId === null;
+		const hasCurrentSessionId = activeSessionId === sessionId;
+		const isCurrentSession = hasNoActiveSession || hasCurrentSessionId;
+		return isCurrentContext && isCurrentSession;
 	}
 
 	private async consumeToolResult(
@@ -99,9 +100,10 @@ class Worktree implements WorktreeConsumer {
 		const shouldRefresh = isFileMutation || isBashTool;
 		const shouldSkipRefresh = !shouldRefresh;
 		if (shouldSkipRefresh) return;
-		const generation = this.sessionGeneration;
+		const sessionId =
+			this.sessionState.session.activeSessionId ?? LEGACY_SESSION_ID;
 		const sequence = ++this.refreshSequence;
-		await this.refreshStatus(context, generation, sequence);
+		await this.refreshStatus(context, sessionId, sequence);
 	}
 
 	private emitState(gitStatePatch?: Partial<SessionState["gitState"]>): void {
@@ -117,11 +119,11 @@ class Worktree implements WorktreeConsumer {
 
 	private async refreshStatus(
 		context: ExtensionContext,
-		generation: number,
+		sessionId: string,
 		sequence: number,
 	): Promise<void> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
-		const isCurrent = this.isCurrentSession(context, generation);
+		const isCurrent = this.isCurrentSession(context, sessionId);
 		const hasStatus = dirtyStatus !== null;
 		const isCurrentAndHasStatus = isCurrent && hasStatus;
 		const isLatestRequest = sequence === this.refreshSequence;
@@ -133,20 +135,18 @@ class Worktree implements WorktreeConsumer {
 
 	private async initializeSession(
 		ctx: ExtensionContext,
-		generation: number,
+		sessionId: string,
+		initializationSequence: number,
 	): Promise<void> {
+		const isCurrentInitialization = () =>
+			initializationSequence === this.initializationSequence;
 		const project = await inspectProject(this.exec, ctx.cwd);
-		const isCurrentContextAfterProject = this.isCurrentSession(ctx, generation);
+		const isCurrentContextAfterProject =
+			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
 		if (isNotWorktree) {
-			const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
-			const isCurrentAfterDirtyStatus = this.isCurrentSession(ctx, generation);
-			const hasStatus = dirtyStatus !== null;
-			const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
-			if (shouldSkipDirtyStatus) return;
-			this.hasUncommittedChanges = dirtyStatus;
-			this.emitState({ hasUncommittedChanges: dirtyStatus });
+			await this.initializeNonWorktree(ctx, sessionId, isCurrentInitialization);
 			return;
 		}
 		if (project.root === null) return;
@@ -154,7 +154,8 @@ class Worktree implements WorktreeConsumer {
 		if (project.mainRoot === null) return;
 		const state = await currentWorktreeState(this.exec, ctx.cwd);
 		if (state === null) return;
-		const isCurrentContextAfterState = this.isCurrentSession(ctx, generation);
+		const isCurrentContextAfterState =
+			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterState) return;
 		this.baseline = {
 			worktreePath: project.root,
@@ -173,9 +174,24 @@ class Worktree implements WorktreeConsumer {
 		});
 	}
 
+	private async initializeNonWorktree(
+		ctx: ExtensionContext,
+		sessionId: string,
+		isCurrentInitialization: () => boolean,
+	): Promise<void> {
+		const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
+		const isCurrentAfterDirtyStatus =
+			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
+		const hasStatus = dirtyStatus !== null;
+		const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
+		if (shouldSkipDirtyStatus) return;
+		this.hasUncommittedChanges = dirtyStatus;
+		this.emitState({ hasUncommittedChanges: dirtyStatus });
+	}
+
 	deactivate(): void {
-		this.sessionGeneration += 1;
 		this.refreshSequence += 1;
+		this.initializationSequence += 1;
 		this.context = null;
 		this.baseline = null;
 		this.hasUncommittedChanges = false;
@@ -191,21 +207,28 @@ class Worktree implements WorktreeConsumer {
 	}
 
 	removeWorktree(): Promise<ExitActionResult> {
-		if (this.context === null) return Promise.resolve(FAILED);
+		const context = this.context;
+		if (context === null) return Promise.resolve(FAILED);
 		const worktree = this.baseline;
 		if (worktree === null) return Promise.resolve(FAILED);
-		return this.executeCleanup(worktree);
+		const sessionId =
+			this.sessionState.session.activeSessionId ?? LEGACY_SESSION_ID;
+		return this.executeCleanup(context, sessionId, worktree);
 	}
 
 	private async executeCleanup(
+		context: ExtensionContext,
+		sessionId: string,
 		worktree: WorktreeBaseline,
 	): Promise<ExitActionResult> {
-		const context = this.context;
-		if (context === null) return FAILED;
+		const isCurrentBeforeCleanup = this.isCurrentSession(context, sessionId);
+		if (!isCurrentBeforeCleanup) return FAILED;
 		const hasNoUi = !context.hasUI;
 		if (hasNoUi) return FAILED;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrent = isCurrentWorktree(this.baseline, worktree);
+		const isCurrentSession = this.isCurrentSession(context, sessionId);
+		const isCurrentWorktreeState = isCurrentWorktree(this.baseline, worktree);
+		const isCurrent = isCurrentSession && isCurrentWorktreeState;
 		if (!isCurrent) return FAILED;
 		const hasNoState = state === null;
 		if (hasNoState) {
@@ -218,10 +241,18 @@ class Worktree implements WorktreeConsumer {
 			force = await confirmDirtyRemoval(context, worktree);
 			if (!force) return FAILED;
 		}
-		return this.cleanupNow(worktree, force, CLEANUP_SUCCESS);
+		return this.cleanupNow(
+			context,
+			sessionId,
+			worktree,
+			force,
+			CLEANUP_SUCCESS,
+		);
 	}
 
 	private async cleanupNow(
+		context: ExtensionContext,
+		sessionId: string,
 		worktree: WorktreeBaseline,
 		force: boolean,
 		successMessage: string,
@@ -230,9 +261,11 @@ class Worktree implements WorktreeConsumer {
 		const result = await cleanupWorktree(worktree, force, {
 			exec: this.exec,
 			changeDirectory: this.changeDirectory,
-			notify: notifyWorktree.bind(null, this.context),
+			notify: notifyWorktree.bind(null, context),
 			worktreeRemoved: cleanupState,
-			isCurrent: () => isCurrentWorktree(this.baseline, worktree),
+			isCurrent: () =>
+				this.isCurrentSession(context, sessionId) &&
+				isCurrentWorktree(this.baseline, worktree),
 		});
 		const worktreeWasRemoved = cleanupState.value;
 		if (worktreeWasRemoved) this.baseline = null;

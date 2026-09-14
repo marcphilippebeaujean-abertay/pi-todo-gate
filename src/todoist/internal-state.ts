@@ -124,7 +124,6 @@ export interface TodoistModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getLifecycleEpoch?: () => number;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;
 	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
@@ -147,7 +146,6 @@ export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
 	projectRef: string;
-	getLifecycleEpoch?: () => number;
 	todoist: TodoistTaskClaimController;
 	promptQueue: PromptQueue;
 	exec?: Exec;
@@ -166,7 +164,7 @@ export interface TodoistOperations {
 		taskRef: string,
 		stateSnapshot: TodoistCompletionSnapshot,
 		workRevision: number,
-		operationGeneration: number,
+		sessionId: string,
 	): Promise<ExitActionResult>;
 }
 

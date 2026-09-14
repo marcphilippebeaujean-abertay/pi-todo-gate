@@ -92,7 +92,6 @@ export function createExtensionState(
 			serializeSessionState(state, stateDescriptors),
 		);
 	};
-	const lifecycleEpoch = { value: 0 };
 	const stateUpdateEpoch = { value: 0 };
 	const footer = createFooterModule({
 		eventHandler,
@@ -101,7 +100,6 @@ export function createExtensionState(
 	const worktree = createWorktreeModule({
 		eventHandler,
 		sessionState,
-		getLifecycleEpoch: () => lifecycleEpoch.value,
 		exec: moduleDependencies.exec,
 	});
 	const pr = createPrModule({
@@ -109,7 +107,6 @@ export function createExtensionState(
 		promptQueue,
 		eventHandler,
 		sessionState,
-		getLifecycleEpoch: () => lifecycleEpoch.value,
 		exec: moduleDependencies.exec,
 	});
 	const todoist = createTodoistModule({
@@ -117,7 +114,6 @@ export function createExtensionState(
 		promptQueue,
 		eventHandler,
 		sessionState,
-		getLifecycleEpoch: () => lifecycleEpoch.value,
 		exec: moduleDependencies.exec,
 		loadConfig: moduleDependencies.loadConfig,
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
@@ -128,7 +124,6 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		worktree,
-		getLifecycleEpoch: () => lifecycleEpoch.value,
 	});
 	const extensionState = {
 		pi,
@@ -156,7 +151,6 @@ export function createExtensionState(
 		exitProtocol,
 		session: null,
 		publisher: new RootEventPublisher(eventHandler),
-		lifecycleEpoch,
 		stateUpdateEpoch,
 		stateUpdatesDrained: async () => undefined,
 		stateDescriptors,
