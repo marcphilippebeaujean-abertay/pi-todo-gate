@@ -5,16 +5,16 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { lintProgram } from "../../src/lint/index.ts";
 
-const TEMP_PREFIX = "pi-todo-gate-no-nonserializable-module-state-";
-const RULE_ID = "no-nonserializable-module-state";
+const TEMP_PREFIX = "pi-todo-gate-module-state-contract-";
+const RULE_ID = "module-state-contract";
 
 async function lintStateSource(source: string) {
 	const root = await mkdtemp(join(tmpdir(), TEMP_PREFIX));
 	const directory = join(root, "src");
 	await mkdir(directory, { recursive: true });
-	const sharedDirectory = join(directory, "shared");
-	await mkdir(sharedDirectory, { recursive: true });
-	const filePath = join(sharedDirectory, "session-state.ts");
+	const moduleDirectory = join(directory, "pr");
+	await mkdir(moduleDirectory, { recursive: true });
+	const filePath = join(moduleDirectory, "module-state.ts");
 	await writeFile(filePath, source);
 	const program = ts.createProgram([filePath], {
 		strict: true,
@@ -103,7 +103,7 @@ export interface ModuleState {
 `);
 
 		expect(diagnostics.filter(({ ruleId }) => ruleId === RULE_ID)).toHaveLength(
-			1,
+			2,
 		);
 	});
 });

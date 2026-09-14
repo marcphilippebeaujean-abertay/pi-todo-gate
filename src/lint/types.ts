@@ -21,7 +21,7 @@ export type LintRuleId =
 	| "event-types-location"
 	| "no-functions-in-data"
 	| "no-event-handler-emits-in-consumers"
-	| "no-nonserializable-module-state"
+	| "module-state-contract"
 	| "no-direct-module-state-write";
 export interface LintDiagnostic {
 	filePath: string;

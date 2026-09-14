@@ -6,6 +6,7 @@ import { eventTypesLocation } from "./rules/event-types-location.ts";
 import { eventTypesOutsideEvents } from "./rules/event-types-outside-events.ts";
 import { functionLength } from "./rules/function-length.ts";
 import { functionsPerFile } from "./rules/functions-per-file.ts";
+import { moduleStateContract } from "./rules/module-state-contract.ts";
 import { namedIfCondition } from "./rules/named-if-condition.ts";
 import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
 import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts";
@@ -16,7 +17,6 @@ import { noEventHandlerEmitsInConsumers } from "./rules/no-event-handler-emits-i
 import { noRootStateImportsInModules } from "./rules/no-extension-state-in-modules.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
-import { noNonserializableModuleState } from "./rules/no-nonserializable-module-state.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
 import { noWorkerConsumerCallbacks } from "./rules/no-worker-consumer-callbacks.ts";
 import { preferSwitchDispatch } from "./rules/prefer-switch-dispatch.ts";
@@ -43,7 +43,7 @@ const RULES: readonly LintRule[] = [
 	noRootStateImportsInModules,
 	noDirectModuleStateWrite,
 	noFunctionsInData,
-	noNonserializableModuleState,
+	moduleStateContract,
 	repeatedFieldChecks,
 	preferSwitchDispatch,
 	noComplicatedExpressions,
