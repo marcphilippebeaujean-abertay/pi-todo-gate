@@ -3,14 +3,10 @@ import { event } from "../shared/events.ts";
 import type { ClaimWorkerResponse } from "./internal-state.ts";
 
 export interface ClaimCompletedEvent {
-	attemptId: number;
-	lifecycleEpoch?: number;
 	result?: ClaimWorkerResponse;
 }
 
 export interface ClaimFailedEvent {
-	attemptId: number;
-	lifecycleEpoch?: number;
 	message: string;
 	workerFailed: boolean;
 }

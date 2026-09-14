@@ -1,7 +1,6 @@
 import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./internal-state.ts";
 
 export const MAX_DIAGNOSTIC_BYTES = 500;
-export const HERDR_MAX_CLAIM_ATTEMPTS = 3;
 export const HERDR_CLAIM_RETURNED = "true";
 export const HERDR_OBJECT_TYPE = "object";
 export const HERDR_COMMAND = "herdr";

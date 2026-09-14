@@ -31,19 +31,9 @@ export function startClaimWorker(
 			instructions: request.instructions,
 			parseResult: parseClaimResult,
 			onResult: (result) =>
-				void request.events.claimCompletedEvent.emit({
-					attemptId: request.attemptId,
-					...(request.lifecycleEpoch === undefined
-						? {}
-						: { lifecycleEpoch: request.lifecycleEpoch }),
-					result,
-				}),
+				void request.events.claimCompletedEvent.emit({ result }),
 			onFailure: (message) =>
 				void request.events.claimFailedEvent.emit({
-					attemptId: request.attemptId,
-					...(request.lifecycleEpoch === undefined
-						? {}
-						: { lifecycleEpoch: request.lifecycleEpoch }),
 					message: claimFailureMessage(message),
 					workerFailed: true,
 				}),

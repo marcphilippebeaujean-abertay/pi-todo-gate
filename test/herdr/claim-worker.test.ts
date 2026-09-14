@@ -36,7 +36,6 @@ function setup() {
 	const request: ClaimWorkerRequest = {
 		prompt: "Fix dialog",
 		instructions: "Claim tab",
-		attemptId: 1,
 		events,
 	};
 	return {
@@ -110,7 +109,6 @@ describe("startClaimWorker", () => {
 		setupState.process.emit("close", 0);
 
 		expect(setupState.completed).toHaveBeenCalledWith({
-			attemptId: 1,
 			result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
 		});
 		expect(setupState.failed).not.toHaveBeenCalled();
@@ -134,7 +132,6 @@ describe("startClaimWorker", () => {
 		setupState.process.emit("close", 0);
 
 		expect(setupState.completed).toHaveBeenCalledWith({
-			attemptId: 1,
 			result: null,
 		});
 	});
@@ -149,7 +146,6 @@ describe("startClaimWorker", () => {
 
 		expect(setupState.completed).not.toHaveBeenCalled();
 		expect(setupState.failed).toHaveBeenCalledWith({
-			attemptId: 1,
 			message: "completed without claim evidence",
 			workerFailed: true,
 		});
@@ -174,7 +170,6 @@ describe("startClaimWorker", () => {
 		retry.process.emit("close", 1);
 		expect(retry.failed).toHaveBeenCalledOnce();
 		expect(retry.failed).toHaveBeenCalledWith({
-			attemptId: 1,
 			message: expect.stringContaining("worker"),
 			workerFailed: true,
 		});

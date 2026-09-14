@@ -25,8 +25,6 @@ export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponseData = {
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
-	attemptId: number;
-	lifecycleEpoch?: number;
 	events: HerdrEvents;
 }
 
@@ -38,15 +36,6 @@ export interface ClaimWorkerOptions {
 
 export interface CwdReference {
 	current: string;
-}
-
-export interface TabClaimAttempt {
-	attemptId: number;
-	lifecycleEpoch: number;
-	initialLabel: string | undefined;
-	tabId: string | undefined;
-	paneId: string | undefined;
-	context: ExtensionContext;
 }
 
 export interface ClaimWorkerHandle {
