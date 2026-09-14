@@ -25,7 +25,7 @@ async function lintSource(domain: string, file: string, source: string) {
 }
 
 describe(RULE_ID, () => {
-	it("rejects interfaces and type aliases outside state.ts", async () => {
+	it("rejects interfaces and type aliases outside internal-state.ts", async () => {
 		const diagnostics = await lintSource(
 			"pr",
 			"commands.ts",
@@ -39,10 +39,10 @@ type Result = string;
 		);
 	});
 
-	it("allows declarations in every module state.ts", async () => {
+	it("allows declarations in every module internal-state.ts", async () => {
 		const diagnostics = await lintSource(
 			"footer",
-			"state.ts",
+			"internal-state.ts",
 			`interface FooterState { visible: boolean; }
 type FooterId = string;
 `,

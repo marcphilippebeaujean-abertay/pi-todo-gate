@@ -11,7 +11,7 @@ import type {
 	ClaimWorkerRequest,
 	StartBackgroundWorker,
 	WorkerSpawner,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 function claimFailureMessage(message: string): string {
 	const isMissingExpectedResult = message === EXPECTED_RESULT_FAILURE;

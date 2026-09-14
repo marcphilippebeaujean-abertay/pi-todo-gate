@@ -27,8 +27,6 @@ import {
 	createHerdrEvents,
 	type HerdrEvents,
 } from "./events.ts";
-import { notifyHerdrFailure } from "./notifications.ts";
-import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
 import type {
 	ClaimWorkerHandle,
 	ClaimWorkerResponse,
@@ -36,7 +34,9 @@ import type {
 	HerdrTabOptions,
 	StartBackgroundWorker,
 	TabClaimAttempt,
-} from "./state.ts";
+} from "./internal-state.ts";
+import { notifyHerdrFailure } from "./notifications.ts";
+import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
 import {
 	hasValidatedTabClaim,
 	tabNameIsParseableAsInt,

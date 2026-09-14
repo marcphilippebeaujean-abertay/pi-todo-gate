@@ -12,7 +12,7 @@ import type {
 	TodoistCompletionSnapshot,
 	TodoistOperations,
 	TodoistState,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 function isCurrentCompletion(
 	operations: TodoistOperations,

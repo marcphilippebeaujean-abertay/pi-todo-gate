@@ -86,7 +86,7 @@ describe("session shutdown", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../src/pr/state.ts").PrSession;
+		} as unknown as import("../src/pr/internal-state.ts").PrSession;
 		root.session = session;
 		root.sessionState.session.activeSessionId = "session";
 		root.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
@@ -390,7 +390,7 @@ describe("session shutdown", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../src/pr/state.ts").PrSession;
+		} as unknown as import("../src/pr/internal-state.ts").PrSession;
 		root.session = session;
 		root.sessionState.session.activeSessionId = "session";
 		const activation = root.eventHandler.sessionActivatedEvent.emit({

@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
-import type { WorktreeModule } from "../worktree/state.ts";
+import type { WorktreeModule } from "../worktree/internal-state.ts";
 import {
 	addWorktreeExitAction,
 	createExitRequest,
@@ -12,7 +12,7 @@ import type {
 	ExitProtocolModule,
 	ExitProtocolModuleOptions,
 	ExitRequest,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 export class ExitProtocolConsumer implements ExitProtocolModule {
 	private context: ExtensionContext | null = null;

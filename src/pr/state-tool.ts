@@ -8,13 +8,13 @@ import type {
 import { Type } from "typebox";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { extensionResult } from "../shared/extension-message.ts";
-import { githubPrUrl } from "./parsing.ts";
 import type {
 	PrSession,
 	PrState,
 	StateToolDependencies,
 	StateToolParams,
-} from "./state.ts";
+} from "./internal-state.ts";
+import { githubPrUrl } from "./parsing.ts";
 
 export const stateParameters = Type.Object({
 	action: StringEnum(["status", "set_pr", "clear_pr", "clear_all"] as const),

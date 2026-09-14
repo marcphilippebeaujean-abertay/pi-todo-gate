@@ -7,7 +7,7 @@ import {
 	TAB_GET_COMMAND,
 	UTF8_ENCODING,
 } from "./constants.ts";
-import type { CommandRunner, CwdReference } from "./state.ts";
+import type { CommandRunner, CwdReference } from "./internal-state.ts";
 
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";

@@ -4,7 +4,7 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const ALLOWED_TYPE_FILES = new Set([
-	"state.ts",
+	"internal-state.ts",
 	"events.ts",
 	"module-state.ts",
 ]);
@@ -12,7 +12,7 @@ const DOMAIN_PATH =
 	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/][^\\/]+\.ts$/;
 const RULE_ID = "domain-types-outside-state" as const;
 const MESSAGE =
-	"Domain interfaces and type aliases must live in state.ts, events.ts, or module-state.ts";
+	"Domain interfaces and type aliases must live in internal-state.ts, events.ts, or module-state.ts";
 
 function isTypeDeclaration(node: ts.Node): boolean {
 	return ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node);

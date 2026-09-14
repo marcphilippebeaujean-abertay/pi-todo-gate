@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
+import { worktreeStateDescriptor } from "../../src/worktree/internal-state.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
-import { worktreeStateDescriptor } from "../../src/worktree/state.ts";
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };

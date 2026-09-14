@@ -1,7 +1,7 @@
 import "./commands.ts";
 import "./client.ts";
 import "./constants.ts";
-import "./state.ts";
+import "./internal-state.ts";
 import "./events.ts";
 import "./parsing.ts";
 import "./event-consumers.ts";
@@ -14,8 +14,8 @@ export * from "./commands.ts";
 export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
 export * from "./events.ts";
+export * from "./internal-state.ts";
 export * from "./parsing.ts";
-export * from "./state.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
@@ -31,7 +31,7 @@ import type {
 	TodoistSession,
 	TodoistState,
 	TodoistStateUpdateOptions,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 class TodoistModuleImpl implements TodoistModule {
 	private readonly getLifecycleEpoch: () => number;

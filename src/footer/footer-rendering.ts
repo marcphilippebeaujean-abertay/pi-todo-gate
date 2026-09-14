@@ -34,7 +34,7 @@ import type {
 	FooterTui,
 	FooterSessionRecord as SessionRecord,
 	TodoistFooterTheme,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 export class Footer implements FooterEntry {
 	private value = "";

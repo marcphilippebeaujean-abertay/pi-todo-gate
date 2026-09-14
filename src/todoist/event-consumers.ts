@@ -22,7 +22,7 @@ import type {
 	TodoistOperations,
 	TodoistSession,
 	TodoistState,
-} from "./state.ts";
+} from "./internal-state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
 
 function isSessionRecord(

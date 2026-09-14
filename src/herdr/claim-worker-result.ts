@@ -1,7 +1,7 @@
 import { textFromAssistantMessage } from "../shared/pi-worker.ts";
 import { HERDR_OBJECT_TYPE, MAX_DIAGNOSTIC_BYTES } from "./constants.ts";
 
-import type { ClaimWorkerResponse } from "./state.ts";
+import type { ClaimWorkerResponse } from "./internal-state.ts";
 
 export function appendBounded(current: string, chunk: Buffer | string): string {
 	const next = `${current}${chunk.toString()}`;

@@ -26,7 +26,7 @@ import type {
 	PrStatePatch,
 	QuoteCharacter,
 	ShellState,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 const prStateSchema = z.enum([OPEN_STATE, CLOSED_STATE, MERGED_STATE]);
 

@@ -4,9 +4,9 @@ import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_SPINNER_INTERVAL_MS,
 } from "../../src/footer/constants.ts";
+import type { FooterUpdate } from "../../src/footer/internal-state.ts";
+import { restoreFooterState } from "../../src/footer/internal-state.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
-import type { FooterUpdate } from "../../src/footer/state.ts";
-import { restoreFooterState } from "../../src/footer/state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 

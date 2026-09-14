@@ -4,11 +4,11 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
 import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
 } from "../../src/pr/module.ts";
-import type { PrCommandOptions } from "../../src/pr/state.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
 import {
 	createSessionState,

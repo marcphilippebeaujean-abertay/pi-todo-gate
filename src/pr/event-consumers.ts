@@ -4,7 +4,7 @@ import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { ToolResultEvent } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
 import { matchesPinnedPr } from "./event-publishers.ts";
-import type { PrSession, PrState } from "./state.ts";
+import type { PrSession, PrState } from "./internal-state.ts";
 
 const STRING_TYPE = "string";
 const BASH_COMMAND = "command";

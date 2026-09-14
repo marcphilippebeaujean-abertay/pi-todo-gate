@@ -1,6 +1,6 @@
 import type { Event } from "../shared/events.ts";
 import { event } from "../shared/events.ts";
-import type { ClaimWorkerResponse } from "./state.ts";
+import type { ClaimWorkerResponse } from "./internal-state.ts";
 
 export interface ClaimCompletedEvent {
 	attemptId: number;

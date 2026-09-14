@@ -1,14 +1,17 @@
 import "./commands.ts";
 import "./git.ts";
 import "./constants.ts";
-import "./state.ts";
+import "./internal-state.ts";
 import "./events.ts";
 import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
-import type { WorktreeModule, WorktreeModuleOptions } from "./state.ts";
+import type {
+	WorktreeModule,
+	WorktreeModuleOptions,
+} from "./internal-state.ts";
 
 export * from "./events.ts";
 export type {
@@ -18,7 +21,7 @@ export type {
 	WorktreeModule,
 	WorktreeModuleDependencies,
 	WorktreeModuleOptions,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 export function createWorktreeModule(
 	options: WorktreeModuleOptions,

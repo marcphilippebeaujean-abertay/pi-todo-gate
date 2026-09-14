@@ -29,8 +29,8 @@ import type {
 	TodoistProjectSettings,
 	TodoistState,
 	TodoistTask,
-} from "./state.ts";
-import { TaskClaimWorkerResultSchema } from "./state.ts";
+} from "./internal-state.ts";
+import { TaskClaimWorkerResultSchema } from "./internal-state.ts";
 
 export type {
 	ProjectEntry,
@@ -41,7 +41,7 @@ export type {
 	TodoistProjectSettings,
 	TodoistState,
 	TodoistTask,
-} from "./state.ts";
+} from "./internal-state.ts";
 export function defaultConfigPath(): string {
 	const agentDir =
 		process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");

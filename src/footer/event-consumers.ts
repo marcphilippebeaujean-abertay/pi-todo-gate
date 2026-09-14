@@ -16,12 +16,12 @@ import type {
 	FooterModule,
 	FooterModuleOptions,
 	FooterState,
-} from "./state.ts";
+} from "./internal-state.ts";
 import {
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 export class FooterEventConsumer implements FooterModule {
 	private readonly eventHandler: EventHandler;

@@ -21,6 +21,13 @@ import {
 	TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 	VIEW,
 } from "./constants.ts";
+import type {
+	IsCurrentOperation,
+	TodoistClientFactoryDependencies,
+	TodoistClientLike,
+	TodoistExec,
+	TodoistTask,
+} from "./internal-state.ts";
 import {
 	childList,
 	parsePayload,
@@ -31,13 +38,6 @@ import {
 	TodoistOperationCancelled,
 	taskFromPayload,
 } from "./parsing.ts";
-import type {
-	IsCurrentOperation,
-	TodoistClientFactoryDependencies,
-	TodoistClientLike,
-	TodoistExec,
-	TodoistTask,
-} from "./state.ts";
 
 export class TodoistClient {
 	constructor(private readonly exec: TodoistExec) {}

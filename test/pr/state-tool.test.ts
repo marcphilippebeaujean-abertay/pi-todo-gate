@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PrState, StateToolDependencies } from "../../src/pr/state.ts";
+import type {
+	PrState,
+	StateToolDependencies,
+} from "../../src/pr/internal-state.ts";
 import { executeStateTool } from "../../src/pr/state-tool.ts";
 import { createSessionState, type SessionRecord } from "../../src/state.ts";
 

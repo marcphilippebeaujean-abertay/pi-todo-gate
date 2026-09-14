@@ -15,12 +15,12 @@ import {
 	currentWorktreeState,
 	isCurrentWorktree,
 } from "./git.ts";
-import { notifyWorktree } from "./notifications.ts";
 import type {
 	WorktreeBaseline,
 	WorktreeModule,
 	WorktreeModuleOptions,
-} from "./state.ts";
+} from "./internal-state.ts";
+import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
 class Worktree implements WorktreeModule {

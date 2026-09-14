@@ -9,6 +9,7 @@ import {
 	mergeProtocolSkillPath,
 } from "./constants.ts";
 import { mergePinnedPr } from "./git.ts";
+import type { PrCommandOptions, PrSession } from "./internal-state.ts";
 import {
 	notifyInactive,
 	notifyMergeFailure,
@@ -16,7 +17,6 @@ import {
 	notifyNoPr,
 	notifyNoUi,
 } from "./notifications.ts";
-import type { PrCommandOptions, PrSession } from "./state.ts";
 import { confirmMerge } from "./user-prompts.ts";
 
 function currentSession(

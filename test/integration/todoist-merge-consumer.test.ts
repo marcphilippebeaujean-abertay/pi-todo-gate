@@ -5,17 +5,17 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
+import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
 import { register } from "../../src/pr/module.ts";
-import type { PrCommandOptions } from "../../src/pr/state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState, type SessionRecord } from "../../src/state.ts";
-import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 import type {
 	TodoistCompletionSnapshot,
 	TodoistOperations,
-} from "../../src/todoist/state.ts";
+} from "../../src/todoist/internal-state.ts";
+import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 

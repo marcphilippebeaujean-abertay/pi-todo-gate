@@ -13,7 +13,7 @@ export const SCOPED_DOMAINS = [
 export const CANONICAL_FACETS = [
 	"commands.ts",
 	"constants.ts",
-	"state.ts",
+	"internal-state.ts",
 	"events.ts",
 	"event-consumers.ts",
 	"event-publishers.ts",

@@ -386,7 +386,7 @@ describe("PR module ownership", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
 		await module.activateSession(session);
 		await events.prMergedEvent.emit({
@@ -420,7 +420,7 @@ describe("PR module ownership", () => {
 			workRevision: 2,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
 		sessionState.moduleState.pr = {
 			prUrl: "https://github.com/o/r/pull/42",
@@ -528,7 +528,7 @@ describe("PR module ownership", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "old";
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
@@ -582,7 +582,7 @@ describe("PR module ownership", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "old";
 		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
 		let release!: () => void;
@@ -632,7 +632,7 @@ describe("PR module ownership", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
@@ -680,7 +680,7 @@ describe("PR module ownership", () => {
 			workRevision: 0,
 			operationGeneration: 0,
 			operationQueue: Promise.resolve(),
-		} as unknown as import("../../src/pr/state.ts").PrSession;
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
 		sessionState.session.activeSessionId = "session";
 		const updates: unknown[] = [];
 		events.moduleStateChangedEvent.subscribe((update) => {

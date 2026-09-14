@@ -79,10 +79,10 @@ module.exports = {
 			to: { path: "^src/pr/constants\\.ts$" },
 		},
 		{
-			name: "pr-module-requires-state",
+			name: "pr-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/pr/module\\.ts$" },
-			to: { path: "^src/pr/state\\.ts$" },
+			to: { path: "^src/pr/internal-state\\.ts$" },
 		},
 		{
 			name: "pr-module-requires-events",
@@ -127,10 +127,10 @@ module.exports = {
 			to: { path: "^src/todoist/constants\\.ts$" },
 		},
 		{
-			name: "todoist-module-requires-state",
+			name: "todoist-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/todoist/module\\.ts$" },
-			to: { path: "^src/todoist/state\\.ts$" },
+			to: { path: "^src/todoist/internal-state\\.ts$" },
 		},
 		{
 			name: "todoist-module-requires-events",
@@ -175,10 +175,10 @@ module.exports = {
 			to: { path: "^src/herdr/constants\\.ts$" },
 		},
 		{
-			name: "herdr-module-requires-state",
+			name: "herdr-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/herdr/module\\.ts$" },
-			to: { path: "^src/herdr/state\\.ts$" },
+			to: { path: "^src/herdr/internal-state\\.ts$" },
 		},
 		{
 			name: "herdr-module-requires-events",
@@ -223,10 +223,10 @@ module.exports = {
 			to: { path: "^src/worktree/constants\\.ts$" },
 		},
 		{
-			name: "worktree-module-requires-state",
+			name: "worktree-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/state\\.ts$" },
+			to: { path: "^src/worktree/internal-state\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-events",
@@ -265,10 +265,10 @@ module.exports = {
 			to: { path: "^src/exit-protocol/constants\\.ts$" },
 		},
 		{
-			name: "exit-protocol-module-requires-state",
+			name: "exit-protocol-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/exit-protocol/module\\.ts$" },
-			to: { path: "^src/exit-protocol/state\\.ts$" },
+			to: { path: "^src/exit-protocol/internal-state\\.ts$" },
 		},
 		{
 			name: "exit-protocol-module-requires-events",
@@ -313,10 +313,10 @@ module.exports = {
 			to: { path: "^src/footer/constants\\.ts$" },
 		},
 		{
-			name: "footer-module-requires-state",
+			name: "footer-module-requires-internal-state",
 			severity: "error",
 			module: { path: "^src/footer/module\\.ts$" },
-			to: { path: "^src/footer/state\\.ts$" },
+			to: { path: "^src/footer/internal-state\\.ts$" },
 		},
 		{
 			name: "footer-module-requires-events",

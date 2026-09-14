@@ -7,7 +7,7 @@ import {
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
-} from "../../src/footer/state.ts";
+} from "../../src/footer/internal-state.ts";
 
 const visible: FooterUpdate = {
 	footerType: "task",

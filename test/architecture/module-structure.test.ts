@@ -45,11 +45,15 @@ describe("module structure checker", () => {
 		expect(config).toContain("^src/[^/]+/event-publishers\\\\.ts$");
 	});
 
-	it("requires every scoped module to define state.ts", async () => {
-		for (const domain of SCOPED_DOMAINS)
+	it("requires every scoped module to define module-state.ts and internal-state.ts", async () => {
+		for (const domain of SCOPED_DOMAINS) {
 			await expect(
-				readFile(join(PROJECT_ROOT, "src", domain, "state.ts")),
+				readFile(join(PROJECT_ROOT, "src", domain, "module-state.ts")),
 			).resolves.toBeDefined();
+			await expect(
+				readFile(join(PROJECT_ROOT, "src", domain, "internal-state.ts")),
+			).resolves.toBeDefined();
+		}
 	});
 
 	it("requires every scoped module to define events.ts", async () => {
@@ -139,7 +143,10 @@ describe("module structure checker", () => {
 		await (await import("node:fs/promises")).rm(
 			join(root, "src", "footer", "footer-rendering.ts"),
 		);
-		await writeFile(join(root, "src", "pr", "legacy.ts"), "export {};\n");
+		await writeFile(
+			join(root, "src", "pr", "module-state-extra.ts"),
+			"export {};\n",
+		);
 		const issues = await checkModuleStructure(root);
 		expect(issues).toEqual(
 			expect.arrayContaining([
@@ -149,7 +156,7 @@ describe("module structure checker", () => {
 				}),
 				expect.objectContaining({
 					domain: "pr",
-					path: "src/pr/legacy.ts",
+					path: "src/pr/module-state-extra.ts",
 					message: "unclassified TypeScript implementation file",
 				}),
 			]),
@@ -162,11 +169,11 @@ describe("module structure checker", () => {
 			join(root, "src", "pr", "commands.ts"),
 		);
 		await (await import("node:fs/promises")).rm(
-			join(root, "src", "footer", "state.ts"),
+			join(root, "src", "footer", "internal-state.ts"),
 		);
 		const issues = await checkModuleStructure(root);
 		expect(issues.map((issue) => issue.path)).toEqual([
-			"src/footer/state.ts",
+			"src/footer/internal-state.ts",
 			"src/pr/commands.ts",
 		]);
 	});

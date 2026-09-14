@@ -1,14 +1,14 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enqueueExitActions } from "../../src/exit-protocol/event-publishers.ts";
-import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import {
 	exitProtocolStateDescriptor,
 	focusAction,
 	focusSubmit,
 	initialPickerState,
 	toggleAction,
-} from "../../src/exit-protocol/state.ts";
+} from "../../src/exit-protocol/internal-state.ts";
+import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";

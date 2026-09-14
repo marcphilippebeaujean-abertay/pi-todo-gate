@@ -1,4 +1,4 @@
-import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./state.ts";
+import { CLAIM_WORKER_RESPONSE_TEMPLATE } from "./internal-state.ts";
 
 export const MAX_DIAGNOSTIC_BYTES = 500;
 export const HERDR_MAX_CLAIM_ATTEMPTS = 3;

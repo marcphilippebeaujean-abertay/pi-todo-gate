@@ -18,7 +18,6 @@ import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
 import { handlePrToolResult, isCurrentMerge } from "./event-consumers.ts";
 import { findOpenPr, isGithubPrAvailable } from "./git.ts";
-import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import type {
 	OriginRequest,
 	PrCommandOptions,
@@ -28,8 +27,9 @@ import type {
 	PrSession,
 	PrSessionIdentity,
 	PrState,
-} from "./state.ts";
-import { normalizePrState } from "./state.ts";
+} from "./internal-state.ts";
+import { normalizePrState } from "./internal-state.ts";
+import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import { installStateTool } from "./state-tool.ts";
 
 export * from "./commands.ts";
@@ -39,9 +39,9 @@ export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
 export * from "./events.ts";
 export * from "./git.ts";
+export * from "./internal-state.ts";
 export * from "./notifications.ts";
 export * from "./parsing.ts";
-export * from "./state.ts";
 export * from "./user-prompts.ts";
 
 function prStateFromSession(

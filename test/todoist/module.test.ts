@@ -4,16 +4,16 @@ import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { completeMergedTask } from "../../src/todoist/completion.ts";
+import type {
+	TodoistSession,
+	TodoistState,
+	TodoistStateUpdateOptions,
+} from "../../src/todoist/internal-state.ts";
 import {
 	applyTodoistStatePatch,
 	createTodoistModule,
 	isTodoistState,
 } from "../../src/todoist/module.ts";
-import type {
-	TodoistSession,
-	TodoistState,
-	TodoistStateUpdateOptions,
-} from "../../src/todoist/state.ts";
 
 describe("Todoist module ownership", () => {
 	it("does not let stale activation reset newer claim state", async () => {
