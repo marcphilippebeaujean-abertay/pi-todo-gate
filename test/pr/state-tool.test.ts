@@ -11,7 +11,7 @@ const PR_URL = "https://github.com/o/r/pull/42";
 function session(): SessionRecord {
 	return {
 		context: { cwd: "/repo", hasUI: false } as never,
-		project: { codingRoot: "/repo", todoistProjectRef: "project" },
+		project: { codingRoot: "/repo" },
 		hasPendingHandoffContext: false,
 		hasPerformedAnyGitMutations: false,
 		workRevision: 0,

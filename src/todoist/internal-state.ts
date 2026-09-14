@@ -120,6 +120,7 @@ export interface TodoistTaskClaimController {
 
 export interface TodoistModuleOptions {
 	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
+	loadConfig?: () => Promise<unknown>;
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
@@ -145,6 +146,7 @@ export interface TodoistCompletionSnapshot {
 export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
+	projectRef: string;
 	getLifecycleEpoch?: () => number;
 	todoist: TodoistTaskClaimController;
 	promptQueue: PromptQueue;

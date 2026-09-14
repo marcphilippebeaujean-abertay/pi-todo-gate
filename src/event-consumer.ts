@@ -29,9 +29,7 @@ import {
 	type RootDependencies,
 	type SessionState,
 } from "./state.ts";
-import type { TodoistProjectMapping } from "./todoist/config.ts";
-import { loadConfig, resolveConfiguredProject } from "./todoist/config.ts";
-import type { TodoistModule } from "./todoist/module.ts";
+import type { SessionProject, TodoistModule } from "./todoist/module.ts";
 import type { WorktreeCleanup } from "./worktree/module.ts";
 
 export interface RootComposition {
@@ -88,14 +86,13 @@ function deactivateUnconfigured(root: Root): void {
 	manageActiveTools(root, true);
 }
 
-function inheritPreviousState(
+async function inheritPreviousState(
 	root: Root,
 	event: SessionStartEvent,
-	config: TodoistProjectMapping,
-	project: { codingRoot: string },
+	project: SessionProject,
 	hasCurrentSnapshot: boolean,
 	state: SessionState,
-): { state: SessionState; hasPendingHandoffContext: boolean } {
+): Promise<{ state: SessionState; hasPendingHandoffContext: boolean }> {
 	const previousSessionFile = event.previousSessionFile;
 	const hasPreviousSession = previousSessionFile !== undefined;
 	if (hasCurrentSnapshot || !hasPreviousSession)
@@ -103,7 +100,9 @@ function inheritPreviousState(
 	const previous: SessionReader =
 		root.dependencies.openSession?.(previousSessionFile) ??
 		SessionManager.open(previousSessionFile);
-	const previousProject = resolveConfiguredProject(previous.getCwd(), config);
+	const previousProject = await root.todoist.resolveSessionProject(
+		previous.getCwd(),
+	);
 	const sameCodingProject = previousProject?.codingRoot === project.codingRoot;
 	if (!sameCodingProject) return { state, hasPendingHandoffContext: false };
 	const persisted = latestPersistedSessionState(previous.getBranch());
@@ -137,8 +136,7 @@ async function activateConfigured(
 	epoch: number,
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
-	project: { codingRoot: string; todoistProjectRef: string },
-	config: TodoistProjectMapping,
+	project: SessionProject,
 ): Promise<{
 	session: SessionRecord;
 	branch: readonly unknown[];
@@ -150,10 +148,9 @@ async function activateConfigured(
 		persisted === null
 			? createSessionState()
 			: restoreSessionState(persisted, root.stateDescriptors);
-	const inherited = inheritPreviousState(
+	const inherited = await inheritPreviousState(
 		root,
 		event,
-		config,
 		project,
 		persisted !== null,
 		restored,
@@ -222,24 +219,14 @@ export async function handleSessionStart(
 	deactivateUnconfigured(root);
 	await root.publisher.publishSessionReset();
 	if (!isCurrentEpoch(root, epoch)) return;
-	const config = (await (
-		root.dependencies.loadConfig ?? loadConfig
-	)()) as TodoistProjectMapping;
+	const project = await root.todoist.resolveSessionProject(ctx.cwd);
 	if (!isCurrentEpoch(root, epoch)) return;
-	const project = resolveConfiguredProject(ctx.cwd, config);
 	if (project === null) {
 		resetSessionState(root.sessionState, root.stateUpdateEpoch);
 		manageActiveTools(root, true);
 		return;
 	}
-	const activated = await activateConfigured(
-		root,
-		epoch,
-		event,
-		ctx,
-		project,
-		config,
-	);
+	const activated = await activateConfigured(root, epoch, event, ctx, project);
 	if (activated === null || !isCurrentEpoch(root, epoch)) return;
 	const { branch, hasPendingHandoffContext } = activated;
 	await root.stateUpdatesDrained();

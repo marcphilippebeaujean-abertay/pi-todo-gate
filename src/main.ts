@@ -3,10 +3,7 @@ import {
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
 } from "./event-consumer.ts";
-import {
-	createModuleStatePublisher,
-	RootEventPublisher,
-} from "./event-publishers.ts";
+import { RootEventPublisher } from "./event-publishers.ts";
 import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import {
 	createExitProtocolModule,
@@ -15,8 +12,7 @@ import {
 import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
 import type { FooterModule } from "./footer/module.ts";
 import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
-import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
-import { installHerdrTabClaim } from "./herdr/module.ts";
+import { createHerdrModule } from "./herdr/module.ts";
 import { herdrStateDescriptor } from "./herdr/module-state.ts";
 import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
@@ -41,9 +37,7 @@ import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
-type HerdrSetupOptions = NonNullable<
-	Parameters<typeof installHerdrTabClaim>[1]
->;
+type HerdrSetupOptions = Parameters<typeof createHerdrModule>[1];
 type HerdrCommandRunner = NonNullable<HerdrSetupOptions["commandRunner"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 
@@ -67,6 +61,7 @@ interface ExtensionState {
 }
 
 interface ModuleSetupDependencies {
+	loadConfig?: (path?: string) => Promise<unknown>;
 	exec?: Exec;
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
@@ -124,6 +119,7 @@ export function createExtensionState(
 		sessionState,
 		getLifecycleEpoch: () => lifecycleEpoch.value,
 		exec: moduleDependencies.exec,
+		loadConfig: moduleDependencies.loadConfig,
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
 		createTodoistClient: moduleDependencies.createTodoistClient,
 	});
@@ -148,7 +144,6 @@ export function createExtensionState(
 	const root = {
 		pi,
 		dependencies: {
-			loadConfig: providedDependencies.loadConfig,
 			openSession: providedDependencies.openSession,
 		},
 		eventHandler,
@@ -176,10 +171,6 @@ function startExtensions(
 ): void {
 	const moduleDependencies: ModuleSetupDependencies = dependencies;
 	const extensionState = createExtensionState(pi, dependencies);
-	const herdrStatePublisher = createModuleStatePublisher(
-		extensionState.eventHandler,
-		"herdr",
-	);
 	const root = (
 		extensionState as ExtensionState & {
 			root: Parameters<typeof registerExtensionEventConsumers>[0];
@@ -193,30 +184,12 @@ function startExtensions(
 		root.persistSessionState,
 	);
 	registerExtensionEventConsumers(root);
-	installHerdrTabClaim(pi, {
+	createHerdrModule(pi, {
+		eventHandler: extensionState.eventHandler,
+		sessionState: extensionState.sessionState,
+		getLifecycleEpoch: () => root.lifecycleEpoch.value,
 		commandRunner: moduleDependencies.herdrCommandRunner,
 		spawnWorker: moduleDependencies.herdrSpawnWorker,
-		publishClaimInProgress: (claimInProgress) => {
-			const current = extensionState.sessionState.moduleState.herdr;
-			return herdrStatePublisher.publish(
-				{ ...current, claimInProgress },
-				{ persist: false },
-			);
-		},
-		hasClaimReturnedSuccessfully: () =>
-			extensionState.sessionState.moduleState.herdr
-				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED,
-		onClaimReturnedSuccessfully: () => {
-			const current = extensionState.sessionState.moduleState.herdr;
-			return herdrStatePublisher.publish(
-				{
-					...current,
-					claimInProgress: false,
-					herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
-				},
-				{ persist: true },
-			);
-		},
 	});
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }

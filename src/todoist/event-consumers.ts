@@ -172,7 +172,7 @@ export async function runTaskClaim(
 			sessionId: operations.sessionState.session.activeSessionId ?? "",
 			prompt,
 			cwd: session.context.cwd,
-			projectRef: session.project.todoistProjectRef,
+			projectRef: operations.projectRef,
 			prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 			worktree,
 		});

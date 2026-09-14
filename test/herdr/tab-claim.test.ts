@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { createModuleStatePublisher } from "../../src/event-publishers.ts";
 import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr/constants.ts";
+import { installHerdrTabClaim } from "../../src/herdr/event-consumers.ts";
 import {
 	CLAIM_WORKER_RESPONSE_TEMPLATE,
 	type ClaimWorkerRequest,
 	type CommandRunner,
 	type StartBackgroundWorker,
 } from "../../src/herdr/internal-state.ts";
-import { installHerdrTabClaim } from "../../src/herdr/module.ts";
 import { herdrStateDescriptor } from "../../src/herdr/module-state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";

@@ -1,10 +1,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { EventHandler } from "../shared/events.ts";
 import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
+import type { SessionState } from "../state.ts";
 import type { HerdrEvents } from "./events.ts";
-
 import type { HerdrModuleState } from "./module-state.ts";
 
 export type HerdrState = HerdrModuleState;
@@ -57,6 +58,14 @@ export type CommandRunner = (command: string, args: string[]) => string;
 export type StartBackgroundWorker = (
 	request: ClaimWorkerRequest,
 ) => ClaimWorkerHandle;
+
+export interface HerdrModuleSetupOptions {
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	getLifecycleEpoch?: () => number;
+	commandRunner?: CommandRunner;
+	spawnWorker?: WorkerSpawner;
+}
 
 export interface HerdrTabOptions {
 	commandRunner?: CommandRunner;

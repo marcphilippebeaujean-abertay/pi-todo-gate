@@ -20,7 +20,6 @@ export interface SessionRecord {
 	context: ExtensionContext;
 	project: {
 		codingRoot: string;
-		todoistProjectRef: string;
 		triggersOnlyOnWorktree?: boolean;
 	};
 	hasPendingHandoffContext: boolean;

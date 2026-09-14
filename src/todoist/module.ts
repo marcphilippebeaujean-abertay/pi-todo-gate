@@ -13,28 +13,45 @@ export * from "./client.ts";
 export * from "./commands.ts";
 export * from "./events.ts";
 export * from "./module-state.ts";
-export type TodoistModule = Record<never, never>;
 export * from "./parsing.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { isRecord } from "../shared/records.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
 	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
+	ResolvedProject,
 	TodoistModuleOptions,
 	TodoistOperations,
+	TodoistProjectMapping,
 	TodoistSession,
 	TodoistState,
 	TodoistStateUpdateOptions,
 } from "./internal-state.ts";
+import {
+	loadConfig as loadTodoistConfig,
+	resolveConfiguredProject,
+} from "./parsing.ts";
 
-class TodoistModuleImpl {
+export interface SessionProject {
+	codingRoot: string;
+	triggersOnlyOnWorktree?: boolean;
+}
+
+export interface TodoistModule {
+	resolveSessionProject(cwd: string): Promise<SessionProject | null>;
+}
+
+class TodoistModuleImpl implements TodoistModule {
 	private readonly getLifecycleEpoch: () => number;
 	private readonly publishState;
 	private currentSession: TodoistSession | null = null;
+	private currentProjectRef = "";
+	private readonly resolvedProjects = new Map<string, ResolvedProject | null>();
 	readonly taskClaim = {
 		pending: false,
 		completed: false,
@@ -57,31 +74,101 @@ class TodoistModuleImpl {
 				const activationEpoch = lifecycleEpoch ?? this.getLifecycleEpoch();
 				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 				if (!isCurrentEpoch) return;
-				this.resetTaskClaim();
-				this.currentSession = session;
-				void this.syncSessionState(session, activationEpoch);
+				return this.activateSession(session, activationEpoch);
 			},
 		);
-		this.options.eventHandler.sessionResetEvent.subscribe(() =>
-			this.resetTaskClaim(),
-		);
+		this.options.eventHandler.sessionResetEvent.subscribe(() => {
+			this.currentSession = null;
+			this.currentProjectRef = "";
+			this.resetTaskClaim();
+		});
 		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() => {
 			this.currentSession = null;
+			this.currentProjectRef = "";
 			this.resetTaskClaim();
 		});
 		this.options.eventHandler.beforeAgentStartEvent.subscribe(
 			({ event, session, lifecycleEpoch }) => {
-				const isCurrentSession = this.currentSession === session;
+				const isCurrentSession =
+					this.currentSession?.context === session.context;
 				const isCurrentEpoch = lifecycleEpoch === this.getLifecycleEpoch();
 				const hasTaskRef =
 					this.options.sessionState.moduleState.todoist.taskRef !== undefined;
 				if (!isCurrentSession) return;
 				if (!isCurrentEpoch) return;
 				if (hasTaskRef) return;
-				this.maybeAnalyzeTaskClaim(session, event.prompt, lifecycleEpoch);
+				this.maybeAnalyzeTaskClaim(event.prompt, lifecycleEpoch);
 			},
 		);
 		this.register();
+	}
+
+	private async loadProjectMapping(): Promise<TodoistProjectMapping> {
+		const hasConfigLoader = this.options.loadConfig !== undefined;
+		const loaded = hasConfigLoader
+			? await this.options.loadConfig?.()
+			: await loadTodoistConfig();
+		const hasProjectMapping = isRecord(loaded) && isRecord(loaded.projects);
+		if (!hasProjectMapping) return { projects: {} };
+		return loaded as unknown as TodoistProjectMapping;
+	}
+
+	private async configuredProject(
+		cwd: string,
+	): Promise<ResolvedProject | null> {
+		const cached = this.resolvedProjects.get(cwd);
+		const hasCachedProject = this.resolvedProjects.has(cwd);
+		if (hasCachedProject) return cached ?? null;
+		const config = await this.loadProjectMapping();
+		const resolved = resolveConfiguredProject(cwd, config);
+		this.resolvedProjects.set(cwd, resolved);
+		return resolved;
+	}
+
+	async resolveSessionProject(cwd: string): Promise<SessionProject | null> {
+		const resolved = await this.configuredProject(cwd);
+		if (resolved === null) return null;
+		return {
+			codingRoot: resolved.codingRoot,
+			triggersOnlyOnWorktree: resolved.triggersOnlyOnWorktree,
+		};
+	}
+
+	private async activateSession(
+		session: import("../shared/session-state.ts").SessionRecord,
+		activationEpoch: number,
+	): Promise<void> {
+		const rawProject = session.project;
+		const legacyProject = (rawProject ?? {
+			codingRoot: session.context.cwd,
+		}) as {
+			codingRoot: string;
+			todoistProjectRef?: unknown;
+			triggersOnlyOnWorktree?: boolean;
+		};
+		const hasLegacyProjectRef =
+			typeof legacyProject.todoistProjectRef === "string";
+		const hasSessionProject = rawProject !== undefined;
+		const resolved = hasLegacyProjectRef
+			? {
+					codingRoot: legacyProject.codingRoot,
+					todoistProjectRef: legacyProject.todoistProjectRef as string,
+					triggersOnlyOnWorktree: legacyProject.triggersOnlyOnWorktree,
+				}
+			: hasSessionProject
+				? await this.configuredProject(session.context.cwd)
+				: {
+						codingRoot: session.context.cwd,
+						todoistProjectRef: "",
+					};
+		const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
+		const hasResolvedProject = resolved !== null;
+		const canActivate = hasResolvedProject && isCurrentEpoch;
+		if (!canActivate) return;
+		this.resetTaskClaim();
+		this.currentSession = session;
+		this.currentProjectRef = resolved.todoistProjectRef;
+		await this.syncSessionState(session, activationEpoch);
 	}
 
 	private async syncSessionState(
@@ -142,6 +229,7 @@ class TodoistModuleImpl {
 		const operations = {
 			sessionState,
 			getSession: () => this.currentSession,
+			projectRef: this.currentProjectRef,
 			getLifecycleEpoch: this.getLifecycleEpoch,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
@@ -184,11 +272,9 @@ class TodoistModuleImpl {
 		registerTodoistMergeConsumer(operations);
 	}
 
-	private maybeAnalyzeTaskClaim(
-		session: TodoistSession,
-		prompt: string,
-		lifecycleEpoch: number,
-	): void {
+	private maybeAnalyzeTaskClaim(prompt: string, lifecycleEpoch: number): void {
+		const session = this.currentSession;
+		if (session === null) return;
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
