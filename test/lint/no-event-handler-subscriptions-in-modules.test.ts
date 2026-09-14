@@ -5,8 +5,8 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { lintProgram } from "../../src/lint/index.ts";
 
-const TEMP_PREFIX = "pi-todo-gate-event-handler-emits-";
-const RULE_ID = "no-event-handler-emits-in-consumers";
+const TEMP_PREFIX = "pi-todo-gate-event-handler-subscriptions-";
+const RULE_ID = "no-event-handler-subscriptions-in-modules";
 const COMPILER_OPTIONS: ts.CompilerOptions = {
 	strict: true,
 	target: ts.ScriptTarget.ES2022,
@@ -35,66 +35,63 @@ function ruleDiagnostics(
 }
 
 describe(RULE_ID, () => {
-	it("rejects typed direct, nested, alias, and destructured references", async () => {
+	it("rejects EventHandler subscriptions from module.ts", async () => {
 		const diagnostics = await lintModule(
-			"event-consumers.ts",
-			`interface EventHandler { foo: { emit(value: unknown): Promise<void> } }
+			"module.ts",
+			`interface EventHandler { foo: { subscribe(callback: () => void): () => void } }
 declare const eventHandler: EventHandler;
 declare const operations: { eventHandler: EventHandler };
-class Consumer {
+class Module {
 	private eventHandler: EventHandler = eventHandler;
-	publish(): void {
-		void eventHandler.foo.emit(undefined);
-		void this.eventHandler.foo.emit(undefined);
-		void operations.eventHandler.foo.emit(undefined);
+	listen(): void {
+		eventHandler.foo.subscribe(() => undefined);
+		this.eventHandler.foo.subscribe(() => undefined);
+		operations.eventHandler.foo.subscribe(() => undefined);
 		const alias = operations.eventHandler;
-		void alias.foo.emit(undefined);
+		alias.foo.subscribe(() => undefined);
 		const typedAlias: EventHandler = operations.eventHandler;
-		void typedAlias.foo.emit(undefined);
+		typedAlias.foo.subscribe(() => undefined);
 		const { eventHandler: destructured } = operations;
-		void destructured.foo.emit(undefined);
+		destructured.foo.subscribe(() => undefined);
 	}
 }
 `,
 		);
 
 		expect(ruleDiagnostics(diagnostics)).toHaveLength(6);
-		expect(
-			ruleDiagnostics(diagnostics).every(({ message }) =>
-				message.includes("event-publishers.ts"),
-			),
-		).toBe(true);
 	});
 
-	it("allows publisher and unrelated Event emitter calls", async () => {
+	it("rejects EventHandler subscriptions from other scoped facets", async () => {
 		const diagnostics = await lintModule(
-			"event-publishers.ts",
-			`declare const eventHandler: { foo: { emit(value: unknown): Promise<void> } };
-declare const event: { emit(value: unknown): Promise<void> };
-export function publish(): void {
-	void eventHandler.foo.emit(undefined);
-	void event.emit(undefined);
-}
+			"commands.ts",
+			`interface EventHandler { foo: { subscribe(callback: () => void): () => void } }
+declare const eventHandler: EventHandler;
+eventHandler.foo.subscribe(() => undefined);
+`,
+		);
+
+		expect(ruleDiagnostics(diagnostics)).toHaveLength(1);
+	});
+
+	it("allows EventHandler subscriptions from event-consumers.ts", async () => {
+		const diagnostics = await lintModule(
+			"event-consumers.ts",
+			`interface EventHandler { foo: { subscribe(callback: () => void): () => void } }
+declare const eventHandler: EventHandler;
+eventHandler.foo.subscribe(() => undefined);
 `,
 		);
 
 		expect(ruleDiagnostics(diagnostics)).toEqual([]);
 	});
 
-	it("allows unrelated emitters, including locals named eventHandler", async () => {
+	it("allows unrelated subscriptions from module.ts", async () => {
 		const diagnostics = await lintModule(
-			"event-consumers.ts",
-			`interface UnrelatedHandler { foo: { emit(value: unknown): Promise<void> } }
-declare const event: { emit(value: unknown): Promise<void> };
-declare const eventHandler: UnrelatedHandler;
-class Consumer {
-	private readonly emitter = event;
-	publish(): void {
-		void event.emit(undefined);
-		void this.emitter.emit(undefined);
-		void eventHandler.foo.emit(undefined);
-	}
-}
+			"module.ts",
+			`declare const eventHandler: { foo: { subscribe(callback: () => void): () => void } };
+declare const event: { subscribe(callback: () => void): () => void };
+eventHandler.foo.subscribe(() => undefined);
+event.subscribe(() => undefined);
 `,
 		);
 

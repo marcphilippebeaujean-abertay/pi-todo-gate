@@ -20,7 +20,8 @@ export type LintRuleId =
 	| "event-types-outside-events"
 	| "event-types-location"
 	| "no-functions-in-data"
-	| "no-event-handler-emits-in-consumers"
+	| "no-event-handler-emits-outside-publishers"
+	| "no-event-handler-subscriptions-in-modules"
 	| "module-state-contract"
 	| "no-internal-state-imports"
 	| "no-direct-module-state-write";

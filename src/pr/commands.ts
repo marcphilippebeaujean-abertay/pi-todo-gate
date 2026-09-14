@@ -8,6 +8,7 @@ import {
 	MERGE_COMMAND as MERGE_PROTOCOL_COMMAND,
 	mergeProtocolSkillPath,
 } from "./constants.ts";
+import { publishPrMerged } from "./event-publishers.ts";
 import { mergePinnedPr } from "./git.ts";
 import type { PrCommandOptions, PrSession } from "./internal-state.ts";
 import {
@@ -127,11 +128,7 @@ async function runMergeProtocol(
 	const isCurrentAfterMerge = currentSession(dependencies, session, sessionId);
 	const shouldStop = !merged || !isCurrentAfterMerge;
 	if (shouldStop) return;
-	await dependencies.eventHandler.prMergedEvent.emit({
-		prUrl,
-		taskMarkedAsCompleted: false,
-		sessionId,
-	});
+	await publishPrMerged(dependencies.eventHandler, prUrl, sessionId);
 	const isCurrentAfterEmit = currentSession(dependencies, session, sessionId);
 	if (isCurrentAfterEmit) notifyMergeSucceeded(ctx);
 }

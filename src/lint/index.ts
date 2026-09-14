@@ -13,7 +13,8 @@ import { noComplicatedExpressions } from "./rules/no-complicated-expressions.ts"
 import { noDefaultParameters } from "./rules/no-default-parameters.ts";
 import { noDirectModuleStateWrite } from "./rules/no-direct-module-state-write.ts";
 import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state.ts";
-import { noEventHandlerEmitsInConsumers } from "./rules/no-event-handler-emits-in-consumers.ts";
+import { noEventHandlerEmitsOutsidePublishers } from "./rules/no-event-handler-emits-outside-publishers.ts";
+import { noEventHandlerSubscriptionsInModules } from "./rules/no-event-handler-subscriptions-in-modules.ts";
 import { noRootStateImportsInModules } from "./rules/no-extension-state-in-modules.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
 import { noInternalStateImports } from "./rules/no-internal-state-imports.ts";
@@ -40,7 +41,8 @@ const RULES: readonly LintRule[] = [
 	eventTypesOutsideEvents,
 	eventTypesLocation,
 	noDomainTypesOutsideState,
-	noEventHandlerEmitsInConsumers,
+	noEventHandlerEmitsOutsidePublishers,
+	noEventHandlerSubscriptionsInModules,
 	noRootStateImportsInModules,
 	noDirectModuleStateWrite,
 	noFunctionsInData,

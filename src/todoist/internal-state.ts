@@ -118,6 +118,18 @@ export interface TodoistTaskClaimController {
 	};
 }
 
+export interface TodoistLifecycleConsumerOptions {
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	getSession: () => TodoistSession | null;
+	activateSession: (
+		session: TodoistSession,
+		sessionId: string,
+	) => Promise<void>;
+	resetSession: () => void;
+	maybeAnalyzeTaskClaim: (prompt: string) => void;
+}
+
 export interface TodoistModuleOptions {
 	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
 	loadConfig?: () => Promise<unknown>;

@@ -19,11 +19,49 @@ import type {
 	MergeRequest,
 	TaskClaimWorkerResult,
 	TodoistCompletionSnapshot,
+	TodoistLifecycleConsumerOptions,
 	TodoistOperations,
 	TodoistSession,
 	TodoistState,
 } from "./internal-state.ts";
 import { confirmTaskCompletion } from "./user-prompts.ts";
+
+export function registerTodoistLifecycleConsumers(
+	options: TodoistLifecycleConsumerOptions,
+): void {
+	options.eventHandler.sessionActivatedEvent.subscribe(
+		({ context, session, sessionId }) => {
+			const hasNoSession = session === undefined;
+			if (hasNoSession) return;
+			const isCurrentContext = session.context === context;
+			if (!isCurrentContext) return;
+			const isCurrentSession =
+				options.sessionState.session.activeSessionId === sessionId;
+			if (!isCurrentSession) return;
+			return options.activateSession(session, sessionId);
+		},
+	);
+	options.eventHandler.sessionResetEvent.subscribe(() =>
+		options.resetSession(),
+	);
+	options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+		options.resetSession(),
+	);
+	options.eventHandler.beforeAgentStartEvent.subscribe(
+		({ event, session, sessionId }) => {
+			const isCurrentContext =
+				options.getSession()?.context === session.context;
+			const isCurrentSessionId =
+				options.sessionState.session.activeSessionId === sessionId;
+			const hasTaskRef =
+				options.sessionState.moduleState.todoist.taskRef !== undefined;
+			const isCurrentSession = isCurrentContext && isCurrentSessionId;
+			if (!isCurrentSession) return;
+			if (hasTaskRef) return;
+			options.maybeAnalyzeTaskClaim(event.prompt);
+		},
+	);
+}
 
 function isSessionRecord(
 	operations: TodoistOperations,

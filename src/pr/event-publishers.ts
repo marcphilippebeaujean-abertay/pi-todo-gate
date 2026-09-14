@@ -1,4 +1,5 @@
 import type { CommandResult, Exec } from "../shared/command.ts";
+import type { EventHandler } from "../shared/events.ts";
 import { queryCurrentPr, queryPinnedHead } from "./git.ts";
 
 const GIT_COMMAND = "git";
@@ -119,6 +120,18 @@ export async function matchesPinnedPr(
 	return isGhMerge
 		? matchesGhMerge(exec, cwd, parsed, pinned)
 		: matchesGitMerge(exec, cwd, parsed, pinned);
+}
+
+export function publishPrMerged(
+	eventHandler: EventHandler,
+	prUrl: string,
+	sessionId: string,
+): Promise<void> {
+	return eventHandler.prMergedEvent.emit({
+		prUrl,
+		taskMarkedAsCompleted: false,
+		sessionId,
+	});
 }
 
 export async function detectMerge(

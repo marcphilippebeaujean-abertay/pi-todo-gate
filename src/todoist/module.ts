@@ -22,6 +22,7 @@ import { isRecord } from "../shared/records.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
+	registerTodoistLifecycleConsumers,
 	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
@@ -71,51 +72,15 @@ class TodoistModuleImpl implements TodoistModule {
 			this.options.eventHandler,
 			C.module.todoist,
 		);
-		this.subscribeSessionLifecycle();
-		this.subscribeBeforeAgentStart();
+		registerTodoistLifecycleConsumers({
+			eventHandler: this.options.eventHandler,
+			sessionState: this.options.sessionState,
+			getSession: () => this.currentSession,
+			activateSession: this.activateSession.bind(this),
+			resetSession: this.resetSession.bind(this),
+			maybeAnalyzeTaskClaim: this.maybeAnalyzeTaskClaim.bind(this),
+		});
 		this.register();
-	}
-
-	private subscribeSessionLifecycle(): void {
-		this.options.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session, sessionId }) => {
-				const hasNoSession = session === undefined;
-				if (hasNoSession) return;
-				const isCurrentContext = session.context === context;
-				if (!isCurrentContext) return;
-				const expectedSessionId = sessionId;
-				const activeSessionId =
-					this.options.sessionState.session.activeSessionId;
-				const isCurrentSession = activeSessionId === expectedSessionId;
-				if (!isCurrentSession) return;
-				return this.activateSession(session, expectedSessionId);
-			},
-		);
-		this.options.eventHandler.sessionResetEvent.subscribe(() =>
-			this.resetSession(),
-		);
-		this.options.eventHandler.sessionDeactivatedEvent.subscribe(() =>
-			this.resetSession(),
-		);
-	}
-
-	private subscribeBeforeAgentStart(): void {
-		this.options.eventHandler.beforeAgentStartEvent.subscribe(
-			({ event, session, sessionId }) => {
-				const expectedSessionId = sessionId;
-				const activeSessionId =
-					this.options.sessionState.session.activeSessionId;
-				const hasCurrentSessionId = activeSessionId === expectedSessionId;
-				const isCurrentContext =
-					this.currentSession?.context === session.context;
-				const isCurrentSession = isCurrentContext && hasCurrentSessionId;
-				const hasTaskRef =
-					this.options.sessionState.moduleState.todoist.taskRef !== undefined;
-				if (!isCurrentSession) return;
-				if (hasTaskRef) return;
-				this.maybeAnalyzeTaskClaim(event.prompt);
-			},
-		);
 	}
 
 	private resetSession(): void {
