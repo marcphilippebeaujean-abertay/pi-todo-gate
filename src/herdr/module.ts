@@ -34,7 +34,6 @@ export function createHerdrModule(
 	);
 	const tabOptions: HerdrTabOptions = {
 		commandRunner: options.commandRunner,
-		getLifecycleEpoch: options.getLifecycleEpoch,
 		spawnWorker: options.spawnWorker,
 		publishClaimInProgress: (claimInProgress) =>
 			statePublisher.publish(

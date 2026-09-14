@@ -187,7 +187,6 @@ function startExtensions(
 	createHerdrModule(pi, {
 		eventHandler: extensionState.eventHandler,
 		sessionState: extensionState.sessionState,
-		getLifecycleEpoch: () => root.lifecycleEpoch.value,
 		commandRunner: moduleDependencies.herdrCommandRunner,
 		spawnWorker: moduleDependencies.herdrSpawnWorker,
 	});

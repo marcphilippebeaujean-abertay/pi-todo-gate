@@ -220,18 +220,15 @@ describe("background Herdr tab claim", () => {
 		}
 	});
 
-	it("accepts active first-prompt response despite lifecycle epoch changes", async () => {
+	it("accepts active first-prompt response without lifecycle epoch distinction", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
-			const lifecycleEpoch = { value: 1 };
-			const getLifecycleEpoch = vi.fn(() => lifecycleEpoch.value);
 			const commands: string[] = [];
 			const claimStates: boolean[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
 				commandRunner: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
-				getLifecycleEpoch,
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
 					claimStates.push(claimInProgress);
@@ -244,7 +241,6 @@ describe("background Herdr tab claim", () => {
 			);
 			const request = backgroundWorker.requests[0];
 			if (request === undefined) throw new Error("worker request missing");
-			lifecycleEpoch.value = 2;
 			await request.events.claimCompletedEvent.emit({
 				result: { tabName: "dialog-editor", shouldMoveToNewTab: false },
 			});
@@ -256,7 +252,6 @@ describe("background Herdr tab claim", () => {
 				result: { tabName: "late-result", shouldMoveToNewTab: false },
 			});
 
-			expect(getLifecycleEpoch).not.toHaveBeenCalled();
 			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 			expect(commands).toContain("herdr tab rename w1:t1 dialog-editor");
 			expect(commands).not.toContain("herdr tab rename w1:t1 late-result");

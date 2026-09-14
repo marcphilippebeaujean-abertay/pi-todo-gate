@@ -53,14 +53,12 @@ export type StartBackgroundWorker = (
 export interface HerdrModuleSetupOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	getLifecycleEpoch?: () => number;
 	commandRunner?: CommandRunner;
 	spawnWorker?: WorkerSpawner;
 }
 
 export interface HerdrTabOptions {
 	commandRunner?: CommandRunner;
-	getLifecycleEpoch?: () => number;
 	cwd?: string;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
