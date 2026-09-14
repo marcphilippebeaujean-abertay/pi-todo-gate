@@ -4,7 +4,7 @@ import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
 import type { SessionState } from "../state.ts";
-import type { WorktreeModule } from "../worktree/internal-state.ts";
+import type { WorktreeModule } from "../worktree/module.ts";
 import type { ExitRequest } from "./internal-state.ts";
 import { presentExitActions } from "./user-prompts.ts";
 

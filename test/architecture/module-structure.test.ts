@@ -44,6 +44,16 @@ describe("module structure checker", () => {
 		expect(config).toContain("no-event-publisher-to-consumer");
 		expect(config).toContain("^src/[^/]+/event-publishers\\\\.ts$");
 	});
+	it("allows shared module-state imports but protects internal-state", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		expect(config).toContain("no-shared-to-scoped-implementation");
+		expect(config).toContain("no-shared-to-internal-state");
+		expect(config).toContain("no-root-to-internal-state");
+		expect(config).toContain("(?!module-state\\\\.ts$)");
+	});
 
 	it("requires every scoped module to define module-state.ts and internal-state.ts", async () => {
 		for (const domain of SCOPED_DOMAINS) {

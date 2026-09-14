@@ -4,9 +4,9 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { RootEventPublisher } from "./event-publishers.ts";
-import type { ExitProtocolModule } from "./exit-protocol/internal-state.ts";
-import type { FooterModule as FooterModuleType } from "./footer/internal-state.ts";
-import type { PrModule, PrSession } from "./pr/internal-state.ts";
+import type { ExitProtocolModule } from "./exit-protocol/module.ts";
+import type { FooterModule as FooterModuleType } from "./footer/module.ts";
+import type { PrModule, PrSession } from "./pr/module.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
 import {
@@ -31,11 +31,8 @@ import {
 	type SessionState,
 } from "./state.ts";
 import { loadConfig, resolveConfiguredProject } from "./todoist/config.ts";
-import type {
-	TodoistModule,
-	TodoistProjectMapping,
-} from "./todoist/internal-state.ts";
-import type { WorktreeModule } from "./worktree/internal-state.ts";
+import type { TodoistModule, TodoistProjectMapping } from "./todoist/module.ts";
+import type { WorktreeModule } from "./worktree/module.ts";
 
 export interface RootComposition {
 	pi: ExtensionAPI;

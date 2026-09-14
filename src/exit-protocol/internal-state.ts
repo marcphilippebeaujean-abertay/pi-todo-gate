@@ -7,7 +7,7 @@ import type {
 	ModuleStateDescriptor,
 } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
-import type { WorktreeModule } from "../worktree/internal-state.ts";
+import type { WorktreeModule } from "../worktree/module.ts";
 import {
 	EXIT_ACTION_KEY,
 	type EXIT_CANCEL_KEY,

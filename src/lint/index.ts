@@ -16,6 +16,7 @@ import { noDomainTypesOutsideState } from "./rules/no-domain-types-outside-state
 import { noEventHandlerEmitsInConsumers } from "./rules/no-event-handler-emits-in-consumers.ts";
 import { noRootStateImportsInModules } from "./rules/no-extension-state-in-modules.ts";
 import { noFunctionsInData } from "./rules/no-functions-in-data.ts";
+import { noInternalStateImports } from "./rules/no-internal-state-imports.ts";
 import { noMagicStrings } from "./rules/no-magic-strings.ts";
 import { noShortStringConstants } from "./rules/no-short-string-constants.ts";
 import { noWorkerConsumerCallbacks } from "./rules/no-worker-consumer-callbacks.ts";
@@ -44,6 +45,7 @@ const RULES: readonly LintRule[] = [
 	noDirectModuleStateWrite,
 	noFunctionsInData,
 	moduleStateContract,
+	noInternalStateImports,
 	repeatedFieldChecks,
 	preferSwitchDispatch,
 	noComplicatedExpressions,

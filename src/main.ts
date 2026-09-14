@@ -10,20 +10,21 @@ import {
 	createModuleStatePublisher,
 	RootEventPublisher,
 } from "./event-publishers.ts";
-import type { ExitProtocolModule } from "./exit-protocol/internal-state.ts";
-import { exitProtocolStateDescriptor } from "./exit-protocol/internal-state.ts";
-import { createExitProtocolModule } from "./exit-protocol/module.ts";
+import type { ExitProtocolModule } from "./exit-protocol/module.ts";
+import {
+	createExitProtocolModule,
+	exitProtocolStateDescriptor,
+} from "./exit-protocol/module.ts";
 import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
-import type { FooterModule } from "./footer/internal-state.ts";
-import { footerStateDescriptor } from "./footer/internal-state.ts";
-import { createFooterModule } from "./footer/module.ts";
+import type { FooterModule } from "./footer/module.ts";
+import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
 import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
-import type { CommandRunner, WorkerSpawner } from "./herdr/internal-state.ts";
-import { herdrStateDescriptor } from "./herdr/internal-state.ts";
+import type { CommandRunner, WorkerSpawner } from "./herdr/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
-import type { PrModule } from "./pr/internal-state.ts";
-import { prStateDescriptor } from "./pr/internal-state.ts";
+import { herdrStateDescriptor } from "./herdr/module-state.ts";
+import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
+import { prStateDescriptor } from "./pr/module-state.ts";
 import { PromptQueue } from "./prompt-queue.ts";
 import {
 	type ModuleStateDescriptors,
@@ -39,11 +40,11 @@ import type {
 	TaskClaimWorker,
 	TodoistClientLike,
 	TodoistModule,
-} from "./todoist/internal-state.ts";
-import { todoistStateDescriptor } from "./todoist/internal-state.ts";
+} from "./todoist/module.ts";
 import { createTodoistModule } from "./todoist/module.ts";
-import { worktreeStateDescriptor } from "./worktree/internal-state.ts";
+import { todoistStateDescriptor } from "./todoist/module-state.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
+import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 
 export interface ExtensionDependencies extends BaseExtensionDependencies {
 	createTodoistClient?: (
@@ -63,7 +64,7 @@ interface ExtensionState {
 	footer: FooterModule;
 	pr: PrModule;
 	todoist: TodoistModule;
-	worktree: import("./worktree/internal-state.ts").WorktreeModule;
+	worktree: import("./worktree/module.ts").WorktreeModule;
 	exitProtocol: ExitProtocolModule;
 }
 

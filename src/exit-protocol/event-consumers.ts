@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
-import type { WorktreeModule } from "../worktree/internal-state.ts";
+import type { WorktreeModule } from "../worktree/module.ts";
 import {
 	addWorktreeExitAction,
 	createExitRequest,
