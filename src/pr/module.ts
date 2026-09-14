@@ -20,6 +20,7 @@ import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
 import { handlePrToolResult } from "./event-consumers.ts";
+import "./event-publishers.ts";
 import { findOpenPr, isGithubPrAvailable } from "./git.ts";
 import type {
 	OriginRequest,
@@ -37,8 +38,6 @@ import { installStateTool } from "./state-tool.ts";
 export * from "./commands.ts";
 export { register as registerMergeProtocol } from "./commands.ts";
 export * from "./constants.ts";
-export * from "./event-consumers.ts";
-export * from "./event-publishers.ts";
 export * from "./events.ts";
 export * from "./git.ts";
 export * from "./module-state.ts";

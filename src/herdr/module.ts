@@ -10,9 +10,7 @@ import "./notifications.ts";
 
 export * from "./claim-worker-result.ts";
 export * from "./commands.ts";
-export * from "./event-consumers.ts";
 export { installHerdrTabClaim } from "./event-consumers.ts";
-export * from "./event-publishers.ts";
 export * from "./events.ts";
 export * from "./module-state.ts";
 export * from "./runtime.ts";

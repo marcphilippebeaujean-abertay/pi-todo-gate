@@ -29,11 +29,3 @@ export function createWorktreeModule(
 ): WorktreeCleanup {
 	return createWorktreeConsumer(options) as unknown as WorktreeCleanup;
 }
-
-export {
-	cleanupWorktree,
-	commandFailure,
-	commandOutput,
-	currentWorktreeState,
-	isCurrentWorktree,
-} from "./git.ts";

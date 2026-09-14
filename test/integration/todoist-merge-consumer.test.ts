@@ -16,11 +16,11 @@ const createTestExitProtocolModule = createExitProtocolModule as unknown as (
 	options: Parameters<typeof createExitProtocolModule>[0],
 ) => { sessionStart(context: unknown): void };
 
+import { registerTodoistMergeConsumer } from "../../src/todoist/event-consumers.ts";
 import type {
 	TodoistCompletionSnapshot,
 	TodoistOperations,
 } from "../../src/todoist/internal-state.ts";
-import { registerTodoistMergeConsumer } from "../../src/todoist/module.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 

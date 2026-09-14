@@ -1,7 +1,4 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
@@ -33,7 +30,6 @@ import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
-import type { PiWorkerSpawner } from "./shared/pi-worker-data.ts";
 import { isSubagent } from "./shared/session.ts";
 import { createSessionState } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
@@ -42,11 +38,20 @@ import { todoistStateDescriptor } from "./todoist/module-state.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 
+type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
+type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
+type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
+type HerdrSetupOptions = NonNullable<
+	Parameters<typeof installHerdrTabClaim>[1]
+>;
+type HerdrCommandRunner = NonNullable<HerdrSetupOptions["commandRunner"]>;
+type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
+
 export interface ExtensionDependencies extends BaseExtensionDependencies {
-	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => unknown;
-	taskClaimWorker?: unknown;
-	herdrCommandRunner?: (command: string, args: string[]) => string;
-	herdrSpawnWorker?: PiWorkerSpawner;
+	createTodoistClient?: TodoistClientFactory;
+	taskClaimWorker?: TaskClaimWorker;
+	herdrCommandRunner?: HerdrCommandRunner;
+	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
 interface ExtensionState {
@@ -63,10 +68,10 @@ interface ExtensionState {
 
 interface ModuleSetupDependencies {
 	exec?: Exec;
-	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => unknown;
-	taskClaimWorker?: unknown;
-	herdrCommandRunner?: (command: string, args: string[]) => string;
-	herdrSpawnWorker?: PiWorkerSpawner;
+	createTodoistClient?: TodoistClientFactory;
+	taskClaimWorker?: TaskClaimWorker;
+	herdrCommandRunner?: HerdrCommandRunner;
+	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
 export function createExtensionState(
@@ -74,8 +79,7 @@ export function createExtensionState(
 	dependencies?: ExtensionDependencies,
 ): ExtensionState {
 	const providedDependencies = dependencies ?? {};
-	const moduleDependencies =
-		providedDependencies as unknown as ModuleSetupDependencies;
+	const moduleDependencies: ModuleSetupDependencies = providedDependencies;
 	const eventHandler = createEventHandler();
 	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
@@ -122,7 +126,7 @@ export function createExtensionState(
 		exec: moduleDependencies.exec,
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
 		createTodoistClient: moduleDependencies.createTodoistClient,
-	} as Parameters<typeof createTodoistModule>[0]);
+	});
 	const exitProtocol = createExitProtocolModule({
 		promptQueue,
 		eventHandler,
