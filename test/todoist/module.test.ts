@@ -146,6 +146,69 @@ describe("Todoist module ownership", () => {
 		expect(worker).not.toHaveBeenCalled();
 	});
 
+	it("does not start stale worker after session changes during inspection", async () => {
+		const events = createSharedEvents();
+		const lifecycleEpoch = { value: 1 };
+		const sessionState = createSessionState();
+		const oldContext = { cwd: "/old", hasUI: false } as never;
+		const newContext = { cwd: "/new", hasUI: false } as never;
+		const oldSession = { context: oldContext } as unknown as TodoistSession;
+		const newSession = { context: newContext } as unknown as TodoistSession;
+		const worker = vi.fn(async () => ({
+			sessionId: "session",
+			action: "error" as const,
+			taskData: null,
+			error: "not a task" as string | null,
+		}));
+		let releaseInspection!: () => void;
+		let markInspectionStarted!: () => void;
+		const inspectionStarted = new Promise<void>((resolve) => {
+			markInspectionStarted = resolve;
+		});
+		const inspectionReleased = new Promise<void>((resolve) => {
+			releaseInspection = resolve;
+		});
+		const exec = vi.fn(async (_command: string, args: string[]) => {
+			if (args[0] === "rev-parse") {
+				markInspectionStarted();
+				await inspectionReleased;
+			}
+			return { stdout: "", stderr: "", code: 1 };
+		});
+		createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			getLifecycleEpoch: () => lifecycleEpoch.value,
+			exec,
+			taskClaimWorker: worker,
+		});
+
+		await events.sessionActivatedEvent.emit({
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+		});
+		const beforeAgent = events.beforeAgentStartEvent.emit({
+			event: { prompt: "stale prompt" } as never,
+			context: oldContext,
+			session: oldSession,
+			lifecycleEpoch: 1,
+			messages: [],
+		});
+		await inspectionStarted;
+		lifecycleEpoch.value = 2;
+		await events.sessionActivatedEvent.emit({
+			context: newContext,
+			session: newSession,
+			lifecycleEpoch: 2,
+		});
+		releaseInspection();
+		await beforeAgent;
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
 	it("starts task-claim analysis from shared before-agent events", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();

@@ -159,6 +159,11 @@ export async function runTaskClaim(
 	try {
 		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 		const worktree = await inspectProject(exec, session.context.cwd);
+		const isCurrentSession = operations.getSession() === session;
+		const isCurrentEpochAfterInspection =
+			(operations.getLifecycleEpoch?.() ?? lifecycleEpoch) === lifecycleEpoch;
+		if (!isCurrentSession) return;
+		if (!isCurrentEpochAfterInspection) return;
 		const worker =
 			operations.taskClaimWorker ??
 			operations.dependencies?.taskClaimWorker ??

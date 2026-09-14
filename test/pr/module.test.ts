@@ -11,6 +11,7 @@ import {
 	removeMergedPr,
 } from "../../src/pr/module.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
+import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createEventHandler } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
@@ -414,6 +415,97 @@ describe("PR module ownership", () => {
 		);
 	});
 
+	it("discovers initial PR from shared initial-discovery events", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const exec = vi.fn(async () => ({
+			stdout: JSON.stringify({ url: "https://github.com/o/r/pull/42" }),
+			stderr: "",
+			code: 0,
+		}));
+		createTestPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		await events.initialPrDiscoveryEvent.emit({
+			branch: [{ type: "message", text: "https://github.com/o/r/pull/42" }],
+			lifecycleEpoch: 0,
+		});
+
+		expect(updates).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					moduleId: "pr",
+					moduleState: expect.objectContaining({
+						prUrl: "https://github.com/o/r/pull/42",
+					}),
+				}),
+			]),
+		);
+	});
+
+	it("skips initial PR discovery when module state disables discovery", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		sessionState.moduleState.pr.discoveryDisabled = true;
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		createTestPrModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState,
+		});
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationGeneration: 0,
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			session,
+			lifecycleEpoch: 0,
+		});
+		updates.length = 0;
+		await events.initialPrDiscoveryEvent.emit({
+			branch: [{ type: "message", text: "https://github.com/o/r/pull/42" }],
+			lifecycleEpoch: 0,
+		});
+
+		expect(updates).toEqual([]);
+	});
+
 	it("emits remote origin through module state and shared Git state", async () => {
 		const events = createEventHandler();
 		const updates: unknown[] = [];
@@ -772,8 +864,19 @@ describe("PR module ownership", () => {
 			if (args[0] === "branch")
 				return { stdout: "feature\n", stderr: "", code: 0 };
 			if (args[0] === "worktree")
-				return { stdout: "worktree /repo\n", stderr: "", code: 0 };
-			return { stdout: "[]", stderr: "", code: 0 };
+				return {
+					stdout:
+						"worktree /main\nHEAD main\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+					stderr: "",
+					code: 0,
+				};
+			return {
+				stdout: JSON.stringify([
+					{ state: "CLOSED", url: "https://github.com/o/r/pull/42" },
+				]),
+				stderr: "",
+				code: 0,
+			};
 		});
 		createTestPrModule({
 			promptQueue: new PromptQueue(),
@@ -800,6 +903,7 @@ describe("PR module ownership", () => {
 				gitStatePatch: { remoteOrigin: "git@github.com:o/r.git" },
 			}),
 		);
+		expect(messages).toEqual([C.message.createPr]);
 	});
 
 	it("ignores stale before-agent prompt contributions after session changes", async () => {
