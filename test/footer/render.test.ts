@@ -50,10 +50,10 @@ const BOUNDED_PR_NUMBER = "#12345…";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
+import type { FooterTheme } from "../../src/footer/internal-state.ts";
 import {
 	createFooterFactory,
 	Footer,
-	type FooterTheme,
 	renderFooter,
 	renderFooterLine,
 	renderPrLabel,

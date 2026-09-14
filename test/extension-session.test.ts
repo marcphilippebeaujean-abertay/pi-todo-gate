@@ -158,9 +158,21 @@ describe("session shutdown", () => {
 			gitState: {},
 			moduleState: createSessionState().moduleState,
 		});
-		expect(runtime.footer.deactivate).toHaveBeenCalledOnce();
-		expect(runtime.worktree.deactivate).toHaveBeenCalledOnce();
-		expect(runtime.exitProtocol.deactivate).toHaveBeenCalledOnce();
+		expect(
+			(runtime.footer as unknown as { deactivate: ReturnType<typeof vi.fn> })
+				.deactivate,
+		).toHaveBeenCalledOnce();
+		expect(
+			(runtime.worktree as unknown as { deactivate: ReturnType<typeof vi.fn> })
+				.deactivate,
+		).toHaveBeenCalledOnce();
+		expect(
+			(
+				runtime.exitProtocol as unknown as {
+					deactivate: ReturnType<typeof vi.fn>;
+				}
+			).deactivate,
+		).toHaveBeenCalledOnce();
 	});
 
 	it("retains startup module snapshots after activation", async () => {

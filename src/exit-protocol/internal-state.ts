@@ -2,21 +2,13 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitAction } from "../shared/exit-actions.ts";
-import type {
-	JsonValue,
-	ModuleStateDescriptor,
-} from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
-import type { WorktreeModule } from "../worktree/module.ts";
+import type { WorktreeCleanup } from "../worktree/module.ts";
 import {
 	EXIT_ACTION_KEY,
 	type EXIT_CANCEL_KEY,
 	EXIT_SUBMIT_KEY,
 } from "./constants.ts";
-
-export interface ExitProtocolModuleState {
-	active: boolean;
-}
 
 export interface ExitRequest {
 	readonly actions: readonly ExitAction[];
@@ -29,35 +21,12 @@ export type {
 	ExitActionResult,
 } from "../shared/exit-actions.ts";
 
-export interface ExitProtocolModule {
-	sessionStart(ctx: ExtensionContext): void;
-	deactivate(): void;
-}
-
-export const exitProtocolStateDescriptor: ModuleStateDescriptor<
-	"exitProtocol",
-	ExitProtocolModuleState
-> = {
-	id: "exitProtocol",
-	createInitialState: () => ({ active: false }),
-	restore: (value) => {
-		const isObjectValue = typeof value === "object" && value !== null;
-		const isArrayValue = Array.isArray(value);
-		const isInvalidValue = !isObjectValue || isArrayValue;
-		if (isInvalidValue) return { active: false };
-		const active = (value as { active?: unknown }).active;
-		const hasValidActive = typeof active === "boolean";
-		return hasValidActive ? { active } : { active: false };
-	},
-	serialize: (state): JsonValue => ({ active: state.active }),
-};
-
 export interface ExitProtocolModuleOptions {
 	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	getLifecycleEpoch?: () => number;
-	worktree?: WorktreeModule;
+	worktree?: WorktreeCleanup;
 }
 
 export type PickerFocus =

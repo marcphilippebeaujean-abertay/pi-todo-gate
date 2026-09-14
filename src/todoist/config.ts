@@ -2,7 +2,7 @@ export type {
 	ResolvedProject,
 	TodoistProjectMapping,
 	TodoistProjectSettings,
-} from "./module.ts";
+} from "./internal-state.ts";
 export {
 	configPathForAgentDir,
 	DEFAULT_CONFIG_PATH,

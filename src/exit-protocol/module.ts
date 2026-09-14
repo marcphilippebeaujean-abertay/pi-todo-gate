@@ -7,10 +7,7 @@ import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
 import { ExitProtocolConsumer } from "./event-consumers.ts";
-import type {
-	ExitProtocolModule,
-	ExitProtocolModuleOptions,
-} from "./internal-state.ts";
+import type { ExitProtocolModuleOptions } from "./internal-state.ts";
 
 export type {
 	ExitAction,
@@ -18,8 +15,9 @@ export type {
 	ExitActionResult,
 } from "../shared/exit-actions.ts";
 export * from "./events.ts";
-export * from "./internal-state.ts";
+export * from "./module-state.ts";
 export * from "./user-prompts.ts";
+export type ExitProtocolModule = Record<never, never>;
 
 export function createExitProtocolModule(
 	options: ExitProtocolModuleOptions,

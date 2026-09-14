@@ -8,25 +8,26 @@ import "./event-publishers.ts";
 import "./notifications.ts";
 import "./user-prompts.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
-import type {
-	WorktreeModule,
-	WorktreeModuleOptions,
-} from "./internal-state.ts";
+import type { WorktreeModuleOptions } from "./internal-state.ts";
 
 export * from "./events.ts";
-export type {
-	WorktreeBaseline,
-	WorktreeCurrentState,
-	WorktreeInfo,
-	WorktreeModule,
-	WorktreeModuleDependencies,
-	WorktreeModuleOptions,
-} from "./internal-state.ts";
+export * from "./module-state.ts";
+export interface WorktreeInfo {
+	worktreePath: string;
+	branch: string;
+}
+
+export interface WorktreeCleanup {
+	getWorktreeInfo(): WorktreeInfo | null;
+	removeWorktree(): Promise<
+		import("../shared/exit-actions.ts").ExitActionResult
+	>;
+}
 
 export function createWorktreeModule(
 	options: WorktreeModuleOptions,
-): WorktreeModule {
-	return createWorktreeConsumer(options);
+): WorktreeCleanup {
+	return createWorktreeConsumer(options) as unknown as WorktreeCleanup;
 }
 
 export {

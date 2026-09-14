@@ -4,11 +4,26 @@ import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_SPINNER_INTERVAL_MS,
 } from "../../src/footer/constants.ts";
-import type { FooterUpdate } from "../../src/footer/internal-state.ts";
-import { restoreFooterState } from "../../src/footer/internal-state.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
+import type {
+	FooterModuleState,
+	FooterUpdate,
+} from "../../src/footer/module-state.ts";
+import { restoreFooterState } from "../../src/footer/module-state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
+
+type TestFooterModule = {
+	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
+	update(event: unknown): void;
+	getState(): FooterModuleState;
+	deactivate(): void;
+};
+
+const createTestFooterModule = (
+	options: Parameters<typeof createFooterModule>[0],
+): TestFooterModule =>
+	createFooterModule(options) as unknown as TestFooterModule;
 
 function harness(branch: unknown[] = []) {
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
@@ -61,7 +76,7 @@ describe("footer module", () => {
 
 	it("starts a blank session without rendering default footers", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -76,7 +91,7 @@ describe("footer module", () => {
 		vi.useFakeTimers();
 		try {
 			const h = harness();
-			const footer = createFooterModule({
+			const footer = createTestFooterModule({
 				eventHandler: h.events,
 				sessionState: h.sessionState,
 			});
@@ -103,7 +118,7 @@ describe("footer module", () => {
 
 	it("updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -127,7 +142,7 @@ describe("footer module", () => {
 		h.events.moduleStateChangedEvent.subscribe((event) => {
 			updates.push(event);
 		});
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -146,7 +161,7 @@ describe("footer module", () => {
 
 	it("throws when live module update receives invalid data", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -162,7 +177,7 @@ describe("footer module", () => {
 
 	it("derives all statuses from module state changes", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -207,7 +222,7 @@ describe("footer module", () => {
 
 	it("hides Herdr spinner after transient claim completion", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});
@@ -238,7 +253,7 @@ describe("footer module", () => {
 
 	it("resets in-memory state when extension instance receives a new blank session", async () => {
 		const h = harness();
-		const footer = createFooterModule({
+		const footer = createTestFooterModule({
 			eventHandler: h.events,
 			sessionState: h.sessionState,
 		});

@@ -104,26 +104,18 @@ export interface TodoistModuleState {
 }
 
 export type TodoistState = TodoistModuleState;
-export { todoistStateDescriptor } from "./module-state.ts";
 
 export interface TodoistStateUpdateOptions {
 	persist: boolean;
 	gitStatePatch?: Partial<SessionState["gitState"]>;
 }
 
-export interface TodoistModule {
-	register(): void;
-	syncSessionState(session: TodoistSession): Promise<void>;
-	updateState(
-		state: TodoistState,
-		options: TodoistStateUpdateOptions,
-	): Promise<void>;
+export interface TodoistTaskClaimController {
 	taskClaim: {
 		pending: boolean;
 		completed: boolean;
 		session?: TodoistSession;
 	};
-	maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void;
 }
 
 export interface TodoistModuleOptions {
@@ -154,7 +146,7 @@ export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
 	getLifecycleEpoch?: () => number;
-	todoist: TodoistModule;
+	todoist: TodoistTaskClaimController;
 	promptQueue: PromptQueue;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;

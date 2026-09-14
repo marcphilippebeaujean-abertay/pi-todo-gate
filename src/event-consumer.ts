@@ -6,7 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { RootEventPublisher } from "./event-publishers.ts";
 import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import type { FooterModule as FooterModuleType } from "./footer/module.ts";
-import type { PrModule, PrSession } from "./pr/module.ts";
+import type { PrModule } from "./pr/module.ts";
 import type { PromptQueue } from "./prompt-queue.ts";
 import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
 import {
@@ -23,16 +23,16 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "./shared/events.ts";
-import { textOf } from "./shared/extension-message.ts";
-import type { SessionReader } from "./shared/session-state.ts";
+import type { SessionReader, SessionRecord } from "./shared/session-state.ts";
 import {
 	createSessionState,
 	type RootDependencies,
 	type SessionState,
 } from "./state.ts";
+import type { TodoistProjectMapping } from "./todoist/config.ts";
 import { loadConfig, resolveConfiguredProject } from "./todoist/config.ts";
-import type { TodoistModule, TodoistProjectMapping } from "./todoist/module.ts";
-import type { WorktreeModule } from "./worktree/module.ts";
+import type { TodoistModule } from "./todoist/module.ts";
+import type { WorktreeCleanup } from "./worktree/module.ts";
 
 export interface RootComposition {
 	pi: ExtensionAPI;
@@ -43,9 +43,9 @@ export interface RootComposition {
 	footer: FooterModuleType;
 	pr: PrModule;
 	todoist: TodoistModule;
-	worktree: WorktreeModule;
+	worktree: WorktreeCleanup;
 	exitProtocol: ExitProtocolModule;
-	session: PrSession | null;
+	session: SessionRecord | null;
 	publisher: RootEventPublisher;
 	lifecycleEpoch: { value: number };
 	stateUpdateEpoch: { value: number };
@@ -140,7 +140,7 @@ async function activateConfigured(
 	project: { codingRoot: string; todoistProjectRef: string },
 	config: TodoistProjectMapping,
 ): Promise<{
-	session: PrSession;
+	session: SessionRecord;
 	branch: readonly unknown[];
 	hasPendingHandoffContext: boolean;
 } | null> {
@@ -166,7 +166,7 @@ async function activateConfigured(
 	root.sessionState.gitState = state.gitState;
 	root.sessionState.moduleState = state.moduleState;
 	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
-	const session: PrSession = {
+	const session: SessionRecord = {
 		context: ctx,
 		project,
 		hasPendingHandoffContext,
@@ -185,11 +185,6 @@ async function activateConfigured(
 		lifecycleEpoch: epoch,
 	});
 	if (!isCurrentEpoch(root, epoch)) return null;
-	await root.pr.initializeRemoteOrigin(
-		ctx,
-		root.sessionState.gitState.remoteOrigin,
-	);
-	if (!isCurrentEpoch(root, epoch)) return null;
 	return { session, branch, hasPendingHandoffContext };
 }
 
@@ -205,16 +200,16 @@ async function persistInheritedState(
 	return isCurrentEpoch(root, epoch);
 }
 
-async function persistInitialPr(
+async function publishInitialPrDiscovery(
 	root: Root,
 	epoch: number,
 	branch: readonly unknown[],
 ): Promise<void> {
-	const prState = root.sessionState.moduleState.pr;
-	const canDiscover = !prState.discoveryDisabled && prState.prUrl === undefined;
-	if (!canDiscover || !isCurrentEpoch(root, epoch)) return;
-	await root.pr.persistInitialPr(branch);
-	if (!isCurrentEpoch(root, epoch)) return;
+	const canDiscoverInitialPr =
+		!root.sessionState.moduleState.pr.discoveryDisabled &&
+		root.sessionState.moduleState.pr.prUrl === undefined;
+	if (canDiscoverInitialPr && isCurrentEpoch(root, epoch))
+		await root.eventHandler.initialPrDiscoveryEvent.emit({ branch });
 }
 
 export async function handleSessionStart(
@@ -257,7 +252,7 @@ export async function handleSessionStart(
 	if (!inheritedStateReady) return;
 	manageActiveTools(root);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
-	await persistInitialPr(root, epoch, branch);
+	await publishInitialPrDiscovery(root, epoch, branch);
 	if (!isCurrentEpoch(root, epoch)) return;
 }
 
@@ -265,7 +260,7 @@ export async function handleMessageEnd(
 	root: Root,
 	event: MessageEndEvent,
 ): Promise<void> {
-	await root.pr.persistPrIfAvailable(textOf(event.message));
+	await root.eventHandler.messageEndEvent.emit({ event });
 }
 
 export async function handleBeforeAgentStart(
@@ -284,10 +279,12 @@ export async function handleBeforeAgentStart(
 		);
 		session.hasPendingHandoffContext = false;
 	}
-	if (root.sessionState.moduleState.todoist.taskRef === undefined)
-		root.todoist.maybeAnalyzeTaskClaim(session, event.prompt);
-	if (session.hasPerformedAnyGitMutations)
-		await root.pr.appendBeforeAgentPrompt(ctx, messages);
+	await root.eventHandler.beforeAgentStartEvent.emit({
+		event,
+		context: ctx,
+		session,
+		messages,
+	});
 	if (messages.length === 0) return undefined;
 	return {
 		message: {

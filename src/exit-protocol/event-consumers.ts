@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
-import type { WorktreeModule } from "../worktree/module.ts";
+import type { WorktreeCleanup } from "../worktree/module.ts";
 import {
 	addWorktreeExitAction,
 	createExitRequest,
@@ -9,12 +9,10 @@ import {
 	publishExitProtocolState,
 } from "./event-publishers.ts";
 import type {
-	ExitProtocolModule,
 	ExitProtocolModuleOptions,
 	ExitRequest,
 } from "./internal-state.ts";
-
-export class ExitProtocolConsumer implements ExitProtocolModule {
+export class ExitProtocolConsumer {
 	private context: ExtensionContext | null = null;
 	private sessionId: string | null = null;
 	private lifecycleEpoch = 0;
@@ -22,7 +20,7 @@ export class ExitProtocolConsumer implements ExitProtocolModule {
 	private readonly eventHandler: EventHandler;
 	private readonly getLifecycleEpoch: () => number;
 	private readonly sessionState: ExitProtocolModuleOptions["sessionState"];
-	private readonly worktree: WorktreeModule | undefined;
+	private readonly worktree: WorktreeCleanup | undefined;
 	private request: ExitRequest | null = null;
 
 	constructor(options: ExitProtocolModuleOptions) {

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { FOOTER_HERDR_TYPE } from "../../src/footer/constants.ts";
 import {
-	type FooterState,
+	type FooterModuleState as FooterState,
 	type FooterUpdate,
 	footerStateDescriptor,
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
-} from "../../src/footer/internal-state.ts";
+} from "../../src/footer/module-state.ts";
 
 const visible: FooterUpdate = {
 	footerType: "task",

@@ -1,13 +1,13 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import {
-	type ClaimWorkerRequest,
-	createHerdrEvents,
-	startClaimWorker,
-	type WorkerProcess,
-	type WorkerSpawner,
-} from "../../src/herdr/module.ts";
+import { startClaimWorker } from "../../src/herdr/event-publishers.ts";
+import type {
+	ClaimWorkerRequest,
+	WorkerProcess,
+	WorkerSpawner,
+} from "../../src/herdr/internal-state.ts";
+import { createHerdrEvents } from "../../src/herdr/module.ts";
 
 class FakeProcess extends EventEmitter implements WorkerProcess {
 	readonly stdout = new PassThrough();

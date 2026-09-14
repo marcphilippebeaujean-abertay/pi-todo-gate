@@ -57,10 +57,10 @@ const TASK_COMPLETE = "task complete";
 
 import { describe, expect, it } from "vitest";
 import type { CommandResult } from "../../src/shared/command.ts";
+import type { TodoistExec } from "../../src/todoist/internal-state.ts";
 import {
 	TodoistClient,
 	TodoistError,
-	type TodoistExec,
 	TodoistOperationCancelled,
 } from "../../src/todoist/module.ts";
 

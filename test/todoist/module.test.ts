@@ -11,9 +11,27 @@ import type {
 } from "../../src/todoist/internal-state.ts";
 import {
 	applyTodoistStatePatch,
-	createTodoistModule,
+	createTodoistModule as createTodoistModuleFactory,
 	isTodoistState,
 } from "../../src/todoist/module.ts";
+
+type TestTodoistModule = {
+	taskClaim: {
+		pending: boolean;
+		completed: boolean;
+		session?: unknown;
+	};
+	syncSessionState(session: unknown): Promise<void>;
+	updateState(
+		state: TodoistState,
+		options: TodoistStateUpdateOptions,
+	): Promise<void>;
+};
+
+const createTodoistModule = (
+	options: Parameters<typeof createTodoistModuleFactory>[0],
+): TestTodoistModule =>
+	createTodoistModuleFactory(options) as unknown as TestTodoistModule;
 
 describe("Todoist module ownership", () => {
 	it("does not let stale activation reset newer claim state", async () => {

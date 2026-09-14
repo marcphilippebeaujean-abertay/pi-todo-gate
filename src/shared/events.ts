@@ -103,6 +103,21 @@ export interface SessionActivatedEvent {
 }
 export type SessionDeactivatedEvent = undefined;
 
+export interface InitialPrDiscoveryEvent {
+	branch: readonly unknown[];
+}
+
+export interface MessageEndEventPayload {
+	event: MessageEndEvent;
+}
+
+export interface BeforeAgentStartEventPayload {
+	event: BeforeAgentStartEvent;
+	context: ExtensionContext;
+	session: SessionRecord;
+	messages: string[];
+}
+
 export interface PrMergedEvent {
 	prUrl: string | null;
 	taskMarkedAsCompleted: boolean;
@@ -122,6 +137,9 @@ export interface EventHandler {
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
+	initialPrDiscoveryEvent: Event<InitialPrDiscoveryEvent>;
+	messageEndEvent: Event<MessageEndEventPayload>;
+	beforeAgentStartEvent: Event<BeforeAgentStartEventPayload>;
 	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
 }
 
@@ -138,6 +156,9 @@ export function createSharedEvents(): EventHandler {
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
+		initialPrDiscoveryEvent: event<InitialPrDiscoveryEvent>(),
+		messageEndEvent: event<MessageEndEventPayload>(),
+		beforeAgentStartEvent: event<BeforeAgentStartEventPayload>(),
 		piToolRegistrationsBecameAvailableEvent:
 			event<PiToolRegistrationsBecameAvailableEvent>(),
 	};

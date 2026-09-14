@@ -2,17 +2,27 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enqueueExitActions } from "../../src/exit-protocol/event-publishers.ts";
 import {
-	exitProtocolStateDescriptor,
 	focusAction,
 	focusSubmit,
 	initialPickerState,
 	toggleAction,
 } from "../../src/exit-protocol/internal-state.ts";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
+import { exitProtocolStateDescriptor } from "../../src/exit-protocol/module-state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
 import { createSessionState } from "../../src/state.ts";
+
+type TestExitProtocolModule = {
+	sessionStart(context: unknown): void;
+	deactivate(): void;
+};
+
+const createTestExitProtocolModule = (
+	options: Parameters<typeof createExitProtocolModule>[0],
+): TestExitProtocolModule =>
+	createExitProtocolModule(options) as unknown as TestExitProtocolModule;
 
 const actions: ExitAction[] = [
 	{
@@ -142,7 +152,7 @@ describe("exit protocol presenter", () => {
 		events.moduleStateChangedEvent.subscribe((event) => {
 			updates.push(event);
 		});
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: new PromptQueue(),
@@ -168,7 +178,7 @@ describe("exit protocol presenter", () => {
 	it("uses injected lifecycle dependencies", async () => {
 		const events = createSharedEvents();
 		const ctx = context();
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: new PromptQueue(),
@@ -191,7 +201,7 @@ describe("exit protocol presenter", () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: queue,
@@ -215,7 +225,7 @@ describe("exit protocol presenter", () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: queue,
@@ -243,7 +253,7 @@ describe("exit protocol presenter", () => {
 		const ctx = context();
 		const custom = vi.fn(() => prompt);
 		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: queue,
@@ -276,7 +286,7 @@ describe("exit protocol presenter", () => {
 				notify: vi.fn(),
 			},
 		});
-		const module = createExitProtocolModule({
+		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			promptQueue: queue,

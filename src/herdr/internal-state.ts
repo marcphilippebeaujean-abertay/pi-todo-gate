@@ -5,11 +5,7 @@ import type {
 } from "../shared/pi-worker-data.ts";
 import type { HerdrEvents } from "./events.ts";
 
-export type { HerdrModuleState } from "./module-state.ts";
-
 import type { HerdrModuleState } from "./module-state.ts";
-
-export { herdrStateDescriptor } from "./module-state.ts";
 
 export type HerdrState = HerdrModuleState;
 

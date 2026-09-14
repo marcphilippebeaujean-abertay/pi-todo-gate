@@ -3,8 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
-import { worktreeStateDescriptor } from "../../src/worktree/internal-state.ts";
 import { createWorktreeModule } from "../../src/worktree/module.ts";
+import { worktreeStateDescriptor } from "../../src/worktree/module-state.ts";
+
+type TestWorktreeModule = {
+	sessionStart(context: ExtensionContext): Promise<void>;
+	deactivate(): void;
+	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
+	removeWorktree(): Promise<unknown>;
+};
+
+const createTestWorktreeModule = (
+	options: Parameters<typeof createWorktreeModule>[0],
+): TestWorktreeModule =>
+	createWorktreeModule(options) as unknown as TestWorktreeModule;
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };
@@ -96,7 +108,7 @@ describe("worktree event actions", () => {
 				return ok("\n");
 			return ok("");
 		};
-		const module = createWorktreeModule({
+		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			dependencies: { exec },
@@ -121,7 +133,7 @@ describe("worktree event actions", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
-		const module = createWorktreeModule({
+		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 		});
@@ -159,7 +171,7 @@ describe("worktree event actions", () => {
 			return ok("origin\n");
 		};
 		const ctx = context();
-		const module = createWorktreeModule({
+		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -206,7 +218,7 @@ describe("worktree event actions", () => {
 			return ok("origin\n");
 		};
 		const ctx = context();
-		const module = createWorktreeModule({
+		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -240,7 +252,7 @@ describe("worktree event actions", () => {
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
 		const changeDirectory = vi.fn();
-		const module = createWorktreeModule({
+		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 			dependencies: {

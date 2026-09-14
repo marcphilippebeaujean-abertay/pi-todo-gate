@@ -1,18 +1,11 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 
-export type { MergedPrState, PrModuleState } from "./module-state.ts";
-
 import type { MergedPrState, PrModuleState } from "./module-state.ts";
-
-export { normalizePrState, prStateDescriptor } from "./module-state.ts";
 
 export type PrState = PrModuleState;
 export type PrStatePatch = Partial<PrState>;
@@ -64,29 +57,6 @@ export interface PrModuleOptions {
 	exec?: Exec;
 	/** @deprecated pass exec directly. */
 	dependencies?: PrModuleDependencies;
-}
-
-export interface PrModule {
-	activateSession(session: PrSession): Promise<void>;
-	deactivateSession(): void;
-	syncSessionState(session: PrSession): Promise<void>;
-	initializeRemoteOrigin(
-		ctx: ExtensionContext,
-		remoteOrigin?: string,
-	): Promise<string | undefined>;
-	persistPrIfAvailable(text: string): Promise<void>;
-	persistInitialPr(branch: readonly unknown[]): Promise<void>;
-	appendBeforeAgentPrompt(
-		ctx: ExtensionContext,
-		messages: string[],
-	): Promise<void>;
-	isCurrentMerge(
-		session: PrSession,
-		workRevision: number,
-		operationGeneration: number,
-		taskRef: string | undefined,
-		prUrl: string,
-	): boolean;
 }
 
 export interface OpenPrInfo {

@@ -9,11 +9,12 @@ import "./user-prompts.ts";
 import "./footer-rendering.ts";
 import { FooterEventConsumer } from "./event-consumers.ts";
 import { renderPrStatus, renderTaskStatusCompact } from "./footer-rendering.ts";
-import type { FooterModule, FooterModuleOptions } from "./internal-state.ts";
+import type { FooterModuleOptions } from "./internal-state.ts";
 
 export * from "./events.ts";
 export * from "./footer-rendering.ts";
-export * from "./internal-state.ts";
+export * from "./module-state.ts";
+export type FooterModule = Record<never, never>;
 export { renderPrStatus, renderTaskStatusCompact as renderTodoistTaskStatus };
 
 export function createFooterModule(options: FooterModuleOptions): FooterModule {

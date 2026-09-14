@@ -14,7 +14,8 @@ export * from "./commands.ts";
 export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
 export * from "./events.ts";
-export * from "./internal-state.ts";
+export * from "./module-state.ts";
+export type TodoistModule = Record<never, never>;
 export * from "./parsing.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
@@ -25,7 +26,6 @@ import {
 	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
-	TodoistModule,
 	TodoistModuleOptions,
 	TodoistOperations,
 	TodoistSession,
@@ -33,7 +33,7 @@ import type {
 	TodoistStateUpdateOptions,
 } from "./internal-state.ts";
 
-class TodoistModuleImpl implements TodoistModule {
+class TodoistModuleImpl {
 	private readonly getLifecycleEpoch: () => number;
 	private readonly publishState;
 	private currentSession: TodoistSession | null = null;
@@ -71,9 +71,20 @@ class TodoistModuleImpl implements TodoistModule {
 			this.currentSession = null;
 			this.resetTaskClaim();
 		});
+		this.options.eventHandler.beforeAgentStartEvent.subscribe(
+			({ event, session }) => {
+				if (this.options.sessionState.moduleState.todoist.taskRef !== undefined)
+					return;
+				this.maybeAnalyzeTaskClaim(
+					this.currentSession ?? session,
+					event.prompt,
+				);
+			},
+		);
+		this.register();
 	}
 
-	async syncSessionState(
+	private async syncSessionState(
 		session: TodoistSession,
 		activationEpoch?: number,
 	): Promise<void> {
@@ -96,7 +107,7 @@ class TodoistModuleImpl implements TodoistModule {
 		this.taskClaim.session = undefined;
 	}
 
-	updateState(
+	private updateState(
 		state: TodoistState,
 		options: TodoistStateUpdateOptions,
 	): Promise<void> {
@@ -162,7 +173,7 @@ class TodoistModuleImpl implements TodoistModule {
 		return operations;
 	}
 
-	register(): void {
+	private register(): void {
 		const alreadyRegistered = this.registered;
 		if (alreadyRegistered) return;
 		const operations = this.operations();
@@ -173,7 +184,7 @@ class TodoistModuleImpl implements TodoistModule {
 		registerTodoistMergeConsumer(operations);
 	}
 
-	maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void {
+	private maybeAnalyzeTaskClaim(session: TodoistSession, prompt: string): void {
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
@@ -184,5 +195,5 @@ class TodoistModuleImpl implements TodoistModule {
 export function createTodoistModule(
 	options: TodoistModuleOptions,
 ): TodoistModule {
-	return new TodoistModuleImpl(options);
+	return new TodoistModuleImpl(options) as unknown as TodoistModule;
 }

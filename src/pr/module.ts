@@ -7,28 +7,30 @@ import type { PromptQueue } from "../prompt-queue.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type {
+	BeforeAgentStartEventPayload,
 	EventHandler,
+	InitialPrDiscoveryEvent,
+	MessageEndEventPayload,
 	PiToolRegistrationsBecameAvailableEvent,
 	PrMergedEvent,
 } from "../shared/events.ts";
-import { branchTexts } from "../shared/extension-message.ts";
+import { branchTexts, textOf } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
 import type { SessionState } from "../state.ts";
 import { register as registerMergeProtocol } from "./commands.ts";
 import { mergeProtocolSkillPath } from "./constants.ts";
-import { handlePrToolResult, isCurrentMerge } from "./event-consumers.ts";
+import { handlePrToolResult } from "./event-consumers.ts";
 import { findOpenPr, isGithubPrAvailable } from "./git.ts";
 import type {
 	OriginRequest,
 	PrCommandOptions,
-	PrModule,
 	PrModuleDependencies,
 	PrModuleOptions,
 	PrSession,
 	PrSessionIdentity,
 	PrState,
 } from "./internal-state.ts";
-import { normalizePrState } from "./internal-state.ts";
+import { normalizePrState } from "./module-state.ts";
 import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import { installStateTool } from "./state-tool.ts";
 
@@ -39,7 +41,8 @@ export * from "./event-consumers.ts";
 export * from "./event-publishers.ts";
 export * from "./events.ts";
 export * from "./git.ts";
-export * from "./internal-state.ts";
+export * from "./module-state.ts";
+export type PrModule = Record<never, never>;
 export * from "./notifications.ts";
 export * from "./parsing.ts";
 export * from "./user-prompts.ts";
@@ -56,7 +59,7 @@ function prStateFromSession(
 	});
 }
 
-class PrModuleImpl implements PrModule {
+class PrModuleImpl {
 	private readonly promptQueue: PromptQueue;
 	private readonly pi: ExtensionAPI | undefined;
 	private readonly eventHandler: EventHandler;
@@ -83,6 +86,10 @@ class PrModuleImpl implements PrModule {
 			this.eventHandler,
 			C.module.pr,
 		);
+		this.subscribeEvents();
+	}
+
+	private subscribeEvents(): void {
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.handleToolResult(event, context),
 		);
@@ -90,7 +97,7 @@ class PrModuleImpl implements PrModule {
 			this.registerPiTools.bind(this),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, session, lifecycleEpoch }) => {
+			async ({ context, session, lifecycleEpoch }) => {
 				const hasSession = session !== undefined;
 				if (!hasSession) return;
 				const isCurrentContext = session.context === context;
@@ -99,13 +106,28 @@ class PrModuleImpl implements PrModule {
 				const isCurrentEpoch = activationEpoch === this.getLifecycleEpoch();
 				if (!isCurrentEpoch) return;
 				this.currentSession = session;
-				return this.activateSession(session, activationEpoch);
+				await this.activateSession(session, activationEpoch);
+				const isStaleActivation = this.getLifecycleEpoch() !== activationEpoch;
+				if (isStaleActivation) return;
+				await this.initializeRemoteOrigin(
+					context,
+					this.sessionState.gitState.remoteOrigin,
+				);
 			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() => {
 			this.currentSession = null;
 			this.deactivateSession();
 		});
+		this.eventHandler.initialPrDiscoveryEvent.subscribe((event) =>
+			this.handleInitialPrDiscovery(event),
+		);
+		this.eventHandler.messageEndEvent.subscribe((event) =>
+			this.handleMessageEnd(event),
+		);
+		this.eventHandler.beforeAgentStartEvent.subscribe((event) =>
+			this.handleBeforeAgentStart(event),
+		);
 		this.eventHandler.prMergedEvent.subscribe((event) =>
 			this.recordMerge(event),
 		);
@@ -127,7 +149,7 @@ class PrModuleImpl implements PrModule {
 		});
 	}
 
-	async activateSession(
+	private async activateSession(
 		session: PrSession,
 		activationEpoch?: number,
 	): Promise<void> {
@@ -147,7 +169,7 @@ class PrModuleImpl implements PrModule {
 		this.state = nextState;
 	}
 
-	deactivateSession(): void {
+	private deactivateSession(): void {
 		this.currentSession = null;
 		this.generation += 1;
 		this.state = {
@@ -158,7 +180,7 @@ class PrModuleImpl implements PrModule {
 		};
 	}
 
-	async syncSessionState(session: PrSession): Promise<void> {
+	private async syncSessionState(session: PrSession): Promise<void> {
 		const isCurrent = this.isCurrentSession(session, this.generation);
 		if (!isCurrent) return;
 		this.state = prStateFromSession(
@@ -169,7 +191,7 @@ class PrModuleImpl implements PrModule {
 		await this.emitState(this.state, { persist: false });
 	}
 
-	async initializeRemoteOrigin(
+	private async initializeRemoteOrigin(
 		ctx: ExtensionContext,
 		remoteOrigin?: string,
 	): Promise<string | undefined> {
@@ -212,7 +234,7 @@ class PrModuleImpl implements PrModule {
 		return remoteOrigin;
 	}
 
-	async persistPrIfAvailable(text: string): Promise<void> {
+	private async persistPrIfAvailable(text: string): Promise<void> {
 		const session = this.currentSession;
 		const hasSession = session !== null;
 		if (!hasSession) return;
@@ -323,11 +345,11 @@ class PrModuleImpl implements PrModule {
 		return true;
 	}
 
-	async persistInitialPr(branch: readonly unknown[]): Promise<void> {
+	private async persistInitialPr(branch: readonly unknown[]): Promise<void> {
 		await this.persistPrIfAvailable(branchTexts(branch).join("\n"));
 	}
 
-	async appendBeforeAgentPrompt(
+	private async appendBeforeAgentPrompt(
 		ctx: ExtensionContext,
 		messages: string[],
 	): Promise<void> {
@@ -367,23 +389,24 @@ class PrModuleImpl implements PrModule {
 		}
 	}
 
-	isCurrentMerge(
-		session: PrSession,
-		workRevision: number,
-		operationGeneration: number,
-		taskRef: string | undefined,
-		prUrl: string,
-	): boolean {
-		return isCurrentMerge(
-			this.sessionState,
-			this.state,
-			session,
-			workRevision,
-			operationGeneration,
-			this.generation,
-			taskRef,
-			prUrl,
-		);
+	private handleInitialPrDiscovery({
+		branch,
+	}: InitialPrDiscoveryEvent): Promise<void> {
+		return this.persistInitialPr(branch);
+	}
+
+	private handleMessageEnd({ event }: MessageEndEventPayload): Promise<void> {
+		return this.persistPrIfAvailable(textOf(event.message));
+	}
+
+	private handleBeforeAgentStart({
+		context,
+		messages,
+	}: BeforeAgentStartEventPayload): Promise<void> {
+		const hasPerformedGitMutations =
+			this.currentSession?.hasPerformedAnyGitMutations ?? false;
+		if (!hasPerformedGitMutations) return Promise.resolve();
+		return this.appendBeforeAgentPrompt(context, messages);
 	}
 
 	private isCurrentOperation(_session: PrSession, generation: number): boolean {
@@ -554,7 +577,7 @@ class PrModuleImpl implements PrModule {
 }
 
 export function createPrModule(options: PrModuleOptions): PrModule {
-	return new PrModuleImpl(options);
+	return new PrModuleImpl(options) as unknown as PrModule;
 }
 
 export { mergeProtocolSkillPath };

@@ -29,12 +29,12 @@ import type {
 	FooterEntry,
 	FooterFactory,
 	FooterRenderState,
-	FooterState,
 	FooterTheme,
 	FooterTui,
 	FooterSessionRecord as SessionRecord,
 	TodoistFooterTheme,
 } from "./internal-state.ts";
+import type { FooterModuleState as FooterState } from "./module-state.ts";
 
 export class Footer implements FooterEntry {
 	private value = "";

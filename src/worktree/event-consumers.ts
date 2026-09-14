@@ -17,13 +17,13 @@ import {
 } from "./git.ts";
 import type {
 	WorktreeBaseline,
-	WorktreeModule,
+	WorktreeConsumer,
 	WorktreeModuleOptions,
 } from "./internal-state.ts";
 import { notifyWorktree } from "./notifications.ts";
 import { confirmDirtyRemoval } from "./user-prompts.ts";
 
-class Worktree implements WorktreeModule {
+class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
@@ -182,10 +182,6 @@ class Worktree implements WorktreeModule {
 		void publishWorktreeState(this.eventHandler, {}, {});
 	}
 
-	getHasUncommittedChanges(): boolean {
-		return this.hasUncommittedChanges;
-	}
-
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null {
 		if (this.baseline === null) return null;
 		return {
@@ -248,6 +244,6 @@ class Worktree implements WorktreeModule {
 
 export function createWorktreeConsumer(
 	options: WorktreeModuleOptions,
-): WorktreeModule {
+): WorktreeConsumer {
 	return new Worktree(options);
 }

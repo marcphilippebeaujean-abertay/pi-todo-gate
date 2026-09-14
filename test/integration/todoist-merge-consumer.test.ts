@@ -11,6 +11,11 @@ import { PromptQueue } from "../../src/prompt-queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState, type SessionRecord } from "../../src/state.ts";
+
+const createTestExitProtocolModule = createExitProtocolModule as unknown as (
+	options: Parameters<typeof createExitProtocolModule>[0],
+) => { sessionStart(context: unknown): void };
+
 import type {
 	TodoistCompletionSnapshot,
 	TodoistOperations,
@@ -217,7 +222,7 @@ describe("Todoist merge consumer", () => {
 			return true;
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
-		const exitModule = createExitProtocolModule({
+		const exitModule = createTestExitProtocolModule({
 			eventHandler: setupResult.runtime.eventHandler,
 			sessionState: setupResult.runtime.sessionState,
 			promptQueue: setupResult.runtime.promptQueue,

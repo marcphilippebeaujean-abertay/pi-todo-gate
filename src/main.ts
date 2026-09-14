@@ -19,7 +19,6 @@ import type { ExtensionDependencies as BaseExtensionDependencies } from "./exten
 import type { FooterModule } from "./footer/module.ts";
 import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
 import { HERDR_CLAIM_RETURNED } from "./herdr/constants.ts";
-import type { CommandRunner, WorkerSpawner } from "./herdr/module.ts";
 import { installHerdrTabClaim } from "./herdr/module.ts";
 import { herdrStateDescriptor } from "./herdr/module-state.ts";
 import type { PrModule } from "./pr/module.ts";
@@ -34,26 +33,20 @@ import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
+import type { PiWorkerSpawner } from "./shared/pi-worker-data.ts";
 import { isSubagent } from "./shared/session.ts";
 import { createSessionState } from "./state.ts";
-import type {
-	TaskClaimWorker,
-	TodoistClientLike,
-	TodoistModule,
-} from "./todoist/module.ts";
+import type { TodoistModule } from "./todoist/module.ts";
 import { createTodoistModule } from "./todoist/module.ts";
 import { todoistStateDescriptor } from "./todoist/module-state.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 
 export interface ExtensionDependencies extends BaseExtensionDependencies {
-	createTodoistClient?: (
-		ctx: ExtensionContext,
-		exec: Exec,
-	) => TodoistClientLike;
-	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: CommandRunner;
-	herdrSpawnWorker?: WorkerSpawner;
+	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => unknown;
+	taskClaimWorker?: unknown;
+	herdrCommandRunner?: (command: string, args: string[]) => string;
+	herdrSpawnWorker?: PiWorkerSpawner;
 }
 
 interface ExtensionState {
@@ -64,19 +57,16 @@ interface ExtensionState {
 	footer: FooterModule;
 	pr: PrModule;
 	todoist: TodoistModule;
-	worktree: import("./worktree/module.ts").WorktreeModule;
+	worktree: import("./worktree/module.ts").WorktreeCleanup;
 	exitProtocol: ExitProtocolModule;
 }
 
 interface ModuleSetupDependencies {
 	exec?: Exec;
-	createTodoistClient?: (
-		ctx: ExtensionContext,
-		exec: Exec,
-	) => TodoistClientLike;
-	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: CommandRunner;
-	herdrSpawnWorker?: WorkerSpawner;
+	createTodoistClient?: (ctx: ExtensionContext, exec: Exec) => unknown;
+	taskClaimWorker?: unknown;
+	herdrCommandRunner?: (command: string, args: string[]) => string;
+	herdrSpawnWorker?: PiWorkerSpawner;
 }
 
 export function createExtensionState(
@@ -132,9 +122,7 @@ export function createExtensionState(
 		exec: moduleDependencies.exec,
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
 		createTodoistClient: moduleDependencies.createTodoistClient,
-	});
-	// Register Todoist merge consumer before Exit Protocol subscribes to prMergedEvent.
-	todoist.register();
+	} as Parameters<typeof createTodoistModule>[0]);
 	const exitProtocol = createExitProtocolModule({
 		promptQueue,
 		eventHandler,

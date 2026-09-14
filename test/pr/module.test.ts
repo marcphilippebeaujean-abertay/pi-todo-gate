@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isCurrentMerge } from "../../src/pr/event-consumers.ts";
 import {
 	createPrModule,
 	firstUnmergedGithubPrUrl,
@@ -12,6 +13,23 @@ import {
 import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createEventHandler } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
+
+type TestPrModule = {
+	activateSession(session: unknown): Promise<void>;
+	deactivateSession(): void;
+	syncSessionState(session: unknown): Promise<void>;
+	initializeRemoteOrigin(
+		ctx: unknown,
+		remoteOrigin?: string,
+	): Promise<string | undefined>;
+	persistPrIfAvailable(text: string): Promise<void>;
+	persistInitialPr(branch: readonly unknown[]): Promise<void>;
+	appendBeforeAgentPrompt(ctx: unknown, messages: string[]): Promise<void>;
+};
+
+const createTestPrModule = (
+	options: Parameters<typeof createPrModule>[0],
+): TestPrModule => createPrModule(options) as unknown as TestPrModule;
 
 describe("isPrState", () => {
 	it("accepts valid PR state and rejects malformed state", () => {
@@ -324,7 +342,7 @@ describe("PR module ownership", () => {
 			registerTool,
 		};
 		const extensionApi = pi as never;
-		createPrModule({
+		createTestPrModule({
 			pi: extensionApi,
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
@@ -360,7 +378,7 @@ describe("PR module ownership", () => {
 		});
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -433,7 +451,7 @@ describe("PR module ownership", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -463,28 +481,37 @@ describe("PR module ownership", () => {
 		);
 
 		expect(
-			module.isCurrentMerge(
+			isCurrentMerge(
+				sessionState,
+				sessionState.moduleState.pr,
 				session,
 				2,
+				0,
 				0,
 				"task",
 				"https://github.com/o/r/pull/42",
 			),
 		).toBe(false);
 		expect(
-			module.isCurrentMerge(
+			isCurrentMerge(
+				sessionState,
+				sessionState.moduleState.pr,
 				session,
 				2,
+				0,
 				0,
 				"task",
 				"https://github.com/o/r/pull/43",
 			),
 		).toBe(true);
 		expect(
-			module.isCurrentMerge(
+			isCurrentMerge(
+				sessionState,
+				sessionState.moduleState.pr,
 				session,
 				2,
 				1,
+				0,
 				"task",
 				"https://github.com/o/r/pull/43",
 			),
@@ -542,7 +569,7 @@ describe("PR module ownership", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -597,7 +624,7 @@ describe("PR module ownership", () => {
 				code: 0,
 			};
 		});
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -642,7 +669,7 @@ describe("PR module ownership", () => {
 			if (args[0] === "remote") await gate;
 			return { stdout: "git@github.com:o/r.git\n", stderr: "", code: 0 };
 		});
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
@@ -697,7 +724,7 @@ describe("PR module ownership", () => {
 				return { stdout: "worktree /repo\n", stderr: "", code: 0 };
 			return { stdout: "[]", stderr: "", code: 0 };
 		});
-		const module = createPrModule({
+		const module = createTestPrModule({
 			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,

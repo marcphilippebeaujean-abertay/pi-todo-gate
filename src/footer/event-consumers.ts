@@ -12,18 +12,15 @@ import {
 	renderPrStatus,
 	renderTaskStatusCompact,
 } from "./footer-rendering.ts";
-import type {
-	FooterModule,
-	FooterModuleOptions,
-	FooterState,
-} from "./internal-state.ts";
+import type { FooterModuleOptions } from "./internal-state.ts";
+import type { FooterModuleState as FooterState } from "./module-state.ts";
 import {
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
-} from "./internal-state.ts";
+} from "./module-state.ts";
 
-export class FooterEventConsumer implements FooterModule {
+export class FooterEventConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: FooterModuleOptions["sessionState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
