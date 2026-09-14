@@ -135,7 +135,7 @@ import extension, {
 } from "../../extensions/pi-todo-gate.ts";
 import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
 import type { TodoistClient } from "../../src/todoist/client.ts";
-import type { TodoistProjectMapping } from "../../src/todoist/config.ts";
+import type { TodoistProjectMapping } from "../../src/todoist/internal-state.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 type TestTool = {
