@@ -149,7 +149,7 @@ async function buildBeforeAgentMessages(
 		session.handoffContext = false;
 	}
 	if (session.state.taskRef === undefined)
-		maybeAnalyzeTaskClaim(runtime, session, event.prompt);
+		await maybeAnalyzeTaskClaim(runtime, session, event.prompt);
 	const hasWorkChanged = session.workChanged;
 	if (hasWorkChanged) await appendWorktreePrompt(runtime, ctx, messages);
 	return messages;

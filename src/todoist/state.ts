@@ -96,7 +96,10 @@ export interface TodoistState {
 export interface TodoistSession {
 	sessionId: string;
 	context: ExtensionContext;
-	project: { todoistProjectRef: string };
+	project: {
+		todoistProjectRef: string;
+		triggersOnlyOnWorktree?: boolean;
+	};
 	state: WorkState;
 	allowPrDiscovery: boolean;
 	workRevision: number;

@@ -137,6 +137,7 @@ import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
 import type {
 	TodoistClient,
 	TodoistProjectMapping,
+	TodoistProjectSettings,
 } from "../../src/todoist/module.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
@@ -219,11 +220,22 @@ function harness(
 	};
 }
 
-const config = (projects: Record<string, string>) => ({ projects });
+const config = (
+	projects: Record<string, string | TodoistProjectSettings>,
+): TodoistProjectMapping => ({ projects });
+
+const claimEnabledConfig = (
+	root: string,
+): TodoistProjectMapping["projects"] => ({
+	[root]: {
+		todoistProjectRef: MERGE_TD,
+		triggersOnlyOnWorktree: false,
+	},
+});
 
 async function start(
 	h: ReturnType<typeof harness>,
-	projects: Record<string, string>,
+	projects: TodoistProjectMapping["projects"],
 	dependencies: ExtensionDependencies = {},
 ) {
 	extension(h.pi, {
@@ -425,6 +437,67 @@ describe("lazy activation", () => {
 });
 
 describe("automatic Todoist task claiming", () => {
+	it("does not start a claim worker from the main checkout", async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: TODOIST_UNAVAILABLE,
+		}));
+		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: WORK },
+			h.ctx,
+		);
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
+	it("starts a claim worker from a linked worktree", async () => {
+		const root = "/configured/.worktrees/feature";
+		const h = harness(root);
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: TODOIST_UNAVAILABLE,
+		}));
+		const exec = async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			switch (key) {
+				case "git rev-parse --show-toplevel":
+					return { stdout: `${root}\n`, stderr: EMPTY_STRING, code: 0 };
+				case "git branch --show-current":
+					return { stdout: "feature\n", stderr: EMPTY_STRING, code: 0 };
+				case "git worktree list --porcelain":
+					return {
+						stdout: `worktree /configured\nHEAD abc\nbranch refs/heads/main\n\nworktree ${root}\nHEAD def\nbranch refs/heads/feature\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				default:
+					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+			}
+		};
+		await start(
+			h,
+			{ "/configured": MERGE_TD },
+			{ exec, taskClaimWorker: worker },
+		);
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: WORK },
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).toHaveBeenCalledWith(
+			expect.objectContaining({
+				worktree: expect.objectContaining({ isWorktree: true }),
+			}),
+		);
+	});
+
 	it(
 		INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION,
 		async () => {
@@ -488,7 +561,9 @@ describe("automatic Todoist task claiming", () => {
 					resolveClaims.push(resolve);
 				}),
 		);
-		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
+		await start(h, claimEnabledConfig("/configured"), {
+			taskClaimWorker: worker,
+		});
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -552,7 +627,7 @@ describe("automatic Todoist task claiming", () => {
 			claimTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
+			loadConfig: async () => config(claimEnabledConfig(root)),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: SESSION_CURRENT,
@@ -565,7 +640,7 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, { [root]: MERGE_TD });
+		await start(h, claimEnabledConfig(root));
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
@@ -580,7 +655,7 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 		expect(h.confirmations).toHaveLength(0);
 		expect(claimTask).not.toHaveBeenCalled();
 		expect(h.appended.at(-1)).toMatchObject({
@@ -598,7 +673,7 @@ describe("automatic Todoist task claiming", () => {
 			claimTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
+			loadConfig: async () => config(claimEnabledConfig(root)),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: "previous-session",
@@ -611,7 +686,7 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, { [root]: MERGE_TD });
+		await start(h, claimEnabledConfig(root));
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -639,7 +714,7 @@ describe("automatic Todoist task claiming", () => {
 			createTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
+			loadConfig: async () => config(claimEnabledConfig(root)),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: SESSION_CURRENT,
@@ -652,12 +727,12 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, { [root]: MERGE_TD });
+		await start(h, claimEnabledConfig(root));
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(h.confirmations).toHaveLength(0);
 		expect(createTask).not.toHaveBeenCalled();
@@ -699,11 +774,11 @@ describe("automatic Todoist task claiming", () => {
 			}),
 		};
 		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
+			loadConfig: async () => config(claimEnabledConfig(root)),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: worker,
 		});
-		await start(h, { [root]: MERGE_TD });
+		await start(h, claimEnabledConfig(root));
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -736,10 +811,10 @@ describe("automatic Todoist task claiming", () => {
 			error: "not used",
 		}));
 		extension(h.pi, {
-			loadConfig: async () => config({ [root]: MERGE_TD }),
+			loadConfig: async () => config(claimEnabledConfig(root)),
 			taskClaimWorker: worker,
 		});
-		await start(h, { [root]: MERGE_TD });
+		await start(h, claimEnabledConfig(root));
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{
 				type: BEFORE_AGENT_START,

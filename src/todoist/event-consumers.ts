@@ -1,7 +1,7 @@
 import { EXTENSION_CONSTANTS as C } from "../constants.ts";
 import { applyStatePatch } from "../session-state.ts";
 import { spawnExec } from "../shared/command.ts";
-import { inspectProject } from "../shared/project.ts";
+import { inspectProject, type ProjectInfo } from "../shared/project.ts";
 import {
 	CLAIM,
 	COMPLETED,
@@ -30,6 +30,29 @@ function isActiveSession(
 	session: TodoistSession,
 ): boolean {
 	return runtime.active === session;
+}
+
+function canStartTaskClaim(
+	runtime: TodoistRuntime,
+	session: TodoistSession,
+): boolean {
+	const isActive = isActiveSession(runtime, session);
+	if (!isActive) return false;
+	const hasNoTask = session.state.taskRef === undefined;
+	return hasNoTask;
+}
+
+function isCurrentClaimOperation(
+	runtime: TodoistRuntime,
+	session: TodoistSession,
+	operation: TodoistRuntime["taskClaim"],
+): boolean {
+	const isActive = isActiveSession(runtime, session);
+	if (!isActive) return false;
+	const isPending = operation.pending;
+	if (!isPending) return false;
+	const isExpectedWorker = operation.session === session;
+	return isExpectedWorker;
 }
 
 function isCurrentEvent(
@@ -115,10 +138,12 @@ export async function runTaskClaim(
 	runtime: TodoistRuntime,
 	session: TodoistSession,
 	prompt: string,
+	worktree?: ProjectInfo,
 ): Promise<void> {
 	try {
 		const exec = runtime.dependencies.exec ?? spawnExec;
-		const worktree = await inspectProject(exec, session.context.cwd);
+		const project =
+			worktree ?? (await inspectProject(exec, session.context.cwd));
 		const worker =
 			runtime.dependencies.taskClaimWorker ?? createTaskClaimWorker(exec);
 		const result = await worker({
@@ -127,7 +152,7 @@ export async function runTaskClaim(
 			cwd: session.context.cwd,
 			projectRef: session.project.todoistProjectRef,
 			prRef: session.state.prUrl ?? null,
-			worktree,
+			worktree: project,
 		});
 		handleTaskClaimResult(runtime, session, {
 			sessionId: result.sessionId,
@@ -142,13 +167,12 @@ export async function runTaskClaim(
 	}
 }
 
-export function maybeAnalyzeTaskClaim(
+export async function maybeAnalyzeTaskClaim(
 	runtime: TodoistRuntime,
 	session: TodoistSession,
 	prompt: string,
-): void {
-	const canStart =
-		runtime.active === session && session.state.taskRef === undefined;
+): Promise<void> {
+	const canStart = canStartTaskClaim(runtime, session);
 	const unavailableSession = !canStart;
 	if (unavailableSession) return;
 	const operation = runtime.taskClaim;
@@ -156,7 +180,21 @@ export function maybeAnalyzeTaskClaim(
 	if (isAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(runtime, session, prompt);
+	const requiresWorktree = session.project.triggersOnlyOnWorktree !== false;
+	const exec = runtime.dependencies.exec ?? spawnExec;
+	const worktree = requiresWorktree
+		? await inspectProject(exec, session.context.cwd)
+		: undefined;
+	const isCurrentClaim = isCurrentClaimOperation(runtime, session, operation);
+	if (!isCurrentClaim) return;
+	const isMainCheckout = worktree?.isWorktree !== true;
+	const blockedByMainCheckout = requiresWorktree && isMainCheckout;
+	if (!blockedByMainCheckout) {
+		void runTaskClaim(runtime, session, prompt, worktree);
+		return;
+	}
+	operation.pending = false;
+	operation.session = undefined;
 }
 
 async function consumeMergedEvent(
