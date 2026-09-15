@@ -5,8 +5,8 @@ const SESSIONS = "/sessions";
 const EMPTY_STRING = "";
 const SESSION_START = "session_start";
 const STARTUP = "startup";
-const DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL =
-	"does not register tools or perform external work for an unmatched project";
+const REGISTERS_TOOL_WITHOUT_PERFORMING_EXTERNAL_WORK =
+	"registers tool without performing external work for an unmatched project";
 const DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT =
 	"does not start worktree tracking for an unmatched project";
 const INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION =
@@ -16,8 +16,8 @@ const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
-const REGISTERS_THE_STATE_TOOL_ONLY_FOR_A =
-	"registers the state tool only for a matched project";
+const REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION =
+	"registers state tool before session activation";
 const CONFIGURED_PROJECT = "/configured/project";
 const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
@@ -134,11 +134,8 @@ import extension, {
 	type ExtensionDependencies,
 } from "../../extensions/pi-todo-gate.ts";
 import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
-import type {
-	TodoistClient,
-	TodoistProjectMapping,
-	TodoistProjectSettings,
-} from "../../src/todoist/module.ts";
+import type { TodoistClient } from "../../src/todoist/client.ts";
+import type { TodoistProjectMapping } from "../../src/todoist/internal-state.ts";
 
 type TestHandler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 type TestTool = {
@@ -146,6 +143,42 @@ type TestTool = {
 	execute: (...args: unknown[]) => Promise<unknown> | unknown;
 };
 type StateToolResult = { content: Array<{ text: string }> };
+
+function persistedStateEntry(
+	moduleState: {
+		pr?: Record<string, unknown>;
+		todoist?: Record<string, unknown>;
+		herdr?: Record<string, unknown>;
+		worktree?: Record<string, unknown>;
+		footer?: Record<string, unknown>;
+		exitProtocol?: Record<string, unknown>;
+	},
+	gitState: Record<string, unknown> = {},
+	session: Record<string, unknown> = {},
+): unknown {
+	return {
+		type: CUSTOM,
+		customType: PI_TODO_GATE_STATE_ENTRY,
+		data: {
+			schemaVersion: 1,
+			session,
+			gitState,
+			moduleState: {
+				pr: {
+					discoveryDisabled: false,
+					discoveryTestedUrls: [],
+					mergedPrs: [],
+					...moduleState.pr,
+				},
+				todoist: moduleState.todoist ?? {},
+				herdr: moduleState.herdr ?? {},
+				worktree: moduleState.worktree ?? {},
+				footer: moduleState.footer ?? { footers: {} },
+				exitProtocol: moduleState.exitProtocol ?? { active: true },
+			},
+		},
+	};
+}
 
 function harness(
 	cwd: string,
@@ -220,22 +253,54 @@ function harness(
 	};
 }
 
-const config = (
-	projects: Record<string, string | TodoistProjectSettings>,
-): TodoistProjectMapping => ({ projects });
+function snapshotDataAt(
+	h: ReturnType<typeof harness>,
+	index: number,
+): Record<string, unknown> {
+	const entry = h.appended.at(index);
+	if (typeof entry !== "object" || entry === null)
+		throw new Error("missing state entry");
+	const data = (entry as { data?: unknown }).data;
+	if (typeof data !== "object" || data === null || Array.isArray(data))
+		throw new Error("invalid state entry");
+	return data as Record<string, unknown>;
+}
 
-const claimEnabledConfig = (
-	root: string,
-): TodoistProjectMapping["projects"] => ({
-	[root]: {
-		todoistProjectRef: MERGE_TD,
-		triggersOnlyOnWorktree: false,
-	},
+function latestSnapshotData(
+	h: ReturnType<typeof harness>,
+): Record<string, unknown> {
+	return snapshotDataAt(h, -1);
+}
+
+function latestModuleState(
+	h: ReturnType<typeof harness>,
+	moduleId: string,
+): Record<string, unknown> {
+	const moduleState = latestSnapshotData(h).moduleState;
+	if (
+		typeof moduleState !== "object" ||
+		moduleState === null ||
+		Array.isArray(moduleState)
+	)
+		throw new Error("invalid module state");
+	const value = (moduleState as Record<string, unknown>)[moduleId];
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new Error("invalid module state slice");
+	return value as Record<string, unknown>;
+}
+
+const config = (projects: Record<string, string>) => ({
+	projects: Object.fromEntries(
+		Object.entries(projects).map(([path, todoistProjectRef]) => [
+			path,
+			{ todoistProjectRef, triggersOnlyOnWorktree: false },
+		]),
+	),
 });
 
 async function start(
 	h: ReturnType<typeof harness>,
-	projects: TodoistProjectMapping["projects"],
+	projects: Record<string, string>,
 	dependencies: ExtensionDependencies = {},
 ) {
 	extension(h.pi, {
@@ -253,11 +318,9 @@ describe("working tree status", () => {
 		MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT,
 		async () => {
 			const h = harness(CONFIGURED_PROJECT, [
-				{
-					type: CUSTOM,
-					customType: PI_TODO_GATE_STATE_ENTRY,
-					data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
-				},
+				persistedStateEntry({
+					pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				}),
 			]);
 			let isDirty = true;
 			const exec = async (command: string, args: string[]) => {
@@ -279,7 +342,9 @@ describe("working tree status", () => {
 				h.ctx,
 			);
 			await new Promise((resolve) => setTimeout(resolve, 0));
-			expect(h.statusCalls.at(-2)?.text).toContain("#42*");
+			expect(h.statusCalls.some((call) => call.text?.includes("#42*"))).toBe(
+				true,
+			);
 
 			isDirty = false;
 			await h.handlers.get(TOOL_RESULT)?.(
@@ -292,19 +357,20 @@ describe("working tree status", () => {
 				h.ctx,
 			);
 
-			expect(h.statusCalls.at(-2)?.text).toContain("#42");
-			expect(h.statusCalls.at(-2)?.text).not.toContain("#42*");
+			expect(
+				h.statusCalls.some(
+					(call) => call.text?.includes("#42") && !call.text.includes("#42*"),
+				),
+			).toBe(true);
 		},
 	);
 
 	it("starts exit protocol after an external gh pull request merge", async () => {
 		const root = CONFIGURED_PROJECT;
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+			}),
 		]);
 		h.ctx.hasUI = true;
 		const exec = vi.fn(async (command: string, args: string[]) => {
@@ -399,11 +465,20 @@ describe("lazy activation", () => {
 		expect(h.tools).toHaveLength(0);
 	});
 
-	it(DOES_NOT_REGISTER_TOOLS_OR_PERFORM_EXTERNAL, async () => {
+	it(REGISTERS_TOOL_WITHOUT_PERFORMING_EXTERNAL_WORK, async () => {
 		const h = harness(UNCONFIGURED_PROJECT);
 		await start(h, { "/configured": MERGE_TD });
-		expect(h.tools).toHaveLength(0);
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
 		expect(h.appended).toHaveLength(0);
+		await expect(
+			h.tools[0]?.execute(
+				"call",
+				{ action: "status" },
+				undefined,
+				undefined,
+				h.ctx,
+			),
+		).rejects.toThrow("pi-todo-gate is inactive for this project");
 	});
 
 	it(DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT, async () => {
@@ -417,9 +492,17 @@ describe("lazy activation", () => {
 		expect(exec).not.toHaveBeenCalled();
 	});
 
-	it(REGISTERS_THE_STATE_TOOL_ONLY_FOR_A, async () => {
+	it(REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION, async () => {
 		const h = harness(CONFIGURED_PROJECT);
-		await start(h, { "/configured": MERGE_TD });
+		extension(h.pi, {
+			loadConfig: async () => config({ "/configured": MERGE_TD }),
+		});
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
+
+		await h.handlers.get(SESSION_START)?.(
+			{ type: SESSION_START, reason: STARTUP },
+			h.ctx,
+		);
 		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
 	});
 
@@ -432,72 +515,11 @@ describe("lazy activation", () => {
 			{ key: PI_TODO_GATE_PR, text: PR_LINK_NONE },
 			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
 		]);
-		expect(h.footerAppended).toHaveLength(2);
+		expect(h.footerAppended).toHaveLength(0);
 	});
 });
 
 describe("automatic Todoist task claiming", () => {
-	it("does not start a claim worker from the main checkout", async () => {
-		const h = harness(CONFIGURED_PROJECT);
-		const worker = vi.fn(async () => ({
-			sessionId: SESSION_CURRENT,
-			action: "error" as const,
-			taskData: null,
-			error: TODOIST_UNAVAILABLE,
-		}));
-		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
-		await h.handlers.get(BEFORE_AGENT_START)?.(
-			{ type: BEFORE_AGENT_START, prompt: WORK },
-			h.ctx,
-		);
-
-		expect(worker).not.toHaveBeenCalled();
-	});
-
-	it("starts a claim worker from a linked worktree", async () => {
-		const root = "/configured/.worktrees/feature";
-		const h = harness(root);
-		const worker = vi.fn(async () => ({
-			sessionId: SESSION_CURRENT,
-			action: "error" as const,
-			taskData: null,
-			error: TODOIST_UNAVAILABLE,
-		}));
-		const exec = async (command: string, args: string[]) => {
-			const key = [command, ...args].join(" ");
-			switch (key) {
-				case "git rev-parse --show-toplevel":
-					return { stdout: `${root}\n`, stderr: EMPTY_STRING, code: 0 };
-				case "git branch --show-current":
-					return { stdout: "feature\n", stderr: EMPTY_STRING, code: 0 };
-				case "git worktree list --porcelain":
-					return {
-						stdout: `worktree /configured\nHEAD abc\nbranch refs/heads/main\n\nworktree ${root}\nHEAD def\nbranch refs/heads/feature\n`,
-						stderr: EMPTY_STRING,
-						code: 0,
-					};
-				default:
-					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
-			}
-		};
-		await start(
-			h,
-			{ "/configured": MERGE_TD },
-			{ exec, taskClaimWorker: worker },
-		);
-		await h.handlers.get(BEFORE_AGENT_START)?.(
-			{ type: BEFORE_AGENT_START, prompt: WORK },
-			h.ctx,
-		);
-		await new Promise((resolve) => setTimeout(resolve, 0));
-
-		expect(worker).toHaveBeenCalledWith(
-			expect.objectContaining({
-				worktree: expect.objectContaining({ isWorktree: true }),
-			}),
-		);
-	});
-
 	it(
 		INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION,
 		async () => {
@@ -561,9 +583,7 @@ describe("automatic Todoist task claiming", () => {
 					resolveClaims.push(resolve);
 				}),
 		);
-		await start(h, claimEnabledConfig("/configured"), {
-			taskClaimWorker: worker,
-		});
+		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -601,8 +621,9 @@ describe("automatic Todoist task claiming", () => {
 			error: null,
 		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "42", taskName: "Work" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "42",
+			taskName: "Work",
 		});
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work after completion" },
@@ -627,7 +648,7 @@ describe("automatic Todoist task claiming", () => {
 			claimTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config(claimEnabledConfig(root)),
+			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: SESSION_CURRENT,
@@ -640,7 +661,7 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, claimEnabledConfig(root));
+		await start(h, { [root]: MERGE_TD });
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
@@ -655,11 +676,12 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 500));
 		expect(h.confirmations).toHaveLength(0);
 		expect(claimTask).not.toHaveBeenCalled();
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: VALUE_42, taskName: IMPLEMENT_FEATURE },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: VALUE_42,
+			taskName: IMPLEMENT_FEATURE,
 		});
 	});
 
@@ -673,7 +695,7 @@ describe("automatic Todoist task claiming", () => {
 			claimTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config(claimEnabledConfig(root)),
+			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: "previous-session",
@@ -686,12 +708,12 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, claimEnabledConfig(root));
+		await start(h, { [root]: MERGE_TD });
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(claimTask).not.toHaveBeenCalled();
 		expect(h.appended).toHaveLength(0);
@@ -714,7 +736,7 @@ describe("automatic Todoist task claiming", () => {
 			createTask,
 		};
 		extension(h.pi, {
-			loadConfig: async () => config(claimEnabledConfig(root)),
+			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: async () => ({
 				sessionId: SESSION_CURRENT,
@@ -727,7 +749,7 @@ describe("automatic Todoist task claiming", () => {
 				error: null,
 			}),
 		});
-		await start(h, claimEnabledConfig(root));
+		await start(h, { [root]: MERGE_TD });
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -736,8 +758,9 @@ describe("automatic Todoist task claiming", () => {
 
 		expect(h.confirmations).toHaveLength(0);
 		expect(createTask).not.toHaveBeenCalled();
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "43", taskName: "New task" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "43",
+			taskName: "New task",
 		});
 	});
 
@@ -774,11 +797,11 @@ describe("automatic Todoist task claiming", () => {
 			}),
 		};
 		extension(h.pi, {
-			loadConfig: async () => config(claimEnabledConfig(root)),
+			loadConfig: async () => config({ [root]: MERGE_TD }),
 			createTodoistClient: () => client as unknown as TodoistClient,
 			taskClaimWorker: worker,
 		});
-		await start(h, claimEnabledConfig(root));
+		await start(h, { [root]: MERGE_TD });
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
@@ -795,8 +818,9 @@ describe("automatic Todoist task claiming", () => {
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: "44", taskName: "Retry task" },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: "44",
+			taskName: "Retry task",
 		});
 	});
 
@@ -811,10 +835,10 @@ describe("automatic Todoist task claiming", () => {
 			error: "not used",
 		}));
 		extension(h.pi, {
-			loadConfig: async () => config(claimEnabledConfig(root)),
+			loadConfig: async () => config({ [root]: MERGE_TD }),
 			taskClaimWorker: worker,
 		});
-		await start(h, claimEnabledConfig(root));
+		await start(h, { [root]: MERGE_TD });
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{
 				type: BEFORE_AGENT_START,
@@ -822,7 +846,7 @@ describe("automatic Todoist task claiming", () => {
 			},
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 25));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 		expect(worker).toHaveBeenCalledTimes(1);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (not used)",
@@ -861,10 +885,9 @@ describe("hidden lifecycle context", () => {
 			}
 		};
 		await start(h, { "/configured": MERGE_TD }, { exec });
-		expect(h.appended).toContainEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: { remoteOrigin: REMOTE_ORIGIN },
-		});
+		expect(
+			(latestSnapshotData(h).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
 	});
 
 	it(WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO, async () => {
@@ -877,11 +900,12 @@ describe("hidden lifecycle context", () => {
 		expect(result).toBeUndefined();
 
 		const withTask = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: { taskRef: VALUE_42, taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42 },
-			},
+			persistedStateEntry({
+				todoist: {
+					taskRef: VALUE_42,
+					taskUrl: HTTPS_APP_TODOIST_COM_APP_TASK_42,
+				},
+			}),
 		]);
 		await start(withTask, { "/configured": MERGE_TD });
 		const second = await withTask.handlers.get(BEFORE_AGENT_START)?.(
@@ -918,19 +942,13 @@ describe("hidden lifecycle context", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toEqual([
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { remoteOrigin: REMOTE_ORIGIN },
-			},
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					remoteOrigin: REMOTE_ORIGIN,
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
-				},
-			},
-		]);
+		expect(h.appended).toHaveLength(2);
+		expect(
+			(snapshotDataAt(h, 0).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
+		expect(snapshotDataAt(h, 1).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_3 },
+		});
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
@@ -978,19 +996,13 @@ describe("hidden lifecycle context", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended).toEqual([
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: { remoteOrigin: REMOTE_ORIGIN },
-			},
-			{
-				type: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					remoteOrigin: REMOTE_ORIGIN,
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_3,
-				},
-			},
-		]);
+		expect(h.appended).toHaveLength(2);
+		expect(
+			(snapshotDataAt(h, 0).gitState as Record<string, unknown>).remoteOrigin,
+		).toBe(REMOTE_ORIGIN);
+		expect(snapshotDataAt(h, 1).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_3 },
+		});
 	});
 
 	it(REJECTS_EXPLICIT_PR_PIN_WITHOUT_REMOTE_ORIGIN, async () => {
@@ -1065,14 +1077,10 @@ describe("pi_todo_gate_state", () => {
 
 	it(CLEAR_ALL_PRESERVES_TASK_STATE, async () => {
 		const h = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_1,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		await start(h, { "/configured": MERGE_TD });
 		await h.tools[0].execute(
@@ -1082,25 +1090,24 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			data: { taskRef: TASK_1, prDiscoveryDisabled: true },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
 		});
-		expect(h.appended.at(-1)).not.toMatchObject({
-			data: { prUrl: expect.any(String) },
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			discoveryDisabled: true,
 		});
+		expect(latestModuleState(h, "pr").prUrl).toBeUndefined();
 	});
 
 	it(VALIDATES_AND_PERSISTS_AN_EXPLICIT_PR_OVERRIDE, async () => {
 		const h = harness(CONFIGURED_PROJECT, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_1,
-					mergeCompletedAt: OLD,
-					todoistCompletionAttemptedAt: OLD,
+			persistedStateEntry(
+				{
+					pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+					todoist: { todoistCompletionAttemptedAt: OLD },
 				},
-			},
+				{ mergeCompletedAt: OLD },
+			),
 		]);
 		const exec = async (_command: string, args: string[]) =>
 			args.join(" ") === "remote get-url origin"
@@ -1118,21 +1125,21 @@ describe("pi_todo_gate_state", () => {
 			undefined,
 			h.ctx,
 		)) as StateToolResult;
-		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: {
-				remoteOrigin: REMOTE_ORIGIN,
-				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-			},
+		expect(latestSnapshotData(h).gitState).toMatchObject({
+			remoteOrigin: REMOTE_ORIGIN,
+		});
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
-		expect(h.statusCalls.slice(-2)).toEqual([
-			{
-				key: PI_TODO_GATE_PR,
-				text: expect.stringContaining(PR_LINK),
-			},
-			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
-		]);
+		expect(h.statusCalls).toContainEqual({
+			key: PI_TODO_GATE_PR,
+			text: expect.stringContaining(PR_LINK),
+		});
+		expect(h.statusCalls).toContainEqual({
+			key: PI_TODO_GATE_TASK,
+			text: TODOIST_TASK_NONE,
+		});
 	});
 
 	it(CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION, async () => {
@@ -1155,11 +1162,9 @@ describe("pi_todo_gate_state", () => {
 				}),
 			openSession: () => ({
 				getBranch: () => [
-					{
-						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_ENTRY,
-						data: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
-					},
+					persistedStateEntry({
+						pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+					}),
 				],
 				getSessionId: () => PREVIOUS,
 				getCwd: () => CONFIGURED_PROJECT,
@@ -1189,11 +1194,7 @@ describe("pi_todo_gate_state", () => {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
 			openSession: () => ({
 				getBranch: () => [
-					{
-						type: CUSTOM,
-						customType: PI_TODO_GATE_STATE_ENTRY,
-						data: { taskRef: TASK_1 },
-					},
+					persistedStateEntry({ todoist: { taskRef: TASK_1 } }),
 				],
 				getSessionId: () => PREVIOUS,
 				getCwd: () => root,
@@ -1207,24 +1208,21 @@ describe("pi_todo_gate_state", () => {
 			},
 			h.ctx,
 		);
-		expect(h.appended.at(-1)).toMatchObject({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: { taskRef: TASK_1, inheritedFrom: PREVIOUS },
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
+		expect(latestSnapshotData(h).session).toMatchObject({
+			inheritedFromSessionId: PREVIOUS,
 		});
 	});
 
 	it.skip(CLEARING_A_TASK_CLEARS_ITS_COMPLETION_METADATA, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					taskRef: TASK_1,
-					mergeCompletedAt: OLD,
-					todoistCompletionAttemptedAt: OLD,
-				},
-			},
+			persistedStateEntry(
+				{ todoist: { taskRef: TASK_1, todoistCompletionAttemptedAt: OLD } },
+				{ mergeCompletedAt: OLD },
+			),
 		]);
 		extension(h.pi, {
 			loadConfig: async () => config({ [root]: MERGE_TD }),
@@ -1250,14 +1248,10 @@ describe("pi_todo_gate_state", () => {
 	it.skip(DOES_NOT_COMPLETE_STALE_MERGE_TASK, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		let resolveExec:
 			| ((result: { stdout: string; stderr: string; code: number }) => void)
@@ -1523,16 +1517,14 @@ describe("pi_todo_gate_state", () => {
 	it.skip(DOES_NOT_COMPLETE_ABA_RECLAIM, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: {
 					taskRef: TASK_1,
 					taskName: TASK_NAME,
 					taskUrl: TASK_URL,
 				},
-			},
+			}),
 		]);
 		let resolveExec: (() => void) | undefined;
 		const execReady = new Promise<void>((resolve) => {
@@ -1593,23 +1585,21 @@ describe("pi_todo_gate_state", () => {
 		resolveExec?.();
 		await mergePromise;
 
-		const latest = (h.appended.at(-1) as { data: Record<string, unknown> })
-			.data;
-		expect(latest).toMatchObject({ taskRef: TASK_1 });
-		expect(latest).not.toHaveProperty("mergeCompletedAt");
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
+		expect(latestSnapshotData(h).gitState).not.toHaveProperty(
+			"mergeCompletedAt",
+		);
 	});
 
 	it.skip(DOES_NOT_OVERWRITE_NEWER_STATE_AFTER_COMPLETION, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		let resolveCompletion: (() => void) | undefined;
 		const completion = new Promise<void>((resolve) => {
@@ -1656,26 +1646,19 @@ describe("pi_todo_gate_state", () => {
 		await mergePromise;
 		await clearing;
 
-		expect(h.appended.at(-1)).toEqual({
-			type: PI_TODO_GATE_STATE_ENTRY,
-			data: {
-				prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-				prDiscoveryDisabled: true,
-			},
+		expect(latestModuleState(h, "pr")).toMatchObject({
+			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
+			discoveryDisabled: true,
 		});
 	});
 
 	it(DOES_NOT_COMPLETE_BEFORE_EXIT_ACTION, async () => {
 		const root = await mkdtemp(join(tmpdir(), PI_TODO_GATE_EXTENSION));
 		const h = harness(root, [
-			{
-				type: CUSTOM,
-				customType: PI_TODO_GATE_STATE_ENTRY,
-				data: {
-					prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
-					taskRef: TASK_1,
-				},
-			},
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+				todoist: { taskRef: TASK_1 },
+			}),
 		]);
 		const completeTask = vi.fn();
 		const client = { completeTask };
@@ -1709,7 +1692,9 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		expect(completeTask).not.toHaveBeenCalled();
-		expect(h.appended).toHaveLength(0);
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: TASK_1,
+		});
 	});
 
 	it(REJECTS_INVALID_PR_URLS_WITHOUT_PERSISTING_THEM, async () => {

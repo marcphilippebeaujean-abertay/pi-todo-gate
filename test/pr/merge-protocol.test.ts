@@ -4,12 +4,17 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import type { ExtensionRuntime } from "../../src/extension-types.ts";
+import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
 import {
 	mergeProtocolSkillPath,
 	registerMergeProtocol,
 } from "../../src/pr/module.ts";
 import type { CommandResult } from "../../src/shared/command.ts";
+import {
+	createSessionState,
+	type ExtensionDependencies,
+	type SessionRecord,
+} from "../../src/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 const cwd = "/repo";
@@ -26,28 +31,46 @@ function commandContext(confirm = true): ExtensionCommandContext {
 }
 
 function createRuntime(
-	exec: ExtensionRuntime["dependencies"]["exec"],
+	exec: ExtensionDependencies["exec"],
 	confirm = true,
 ): {
-	runtime: ExtensionRuntime;
+	runtime: PrCommandOptions;
 	context: ExtensionCommandContext;
-	session: NonNullable<ExtensionRuntime["active"]>;
+	session: SessionRecord;
+	sessionState: ReturnType<typeof createSessionState>;
 } {
 	const context = commandContext(confirm);
 	const session = {
-		sessionId: "session",
 		context,
-		state: { prUrl: PR_URL, taskRef: "task-1" },
-		operationGeneration: 0,
-		operationQueue: Promise.resolve(),
+		project: { codingRoot: cwd, todoistProjectRef: "project" },
+		hasPendingHandoffContext: false,
+		hasPerformedAnyGitMutations: false,
 		workRevision: 0,
-	} as unknown as NonNullable<ExtensionRuntime["active"]>;
+		sessionId: "session",
+		operationQueue: Promise.resolve(),
+	} as unknown as SessionRecord;
+	const activeSession = { current: session };
+	const sessionState = createSessionState();
+	sessionState.session.activeSessionId = "session";
+	sessionState.moduleState.pr.prUrl = PR_URL;
+	sessionState.moduleState.todoist.taskRef = "task-1";
 	const currentRuntime = {
-		active: session,
-		dependencies: { exec },
-		events: { emit: vi.fn(async () => undefined) },
-	} as unknown as ExtensionRuntime;
-	return { runtime: currentRuntime, context, session };
+		sessionState,
+		exec,
+		getSession: () => activeSession.current,
+		getPrState: () => sessionState.moduleState.pr,
+		isCurrentSession: (_current: SessionRecord, sessionId: string) =>
+			sessionState.session.activeSessionId === sessionId,
+		enqueueSessionOperation: <T>(
+			_session: SessionRecord,
+			operation: () => Promise<T>,
+		) => operation(),
+		eventHandler: {
+			prMergedEvent: { emit: vi.fn(async () => undefined) },
+		},
+	} as unknown as PrCommandOptions;
+
+	return { runtime: currentRuntime, context, session, sessionState };
 }
 
 describe("merge protocol command", () => {
@@ -106,9 +129,26 @@ describe("merge protocol command", () => {
 			["pr", "merge", PR_URL, "--merge"],
 			{ cwd },
 		);
-		expect(currentRuntime.events.emit).toHaveBeenCalledWith("prMerged", {
+		expect(
+			currentRuntime.eventHandler.prMergedEvent.emit,
+		).toHaveBeenCalledOnce();
+		const emit = currentRuntime.eventHandler.prMergedEvent.emit as unknown as {
+			mock: {
+				calls: Array<
+					[
+						{
+							prUrl: string;
+							taskMarkedAsCompleted: boolean;
+							sessionId: string;
+						},
+					]
+				>;
+			};
+		};
+		expect(emit.mock.calls[0]?.[0]).toEqual({
 			prUrl: PR_URL,
 			taskMarkedAsCompleted: false,
+			sessionId: "session",
 		});
 	});
 
@@ -117,7 +157,7 @@ describe("merge protocol command", () => {
 		const { runtime, context } = createRuntime(exec, false);
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
-		expect(runtime.events.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 	});
 
 	it("reports command failures without emitting an event", async () => {
@@ -130,7 +170,7 @@ describe("merge protocol command", () => {
 		);
 		const { runtime, context } = createRuntime(exec);
 		await (await commandFor(runtime)).handler("", context);
-		expect(runtime.events.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 		expect(context.ui.notify).toHaveBeenCalledWith(
 			"Pull request merge failed: permission denied extra output",
 			"warning",
@@ -139,12 +179,14 @@ describe("merge protocol command", () => {
 
 	it("does not run without a pinned PR or interactive UI", async () => {
 		const exec = vi.fn();
-		const { runtime, context } = createRuntime(exec);
-		if (runtime.active) runtime.active.state.prUrl = undefined;
+		const { runtime, context, sessionState } = createRuntime(exec);
+		const session = runtime.getSession?.();
+		if (session) sessionState.moduleState.pr.prUrl = undefined;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
 		context.hasUI = false;
-		if (runtime.active) runtime.active.state.prUrl = PR_URL;
+		const restoredSession = runtime.getSession?.();
+		if (restoredSession) sessionState.moduleState.pr.prUrl = PR_URL;
 		await (await commandFor(runtime)).handler("", context);
 		expect(exec).not.toHaveBeenCalled();
 	});
@@ -155,7 +197,7 @@ describe("merge protocol command", () => {
 		});
 		const { runtime, context } = createRuntime(exec);
 		await (await commandFor(runtime)).handler("", context);
-		expect(runtime.events.emit).not.toHaveBeenCalled();
+		expect(runtime.eventHandler.prMergedEvent.emit).not.toHaveBeenCalled();
 		expect(context.ui.notify).toHaveBeenCalledWith(
 			"Pull request merge failed: gh unavailable",
 			"warning",
@@ -193,7 +235,7 @@ function runtimeForTest() {
 	return createRuntime(async () => ({ stdout: "", stderr: "", code: 0 }));
 }
 
-async function commandFor(runtime: ExtensionRuntime) {
+async function commandFor(runtime: PrCommandOptions) {
 	const commands = new Map<
 		string,
 		{ handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }

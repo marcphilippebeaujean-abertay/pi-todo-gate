@@ -46,9 +46,9 @@ export interface Events { emit: EventListener; }
 		expect(diagnostics).toEqual([]);
 	});
 
-	it("rejects event-related declarations in state.ts", async () => {
+	it("rejects event-related declarations in internal-state.ts", async () => {
 		const diagnostics = await lintFile(
-			"state.ts",
+			"internal-state.ts",
 			`export interface ClaimCompletedEvent { value: string; }
 export type HerdrEvents = { emit: () => void };
 `,
@@ -70,7 +70,7 @@ export type EventListener = () => void;
 
 	it("ignores declarations without event in their names", async () => {
 		const diagnostics = await lintFile(
-			"state.ts",
+			"internal-state.ts",
 			`export interface HerdrState { value: string; }
 export type ClaimWorkerRequest = { value: string };
 `,

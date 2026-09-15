@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
 	CANONICAL_FACETS,
 	checkModuleStructure,
+	checkProductionArchitecture,
 	SCOPED_DOMAINS,
 } from "../../scripts/check-module-structure.ts";
 
@@ -43,12 +44,31 @@ describe("module structure checker", () => {
 		expect(config).toContain("no-event-publisher-to-consumer");
 		expect(config).toContain("^src/[^/]+/event-publishers\\\\.ts$");
 	});
+	it("allows shared module-state imports but protects internal-state", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		expect(config).toContain("no-shared-to-scoped-implementation");
+		expect(config).toContain("no-shared-to-internal-state");
+		expect(config).toContain("no-root-to-internal-state");
+		expect(config).toContain("no-exit-protocol-to-worktree-internal-state");
+		expect(config).toContain("(?!module-state\\\\.ts$)");
+		expect(config).toContain("pathNot:");
+		expect(config).toContain(
+			"^src/(shared|pr|todoist|herdr|worktree|exit-protocol|footer)/",
+		);
+	});
 
-	it("requires every scoped module to define state.ts", async () => {
-		for (const domain of SCOPED_DOMAINS)
+	it("requires every scoped module to define module-state.ts and internal-state.ts", async () => {
+		for (const domain of SCOPED_DOMAINS) {
 			await expect(
-				readFile(join(PROJECT_ROOT, "src", domain, "state.ts")),
+				readFile(join(PROJECT_ROOT, "src", domain, "module-state.ts")),
 			).resolves.toBeDefined();
+			await expect(
+				readFile(join(PROJECT_ROOT, "src", domain, "internal-state.ts")),
+			).resolves.toBeDefined();
+		}
 	});
 
 	it("requires every scoped module to define events.ts", async () => {
@@ -60,6 +80,70 @@ describe("module structure checker", () => {
 
 	it("accepts all canonical files, including empty facets", async () => {
 		expect(await checkModuleStructure(await validFixture())).toEqual([]);
+	});
+
+	it("reports facet-specific missing diagnostics", async () => {
+		const root = await validFixture();
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "pr", "module-state.ts"),
+		);
+		await (await import("node:fs/promises")).rm(
+			join(root, "src", "footer", "internal-state.ts"),
+		);
+
+		expect(await checkModuleStructure(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: "src/pr/module-state.ts",
+					message: "missing module-state facet",
+				}),
+				expect.objectContaining({
+					path: "src/footer/internal-state.ts",
+					message: "missing internal-state facet",
+				}),
+			]),
+		);
+	});
+
+	it("rejects reintroduced legacy application directory", async () => {
+		const root = await validFixture();
+		await mkdir(join(root, "src", "application"), { recursive: true });
+
+		expect(await checkModuleStructure(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: "src/application",
+					message: "legacy application directory is not allowed",
+				}),
+			]),
+		);
+	});
+
+	it("passes final production architecture constraints", async () => {
+		expect(await checkProductionArchitecture(PROJECT_ROOT)).toEqual([]);
+	});
+
+	it("reports forbidden compatibility APIs in production files", async () => {
+		const root = await mkdtemp(join(tmpdir(), "production-architecture-"));
+		const sourcePath = join(root, "src", "legacy.ts");
+		await mkdir(join(root, "src"), { recursive: true });
+		await writeFile(
+			sourcePath,
+			"class SessionContext {}\nconst events = { on() {} }; events.on();\n",
+		);
+
+		const issues = await checkProductionArchitecture(root);
+		expect(issues).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					message: "forbidden compatibility identifier SessionContext",
+				}),
+				expect.objectContaining({
+					message:
+						"production architecture must use typed Event channels, not .on()",
+				}),
+			]),
+		);
 	});
 
 	it("rejects nested domain directories", async () => {
@@ -97,7 +181,10 @@ describe("module structure checker", () => {
 		await (await import("node:fs/promises")).rm(
 			join(root, "src", "footer", "footer-rendering.ts"),
 		);
-		await writeFile(join(root, "src", "pr", "legacy.ts"), "export {};\n");
+		await writeFile(
+			join(root, "src", "pr", "module-state-extra.ts"),
+			"export {};\n",
+		);
 		const issues = await checkModuleStructure(root);
 		expect(issues).toEqual(
 			expect.arrayContaining([
@@ -107,7 +194,7 @@ describe("module structure checker", () => {
 				}),
 				expect.objectContaining({
 					domain: "pr",
-					path: "src/pr/legacy.ts",
+					path: "src/pr/module-state-extra.ts",
 					message: "unclassified TypeScript implementation file",
 				}),
 			]),
@@ -120,11 +207,11 @@ describe("module structure checker", () => {
 			join(root, "src", "pr", "commands.ts"),
 		);
 		await (await import("node:fs/promises")).rm(
-			join(root, "src", "footer", "state.ts"),
+			join(root, "src", "footer", "internal-state.ts"),
 		);
 		const issues = await checkModuleStructure(root);
 		expect(issues.map((issue) => issue.path)).toEqual([
-			"src/footer/state.ts",
+			"src/footer/internal-state.ts",
 			"src/pr/commands.ts",
 		]);
 	});

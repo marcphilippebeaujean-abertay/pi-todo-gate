@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { FooterState, FooterUpdate } from "../../src/footer/state.ts";
+import { FOOTER_HERDR_TYPE } from "../../src/footer/constants.ts";
 import {
+	type FooterModuleState as FooterState,
+	type FooterUpdate,
+	footerStateDescriptor,
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
-} from "../../src/footer/state.ts";
+} from "../../src/footer/module-state.ts";
 
 const visible: FooterUpdate = {
 	footerType: "task",
@@ -19,6 +22,26 @@ const hidden: FooterUpdate = {
 	text: "Herdr: working |",
 	isVisible: false,
 };
+
+describe("footer state", () => {
+	it("provides common session-state descriptor", () => {
+		const state: FooterState = {
+			footers: {
+				task: {
+					footerType: "task",
+					isLoading: false,
+					text: "Task",
+					isVisible: true,
+				},
+			},
+		};
+
+		expect(footerStateDescriptor.id).toBe("footer");
+		expect(
+			footerStateDescriptor.restore(footerStateDescriptor.serialize(state)),
+		).toEqual(state);
+	});
+});
 
 describe("footer event parsing", () => {
 	it("returns an exact live event object", () => {
@@ -51,6 +74,34 @@ describe("footer state serialization", () => {
 					text: null,
 				},
 			},
+		});
+	});
+
+	it("does not persist or restore active Herdr footer status", () => {
+		const state: FooterState = {
+			footers: {
+				[FOOTER_HERDR_TYPE]: {
+					footerType: FOOTER_HERDR_TYPE,
+					isLoading: true,
+					text: "Herdr: ⠋ working |",
+					isVisible: true,
+				},
+				task: visible,
+			},
+		};
+
+		const snapshot = serializeFooterState(state);
+		expect(snapshot).toEqual({
+			footers: {
+				task: {
+					footerType: "task",
+					isLoading: true,
+					text: "Todoist Task: work |",
+				},
+			},
+		});
+		expect(restoreFooterState(snapshot)).toEqual({
+			footers: { task: visible },
 		});
 	});
 

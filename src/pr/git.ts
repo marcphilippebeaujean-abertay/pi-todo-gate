@@ -8,13 +8,13 @@ import {
 	UNKNOWN_STATE,
 	VIEW_COMMAND,
 } from "./constants.ts";
+import type { OpenPrInfo } from "./internal-state.ts";
 import {
 	githubPrUrl,
 	openPrRowSchema,
 	parseOpenPrResult,
 	stateFromMergedData,
 } from "./parsing.ts";
-import type { OpenPrInfo } from "./state.ts";
 
 async function runGhView(
 	exec: Exec,

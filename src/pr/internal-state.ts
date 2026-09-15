@@ -1,0 +1,84 @@
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { PromptQueue } from "../prompt-queue.ts";
+import type { Exec } from "../shared/command.ts";
+import type { EventHandler } from "../shared/events.ts";
+import type { SessionRecord } from "../shared/session-state.ts";
+import type { SessionState } from "../state.ts";
+
+import type { MergedPrState, PrModuleState } from "./module-state.ts";
+
+export type PrState = PrModuleState;
+export type PrStatePatch = Partial<PrState>;
+
+export type PrSession = SessionRecord;
+
+export interface PrCommandOptions {
+	readonly sessionState: SessionState;
+	readonly eventHandler: EventHandler;
+	readonly exec?: Exec;
+	readonly getSession: () => PrSession | null;
+	readonly getPrState: () => PrState;
+	readonly isCurrentSession: (session: PrSession, sessionId: string) => boolean;
+	readonly enqueueSessionOperation: <T>(
+		session: PrSession,
+		operation: () => Promise<T>,
+	) => Promise<T>;
+}
+
+export type StateToolParams =
+	| { action: "status"; url?: string }
+	| { action: "set_pr"; url?: string }
+	| { action: "clear_pr"; url?: string }
+	| { action: "clear_all"; url?: string };
+
+export interface StateToolDependencies {
+	getSession: () => PrSession | null;
+	getPrState: () => PrState;
+	getRemoteOrigin: () => string | undefined;
+	updatePrState: (state: PrState, persist: boolean) => Promise<void> | void;
+	syncPrState?: (session: PrSession) => Promise<void> | void;
+}
+
+export interface PrModuleDependencies {
+	exec?: Exec;
+}
+
+export interface PrModuleOptions {
+	promptQueue: PromptQueue;
+	pi?: ExtensionAPI;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	exec?: Exec;
+	/** @deprecated pass exec directly. */
+	dependencies?: PrModuleDependencies;
+}
+
+export interface OpenPrInfo {
+	url: string | null;
+	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
+}
+export interface MergedPr extends MergedPrState {}
+export interface PrSessionIdentity {
+	workRevision: number;
+	prUrl: string | undefined;
+	discoveryDisabled: boolean;
+	sessionId: string;
+}
+
+export interface OriginRequest {
+	sessionId: string | null;
+	session?: PrSession;
+	identity?: PrSessionIdentity;
+}
+
+export interface ParsedMerge {
+	kind: "git" | "gh";
+	args: string[];
+}
+
+export type QuoteCharacter = "'" | '"';
+export interface ShellState {
+	current: string;
+	quote: QuoteCharacter | null;
+	escaped: boolean;
+}

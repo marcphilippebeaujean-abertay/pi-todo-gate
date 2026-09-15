@@ -53,13 +53,13 @@ import { describe, expect, it } from "vitest";
 import {
 	createFooterFactory,
 	Footer,
-	type FooterTheme,
 	renderFooter,
 	renderFooterLine,
 	renderPrLabel,
 	renderPrStatus,
 	renderTaskStatus,
-} from "../../src/footer/module.ts";
+} from "../../src/footer/footer-rendering.ts";
+import type { FooterTheme } from "../../src/footer/internal-state.ts";
 
 const theme: FooterTheme = { fg: (_color, text) => text };
 const statuses = new Map([["caveman", "Caveman: ready"]]);

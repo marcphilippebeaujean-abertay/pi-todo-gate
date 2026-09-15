@@ -1,27 +1,631 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSessionShutdown } from "../src/extension-session.ts";
-import type { ExtensionRuntime } from "../src/extension-types.ts";
+import {
+	handleBeforeAgentStart,
+	handleMessageEnd,
+	handleSessionShutdown,
+	handleSessionStart,
+	registerModuleStateConsumer,
+} from "../src/event-consumer.ts";
+import { RootEventPublisher } from "../src/event-publishers.ts";
+import { createExtensionState } from "../src/main.ts";
+import { type EventHandler, event } from "../src/shared/events.ts";
+import { createSessionState } from "../src/state.ts";
+
+function context(cwd: string, branch: unknown[] = [], sessionId = "session") {
+	return {
+		cwd,
+		mode: "print",
+		hasUI: false,
+		ui: { setFooter: vi.fn(), theme: { fg: vi.fn() } },
+		sessionManager: {
+			getBranch: () => branch,
+			getSessionId: () => sessionId,
+		},
+	} as never;
+}
+
+function rootWithConfig(
+	loadConfig: () => Promise<{ projects: Record<string, string> }>,
+	exec: (
+		command: string,
+		args: string[],
+	) => Promise<{
+		stdout: string;
+		stderr: string;
+		code: number;
+	}> = async () => ({ stdout: "", stderr: "", code: 1 }),
+	openSession?: (path: string) => {
+		getCwd: () => string;
+		getSessionId: () => string;
+		getBranch: () => unknown[];
+	},
+) {
+	const pi = {
+		appendEntry: vi.fn(),
+		on: vi.fn(),
+		registerTool: vi.fn(),
+	} as never;
+	const state = createExtensionState(pi, { loadConfig, exec, openSession });
+	const root = (
+		state as typeof state & { root: Parameters<typeof handleSessionStart>[0] }
+	).root;
+	registerModuleStateConsumer(
+		root.eventHandler,
+		root.sessionState,
+		() => root.session !== null,
+	);
+	return root;
+}
+
+describe("shared event adaptation", () => {
+	it("publishes message-end and before-agent events instead of calling modules", async () => {
+		const root = rootWithConfig(async () => ({ projects: {} }));
+		const contextValue = context("/repo");
+		const session = {
+			context: contextValue,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		};
+		root.session = session as never;
+		root.sessionState.session.activeSessionId = "session";
+		const messageEndEmit = vi.spyOn(root.eventHandler.messageEndEvent, "emit");
+		const beforeAgentStartEmit = vi.spyOn(
+			root.eventHandler.beforeAgentStartEvent,
+			"emit",
+		);
+
+		await handleMessageEnd(root, { message: "message" } as never);
+		await handleBeforeAgentStart(
+			root,
+			{ prompt: "prompt" } as never,
+			contextValue,
+		);
+
+		expect(messageEndEmit).toHaveBeenCalledWith({
+			event: { message: "message" },
+		});
+		expect(beforeAgentStartEmit).toHaveBeenCalledWith({
+			event: { prompt: "prompt" },
+			context: contextValue,
+			session,
+			sessionId: "session",
+			messages: [],
+		});
+	});
+});
 
 describe("session shutdown", () => {
-	it("does not emit delayed shutdown work", () => {
-		const events = {
-			emit: vi.fn(),
+	it("does not return handoff context after shutdown during before-agent emission", async () => {
+		const root = rootWithConfig(async () => ({ projects: {} }));
+		const contextValue = context("/repo");
+		const session = {
+			context: contextValue,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: true,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			operationQueue: Promise.resolve(),
+			sessionId: "session",
 		};
+		root.session = session as never;
+		root.sessionState.session.activeSessionId = "session";
+		let release!: () => void;
+		let markStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		root.eventHandler.beforeAgentStartEvent.subscribe(async () => {
+			markStarted();
+			await blocked;
+		});
+
+		const result = handleBeforeAgentStart(
+			root,
+			{ prompt: "prompt" } as never,
+			contextValue,
+		);
+		await started;
+		handleSessionShutdown(root);
+		release();
+
+		expect(await result).toBeUndefined();
+	});
+
+	it("wires Todoist merge handling before Exit Protocol prompts", async () => {
+		const confirm = vi.fn(async () => false);
+		const custom = vi.fn(async () => undefined);
+		const activationContext = {
+			cwd: "/repo",
+			hasUI: true,
+			ui: { confirm, custom, setFooter: vi.fn(), theme: { fg: vi.fn() } },
+		} as never;
+		const pi = {
+			appendEntry: vi.fn(),
+			registerTool: vi.fn(),
+			on: vi.fn(),
+		} as never;
+		const state = createExtensionState(pi, {
+			loadConfig: async () => ({ projects: { "/repo": "42" } }),
+		});
+		const root = (
+			state as typeof state & {
+				root: Parameters<typeof handleSessionStart>[0];
+			}
+		).root;
+		const enqueue = vi
+			.spyOn(root.promptQueue, "enqueue")
+			.mockImplementation(() => Promise.resolve(undefined));
+		const session = {
+			context: activationContext,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../src/pr/internal-state.ts").PrSession;
+		root.session = session;
+		root.sessionState.session.activeSessionId = "session";
+		root.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		root.sessionState.moduleState.todoist.taskRef = "42";
+		root.sessionState.moduleState.todoist.taskName = "Task";
+		await root.eventHandler.sessionActivatedEvent.emit({
+			context: activationContext,
+			sessionId: "session",
+			session,
+		});
+		await root.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/42",
+			taskMarkedAsCompleted: false,
+			sessionId: "session",
+		});
+
+		expect(enqueue).toHaveBeenCalledTimes(2);
+		const queuedTasks = enqueue.mock.calls.map(
+			([task]) =>
+				task as (isCurrent: () => boolean) => Promise<unknown> | unknown,
+		);
+		await queuedTasks[0]?.(() => true);
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(custom).not.toHaveBeenCalled();
+	});
+
+	it("clears shared state and deactivates modules", () => {
+		const eventHandler = {
+			moduleStateChangedEvent: event(),
+			sessionStateChangedEvent: event(),
+			toolResultEvent: event(),
+			sessionResetEvent: event(),
+			sessionActivatedEvent: event(),
+			sessionDeactivatedEvent: event(),
+			prMergedEvent: event(),
+		} as unknown as EventHandler;
+		const footer = { deactivate: vi.fn() };
+		const worktree = { deactivate: vi.fn() };
+		const exitProtocol = { deactivate: vi.fn() };
+		eventHandler.sessionDeactivatedEvent.subscribe(() => footer.deactivate());
+		eventHandler.sessionDeactivatedEvent.subscribe(() =>
+			exitProtocol.deactivate(),
+		);
+		eventHandler.sessionDeactivatedEvent.subscribe(() => worktree.deactivate());
 		const runtime = {
-			events,
-			active: null,
+			eventHandler,
+			publisher: new RootEventPublisher(eventHandler),
 			promptQueue: { reset: vi.fn() },
-			taskClaim: { pending: false, completed: false, session: undefined },
-			footer: { deactivate: vi.fn() },
-			worktree: { deactivate: vi.fn() },
-			exitProtocol: { deactivate: vi.fn() },
-		} as unknown as ExtensionRuntime;
+			sessionState: {
+				...createSessionState(),
+				session: { activeSessionId: "session" },
+				gitState: { branch: "main" },
+			},
+			getSession: () => null,
+			setSession: vi.fn(),
+			pr: { deactivateSession: vi.fn() },
+			footer,
+			worktree,
+			exitProtocol,
+		} as unknown as Parameters<typeof handleSessionShutdown>[0];
 
 		handleSessionShutdown(runtime);
 
-		expect(events.emit).not.toHaveBeenCalled();
-		expect(runtime.footer.deactivate).toHaveBeenCalledOnce();
-		expect(runtime.worktree.deactivate).toHaveBeenCalledOnce();
-		expect(runtime.exitProtocol.deactivate).toHaveBeenCalledOnce();
+		expect(runtime.promptQueue.reset).toHaveBeenCalledOnce();
+		expect(runtime.sessionState).toMatchObject({
+			session: { activeSessionId: null },
+			gitState: {},
+			moduleState: createSessionState().moduleState,
+		});
+		expect(
+			(runtime.footer as unknown as { deactivate: ReturnType<typeof vi.fn> })
+				.deactivate,
+		).toHaveBeenCalledOnce();
+		expect(
+			(runtime.worktree as unknown as { deactivate: ReturnType<typeof vi.fn> })
+				.deactivate,
+		).toHaveBeenCalledOnce();
+		expect(
+			(
+				runtime.exitProtocol as unknown as {
+					deactivate: ReturnType<typeof vi.fn>;
+				}
+			).deactivate,
+		).toHaveBeenCalledOnce();
+	});
+
+	it("retains startup module snapshots after activation", async () => {
+		const updates: Array<{ moduleId: string }> = [];
+		let observed: {
+			prUrl: string | undefined;
+			taskRef: string | undefined;
+		} | null = null;
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout:
+							"worktree /main\nHEAD main\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				if (key === "git rev-parse HEAD")
+					return { stdout: "abc\n", stderr: "", code: 0 };
+				return { stdout: "", stderr: "", code: 0 };
+			},
+		);
+		root.eventHandler.moduleStateChangedEvent.subscribe(({ moduleId }) => {
+			updates.push({ moduleId });
+		});
+		root.eventHandler.sessionActivatedEvent.subscribe(() => {
+			observed = {
+				prUrl: root.sessionState.moduleState.pr.prUrl,
+				taskRef: root.sessionState.moduleState.todoist.taskRef,
+			};
+		});
+		await handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo", [
+				{
+					type: "custom",
+					customType: "pi-todo-gate-state",
+					data: {
+						schemaVersion: 1,
+						session: {},
+						gitState: {
+							remoteOrigin: "https://persisted.example/repo.git",
+						},
+						moduleState: {
+							pr: {
+								prUrl: "https://github.com/o/r/pull/42",
+								discoveryDisabled: true,
+								discoveryTestedUrls: [],
+								mergedPrs: [],
+							},
+							todoist: { taskRef: "TASK-42" },
+						},
+					},
+				},
+			]),
+		);
+		expect(updates.map(({ moduleId }) => moduleId)).toEqual(
+			expect.arrayContaining(["worktree", "pr", "exitProtocol"]),
+		);
+		expect(root.sessionState.gitState).toMatchObject({
+			isWorktree: true,
+			branch: "feature",
+			remoteOrigin: "https://persisted.example/repo.git",
+		});
+		expect(observed).toEqual({
+			prUrl: "https://github.com/o/r/pull/42",
+			taskRef: "TASK-42",
+		});
+	});
+
+	it("projects inherited handoff origin before persistence", async () => {
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout:
+							"worktree /main\nHEAD main\nbranch refs/heads/main\n\nworktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				if (key === "git remote get-url origin")
+					return {
+						stdout: "https://current.example/repo.git\n",
+						stderr: "",
+						code: 0,
+					};
+				return { stdout: "", stderr: "", code: 0 };
+			},
+			() => ({
+				getCwd: () => "/repo",
+				getSessionId: () => "previous-session",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todo-gate-state",
+						data: {
+							schemaVersion: 1,
+							session: {},
+							gitState: {},
+							moduleState: {
+								todoist: { taskRef: "TASK-123" },
+							},
+						},
+					},
+				],
+			}),
+		);
+		await handleSessionStart(
+			root,
+			{
+				type: "session_start",
+				previousSessionFile: "previous",
+			} as never,
+			context("/repo"),
+		);
+		expect(root.sessionState.gitState.remoteOrigin).toBe(
+			"https://current.example/repo.git",
+		);
+		const appendEntry = (
+			root.pi as never as { appendEntry: ReturnType<typeof vi.fn> }
+		).appendEntry;
+		const stateEntries = appendEntry.mock.calls.filter(
+			(call: unknown[]) => call[0] === "pi-todo-gate-state",
+		);
+		expect(stateEntries.at(-1)).toEqual([
+			"pi-todo-gate-state",
+			expect.objectContaining({
+				schemaVersion: 1,
+				session: { inheritedFromSessionId: "previous-session" },
+				gitState: {
+					remoteOrigin: "https://current.example/repo.git",
+				},
+			}),
+		]);
+	});
+
+	it("does not append origin after concurrent shutdown", async () => {
+		let originStarted = false;
+		let releaseOrigin!: () => void;
+		const originBlocked = new Promise<void>((resolve) => {
+			releaseOrigin = resolve;
+		});
+		const root = rootWithConfig(
+			async () => ({ projects: { "/repo": "project" } }),
+			async (command, args) => {
+				const key = [command, ...args].join(" ");
+				if (key === "git remote get-url origin") {
+					originStarted = true;
+					await originBlocked;
+					return {
+						stdout: "https://github.com/o/r.git\n",
+						stderr: "",
+						code: 0,
+					};
+				}
+				if (key === "git rev-parse --show-toplevel")
+					return { stdout: "/repo\n", stderr: "", code: 0 };
+				if (key === "git branch --show-current")
+					return { stdout: "feature\n", stderr: "", code: 0 };
+				if (key === "git worktree list --porcelain")
+					return {
+						stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/feature\n",
+						stderr: "",
+						code: 0,
+					};
+				return { stdout: "", stderr: "", code: 0 };
+			},
+		);
+		const start = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo"),
+		);
+		for (let attempt = 0; attempt < 20 && !originStarted; attempt += 1)
+			await Promise.resolve();
+		expect(originStarted).toBe(true);
+		handleSessionShutdown(root);
+		releaseOrigin();
+		await start;
+		const appendEntry = (
+			root.pi as never as { appendEntry: ReturnType<typeof vi.fn> }
+		).appendEntry;
+		expect(appendEntry).not.toHaveBeenCalled();
+		expect(root.sessionState).toMatchObject({
+			session: { activeSessionId: null },
+			gitState: {},
+			moduleState: createSessionState().moduleState,
+		});
+	});
+
+	it("does not let stale inherited activation overwrite newer session", async () => {
+		let loadCalls = 0;
+		let markPreviousLookupStarted!: () => void;
+		let releasePreviousLookup!: () => void;
+		const previousLookupStarted = new Promise<void>((resolve) => {
+			markPreviousLookupStarted = resolve;
+		});
+		const previousLookupBlocked = new Promise<void>((resolve) => {
+			releasePreviousLookup = resolve;
+		});
+		const root = rootWithConfig(
+			async () => {
+				loadCalls += 1;
+				if (loadCalls === 2) {
+					markPreviousLookupStarted();
+					await previousLookupBlocked;
+				}
+				return { projects: { "/repo": "project" } };
+			},
+			async () => ({ stdout: "", stderr: "", code: 1 }),
+			() => ({
+				getCwd: () => "/repo",
+				getSessionId: () => "previous",
+				getBranch: () => [
+					{
+						type: "custom",
+						customType: "pi-todo-gate-state",
+						data: {
+							schemaVersion: 1,
+							session: {},
+							gitState: { branch: "inherited" },
+							moduleState: { todoist: { taskRef: "stale" } },
+						},
+					},
+				],
+			}),
+		);
+		const staleStart = handleSessionStart(
+			root,
+			{ type: "session_start", previousSessionFile: "previous" } as never,
+			context("/repo", [], "stale"),
+		);
+		await previousLookupStarted;
+		const currentStart = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo", [], "current"),
+		);
+		releasePreviousLookup();
+		await Promise.all([staleStart, currentStart]);
+
+		expect(root.sessionState.session.activeSessionId).toBe("current");
+		expect(root.sessionState.gitState.branch).not.toBe("inherited");
+		expect(root.sessionState.moduleState.todoist.taskRef).not.toBe("stale");
+	});
+
+	it("does not resurrect module state when activation shuts down", async () => {
+		let releaseInspection!: () => void;
+		let inspectionStarted!: () => void;
+		const inspection = new Promise<void>((resolve) => {
+			releaseInspection = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			inspectionStarted = resolve;
+		});
+		const root = rootWithConfig(
+			async () => ({ projects: {} }),
+			async () => {
+				inspectionStarted();
+				await inspection;
+				return { stdout: "", stderr: "", code: 1 };
+			},
+		);
+		const activationContext = context("/repo");
+		const session = {
+			context: activationContext,
+			project: { codingRoot: "/repo" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../src/pr/internal-state.ts").PrSession;
+		root.session = session;
+		root.sessionState.session.activeSessionId = "session";
+		const activation = root.eventHandler.sessionActivatedEvent.emit({
+			context: activationContext,
+			sessionId: "session",
+			session,
+		});
+		await started;
+		handleSessionShutdown(root);
+		releaseInspection();
+		await activation;
+		await Promise.resolve();
+		expect(root.session).toBeNull();
+		expect(root.sessionState.moduleState).toEqual(
+			createSessionState().moduleState,
+		);
+	});
+
+	it("does not activate stale concurrent starts", async () => {
+		let releaseFirst!: (config: { projects: Record<string, string> }) => void;
+		let calls = 0;
+		const root = rootWithConfig(() => {
+			calls += 1;
+			if (calls === 1)
+				return new Promise((resolve) => {
+					releaseFirst = resolve;
+				});
+			return Promise.resolve({ projects: {} });
+		});
+		const first = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo"),
+		);
+		await Promise.resolve();
+		const second = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo", [], "new-session"),
+		);
+		releaseFirst({ projects: { "/repo": "project" } });
+		await Promise.all([first, second]);
+		expect(root.session).toBeNull();
+		expect(root.sessionState).toMatchObject({
+			session: { activeSessionId: null },
+			gitState: {},
+			moduleState: createSessionState().moduleState,
+		});
+	});
+
+	it("keeps reset state clear after shutdown races", async () => {
+		let release!: (config: { projects: Record<string, string> }) => void;
+		const root = rootWithConfig(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				}),
+		);
+		const stateReference = root.sessionState;
+		const start = handleSessionStart(
+			root,
+			{ type: "session_start" } as never,
+			context("/repo"),
+		);
+		await Promise.resolve();
+		handleSessionShutdown(root);
+		void root.eventHandler.moduleStateChangedEvent.emit({
+			moduleId: "footer",
+			moduleState: { footers: {} },
+			persist: false,
+		});
+		release({ projects: { "/repo": "project" } });
+		await start;
+		await root.eventHandler.moduleStateChangedEvent.emit({
+			moduleId: "footer",
+			moduleState: { footers: {} },
+			persist: false,
+		});
+		await Promise.resolve();
+		expect(root.session).toBeNull();
+		expect(root.sessionState).toBe(stateReference);
+		expect(root.sessionState).toMatchObject({
+			session: { activeSessionId: null },
+			gitState: {},
+			moduleState: createSessionState().moduleState,
+		});
 	});
 });

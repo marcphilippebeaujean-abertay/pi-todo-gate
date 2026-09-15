@@ -23,9 +23,10 @@ import type {
 	OpenPrInfo,
 	ParsedMerge,
 	PrState,
+	PrStatePatch,
 	QuoteCharacter,
 	ShellState,
-} from "./state.ts";
+} from "./internal-state.ts";
 
 const prStateSchema = z.enum([OPEN_STATE, CLOSED_STATE, MERGED_STATE]);
 
@@ -63,8 +64,9 @@ const mergedPrSchema = z.object({
 export const prStateDataSchema = z
 	.object({
 		prUrl: z.string().optional(),
-		mergedPrs: z.array(mergedPrSchema).optional(),
-		discoveryDisabled: z.boolean().optional(),
+		mergedPrs: z.array(mergedPrSchema),
+		discoveryDisabled: z.boolean(),
+		discoveryTestedUrls: z.array(z.string()),
 	})
 	.loose();
 
@@ -269,7 +271,10 @@ export function isPrState(value: unknown): value is PrState {
 	return prStateDataSchema.safeParse(value).success;
 }
 
-export function recordMergedPr(state: PrState, detectedAt: string): PrState {
+export function recordMergedPr(
+	state: PrStatePatch,
+	detectedAt: string,
+): PrStatePatch {
 	const prUrl = state.prUrl;
 	if (prUrl === undefined) return state;
 	const hasPrUrl = prUrl !== "";
@@ -279,10 +284,15 @@ export function recordMergedPr(state: PrState, detectedAt: string): PrState {
 		...withoutPrUrl(existingMergedPrs, prUrl),
 		{ prUrl, detectedAt, reminderPending: true },
 	];
-	return { mergedPrs, discoveryDisabled: false };
+	const { prUrl: _prUrl, ...stateWithoutActivePr } = state;
+	return {
+		...stateWithoutActivePr,
+		mergedPrs,
+		discoveryDisabled: false,
+	};
 }
 
-export function markRemindersDelivered(state: PrState): PrState {
+export function markRemindersDelivered(state: PrStatePatch): PrStatePatch {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const hasPending = existingMergedPrs.some(hasPendingReminder);
@@ -293,7 +303,10 @@ export function markRemindersDelivered(state: PrState): PrState {
 	};
 }
 
-export function removeMergedPr(state: PrState, prUrl: string): PrState {
+export function removeMergedPr(
+	state: PrStatePatch,
+	prUrl: string,
+): PrStatePatch {
 	const existingMergedPrs = state.mergedPrs;
 	if (existingMergedPrs === undefined) return state;
 	const mergedPrs = withoutPrUrl(existingMergedPrs, prUrl);
@@ -301,16 +314,14 @@ export function removeMergedPr(state: PrState, prUrl: string): PrState {
 	const hasSameLength = mergedPrsLength === existingMergedPrs.length;
 	if (hasSameLength) return state;
 	switch (mergedPrsLength) {
-		case 0: {
-			const { mergedPrs: _mergedPrs, ...next } = state;
-			return next;
-		}
+		case 0:
+			return { ...state, mergedPrs: [] };
 		default:
 			return { ...state, mergedPrs };
 	}
 }
 
-export function mergedUrls(state: PrState): string[] {
+export function mergedUrls(state: PrStatePatch): string[] {
 	return state.mergedPrs?.map(prUrlOf) ?? [];
 }
 

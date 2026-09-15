@@ -1,117 +1,168 @@
-import { EXTENSION_CONSTANTS as C } from "../constants.ts";
-import type { ExitAction } from "./exit-actions.ts";
-export interface PrMergedEvent {
-	prUrl: string | null;
-	taskMarkedAsCompleted: boolean;
-}
+import type {
+	BeforeAgentStartEvent,
+	BeforeAgentStartEventResult,
+	ExtensionAPI,
+	ExtensionContext,
+	MessageEndEvent,
+	SessionStartEvent,
+	ToolResultEvent,
+} from "@earendil-works/pi-coding-agent";
+import type {
+	GitState,
+	ModuleId,
+	ModuleState,
+	SessionStateSnapshot,
+} from "../state.ts";
+import type { SessionRecord } from "./session-state.ts";
 
-export type SharedEventPayloads = {
-	prMerged: PrMergedEvent;
+export type {
+	BeforeAgentStartEvent,
+	ExtensionContext,
+	MessageEndEvent,
+	SessionStartEvent,
+	ToolResultEvent,
 };
 
-export interface EventRequest<T> {
-	payload: T;
-	readonly actions: readonly ExitAction[];
-	addAction(action: ExitAction): void;
+export type BeforeAgentStartResultEvent = BeforeAgentStartEventResult;
+export type ExtensionBeforeAgentStartEvent = BeforeAgentStartEvent;
+export type ExtensionBeforeAgentStartResultEvent = BeforeAgentStartEventResult;
+export type ExtensionMessageEndEvent = MessageEndEvent;
+export type ExtensionSessionStartEvent = SessionStartEvent;
+export type ExtensionToolResultEvent = ToolResultEvent;
+
+export type EventCallback<T> = (payload: T) => void | Promise<void>;
+
+export interface Event<T> {
+	emit(payload: T): Promise<void>;
+	subscribe(callback: EventCallback<T>): () => void;
 }
 
-export type EventListener<T> = (
-	request: EventRequest<T>,
-) => void | Promise<void>;
+type Subscriber<T> = { callback: EventCallback<T> };
 
-export type EventName = keyof SharedEventPayloads;
-export type EventPhase = "collect" | "present";
+class EventChannel<T> implements Event<T> {
+	private readonly subscribers: Subscriber<T>[] = [];
 
-type Listener<T> = { listener: EventListener<T>; phase: EventPhase };
-export type AnyListener = Listener<SharedEventPayloads[EventName]>;
-export type ListenerMap = Map<EventName, AnyListener[]>;
+	subscribe(callback: EventCallback<T>): () => void {
+		const subscriber = { callback };
+		this.subscribers.push(subscriber);
+		return this.unsubscribe.bind(this, subscriber);
+	}
 
-export type AnyRequest = EventRequest<SharedEventPayloads[EventName]>;
+	private unsubscribe(subscriber: Subscriber<T>): void {
+		const index = this.subscribers.indexOf(subscriber);
+		const hasIndex = index >= 0;
+		if (hasIndex) this.subscribers.splice(index, 1);
+	}
 
-export interface SharedEvents {
-	on<K extends EventName>(
-		event: K,
-		listener: EventListener<SharedEventPayloads[K]>,
-		phase?: EventPhase,
-	): () => void;
-	emit<K extends EventName>(
-		event: K,
-		payload: SharedEventPayloads[K],
-	): Promise<void>;
-}
-
-function addUniqueAction(actions: ExitAction[], action: ExitAction): void {
-	const alreadyAdded = actions.some((existing) => existing.id === action.id);
-	if (!alreadyAdded) actions.push(action);
-}
-
-function createRequest(payload: SharedEventPayloads[EventName]): AnyRequest {
-	const actions: ExitAction[] = [];
-	return {
-		payload,
-		actions,
-		addAction: addUniqueAction.bind(null, actions),
-	} as AnyRequest;
-}
-
-function removeListener(
-	listeners: ListenerMap,
-	event: EventName,
-	entry: AnyListener,
-): void {
-	const current = listeners.get(event);
-	const hasCurrent = current !== undefined;
-	if (!hasCurrent) return;
-	const index = current.indexOf(entry);
-	const hasIndex = index >= 0;
-	if (hasIndex) current.splice(index, 1);
-	const isEmpty = current.length === 0;
-	if (isEmpty) listeners.delete(event);
-}
-
-function registerListener(
-	listeners: ListenerMap,
-	event: EventName,
-	entry: AnyListener,
-): () => void {
-	const registered = listeners.get(event) ?? [];
-	registered.push(entry);
-	listeners.set(event, registered);
-	return removeListener.bind(null, listeners, event, entry);
-}
-
-async function emitPhase(
-	entries: readonly AnyListener[],
-	phase: EventPhase,
-	request: AnyRequest,
-): Promise<void> {
-	for (const entry of entries) {
-		const isCurrentPhase = entry.phase === phase;
-		if (!isCurrentPhase) continue;
-		try {
-			await entry.listener(request);
-		} catch {
-			// One extension module must not prevent other listeners from running.
+	async emit(payload: T): Promise<void> {
+		const snapshot = [...this.subscribers];
+		for (const subscriber of snapshot) {
+			try {
+				const result = subscriber.callback(payload);
+				if (result instanceof Promise) await result;
+			} catch {
+				// One extension module must not prevent other listeners from running.
+			}
 		}
 	}
 }
 
-export function createSharedEvents(): SharedEvents {
-	const listeners: ListenerMap = new Map();
+export function event<T>(): Event<T> {
+	return new EventChannel<T>();
+}
+
+export interface ClaimErrorEvent {
+	jobType: "Herdr" | "Todoist";
+	error: string;
+}
+
+export type ModuleStateChangedEvent = {
+	[K in ModuleId]: {
+		moduleId: K;
+		moduleState: ModuleState[K];
+		persist: boolean;
+		gitStatePatch?: Partial<GitState>;
+	};
+}[ModuleId];
+
+export type ModuleStateUpdate = ModuleStateChangedEvent;
+
+export type UpdateModuleStateEvent = ModuleStateChangedEvent;
+
+export interface SessionStateChangedEvent {
+	previousState: SessionStateSnapshot;
+	currentState: SessionStateSnapshot;
+}
+
+export type SessionResetEvent = undefined;
+export interface SessionActivatedEvent {
+	context: ExtensionContext;
+	sessionId: string;
+	previousSessionFile?: string;
+	session?: SessionRecord;
+}
+export type SessionDeactivatedEvent = undefined;
+
+export interface InitialPrDiscoveryEvent {
+	branch: readonly unknown[];
+	sessionId: string;
+}
+
+export interface MessageEndEventPayload {
+	event: MessageEndEvent;
+}
+
+export interface BeforeAgentStartEventPayload {
+	event: BeforeAgentStartEvent;
+	context: ExtensionContext;
+	session: SessionRecord;
+	sessionId: string;
+	messages: string[];
+}
+
+export interface PrMergedEvent {
+	prUrl: string | null;
+	taskMarkedAsCompleted: boolean;
+	sessionId: string;
+}
+
+export interface PiToolRegistrationsBecameAvailableEvent {
+	pi: ExtensionAPI;
+}
+
+export interface EventHandler {
+	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
+	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
+	toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
+	sessionResetEvent: Event<SessionResetEvent>;
+	sessionActivatedEvent: Event<SessionActivatedEvent>;
+	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
+	prMergedEvent: Event<PrMergedEvent>;
+	initialPrDiscoveryEvent: Event<InitialPrDiscoveryEvent>;
+	messageEndEvent: Event<MessageEndEventPayload>;
+	beforeAgentStartEvent: Event<BeforeAgentStartEventPayload>;
+	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
+}
+
+export function createSharedEvents(): EventHandler {
+	const prMergedEvent = event<PrMergedEvent>();
 	return {
-		on(event, listener, phase?: EventPhase) {
-			const resolvedPhase = phase ?? (C.value.collect as EventPhase);
-			const entry: AnyListener = {
-				listener: listener as EventListener<SharedEventPayloads[EventName]>,
-				phase: resolvedPhase,
-			};
-			return registerListener(listeners, event, entry);
-		},
-		emit: async (event, payload) => {
-			const request = createRequest(payload);
-			const registered = [...(listeners.get(event) ?? [])];
-			await emitPhase(registered, C.value.collect as EventPhase, request);
-			await emitPhase(registered, C.value.present as EventPhase, request);
-		},
+		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
+		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
+		toolResultEvent: event<{
+			event: ToolResultEvent;
+			context: ExtensionContext;
+		}>(),
+		sessionResetEvent: event<SessionResetEvent>(),
+		sessionActivatedEvent: event<SessionActivatedEvent>(),
+		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
+		prMergedEvent,
+		initialPrDiscoveryEvent: event<InitialPrDiscoveryEvent>(),
+		messageEndEvent: event<MessageEndEventPayload>(),
+		beforeAgentStartEvent: event<BeforeAgentStartEventPayload>(),
+		piToolRegistrationsBecameAvailableEvent:
+			event<PiToolRegistrationsBecameAvailableEvent>(),
 	};
 }
+
+export const createEventHandler = createSharedEvents;

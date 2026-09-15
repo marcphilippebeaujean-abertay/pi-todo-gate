@@ -15,8 +15,7 @@ import {
 	EXIT_UNFOCUSED,
 	EXIT_UNSELECTED,
 } from "./constants.ts";
-import { executeExitAction } from "./notifications.ts";
-import type { ExitAction } from "./state.ts";
+import type { ExitAction } from "./internal-state.ts";
 import {
 	type CustomUI,
 	type ExitPickerResult,
@@ -25,7 +24,8 @@ import {
 	type PickerState,
 	type PickerTUI,
 	toggleAction,
-} from "./state.ts";
+} from "./internal-state.ts";
+import { executeExitAction } from "./notifications.ts";
 
 class PickerWidget {
 	private readonly picker: ExitActionPicker;
