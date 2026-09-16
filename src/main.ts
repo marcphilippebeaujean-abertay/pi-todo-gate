@@ -36,13 +36,13 @@ type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
 type HerdrSetupOptions = Parameters<typeof createHerdrModule>[1];
-type HerdrCommandRunner = NonNullable<HerdrSetupOptions["commandRunner"]>;
+type HerdrClient = NonNullable<HerdrSetupOptions["herdrClient"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 
 export interface ExtensionDependencies extends BaseExtensionDependencies {
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: HerdrCommandRunner;
+	herdrClient?: HerdrClient;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
@@ -62,7 +62,7 @@ interface ModuleSetupDependencies {
 	exec?: Exec;
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: HerdrCommandRunner;
+	herdrClient?: HerdrClient;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
@@ -174,7 +174,7 @@ function startExtensions(
 	createHerdrModule(pi, {
 		eventHandler: extensionState.eventHandler,
 		sessionState: extensionState.sessionState,
-		commandRunner: moduleDependencies.herdrCommandRunner,
+		herdrClient: moduleDependencies.herdrClient,
 		spawnWorker: moduleDependencies.herdrSpawnWorker,
 	});
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });

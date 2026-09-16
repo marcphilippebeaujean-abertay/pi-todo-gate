@@ -8,6 +8,6 @@ export interface ExtensionDependencies {
 	exec?: Exec;
 	createTodoistClient?: unknown;
 	taskClaimWorker?: unknown;
-	herdrCommandRunner?: unknown;
+	herdrClient?: unknown;
 	herdrSpawnWorker?: unknown;
 }
