@@ -18,6 +18,7 @@ function context(overrides: Record<string, unknown> = {}): ExtensionContext {
 		hasUI: true,
 		ui: {
 			confirm: vi.fn(async () => true),
+			select: vi.fn(async (_title: string, options: string[]) => options[0]),
 			notify: vi.fn(),
 			custom: vi.fn(async () => ["remove-worktree"]),
 		},
@@ -165,6 +166,7 @@ describe("Prompt Queue orchestration", () => {
 
 	it("passes dirty confirmation as force true", async () => {
 		const state = setup();
+		(state.ctx.ui.select as ReturnType<typeof vi.fn>).mockResolvedValue("Yes");
 		state.worktree.hasUncommittedChanges.mockResolvedValue(true);
 		state.sessionState.moduleState.todoist.taskRef = undefined;
 		await activate(state);
@@ -175,7 +177,31 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
+		expect(state.ctx.ui.notify).toHaveBeenCalledWith(
+			"Worktree /repo/.worktrees/feature has uncommitted work. Deleting it will permanently remove that work.",
+			"warning",
+		);
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({ force: true });
+	});
+
+	it("defaults dirty worktree removal to No", async () => {
+		const state = setup();
+		state.worktree.hasUncommittedChanges.mockResolvedValue(true);
+		state.sessionState.moduleState.todoist.taskRef = undefined;
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain?: () => Promise<void> }).drain?.();
+
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Remove worktree?
+Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
+			["No", "Yes"],
+		);
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
 
 	it("runs removal confirmation after cancelled Todoist confirmation", async () => {
@@ -262,7 +288,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
 		expect(state.ctx.ui.custom).not.toHaveBeenCalled();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
@@ -320,13 +346,13 @@ describe("Prompt Queue orchestration", () => {
 	it("suppresses stale worktree confirmation", async () => {
 		const state = setup();
 		state.ctx.mode = "tui";
-		let resolveConfirm!: (value: boolean) => void;
-		state.ctx.ui.confirm = vi.fn(
+		let resolveSelect!: (value: string) => void;
+		state.ctx.ui.select = vi.fn(
 			() =>
-				new Promise<boolean>((resolve) => {
-					resolveConfirm = resolve;
+				new Promise<string>((resolve) => {
+					resolveSelect = resolve;
 				}),
-		);
+		) as never;
 		state.ctx.ui.custom = vi.fn(async () => {
 			throw new Error("custom picker must not run");
 		}) as never;
@@ -338,7 +364,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await Promise.resolve();
 		await state.eventHandler.sessionDeactivatedEvent.emit(undefined);
-		resolveConfirm(true);
+		resolveSelect("Yes");
 		await (state.module as { drain: () => Promise<void> }).drain();
 
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
@@ -355,7 +381,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
@@ -373,7 +399,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});

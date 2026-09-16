@@ -173,10 +173,19 @@ export class PromptQueueConsumer {
 		if (!canPrompt) return;
 		const info = this.worktree.getWorktreeInfo();
 		if (info === null) return;
+		const dirty = await this.worktree.hasUncommittedChanges();
+		const isCurrentAfterStatus = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentAfterStatus) return;
+		const hasDirtyWorktree = dirty === true;
 		const confirmed = await confirmRemoveWorktree(
 			context,
 			info.worktreePath,
 			info.branch,
+			hasDirtyWorktree,
 		);
 		const isCurrentAfterPrompt = this.isCurrentJob(
 			context,

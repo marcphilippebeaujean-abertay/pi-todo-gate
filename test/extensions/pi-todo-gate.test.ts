@@ -415,10 +415,10 @@ describe("working tree status", () => {
 			h.ctx,
 		);
 
-		expect(h.confirmations).toContainEqual({
-			title: "Remove worktree?",
-			message:
-				'Delete worktree "/configured/project" and local branch "feature"?',
+		expect(h.selections).toContainEqual({
+			title:
+				'Remove worktree?\nDelete worktree "/configured/project" and local branch "feature"?',
+			options: ["Yes", "No"],
 		});
 		expect(exec).not.toHaveBeenCalledWith(
 			"gh",

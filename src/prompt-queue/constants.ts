@@ -16,6 +16,10 @@ export const TODOIST_CONFIRM_SUFFIX = '" complete?';
 export const TODOIST_CONFIRM_MESSAGE_PREFIX = "Todoist task ";
 export const REMOVE_WORKTREE_CONFIRM_TITLE = "Remove worktree?";
 export const DIRTY_CONFIRM_TITLE = "Remove worktree with uncommitted changes?";
+export const PROMPT_YES = "Yes";
+export const PROMPT_NO = "No";
 export const DIRTY_CONFIRM_PREFIX = "Worktree ";
 export const DIRTY_CONFIRM_SUFFIX =
 	" has uncommitted changes. Force removal will delete them.";
+export const DIRTY_INFO_SUFFIX =
+	" has uncommitted work. Deleting it will permanently remove that work.";
