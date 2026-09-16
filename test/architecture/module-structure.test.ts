@@ -52,11 +52,12 @@ describe("module structure checker", () => {
 		expect(config).toContain("no-shared-to-scoped-implementation");
 		expect(config).toContain("no-shared-to-internal-state");
 		expect(config).toContain("no-root-to-internal-state");
-		expect(config).toContain("no-exit-protocol-to-worktree-internal-state");
+		expect(config).toContain("no-prompt-queue-to-internal-state");
+		expect(config).not.toContain("exit-protocol");
 		expect(config).toContain("(?!module-state\\\\.ts$)");
 		expect(config).toContain("pathNot:");
 		expect(config).toContain(
-			"^src/(shared|pr|todoist|herdr|worktree|exit-protocol|footer)/",
+			"^src/(shared|pr|todoist|herdr|worktree|prompt-queue|footer)/",
 		);
 	});
 

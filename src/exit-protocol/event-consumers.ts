@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PromptQueue } from "../prompt-queue.ts";
+import type { PromptQueue } from "../prompt-queue/queue.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { WorktreeCleanup } from "../worktree/module.ts";
 import {

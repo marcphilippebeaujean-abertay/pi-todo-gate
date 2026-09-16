@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { register } from "../../src/pr/commands.ts";
 import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
-import { PromptQueue } from "../../src/prompt-queue.ts";
+import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState, type SessionRecord } from "../../src/state.ts";

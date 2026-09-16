@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
-import { PromptQueue } from "../../src/prompt-queue.ts";
+import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { completeMergedTask } from "../../src/todoist/completion.ts";
