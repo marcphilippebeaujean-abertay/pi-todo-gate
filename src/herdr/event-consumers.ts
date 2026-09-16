@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { BeforeAgentStartEvent } from "../shared/events.ts";
+import { modelReference } from "../shared/pi-worker.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
@@ -170,6 +171,7 @@ class HerdrTabClaimConsumer {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
 				instructions: TAB_CLAIM_INSTRUCTIONS,
+				model: modelReference(ctx.model),
 				events: this.events,
 			});
 			this.publishClaimInProgress(true);

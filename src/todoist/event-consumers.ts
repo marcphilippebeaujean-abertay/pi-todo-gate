@@ -1,4 +1,5 @@
 import { spawnExec } from "../shared/command.ts";
+import { modelReference } from "../shared/pi-worker.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	CLAIM,
@@ -15,6 +16,7 @@ import {
 import type { TaskClaimResultEvent } from "./events.ts";
 import type {
 	ClaimTaskData,
+	TaskClaimWorker,
 	TaskClaimWorkerResult,
 	TodoistLifecycleConsumerOptions,
 	TodoistOperations,
@@ -44,7 +46,7 @@ export function registerTodoistLifecycleConsumers(
 		options.resetSession(),
 	);
 	options.eventHandler.beforeAgentStartEvent.subscribe(
-		({ event, session, sessionId }) => {
+		({ event, context, session, sessionId }) => {
 			const isCurrentContext =
 				options.getSession()?.context === session.context;
 			const isCurrentSessionId =
@@ -54,7 +56,10 @@ export function registerTodoistLifecycleConsumers(
 			const isCurrentSession = isCurrentContext && isCurrentSessionId;
 			if (!isCurrentSession) return;
 			if (hasTaskRef) return;
-			options.maybeAnalyzeTaskClaim(event.prompt);
+			options.maybeAnalyzeTaskClaim(
+				event.prompt,
+				modelReference(context.model),
+			);
 		},
 	);
 }
@@ -159,11 +164,23 @@ function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error };
 }
 
+function resolveTaskClaimWorker(
+	operations: TodoistOperations,
+	exec: import("../shared/command.ts").Exec,
+): TaskClaimWorker {
+	return (
+		operations.taskClaimWorker ??
+		operations.dependencies?.taskClaimWorker ??
+		createTaskClaimWorker(exec)
+	);
+}
+
 export async function runTaskClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
 	sessionId: string,
+	model?: string,
 ): Promise<void> {
 	const isCurrentSessionId = () =>
 		operations.sessionState.session.activeSessionId === sessionId;
@@ -181,12 +198,10 @@ export async function runTaskClaim(
 			operations.todoist.taskClaim.session = undefined;
 			return;
 		}
-		const worker =
-			operations.taskClaimWorker ??
-			operations.dependencies?.taskClaimWorker ??
-			createTaskClaimWorker(exec);
+		const worker = resolveTaskClaimWorker(operations, exec);
 		const result = await worker({
 			sessionId,
+			model,
 			prompt,
 			cwd: session.context.cwd,
 			projectRef: operations.projectRef,
@@ -214,6 +229,7 @@ export function maybeAnalyzeTaskClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
 	prompt: string,
+	model?: string,
 ): void {
 	const expectedSessionId = operations.sessionState.session.activeSessionId;
 	if (expectedSessionId === null) return;
@@ -230,5 +246,5 @@ export function maybeAnalyzeTaskClaim(
 	if (claimAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(operations, session, prompt, expectedSessionId);
+	void runTaskClaim(operations, session, prompt, expectedSessionId, model);
 }

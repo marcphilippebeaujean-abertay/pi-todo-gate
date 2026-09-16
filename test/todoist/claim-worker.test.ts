@@ -8,6 +8,7 @@ import {
 
 const input: TaskClaimWorkerInput = {
 	sessionId: "session-current",
+	model: "openai-codex/gpt-5.6-luna",
 	prompt: "Implement feature",
 	cwd: "/repo/.worktrees/feature",
 	projectRef: "Pi Extensions",
@@ -51,6 +52,8 @@ describe("Todoist task claim worker", () => {
 						"bash",
 						"--thinking",
 						"high",
+						"--model",
+						input.model,
 					]),
 				);
 				const prompt = args.at(-1) ?? "";

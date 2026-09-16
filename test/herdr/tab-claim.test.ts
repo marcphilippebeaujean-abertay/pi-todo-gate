@@ -35,9 +35,14 @@ function fakePi(): FakePi {
 	};
 }
 
-function context(cwd = "/repo", branch: unknown[] = []) {
+function context(
+	cwd = "/repo",
+	branch: unknown[] = [],
+	model?: { provider: string; id: string },
+) {
 	return {
 		cwd,
+		model,
 		ui: { notify: vi.fn() },
 		sessionManager: { getBranch: () => branch },
 	};
@@ -210,7 +215,13 @@ describe("background Herdr tab claim", () => {
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "claim" },
-				context(),
+				context("/repo", [], {
+					provider: "anthropic",
+					id: "claude-sonnet-4-5",
+				}),
+			);
+			expect(backgroundWorker.requests[0]?.model).toBe(
+				"anthropic/claude-sonnet-4-5",
 			);
 			emitFailure(backgroundWorker.requests[0] as ClaimWorkerRequest);
 

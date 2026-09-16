@@ -44,6 +44,7 @@ export type TaskClaimWorker = (
 
 export const TaskClaimWorkerInputSchema = Type.Object({
 	sessionId: Type.String({ minLength: 1 }),
+	model: Type.Optional(Type.String({ minLength: 1 })),
 	prompt: Type.String(),
 	cwd: Type.String(),
 	projectRef: Type.String(),
@@ -125,7 +126,7 @@ export interface TodoistLifecycleConsumerOptions {
 		sessionId: string,
 	) => Promise<void>;
 	resetSession: () => void;
-	maybeAnalyzeTaskClaim: (prompt: string) => void;
+	maybeAnalyzeTaskClaim: (prompt: string, model?: string) => void;
 }
 
 export interface TodoistModuleOptions {

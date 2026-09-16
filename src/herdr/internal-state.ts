@@ -25,6 +25,7 @@ export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponseData = {
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
+	model?: string;
 	events: HerdrEvents;
 }
 
