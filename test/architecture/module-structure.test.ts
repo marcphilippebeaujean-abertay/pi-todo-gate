@@ -230,13 +230,33 @@ describe("module structure checker", () => {
 			}),
 		).resolves.not.toContain("no-prompt-queue-to-pr");
 
-		await expect(
-			cruiseFixture({
-				"src/prompt-queue/consumer.ts":
-					'import type { State } from "../herdr/internal-state.ts";\nvoid (null as State);\n',
-				"src/herdr/internal-state.ts": "export interface State {}\n",
-			}),
-		).resolves.toContain("no-prompt-queue-to-internal-state");
+		const featureDomains = [
+			"pr",
+			"todoist",
+			"herdr",
+			"worktree",
+			"footer",
+		] as const;
+		const internalImports = featureDomains
+			.map(
+				(domain) =>
+					`import type { State } from "../${domain}/internal-state.ts";`,
+			)
+			.join("\\n");
+		const internalStateFiles = Object.fromEntries(
+			featureDomains.map((domain) => [
+				`src/${domain}/internal-state.ts`,
+				"export interface State {}\\n",
+			]),
+		);
+		const internalStateViolations = await cruiseFixture({
+			"src/prompt-queue/consumer.ts": `${internalImports}\\n`,
+			...internalStateFiles,
+		});
+		for (const domain of featureDomains)
+			expect(internalStateViolations).toContain(
+				`src/${domain}/internal-state.ts`,
+			);
 
 		await expect(
 			cruiseFixture({
