@@ -223,21 +223,27 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
 	});
 
-	it("enqueues Todoist job before exit job synchronously", async () => {
+	it("runs Todoist completion before exit action", async () => {
 		const state = setup();
+		const order: string[] = [];
 		state.sessionState.moduleState.todoist.taskRef = "42";
+		state.todoist.completeMergedTask.mockImplementation(async () => {
+			order.push("todoist");
+			return "completed";
+		});
+		state.worktree.removeWorktree.mockImplementation(async () => {
+			order.push("exit");
+			return "completed";
+		});
 		await activate(state);
-		const enqueue = vi.spyOn(state.queue, "enqueue");
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
 			taskMarkedAsCompleted: false,
 			sessionId,
 		});
+		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(enqueue).toHaveBeenCalledTimes(2);
-		expect(enqueue.mock.invocationCallOrder[0]).toBeLessThan(
-			enqueue.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
-		);
+		expect(order).toEqual(["todoist", "exit"]);
 	});
 
 	it("uses TUI picker selection to execute selected action", async () => {
