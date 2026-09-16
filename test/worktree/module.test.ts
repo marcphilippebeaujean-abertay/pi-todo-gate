@@ -10,7 +10,8 @@ type TestWorktreeModule = {
 	sessionStart(context: ExtensionContext, sessionId: string): Promise<void>;
 	deactivate(): void;
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
-	removeWorktree(): Promise<unknown>;
+	hasUncommittedChanges(): Promise<boolean | null>;
+	removeWorktree(options: { force: boolean }): Promise<unknown>;
 };
 
 const createTestWorktreeModule = (
@@ -78,6 +79,28 @@ describe("worktree state", () => {
 });
 
 describe("worktree event actions", () => {
+	it("reports current dirty status without prompting", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const ctx = context();
+		const exec: Exec = async (command, args) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git status --porcelain=v1 --untracked-files=all")
+				return ok(" M dirty\\n");
+			return ok("");
+		};
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		await module.sessionStart(ctx, "session");
+
+		await expect(module.hasUncommittedChanges()).resolves.toBe(true);
+		expect(ctx.ui.confirm).not.toHaveBeenCalled();
+	});
+
 	it("does not let an earlier start overwrite a later start", async () => {
 		const events = createSharedEvents();
 		let releaseFirstInspection!: () => void;
@@ -304,20 +327,24 @@ describe("worktree event actions", () => {
 		const changeDirectory = vi.fn();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
+		const ctx = context();
 		const module = createTestWorktreeModule({
 			eventHandler: events,
 			sessionState,
 			dependencies: {
-				exec: projectResult("abc", "abc", "", "", commands),
+				exec: projectResult("abc", "abc", "", " M dirty\\n", commands),
 				changeDirectory,
 			},
 		});
-		await module.sessionStart(context(), "session");
-		await expect(module.removeWorktree()).resolves.toBe("completed");
+		await module.sessionStart(ctx, "session");
+		await expect(module.removeWorktree({ force: true })).resolves.toBe(
+			"completed",
+		);
+		expect(ctx.ui.confirm).not.toHaveBeenCalled();
 		expect(changeDirectory).toHaveBeenCalledWith("/repo");
 		expect(commands.at(-2)).toEqual({
 			command: "git",
-			args: ["worktree", "remove", "/repo/.worktrees/feature"],
+			args: ["worktree", "remove", "--force", "/repo/.worktrees/feature"],
 			cwd: "/repo",
 		});
 		expect(commands.at(-1)).toEqual({
@@ -353,7 +380,7 @@ describe("worktree event actions", () => {
 			},
 		});
 		await module.sessionStart(ctx, "old");
-		const cleanup = module.removeWorktree();
+		const cleanup = module.removeWorktree({ force: false });
 		await Promise.resolve();
 		sessionState.session.activeSessionId = "new";
 		await module.sessionStart(ctx, "new");

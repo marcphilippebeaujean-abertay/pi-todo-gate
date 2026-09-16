@@ -43,7 +43,7 @@ export function addWorktreeExitAction(
 	request.addAction({
 		id: "remove-worktree",
 		label: `Delete worktree "${info.worktreePath}" and local branch "${info.branch}"`,
-		execute: worktree.removeWorktree.bind(worktree),
+		execute: () => worktree.removeWorktree({ force: false }),
 	});
 }
 
