@@ -242,21 +242,24 @@ describe("module structure checker", () => {
 				(domain) =>
 					`import type { State } from "../${domain}/internal-state.ts";`,
 			)
-			.join("\\n");
+			.join("\n");
 		const internalStateFiles = Object.fromEntries(
 			featureDomains.map((domain) => [
 				`src/${domain}/internal-state.ts`,
-				"export interface State {}\\n",
+				"export interface State {}\n",
 			]),
 		);
 		const internalStateViolations = await cruiseFixture({
-			"src/prompt-queue/consumer.ts": `${internalImports}\\n`,
+			"src/prompt-queue/consumer.ts": `${internalImports}\n`,
 			...internalStateFiles,
 		});
-		for (const domain of featureDomains)
-			expect(internalStateViolations).toContain(
-				`src/${domain}/internal-state.ts`,
+		for (const domain of featureDomains) {
+			expect(internalStateViolations).toMatch(
+				new RegExp(
+					`no-prompt-queue-to-internal-state: src/prompt-queue/consumer\\.ts .* src/${domain}/internal-state\\.ts`,
+				),
 			);
+		}
 
 		await expect(
 			cruiseFixture({
