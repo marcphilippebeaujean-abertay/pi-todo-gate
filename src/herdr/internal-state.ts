@@ -25,6 +25,7 @@ export const CLAIM_WORKER_RESPONSE_TEMPLATE: ClaimWorkerResponseData = {
 export interface ClaimWorkerRequest {
 	prompt: string;
 	instructions: string;
+	model?: string;
 	events: HerdrEvents;
 }
 
@@ -45,7 +46,7 @@ export interface ClaimWorkerHandle {
 export type WorkerProcess = PiWorkerProcess;
 export type WorkerSpawner = PiWorkerSpawner;
 
-export type CommandRunner = (command: string, args: string[]) => string;
+export type HerdrClient = (command: string, args: string[]) => string;
 export type StartBackgroundWorker = (
 	request: ClaimWorkerRequest,
 ) => ClaimWorkerHandle;
@@ -53,12 +54,12 @@ export type StartBackgroundWorker = (
 export interface HerdrModuleSetupOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	commandRunner?: CommandRunner;
+	herdrClient?: HerdrClient;
 	spawnWorker?: WorkerSpawner;
 }
 
 export interface HerdrTabOptions {
-	commandRunner?: CommandRunner;
+	herdrClient?: HerdrClient;
 	cwd?: string;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;

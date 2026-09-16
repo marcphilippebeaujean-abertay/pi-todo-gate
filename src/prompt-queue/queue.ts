@@ -1,4 +1,6 @@
-export type PromptTask<T> = (isCurrent: () => boolean) => Promise<T> | T;
+import type { PromptTask } from "./internal-state.ts";
+
+export type { PromptTask } from "./internal-state.ts";
 
 export class PromptQueue {
 	private queue = Promise.resolve();

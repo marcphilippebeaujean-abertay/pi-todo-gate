@@ -1,9 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { PromptQueue } from "../prompt-queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
-import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 
@@ -46,6 +44,7 @@ export type TaskClaimWorker = (
 
 export const TaskClaimWorkerInputSchema = Type.Object({
 	sessionId: Type.String({ minLength: 1 }),
+	model: Type.Optional(Type.String({ minLength: 1 })),
 	prompt: Type.String(),
 	cwd: Type.String(),
 	projectRef: Type.String(),
@@ -127,13 +126,12 @@ export interface TodoistLifecycleConsumerOptions {
 		sessionId: string,
 	) => Promise<void>;
 	resetSession: () => void;
-	maybeAnalyzeTaskClaim: (prompt: string) => void;
+	maybeAnalyzeTaskClaim: (prompt: string, model?: string) => void;
 }
 
 export interface TodoistModuleOptions {
 	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
 	loadConfig?: () => Promise<unknown>;
-	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	exec?: Exec;
@@ -150,8 +148,11 @@ export interface TodoistModuleOptions {
 export type TodoistSession = SessionRecord;
 
 export interface TodoistCompletionSnapshot {
-	taskRef?: string;
-	prUrl?: string;
+	readonly taskRef: string;
+	readonly taskName: string;
+	readonly prUrl: string;
+	readonly workRevision: number;
+	readonly sessionId: string;
 }
 
 export interface TodoistOperations {
@@ -159,7 +160,6 @@ export interface TodoistOperations {
 	getSession: () => TodoistSession | null;
 	projectRef: string;
 	todoist: TodoistTaskClaimController;
-	promptQueue: PromptQueue;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;
 	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
@@ -171,13 +171,6 @@ export interface TodoistOperations {
 		state: TodoistState,
 		options: TodoistStateUpdateOptions,
 	): Promise<void>;
-	completeMergedTask?(
-		session: TodoistSession,
-		taskRef: string,
-		stateSnapshot: TodoistCompletionSnapshot,
-		workRevision: number,
-		sessionId: string,
-	): Promise<ExitActionResult>;
 }
 
 export interface ClaimTaskData {

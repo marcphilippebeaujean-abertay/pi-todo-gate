@@ -3,9 +3,9 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const SCOPED_MODULE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/][^\\/]+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/][^\\/]+\.ts$/;
 const EVENT_PUBLISHERS_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/]event-publishers\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/]event-publishers\.ts$/;
 const RULE_ID = "no-event-handler-emits-outside-publishers" as const;
 const MESSAGE = "EventHandler emits must live in event-publishers.ts";
 

@@ -3,7 +3,7 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const MODULE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/].+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/].+\.ts$/;
 const ROOT_PATH = /[\\/]src[\\/].+\.ts$/;
 const MODULE_STATE_NAME = "moduleState";
 const RULE_ID = "no-direct-module-state-write" as const;

@@ -16,7 +16,6 @@ describe("session state", () => {
 				herdr: {},
 				worktree: {},
 				footer: { footers: {} },
-				exitProtocol: { active: false },
 			},
 		});
 	});

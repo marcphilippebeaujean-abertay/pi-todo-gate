@@ -1,5 +1,7 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { PromptQueue } from "../prompt-queue.ts";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
@@ -11,19 +13,7 @@ export type PrState = PrModuleState;
 export type PrStatePatch = Partial<PrState>;
 
 export type PrSession = SessionRecord;
-
-export interface PrCommandOptions {
-	readonly sessionState: SessionState;
-	readonly eventHandler: EventHandler;
-	readonly exec?: Exec;
-	readonly getSession: () => PrSession | null;
-	readonly getPrState: () => PrState;
-	readonly isCurrentSession: (session: PrSession, sessionId: string) => boolean;
-	readonly enqueueSessionOperation: <T>(
-		session: PrSession,
-		operation: () => Promise<T>,
-	) => Promise<T>;
-}
+export type NotificationContext = Pick<ExtensionContext, "ui">;
 
 export type StateToolParams =
 	| { action: "status"; url?: string }
@@ -44,7 +34,6 @@ export interface PrModuleDependencies {
 }
 
 export interface PrModuleOptions {
-	promptQueue: PromptQueue;
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;

@@ -151,7 +151,6 @@ function persistedStateEntry(
 		herdr?: Record<string, unknown>;
 		worktree?: Record<string, unknown>;
 		footer?: Record<string, unknown>;
-		exitProtocol?: Record<string, unknown>;
 	},
 	gitState: Record<string, unknown> = {},
 	session: Record<string, unknown> = {},
@@ -174,7 +173,6 @@ function persistedStateEntry(
 				herdr: moduleState.herdr ?? {},
 				worktree: moduleState.worktree ?? {},
 				footer: moduleState.footer ?? { footers: {} },
-				exitProtocol: moduleState.exitProtocol ?? { active: true },
 			},
 		},
 	};
@@ -365,7 +363,7 @@ describe("working tree status", () => {
 		},
 	);
 
-	it("starts exit protocol after an external gh pull request merge", async () => {
+	it("starts Prompt Queue after an external gh pull request merge", async () => {
 		const root = CONFIGURED_PROJECT;
 		const h = harness(root, [
 			persistedStateEntry({
@@ -419,7 +417,7 @@ describe("working tree status", () => {
 
 		expect(h.selections).toContainEqual({
 			title:
-				'Exit protocol\nDelete worktree "/configured/project" and local branch "feature"',
+				'Remove worktree?\nDelete worktree "/configured/project" and local branch "feature"?',
 			options: ["Yes", "No"],
 		});
 		expect(exec).not.toHaveBeenCalledWith(

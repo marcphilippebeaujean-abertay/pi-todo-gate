@@ -4,11 +4,6 @@ import {
 	registerModuleStateConsumer,
 } from "./event-consumer.ts";
 import { RootEventPublisher } from "./event-publishers.ts";
-import type { ExitProtocolModule } from "./exit-protocol/module.ts";
-import {
-	createExitProtocolModule,
-	exitProtocolStateDescriptor,
-} from "./exit-protocol/module.ts";
 import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
 import type { FooterModule } from "./footer/module.ts";
 import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
@@ -17,7 +12,10 @@ import { herdrStateDescriptor } from "./herdr/module-state.ts";
 import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
 import { prStateDescriptor } from "./pr/module-state.ts";
-import { PromptQueue } from "./prompt-queue.ts";
+import {
+	createPromptQueueModule,
+	type PromptQueueModule,
+} from "./prompt-queue/module.ts";
 import {
 	type ModuleStateDescriptors,
 	serializeSessionState,
@@ -38,26 +36,25 @@ type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
 type HerdrSetupOptions = Parameters<typeof createHerdrModule>[1];
-type HerdrCommandRunner = NonNullable<HerdrSetupOptions["commandRunner"]>;
+type HerdrClient = NonNullable<HerdrSetupOptions["herdrClient"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 
 export interface ExtensionDependencies extends BaseExtensionDependencies {
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: HerdrCommandRunner;
+	herdrClient?: HerdrClient;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
 interface ExtensionState {
 	pi: ExtensionAPI;
 	sessionState: import("./state.ts").SessionState;
-	promptQueue: PromptQueue;
+	promptQueue: PromptQueueModule;
 	eventHandler: EventHandler;
 	footer: FooterModule;
 	pr: PrModule;
 	todoist: TodoistModule;
 	worktree: import("./worktree/module.ts").WorktreeCleanup;
-	exitProtocol: ExitProtocolModule;
 }
 
 interface ModuleSetupDependencies {
@@ -65,7 +62,7 @@ interface ModuleSetupDependencies {
 	exec?: Exec;
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
-	herdrCommandRunner?: HerdrCommandRunner;
+	herdrClient?: HerdrClient;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
@@ -76,7 +73,6 @@ export function createExtensionState(
 	const providedDependencies = dependencies ?? {};
 	const moduleDependencies: ModuleSetupDependencies = providedDependencies;
 	const eventHandler = createEventHandler();
-	const promptQueue = new PromptQueue();
 	const sessionState = createSessionState();
 	const stateDescriptors: ModuleStateDescriptors = {
 		pr: prStateDescriptor,
@@ -84,7 +80,6 @@ export function createExtensionState(
 		herdr: herdrStateDescriptor,
 		worktree: worktreeStateDescriptor,
 		footer: footerStateDescriptor,
-		exitProtocol: exitProtocolStateDescriptor,
 	};
 	const persistSessionState = (state: typeof sessionState): void => {
 		pi.appendEntry(
@@ -104,14 +99,12 @@ export function createExtensionState(
 	});
 	const pr = createPrModule({
 		pi,
-		promptQueue,
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
 	});
 	const todoist = createTodoistModule({
 		pi,
-		promptQueue,
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
@@ -119,10 +112,12 @@ export function createExtensionState(
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
 		createTodoistClient: moduleDependencies.createTodoistClient,
 	});
-	const exitProtocol = createExitProtocolModule({
-		promptQueue,
+	const promptQueue = createPromptQueueModule({
+		pi,
 		eventHandler,
 		sessionState,
+		pr,
+		todoist,
 		worktree,
 	});
 	const extensionState = {
@@ -134,7 +129,6 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
-		exitProtocol,
 	} as ExtensionState;
 	const root = {
 		pi,
@@ -148,7 +142,6 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
-		exitProtocol,
 		session: null,
 		publisher: new RootEventPublisher(eventHandler),
 		stateUpdateEpoch,
@@ -181,7 +174,7 @@ function startExtensions(
 	createHerdrModule(pi, {
 		eventHandler: extensionState.eventHandler,
 		sessionState: extensionState.sessionState,
-		commandRunner: moduleDependencies.herdrCommandRunner,
+		herdrClient: moduleDependencies.herdrClient,
 		spawnWorker: moduleDependencies.herdrSpawnWorker,
 	});
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });

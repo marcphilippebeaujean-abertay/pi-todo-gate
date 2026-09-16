@@ -21,7 +21,6 @@ import type {
 	WorktreeModuleOptions,
 } from "./internal-state.ts";
 import { notifyWorktree } from "./notifications.ts";
-import { confirmDirtyRemoval } from "./user-prompts.ts";
 
 class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
@@ -30,7 +29,7 @@ class Worktree implements WorktreeConsumer {
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
-	private hasUncommittedChanges = false;
+	private uncommittedChanges = false;
 	private refreshSequence = 0;
 	private initializationSequence = 0;
 
@@ -122,8 +121,8 @@ class Worktree implements WorktreeConsumer {
 		const isLatestRequest = sequence === this.refreshSequence;
 		const shouldSkipStatus = !isCurrentAndHasStatus || !isLatestRequest;
 		if (shouldSkipStatus) return;
-		this.hasUncommittedChanges = dirtyStatus;
-		this.emitState({ hasUncommittedChanges: this.hasUncommittedChanges });
+		this.uncommittedChanges = dirtyStatus;
+		this.emitState({ hasUncommittedChanges: this.uncommittedChanges });
 	}
 
 	private async initializeSession(
@@ -157,13 +156,13 @@ class Worktree implements WorktreeConsumer {
 			initialHead: state.currentHead,
 			initialStatus: state.currentStatus,
 		};
-		this.hasUncommittedChanges = state.currentStatus !== EMPTY;
+		this.uncommittedChanges = state.currentStatus !== EMPTY;
 		this.emitState({
 			branch: project.branch,
 			isWorktree: project.isWorktree,
 			worktreeRoot: project.root,
 			mainRoot: project.mainRoot,
-			hasUncommittedChanges: this.hasUncommittedChanges,
+			hasUncommittedChanges: this.uncommittedChanges,
 		});
 	}
 
@@ -178,7 +177,7 @@ class Worktree implements WorktreeConsumer {
 		const hasStatus = dirtyStatus !== null;
 		const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
 		if (shouldSkipDirtyStatus) return;
-		this.hasUncommittedChanges = dirtyStatus;
+		this.uncommittedChanges = dirtyStatus;
 		this.emitState({ hasUncommittedChanges: dirtyStatus });
 	}
 
@@ -187,42 +186,54 @@ class Worktree implements WorktreeConsumer {
 		this.initializationSequence += 1;
 		this.context = null;
 		this.baseline = null;
-		this.hasUncommittedChanges = false;
+		this.uncommittedChanges = false;
 		void publishWorktreeState(this.eventHandler, {}, {});
 	}
 
-	getWorktreeInfo(): {
-		worktreePath: string;
-		branch: string;
-		hasUncommittedChanges: boolean;
-	} | null {
+	getWorktreeInfo(): { worktreePath: string; branch: string } | null {
 		if (this.baseline === null) return null;
 		return {
 			worktreePath: this.baseline.worktreePath,
 			branch: this.baseline.branch,
-			hasUncommittedChanges: this.hasUncommittedChanges,
 		};
 	}
 
-	removeWorktree(): Promise<ExitActionResult> {
+	async hasUncommittedChanges(): Promise<boolean | null> {
+		const context = this.context;
+		if (context === null) return null;
+		const sessionId = this.sessionState.session.activeSessionId;
+		if (sessionId === null) return null;
+		const isCurrent = this.isCurrentSession(context, sessionId);
+		if (!isCurrent) return null;
+		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
+		const isCurrentAfterInspection = this.isCurrentSession(context, sessionId);
+		if (!isCurrentAfterInspection) return null;
+		return dirtyStatus;
+	}
+
+	removeWorktree(options: { force: boolean }): Promise<ExitActionResult> {
 		const context = this.context;
 		if (context === null) return Promise.resolve(FAILED);
 		const worktree = this.baseline;
 		if (worktree === null) return Promise.resolve(FAILED);
 		const expectedSessionId = this.sessionState.session.activeSessionId;
 		if (expectedSessionId === null) return Promise.resolve(FAILED);
-		return this.executeCleanup(context, expectedSessionId, worktree);
+		return this.executeCleanup(
+			context,
+			expectedSessionId,
+			worktree,
+			options.force,
+		);
 	}
 
 	private async executeCleanup(
 		context: ExtensionContext,
 		sessionId: string,
 		worktree: WorktreeBaseline,
+		force: boolean,
 	): Promise<ExitActionResult> {
 		const isCurrentBeforeCleanup = this.isCurrentSession(context, sessionId);
 		if (!isCurrentBeforeCleanup) return FAILED;
-		const hasNoUi = !context.hasUI;
-		if (hasNoUi) return FAILED;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
 		const isCurrentSession = this.isCurrentSession(context, sessionId);
 		const isCurrentWorktreeState = isCurrentWorktree(this.baseline, worktree);
@@ -233,12 +244,9 @@ class Worktree implements WorktreeConsumer {
 			notifyWorktree(this.context, C.worktree.statusUnavailable, "warning");
 			return FAILED;
 		}
-		let force = false;
 		const hasChanges = state.currentStatus !== EMPTY;
-		if (hasChanges) {
-			force = await confirmDirtyRemoval(context, worktree);
-			if (!force) return FAILED;
-		}
+		const shouldRejectDirtyCleanup = hasChanges && !force;
+		if (shouldRejectDirtyCleanup) return FAILED;
 		return this.cleanupNow(
 			context,
 			sessionId,
