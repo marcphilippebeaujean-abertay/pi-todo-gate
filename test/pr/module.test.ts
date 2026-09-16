@@ -364,7 +364,13 @@ describe("PR module ownership", () => {
 		expect(registerTool).toHaveBeenCalledOnce();
 	});
 
-	it("merges active pinned PR without confirmation", async () => {
+	async function createMergeFixture(
+		exec: import("../../src/shared/command.ts").Exec = vi.fn(async () => ({
+			stdout: "merged",
+			stderr: "",
+			code: 0,
+		})),
+	) {
 		const events = createEventHandler();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
@@ -385,11 +391,6 @@ describe("PR module ownership", () => {
 			sessionId: "session",
 			operationQueue: Promise.resolve(),
 		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
-		const exec = vi.fn(async () => ({
-			stdout: "merged",
-			stderr: "",
-			code: 0,
-		}));
 		const module = createTestPrModule({
 			eventHandler: events,
 			sessionState,
@@ -400,14 +401,119 @@ describe("PR module ownership", () => {
 			sessionId: "session",
 			session,
 		});
+		return {
+			events,
+			sessionState,
+			context,
+			session,
+			module,
+			exec,
+			confirm,
+			notify,
+		};
+	}
 
-		await expect(module.mergeActivePr()).resolves.toBe(true);
-		expect(exec).toHaveBeenCalledWith(
+	it("merges active pinned PR without confirmation and publishes event", async () => {
+		const fixture = await createMergeFixture();
+		const mergedEvents: unknown[] = [];
+		fixture.events.prMergedEvent.subscribe((event) => {
+			mergedEvents.push(event);
+		});
+
+		await expect(fixture.module.mergeActivePr()).resolves.toBe(true);
+		expect(fixture.exec).toHaveBeenCalledWith(
 			"gh",
 			["pr", "merge", "https://github.com/o/r/pull/42", "--merge"],
 			{ cwd: "/repo" },
 		);
-		expect(confirm).not.toHaveBeenCalled();
+		expect(fixture.confirm).not.toHaveBeenCalled();
+		expect(fixture.notify).toHaveBeenCalledWith("Pull request merged", "info");
+		expect(mergedEvents).toEqual([
+			{
+				prUrl: "https://github.com/o/r/pull/42",
+				taskMarkedAsCompleted: false,
+				sessionId: "session",
+			},
+		]);
+	});
+
+	it("returns false and notifies when merge command fails", async () => {
+		const fixture = await createMergeFixture(async () => ({
+			stdout: "",
+			stderr: "permission denied",
+			code: 1,
+		}));
+
+		await expect(fixture.module.mergeActivePr()).resolves.toBe(false);
+		expect(fixture.notify).toHaveBeenCalledWith(
+			"Pull request merge failed: permission denied",
+			"warning",
+		);
+	});
+
+	it("normalizes and caps thrown merge errors before notifying", async () => {
+		const detail = `first line\nsecond line ${"x".repeat(240)}`;
+		const fixture = await createMergeFixture(async () => {
+			throw new Error(detail);
+		});
+
+		await expect(fixture.module.mergeActivePr()).resolves.toBe(false);
+		expect(fixture.notify).toHaveBeenCalledWith(
+			`Pull request merge failed: first line second line ${"x".repeat(177)}`,
+			"warning",
+		);
+	});
+
+	it("returns false without merging when session is inactive or stale", async () => {
+		const inactive = await createMergeFixture();
+		inactive.module.deactivateSession();
+		(inactive.exec as unknown as { mockClear(): void }).mockClear();
+		await expect(inactive.module.mergeActivePr()).resolves.toBe(false);
+		expect(inactive.exec).not.toHaveBeenCalled();
+
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const stale = await createMergeFixture(async (_command, args) => {
+			if (args[1] === "merge") await blocked;
+			return { stdout: "merged", stderr: "", code: 0 };
+		});
+		const merge = stale.module.mergeActivePr();
+		await Promise.resolve();
+		stale.sessionState.session.activeSessionId = "new-session";
+		release();
+		await expect(merge).resolves.toBe(false);
+		expect(stale.notify).not.toHaveBeenCalled();
+	});
+
+	it("serializes concurrent merges through session operation queue", async () => {
+		let releaseFirst!: () => void;
+		let markFirstStarted!: () => void;
+		let calls = 0;
+		const firstStarted = new Promise<void>((resolve) => {
+			markFirstStarted = resolve;
+		});
+		const exec = vi.fn(async (_command, args) => {
+			if (args[1] !== "merge") return { stdout: "", stderr: "", code: 0 };
+			calls += 1;
+			if (calls === 1) {
+				markFirstStarted();
+				await new Promise<void>((resolve) => {
+					releaseFirst = resolve;
+				});
+			}
+			return { stdout: "merged", stderr: "", code: 0 };
+		});
+		const fixture = await createMergeFixture(exec);
+		(fixture.exec as unknown as { mockClear(): void }).mockClear();
+		const first = fixture.module.mergeActivePr();
+		await firstStarted;
+		const second = fixture.module.mergeActivePr();
+		expect(exec).toHaveBeenCalledOnce();
+		releaseFirst();
+		await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+		expect(exec).toHaveBeenCalledTimes(2);
 	});
 
 	it("discovers PRs from shared message-end events", async () => {

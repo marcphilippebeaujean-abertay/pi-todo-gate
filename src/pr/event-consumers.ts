@@ -50,6 +50,10 @@ const BASH_COMMAND = "command";
 const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
 
+function failureDetail(detail: string): string {
+	return detail.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 function isCurrentPrContext(
 	getSession: () => PrSession | null,
 	session: PrSession,
@@ -593,7 +597,9 @@ export class PrConsumer {
 			} catch (error) {
 				const isCurrentAfterFailure = this.isCurrentSession(session, sessionId);
 				if (!isCurrentAfterFailure) return false;
-				const detail = error instanceof Error ? error.message : String(error);
+				const detail = failureDetail(
+					error instanceof Error ? error.message : String(error),
+				);
 				notifyMergeFailure(session.context, detail);
 				return false;
 			}
@@ -601,10 +607,7 @@ export class PrConsumer {
 			if (!isCurrentAfterCommand) return false;
 			const commandFailed = result.code !== 0;
 			if (commandFailed) {
-				notifyMergeFailure(
-					session.context,
-					result.stderr.replace(/\s+/g, " ").trim().slice(0, 200),
-				);
+				notifyMergeFailure(session.context, failureDetail(result.stderr));
 				return false;
 			}
 			await publishPrMerged(this.eventHandler, prUrl, sessionId);
