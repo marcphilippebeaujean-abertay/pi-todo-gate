@@ -104,7 +104,6 @@ export function createExtensionState(
 	});
 	const pr = createPrModule({
 		pi,
-		promptQueue,
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,

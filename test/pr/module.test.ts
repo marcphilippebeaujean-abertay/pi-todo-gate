@@ -11,7 +11,6 @@ import {
 	recordMergedPr,
 	removeMergedPr,
 } from "../../src/pr/parsing.ts";
-import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createEventHandler } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -19,6 +18,7 @@ import { createSessionState } from "../../src/state.ts";
 type TestPrModule = {
 	activateSession(session: unknown): Promise<void>;
 	deactivateSession(): void;
+	mergeActivePr(): Promise<boolean>;
 	syncSessionState(session: unknown): Promise<void>;
 	initializeRemoteOrigin(
 		ctx: unknown,
@@ -334,7 +334,7 @@ describe("firstUnmergedGithubPrUrl", () => {
 });
 
 describe("PR module ownership", () => {
-	it("registers PI command and state tool once when registrations become available", async () => {
+	it("registers state tool once without owning commands", async () => {
 		const events = createEventHandler();
 		const registerCommand = vi.fn();
 		const registerTool = vi.fn();
@@ -346,7 +346,6 @@ describe("PR module ownership", () => {
 		const extensionApi = pi as never;
 		createTestPrModule({
 			pi: extensionApi,
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState: createSessionState(),
 		});
@@ -361,8 +360,54 @@ describe("PR module ownership", () => {
 			pi: extensionApi,
 		});
 
-		expect(registerCommand).toHaveBeenCalledOnce();
+		expect(registerCommand).not.toHaveBeenCalled();
 		expect(registerTool).toHaveBeenCalledOnce();
+	});
+
+	it("merges active pinned PR without confirmation", async () => {
+		const events = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const confirm = vi.fn();
+		const notify = vi.fn();
+		const context = {
+			cwd: "/repo",
+			hasUI: true,
+			ui: { confirm, notify },
+		} as never;
+		const session = {
+			context,
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
+			hasPendingHandoffContext: false,
+			hasPerformedAnyGitMutations: false,
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as import("../../src/pr/internal-state.ts").PrSession;
+		const exec = vi.fn(async () => ({
+			stdout: "merged",
+			stderr: "",
+			code: 0,
+		}));
+		const module = createTestPrModule({
+			eventHandler: events,
+			sessionState,
+			exec,
+		});
+		await events.sessionActivatedEvent.emit({
+			context,
+			sessionId: "session",
+			session,
+		});
+
+		await expect(module.mergeActivePr()).resolves.toBe(true);
+		expect(exec).toHaveBeenCalledWith(
+			"gh",
+			["pr", "merge", "https://github.com/o/r/pull/42", "--merge"],
+			{ cwd: "/repo" },
+		);
+		expect(confirm).not.toHaveBeenCalled();
 	});
 
 	it("discovers PRs from shared message-end events", async () => {
@@ -380,7 +425,6 @@ describe("PR module ownership", () => {
 			code: 0,
 		}));
 		createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -431,7 +475,6 @@ describe("PR module ownership", () => {
 			code: 0,
 		}));
 		createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -479,7 +522,6 @@ describe("PR module ownership", () => {
 			updates.push(update);
 		});
 		createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});
@@ -523,7 +565,6 @@ describe("PR module ownership", () => {
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -598,7 +639,6 @@ describe("PR module ownership", () => {
 			updates.push(update);
 		});
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});
@@ -715,7 +755,6 @@ describe("PR module ownership", () => {
 			mergedEvents.push(event);
 		});
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -767,7 +806,6 @@ describe("PR module ownership", () => {
 			updates.push(update);
 		});
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -821,7 +859,6 @@ describe("PR module ownership", () => {
 			};
 		});
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -865,7 +902,6 @@ describe("PR module ownership", () => {
 			return { stdout: "git@github.com:o/r.git\n", stderr: "", code: 0 };
 		});
 		const module = createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -930,7 +966,6 @@ describe("PR module ownership", () => {
 			};
 		});
 		createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },
@@ -993,7 +1028,6 @@ describe("PR module ownership", () => {
 			return { stdout: "[]", stderr: "", code: 0 };
 		});
 		createTestPrModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			dependencies: { exec },

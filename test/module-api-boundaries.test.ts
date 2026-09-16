@@ -9,6 +9,10 @@ import type {
 	WorktreeCleanup,
 } from "../src/worktree/module.ts";
 
+type PublicPr = ReturnType<typeof createPrModule>;
+const merge: PublicPr = {} as PublicPr;
+void merge.mergeActivePr;
+
 type PublicWorktree = ReturnType<typeof createWorktreeModule>;
 const cleanup: WorktreeCleanup = {} as PublicWorktree;
 void cleanup.getWorktreeInfo;
@@ -27,6 +31,10 @@ void ({} as ReturnType<typeof createExitProtocolModule>).sessionStart;
 void ({} as PublicWorktree).sessionStart;
 
 describe("module API boundaries", () => {
+	it("exposes direct PR merge capability", () => {
+		expect(merge).toBeDefined();
+	});
+
 	it("exposes cleanup capability without lifecycle methods", () => {
 		expect(cleanup).toBeDefined();
 	});

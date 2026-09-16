@@ -1,12 +1,6 @@
-import type {
-	ExtensionAPI,
-	ExtensionCommandContext,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
-import { register } from "../../src/pr/commands.ts";
-import type { PrCommandOptions } from "../../src/pr/internal-state.ts";
 import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
@@ -107,41 +101,6 @@ async function emit(runtime: TodoistOperations) {
 	await runtime.eventHandler.prMergedEvent.emit(payload);
 	await runtime.promptQueue.drain();
 	return payload;
-}
-
-async function runMergeCommand(
-	runtime: TodoistOperations,
-	context: ExtensionCommandContext,
-): Promise<void> {
-	let handler:
-		| ((args: string, ctx: ExtensionCommandContext) => Promise<void>)
-		| undefined;
-	const pi = {
-		on: vi.fn(),
-		registerCommand: (
-			_name: string,
-			command: {
-				handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-			},
-		) => {
-			handler = command.handler;
-		},
-	} as unknown as ExtensionAPI;
-	const commandDependencies: PrCommandOptions = {
-		sessionState: runtime.sessionState,
-		eventHandler: runtime.eventHandler,
-		exec: runtime.dependencies.exec,
-		getSession: runtime.getSession,
-		getPrState: () => runtime.sessionState.moduleState.pr,
-		isCurrentSession: (_session, sessionId) =>
-			runtime.sessionState.session.activeSessionId === sessionId,
-		enqueueSessionOperation: (_session, operation) =>
-			runtime.promptQueue
-				.enqueue(operation)
-				.then((result: unknown) => result as never),
-	};
-	register(pi, commandDependencies);
-	await handler?.("", context);
 }
 
 describe("Todoist merge consumer", () => {
@@ -315,78 +274,5 @@ describe("Todoist merge consumer", () => {
 
 		expect(setupResult.completeTask).not.toHaveBeenCalled();
 		expect(payload.taskMarkedAsCompleted).toBe(false);
-	});
-
-	it("resolves the direct merge command when completion is confirmed", async () => {
-		const confirm = vi.fn(async () => true);
-		const completeTask = vi.fn(
-			async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
-		);
-		const exec = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
-		const context = {
-			cwd: "/repo",
-			hasUI: true,
-			ui: {
-				confirm,
-				notify: vi.fn(),
-				theme: { fg: (_color: string, text: string) => text },
-			},
-		} as unknown as ExtensionCommandContext;
-		const sessionState = createSessionState();
-		sessionState.session.activeSessionId = "session";
-		sessionState.moduleState.pr.prUrl = PR_URL;
-		sessionState.moduleState.todoist = {
-			taskRef: "task-1",
-			taskName: "Implement feature",
-			taskUrl: "https://app.todoist.com/app/task/task-1",
-		};
-		const session = {
-			context,
-			workRevision: 0,
-			sessionId: "session",
-			operationQueue: Promise.resolve(),
-		} as unknown as SessionRecord;
-
-		const runtime = {
-			sessionState,
-			todoist: {
-				taskClaim: { pending: false, completed: false, session: undefined },
-			},
-			promptQueue: new PromptQueue(),
-			dependencies: {
-				exec,
-				createTodoistClient: () => ({ completeTask }),
-			},
-			eventHandler: createSharedEvents(),
-			getSession: () => session,
-			pi: { appendEntry: vi.fn() },
-			footer: { update: vi.fn() },
-			completeMergedTask: async (
-				targetSession: typeof session,
-				taskRef: string,
-				_stateSnapshot: TodoistCompletionSnapshot,
-				_workRevision: number,
-				sessionId: string,
-			) => {
-				const isCurrent = () =>
-					runtime.getSession() === targetSession &&
-					runtime.sessionState.session.activeSessionId === sessionId;
-				if (!isCurrent()) return "failed" as const;
-				await completeTask(taskRef, isCurrent);
-				return isCurrent() ? ("completed" as const) : ("failed" as const);
-			},
-		} as unknown as TodoistOperations;
-
-		registerTodoistMergeConsumer(runtime);
-
-		await runMergeCommand(runtime, context);
-		await runtime.promptQueue.drain();
-
-		expect(exec).toHaveBeenCalledWith(
-			"gh",
-			["pr", "merge", PR_URL, "--merge"],
-			{ cwd: "/repo" },
-		);
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
 	});
 });
