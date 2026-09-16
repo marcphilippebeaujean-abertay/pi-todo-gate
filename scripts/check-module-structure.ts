@@ -264,6 +264,10 @@ export async function checkModuleStructure(
 			continue;
 		}
 		for (const facet of CANONICAL_FACETS) {
+			const isOptionalPromptFacet =
+				(domain === "todoist" || domain === "worktree") &&
+				facet === "user-prompts.ts";
+			if (isOptionalPromptFacet) continue;
 			const facetPath = join(domainPath, facet);
 			if (await isFile(facetPath)) continue;
 			issues.push({

@@ -147,11 +147,11 @@ export interface TodoistModuleOptions {
 export type TodoistSession = SessionRecord;
 
 export interface TodoistCompletionSnapshot {
-	taskRef: string;
-	taskName: string;
-	prUrl: string;
-	workRevision: number;
-	sessionId: string;
+	readonly taskRef: string;
+	readonly taskName: string;
+	readonly prUrl: string;
+	readonly workRevision: number;
+	readonly sessionId: string;
 }
 
 export interface TodoistOperations {

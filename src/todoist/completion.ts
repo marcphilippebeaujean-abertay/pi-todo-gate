@@ -104,8 +104,15 @@ export async function completeMergedTask(
 	ctx: ExtensionContext,
 	snapshot: TodoistCompletionSnapshot,
 ): Promise<import("../shared/exit-actions.ts").ExitActionResult> {
+	const snapshotCopy: TodoistCompletionSnapshot = {
+		taskRef: snapshot.taskRef,
+		taskName: snapshot.taskName,
+		prUrl: snapshot.prUrl,
+		workRevision: snapshot.workRevision,
+		sessionId: snapshot.sessionId,
+	};
 	return enqueueSessionOperation(
 		session,
-		completeMergedTaskNow.bind(null, operations, session, ctx, snapshot),
+		completeMergedTaskNow.bind(null, operations, session, ctx, snapshotCopy),
 	);
 }

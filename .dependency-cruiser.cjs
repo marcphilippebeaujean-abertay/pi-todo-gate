@@ -92,12 +92,6 @@ module.exports = {
 			to: { path: "^src/pr/event-publishers\\.ts$" },
 		},
 		{
-			name: "pr-module-requires-user-prompts",
-			severity: "error",
-			module: { path: "^src/pr/module\\.ts$" },
-			to: { path: "^src/pr/user-prompts\\.ts$" },
-		},
-		{
 			name: "pr-module-requires-notifications",
 			severity: "error",
 			module: { path: "^src/pr/module\\.ts$" },
@@ -138,12 +132,6 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/todoist/module\\.ts$" },
 			to: { path: "^src/todoist/event-publishers\\.ts$" },
-		},
-		{
-			name: "todoist-module-requires-user-prompts",
-			severity: "error",
-			module: { path: "^src/todoist/module\\.ts$" },
-			to: { path: "^src/todoist/user-prompts\\.ts$" },
 		},
 		{
 			name: "todoist-module-requires-notifications",
@@ -228,12 +216,6 @@ module.exports = {
 			severity: "error",
 			module: { path: "^src/worktree/module\\.ts$" },
 			to: { path: "^src/worktree/event-consumers\\.ts$" },
-		},
-		{
-			name: "worktree-module-requires-user-prompts",
-			severity: "error",
-			module: { path: "^src/worktree/module\\.ts$" },
-			to: { path: "^src/worktree/user-prompts\\.ts$" },
 		},
 		{
 			name: "worktree-module-requires-notifications",
