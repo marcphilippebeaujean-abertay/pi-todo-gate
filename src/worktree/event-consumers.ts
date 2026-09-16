@@ -205,7 +205,10 @@ class Worktree implements WorktreeConsumer {
 		if (sessionId === null) return null;
 		const isCurrent = this.isCurrentSession(context, sessionId);
 		if (!isCurrent) return null;
-		return inspectDirtyStatus(this.exec, context.cwd);
+		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
+		const isCurrentAfterInspection = this.isCurrentSession(context, sessionId);
+		if (!isCurrentAfterInspection) return null;
+		return dirtyStatus;
 	}
 
 	removeWorktree(options: { force: boolean }): Promise<ExitActionResult> {

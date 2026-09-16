@@ -12,6 +12,7 @@ import type {
 type PublicWorktree = ReturnType<typeof createWorktreeModule>;
 const cleanup: WorktreeCleanup = {} as PublicWorktree;
 void cleanup.getWorktreeInfo;
+void cleanup.hasUncommittedChanges;
 void cleanup.removeWorktree;
 
 // @ts-expect-error Lifecycle methods remain internal.

@@ -101,6 +101,104 @@ describe("worktree event actions", () => {
 		expect(ctx.ui.confirm).not.toHaveBeenCalled();
 	});
 
+	it("returns null when dirty status resolves after session changes", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		let statusCalls = 0;
+		let releaseStatus!: () => void;
+		const statusBlocked = new Promise<void>((resolve) => {
+			releaseStatus = resolve;
+		});
+		const exec: Exec = async (command, args, options) => {
+			commands.push({ command, args, cwd: options?.cwd });
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return ok("/repo/.worktrees/feature\\n");
+			if (key === "git branch --show-current") return ok("feature\\n");
+			if (key === "git worktree list --porcelain")
+				return ok("worktree /repo\\nHEAD abc\\nbranch refs/heads/main\\n");
+			if (key === "git rev-parse HEAD") return ok("def\\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all") {
+				statusCalls += 1;
+				if (statusCalls === 2) await statusBlocked;
+				return ok(statusCalls === 1 ? "" : " M stale\\n");
+			}
+			return ok("");
+		};
+		const ctx = context();
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		await module.sessionStart(ctx, "session");
+
+		const dirtyStatus = module.hasUncommittedChanges();
+		await Promise.resolve();
+		sessionState.session.activeSessionId = "new-session";
+		releaseStatus();
+
+		await expect(dirtyStatus).resolves.toBeNull();
+	});
+
+	it("returns null when dirty status is unavailable", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const ctx = context();
+		const exec: Exec = async (command, args) => {
+			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return ok("/repo/.worktrees/feature\\n");
+			if (key === "git branch --show-current") return ok("feature\\n");
+			if (key === "git worktree list --porcelain")
+				return ok("worktree /repo\\nHEAD abc\\nbranch refs/heads/main\\n");
+			if (key === "git rev-parse HEAD") return ok("def\\n");
+			if (key === "git status --porcelain=v1 --untracked-files=all")
+				return { stdout: "", stderr: "unavailable", code: 1 };
+			return ok("");
+		};
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: { exec },
+		});
+		await module.sessionStart(ctx, "session");
+
+		await expect(module.hasUncommittedChanges()).resolves.toBeNull();
+		expect(ctx.ui.confirm).not.toHaveBeenCalled();
+	});
+
+	it("does not remove dirty worktree without force", async () => {
+		const events = createSharedEvents();
+		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
+			[];
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const ctx = context();
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: {
+				exec: projectResult("abc", "abc", "", " M dirty\\n", commands),
+			},
+		});
+		await module.sessionStart(ctx, "session");
+
+		await expect(module.removeWorktree({ force: false })).resolves.toBe(
+			"failed",
+		);
+		expect(ctx.ui.confirm).not.toHaveBeenCalled();
+		expect(
+			commands.some(
+				({ args }) => args[0] === "worktree" && args[1] === "remove",
+			),
+		).toBe(false);
+	});
+
 	it("does not let an earlier start overwrite a later start", async () => {
 		const events = createSharedEvents();
 		let releaseFirstInspection!: () => void;
