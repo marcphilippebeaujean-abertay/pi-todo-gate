@@ -29,6 +29,14 @@ import { confirmTaskCompletion } from "./user-prompts.ts";
 export function registerTodoistLifecycleConsumers(
 	options: TodoistLifecycleConsumerOptions,
 ): void {
+	let commandsRegistered = false;
+	options.eventHandler.piToolRegistrationsBecameAvailableEvent.subscribe(
+		({ pi }) => {
+			if (commandsRegistered) return;
+			commandsRegistered = true;
+			options.registerCommands(pi);
+		},
+	);
 	options.eventHandler.sessionActivatedEvent.subscribe(
 		({ context, session, sessionId }) => {
 			const hasNoSession = session === undefined;
@@ -155,6 +163,7 @@ async function persistClaim(
 		...current,
 		taskRef: taskData.id,
 		taskName: taskData.title,
+		taskDescription: taskData.description,
 		taskUrl: `${TASK_URL}${taskData.id}`,
 		todoistCompletionAttemptedAt: undefined,
 	};

@@ -37,6 +37,7 @@ import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
+type TaskRefreshWorker = TodoistModuleOptions["taskRefreshWorker"];
 type HerdrSetupOptions = Parameters<typeof createHerdrModule>[1];
 type HerdrCommandRunner = NonNullable<HerdrSetupOptions["commandRunner"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
@@ -44,6 +45,7 @@ type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 export interface ExtensionDependencies extends BaseExtensionDependencies {
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
+	taskRefreshWorker?: TaskRefreshWorker;
 	herdrCommandRunner?: HerdrCommandRunner;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
@@ -65,6 +67,7 @@ interface ModuleSetupDependencies {
 	exec?: Exec;
 	createTodoistClient?: TodoistClientFactory;
 	taskClaimWorker?: TaskClaimWorker;
+	taskRefreshWorker?: TaskRefreshWorker;
 	herdrCommandRunner?: HerdrCommandRunner;
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
@@ -117,6 +120,7 @@ export function createExtensionState(
 		exec: moduleDependencies.exec,
 		loadConfig: moduleDependencies.loadConfig,
 		taskClaimWorker: moduleDependencies.taskClaimWorker,
+		taskRefreshWorker: moduleDependencies.taskRefreshWorker,
 		createTodoistClient: moduleDependencies.createTodoistClient,
 	});
 	const exitProtocol = createExitProtocolModule({

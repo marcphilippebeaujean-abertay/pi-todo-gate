@@ -47,6 +47,7 @@ function recordSuccessfulCompletion(
 		...operations.sessionState.moduleState.todoist,
 		taskRef: undefined,
 		taskName: undefined,
+		taskDescription: undefined,
 		taskUrl: undefined,
 		todoistCompletionAttemptedAt: new Date().toISOString(),
 	};

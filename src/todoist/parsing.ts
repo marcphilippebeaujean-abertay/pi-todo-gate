@@ -25,18 +25,24 @@ import type {
 	ProjectEntry,
 	ResolvedProject,
 	TaskClaimWorkerResult,
+	TaskRefreshWorkerResult,
 	TodoistProjectMapping,
 	TodoistProjectSettings,
 	TodoistState,
 	TodoistTask,
 } from "./internal-state.ts";
-import { TaskClaimWorkerResultSchema } from "./internal-state.ts";
+import {
+	TaskClaimWorkerResultSchema,
+	TaskRefreshWorkerResultSchema,
+} from "./internal-state.ts";
 
 export type {
 	ProjectEntry,
 	ResolvedProject,
 	TaskClaimWorkerInput,
 	TaskClaimWorkerResult,
+	TaskRefreshWorkerInput,
+	TaskRefreshWorkerResult,
 	TodoistProjectMapping,
 	TodoistProjectSettings,
 	TodoistState,
@@ -284,6 +290,7 @@ export function childList(value: unknown): unknown[] {
 const STATE_KEYS = new Set<keyof TodoistState>([
 	"taskRef",
 	"taskName",
+	"taskDescription",
 	"taskUrl",
 	"todoistCompletionAttemptedAt",
 	"mergePromptedPrUrl",
@@ -383,4 +390,30 @@ export function parseResult(
 		if (hasResult) return result;
 	}
 	return invalidResult(resolvedSessionId);
+}
+
+function refreshCandidate(text: string): TaskRefreshWorkerResult | undefined {
+	const start = text.indexOf("{");
+	const end = text.lastIndexOf("}");
+	const hasInvalidBounds = start < 0 || end <= start;
+	if (hasInvalidBounds) return undefined;
+	try {
+		const value: unknown = JSON.parse(text.slice(start, end + 1));
+		const isSchemaResult = Value.Check(TaskRefreshWorkerResultSchema, value);
+		if (!isSchemaResult) return undefined;
+		return value as TaskRefreshWorkerResult;
+	} catch {
+		return undefined;
+	}
+}
+
+export function parseTaskRefreshResult(
+	stdout: string,
+): TaskRefreshWorkerResult | undefined {
+	const texts = assistantTexts(stdout);
+	for (let index = texts.length - 1; index >= 0; index -= 1) {
+		const result = refreshCandidate(texts[index].trim());
+		if (result !== undefined) return result;
+	}
+	return undefined;
 }

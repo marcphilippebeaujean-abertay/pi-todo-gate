@@ -43,6 +43,29 @@ const createTodoistModule = (
 	}) as unknown as TestTodoistModule;
 
 describe("Todoist module ownership", () => {
+	it("registers Todoist commands once when PI tools become available", async () => {
+		const events = createSharedEvents();
+		const registerCommand = vi.fn();
+		const module = createTodoistModule({
+			promptQueue: new PromptQueue(),
+			eventHandler: events,
+			sessionState: createSessionState(),
+		});
+		await events.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: { registerCommand } as never,
+		});
+		await events.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: { registerCommand } as never,
+		});
+
+		expect(registerCommand).toHaveBeenCalledTimes(2);
+		expect(registerCommand.mock.calls.map(([name]) => name)).toEqual([
+			"refresh_task",
+			"drop_task",
+		]);
+		void module;
+	});
+
 	it("projects configured data without exposing mapping details", async () => {
 		const module = createTodoistModuleFactory({
 			loadConfig: async () => ({
@@ -560,6 +583,7 @@ describe("isTodoistState", () => {
 			isTodoistState({
 				taskRef: "42",
 				taskName: "Implement feature",
+				taskDescription: "Details",
 				taskUrl: "https://app.todoist.com/app/task/42",
 			}),
 		).toBe(true);

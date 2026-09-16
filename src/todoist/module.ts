@@ -19,6 +19,7 @@ export {
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { isRecord } from "../shared/records.ts";
+import { register as registerTodoistCommands } from "./commands.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
@@ -79,6 +80,7 @@ class TodoistModuleImpl implements TodoistModule {
 			activateSession: this.activateSession.bind(this),
 			resetSession: this.resetSession.bind(this),
 			maybeAnalyzeTaskClaim: this.maybeAnalyzeTaskClaim.bind(this),
+			registerCommands: (pi) => registerTodoistCommands(pi, this.operations()),
 		});
 		this.register();
 	}
@@ -192,32 +194,38 @@ class TodoistModuleImpl implements TodoistModule {
 		return this.updateState(state, options);
 	}
 
-	private operations(): TodoistOperations {
+	private operationDependencies(): NonNullable<
+		TodoistModuleOptions["dependencies"]
+	> {
 		const legacyDependencies = this.options.dependencies ?? {};
-		const exec = this.options.exec ?? legacyDependencies.exec;
-		const taskClaimWorker =
-			this.options.taskClaimWorker ?? legacyDependencies.taskClaimWorker;
-		const createTodoistClient =
-			this.options.createTodoistClient ??
-			legacyDependencies.createTodoistClient;
-		const sessionState = this.options.sessionState;
+		return {
+			exec: this.options.exec ?? legacyDependencies.exec,
+			taskClaimWorker:
+				this.options.taskClaimWorker ?? legacyDependencies.taskClaimWorker,
+			taskRefreshWorker:
+				this.options.taskRefreshWorker ?? legacyDependencies.taskRefreshWorker,
+			createTodoistClient:
+				this.options.createTodoistClient ??
+				legacyDependencies.createTodoistClient,
+		};
+	}
+
+	private operations(): TodoistOperations {
+		const dependencies = this.operationDependencies();
 		const operations: TodoistOperations = {
-			sessionState,
+			sessionState: this.options.sessionState,
 			getSession: () => this.currentSession,
 			projectRef: this.currentProjectRef,
 			todoist: this,
 			promptQueue: this.options.promptQueue,
-			exec,
-			taskClaimWorker,
-			createTodoistClient,
+			exec: dependencies.exec,
+			taskClaimWorker: dependencies.taskClaimWorker,
+			taskRefreshWorker: dependencies.taskRefreshWorker,
+			createTodoistClient: dependencies.createTodoistClient,
 			eventHandler: this.options.eventHandler,
 			emitState: this.syncSessionState.bind(this),
 			updateTodoistState: this.updateTodoistState.bind(this),
-			dependencies: {
-				exec,
-				taskClaimWorker,
-				createTodoistClient,
-			},
+			dependencies,
 			completeMergedTask: undefined,
 		};
 		if (operations.completeMergedTask === undefined)
