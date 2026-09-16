@@ -6,6 +6,7 @@ export const SCOPED_DOMAINS = [
 	"todoist",
 	"herdr",
 	"worktree",
+	"prompt-queue",
 	"exit-protocol",
 	"footer",
 ] as const;
@@ -28,6 +29,7 @@ const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
 	pr: ["git.ts", "parsing.ts", "state-tool.ts"],
 	todoist: ["client.ts", "completion.ts", "config.ts", "parsing.ts"],
 	worktree: ["git.ts"],
+	"prompt-queue": ["queue.ts"],
 };
 
 function isAllowedFacet(domain: string, name: string): boolean {
@@ -67,7 +69,7 @@ const FORBIDDEN_IDENTIFIERS = [
 	"ModuleContext",
 ] as const;
 const SCOPED_EVENT_FILES =
-	/src\/(pr|todoist|herdr|worktree|exit-protocol|footer)\/events\.ts$/;
+	/src\/(pr|todoist|herdr|worktree|prompt-queue|exit-protocol|footer)\/events\.ts$/;
 const ALLOWED_NATIVE_ON =
 	/(?:^|\.)pi\.on\(|(?:^|\.)(?:child|stdout|stderr)\??\.on\(/;
 
@@ -112,7 +114,7 @@ export async function checkProductionArchitecture(
 				domain: "root",
 				path: relativePath,
 				message: "PromptQueue must not live under shared",
-				correction: "import PromptQueue from src/prompt-queue.ts",
+				correction: "import PromptQueue from src/prompt-queue/queue.ts",
 			});
 		for (const [lineNumber, line] of source.split("\n").entries()) {
 			if (!line.includes(".on(")) continue;
@@ -170,7 +172,15 @@ export async function checkProductionArchitecture(
 			domain: "root",
 			path: relative(root, queuePath),
 			message: "PromptQueue must not live under shared",
-			correction: "move PromptQueue to src/prompt-queue.ts",
+			correction: "move PromptQueue to src/prompt-queue/queue.ts",
+		});
+	const legacyQueuePath = join(root, "src", "prompt-queue.ts");
+	if (await isFile(legacyQueuePath))
+		issues.push({
+			domain: "root",
+			path: relative(root, legacyQueuePath),
+			message: "legacy PromptQueue utility is not allowed",
+			correction: "move PromptQueue to src/prompt-queue/queue.ts",
 		});
 	const sharedEventsPath = join(root, "src", "shared", "events.ts");
 	if (await isFile(sharedEventsPath)) {

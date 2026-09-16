@@ -251,13 +251,13 @@ class TodoistModuleImpl implements TodoistModule {
 		registerTodoistMergeConsumer(operations);
 	}
 
-	private maybeAnalyzeTaskClaim(prompt: string): void {
+	private maybeAnalyzeTaskClaim(prompt: string, model?: string): void {
 		const session = this.currentSession;
 		if (session === null) return;
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
-		analyzeTaskClaim(operations, session, prompt);
+		analyzeTaskClaim(operations, session, prompt, model);
 	}
 }
 

@@ -36,6 +36,7 @@ function setup() {
 	const request: ClaimWorkerRequest = {
 		prompt: "Fix dialog",
 		instructions: "Claim tab",
+		model: "anthropic/claude-sonnet-4-5",
 		events,
 	};
 	return {
@@ -67,6 +68,8 @@ describe("startClaimWorker", () => {
 			"--no-context-files",
 			"--tools",
 			"bash",
+			"--model",
+			"anthropic/claude-sonnet-4-5",
 			"--append-system-prompt",
 			"Claim tab",
 			"--thinking",

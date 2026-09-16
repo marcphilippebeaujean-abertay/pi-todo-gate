@@ -3,7 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { createModuleStatePublisher } from "../event-publishers.ts";
-import type { PromptQueue } from "../prompt-queue.ts";
+import type { PromptQueue } from "../prompt-queue/queue.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type {

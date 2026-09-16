@@ -7,7 +7,7 @@ import type { RootEventPublisher } from "./event-publishers.ts";
 import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import type { FooterModule as FooterModuleType } from "./footer/module.ts";
 import type { PrModule } from "./pr/module.ts";
-import type { PromptQueue } from "./prompt-queue.ts";
+import type { PromptQueue } from "./prompt-queue/queue.ts";
 import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
 import {
 	latestPersistedSessionState,

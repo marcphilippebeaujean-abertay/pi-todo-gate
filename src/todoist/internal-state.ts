@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { PromptQueue } from "../prompt-queue.ts";
+import type { PromptQueue } from "../prompt-queue/queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
@@ -46,6 +46,7 @@ export type TaskClaimWorker = (
 
 export const TaskClaimWorkerInputSchema = Type.Object({
 	sessionId: Type.String({ minLength: 1 }),
+	model: Type.Optional(Type.String({ minLength: 1 })),
 	prompt: Type.String(),
 	cwd: Type.String(),
 	projectRef: Type.String(),
@@ -127,7 +128,7 @@ export interface TodoistLifecycleConsumerOptions {
 		sessionId: string,
 	) => Promise<void>;
 	resetSession: () => void;
-	maybeAnalyzeTaskClaim: (prompt: string) => void;
+	maybeAnalyzeTaskClaim: (prompt: string, model?: string) => void;
 }
 
 export interface TodoistModuleOptions {

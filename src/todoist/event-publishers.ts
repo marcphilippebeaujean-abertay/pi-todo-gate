@@ -90,7 +90,10 @@ export function createTaskClaimWorker(exec?: Exec): TaskClaimWorker {
 	return async (input) => {
 		const result = await run(
 			PI_COMMAND,
-			buildPiWorkerArgs(workerPrompt(input), { thinking: HIGH_THINKING }),
+			buildPiWorkerArgs(workerPrompt(input), {
+				model: input.model,
+				thinking: HIGH_THINKING,
+			}),
 			{ cwd: input.cwd, timeout: CLAIM_WORKER_TIMEOUT_MS },
 		);
 		const workerFailed = result.code !== 0;
