@@ -75,6 +75,7 @@ function setup() {
 		removeWorktree: vi.fn(async () => "completed" as const),
 	};
 	const api = pi();
+	const queue = new PromptQueue();
 	const module = createPromptQueueModule({
 		pi: api,
 		eventHandler,
@@ -82,7 +83,7 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
-		queue: new PromptQueue(),
+		queue,
 	});
 	return {
 		api,
@@ -93,6 +94,7 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
+		queue,
 		module,
 	};
 }
@@ -206,4 +208,169 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.todoist.completeMergedTask).not.toHaveBeenCalled();
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
+
+	it("queues merge confirmation through same FIFO queue", async () => {
+		const state = setup();
+		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
+		await activate(state);
+		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: state.api,
+		});
+		const enqueue = vi.spyOn(state.queue, "enqueue");
+		await state.api.commands.get("merge")?.handler("", state.ctx);
+
+		expect(enqueue).toHaveBeenCalledOnce();
+		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
+	});
+
+	it("enqueues Todoist job before exit job synchronously", async () => {
+		const state = setup();
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		const enqueue = vi.spyOn(state.queue, "enqueue");
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+
+		expect(enqueue).toHaveBeenCalledTimes(2);
+		expect(enqueue.mock.invocationCallOrder[0]).toBeLessThan(
+			enqueue.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
+		);
+	});
+
+	it("uses TUI picker selection to execute selected action", async () => {
+		const state = setup();
+		state.ctx.mode = "tui";
+		const custom = vi.fn(
+			async (
+				factory: (
+					tui: unknown,
+					theme: unknown,
+					keybindings: unknown,
+					done: (value: unknown) => void,
+				) => unknown,
+			) => {
+				let selected: unknown;
+				const done = (value: unknown) => {
+					selected = value;
+				};
+				const widget = factory({ requestRender: vi.fn() }, {}, {}, done) as {
+					handleInput(data: string): void;
+				};
+				widget.handleInput("\r");
+				return selected;
+			},
+		);
+		state.ctx.ui.custom = custom as never;
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: true,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(custom).toHaveBeenCalledOnce();
+		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
+			force: false,
+		});
+	});
+
+	it("does not present empty actions", async () => {
+		const state = setup();
+		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: true,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.custom).not.toHaveBeenCalled();
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
+	});
+
+	it("does not prompt or call capabilities without UI", async () => {
+		const state = setup();
+		state.ctx.hasUI = false;
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
+		expect(state.todoist.completeMergedTask).not.toHaveBeenCalled();
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+	});
+
+	it("continues with exit picker when Todoist capability fails", async () => {
+		const state = setup();
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		state.todoist.completeMergedTask.mockRejectedValue(new Error("failed"));
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
+			force: false,
+		});
+	});
+
+	it("suppresses stale visible picker result", async () => {
+		const state = setup();
+		state.ctx.mode = "tui";
+		let resolvePicker!: (value: readonly string[]) => void;
+		state.ctx.ui.custom = vi.fn(
+			() =>
+				new Promise<readonly string[]>((resolve) => {
+					resolvePicker = resolve;
+				}),
+		) as never;
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: true,
+			sessionId,
+		});
+		await Promise.resolve();
+		await state.eventHandler.sessionDeactivatedEvent.emit(undefined);
+		resolvePicker(["remove-worktree"]);
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+	});
+
+	it.each([false, null])(
+		"uses force false when dirty status is %s",
+		async (dirty) => {
+			const state = setup();
+			state.worktree.hasUncommittedChanges.mockResolvedValue(dirty as never);
+			await activate(state);
+			await state.eventHandler.prMergedEvent.emit({
+				prUrl: "https://github.com/o/r/pull/1",
+				taskMarkedAsCompleted: true,
+				sessionId,
+			});
+			await (state.module as { drain: () => Promise<void> }).drain();
+
+			expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+			expect(state.ctx.ui.confirm).toHaveBeenCalledWith(
+				"Exit protocol",
+				expect.stringContaining("Delete worktree"),
+			);
+			expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
+				force: false,
+			});
+		},
+	);
 });

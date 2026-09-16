@@ -57,7 +57,19 @@ async function runMerge(
 		notifyNoPr(context);
 		return;
 	}
-	const confirmed = await confirmMerge(context, prUrl);
-	if (!dependencies.isCurrent(context) || !confirmed) return;
-	await dependencies.pr.mergeActivePr();
+	await dependencies.queue
+		.enqueue(async (isCurrent) => {
+			const isCurrentBeforePrompt =
+				isCurrent() && dependencies.isCurrent(context);
+			if (!isCurrentBeforePrompt) return;
+			const confirmed = await confirmMerge(context, prUrl);
+			const isCurrentAfterPrompt =
+				isCurrent() && dependencies.isCurrent(context);
+			if (!isCurrentAfterPrompt || !confirmed) return;
+			const isCurrentBeforeCapability =
+				isCurrent() && dependencies.isCurrent(context);
+			if (!isCurrentBeforeCapability) return;
+			await dependencies.pr.mergeActivePr();
+		})
+		.catch(() => undefined);
 }
