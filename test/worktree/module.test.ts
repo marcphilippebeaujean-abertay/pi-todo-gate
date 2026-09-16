@@ -297,6 +297,33 @@ describe("worktree event actions", () => {
 		).toBe(0);
 	});
 
+	it("informs user before confirming dirty worktree deletion", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const ctx = context();
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			dependencies: {
+				exec: projectResult("abc", "abc", "", " M dirty\\n", []),
+				changeDirectory: vi.fn(),
+			},
+		});
+
+		await module.sessionStart(ctx, "session");
+		await expect(module.removeWorktree()).resolves.toBe("completed");
+
+		expect(ctx.ui.notify).toHaveBeenCalledWith(
+			"Worktree /repo/.worktrees/feature has uncommitted work. Deleting it will permanently remove that work.",
+			"info",
+		);
+		expect(ctx.ui.confirm).toHaveBeenCalledWith(
+			"Remove worktree with uncommitted changes?",
+			"Worktree /repo/.worktrees/feature has uncommitted changes. Force removal will delete them.",
+		);
+	});
+
 	it("executes cleanup immediately after a merge", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =

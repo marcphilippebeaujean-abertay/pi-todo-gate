@@ -22,6 +22,8 @@ export const CONFIRM_TITLE = "Remove worktree with uncommitted changes?";
 export const CONFIRM_PREFIX = "Worktree ";
 export const CONFIRM_SUFFIX =
 	" has uncommitted changes. Force removal will delete them.";
+export const DIRTY_INFO_SUFFIX =
+	" has uncommitted work. Deleting it will permanently remove that work.";
 export const INFO = "info";
 export const WARNING = "warning";
 export const COMPLETED = "completed";
