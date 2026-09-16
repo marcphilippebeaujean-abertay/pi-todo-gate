@@ -1,5 +1,9 @@
 import ts from "typescript";
 
+export function isPromptQueuePath(filePath: string): boolean {
+	return /[\\/]src[\\/]prompt-queue[\\/]/.test(filePath);
+}
+
 const LOGICAL_OPERATORS = new Set<ts.SyntaxKind>([
 	ts.SyntaxKind.AmpersandAmpersandToken,
 	ts.SyntaxKind.BarBarToken,

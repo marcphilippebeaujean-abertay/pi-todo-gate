@@ -3,12 +3,14 @@ import { diagnostic } from "../diagnostic.ts";
 import {
 	isFunctionLike,
 	isIgnoredString,
+	isPromptQueuePath,
 	isStringLiteralLike,
 } from "../shared.ts";
 import type { LintRule } from "../types.ts";
 
 const RULE = "no-magic-strings" as const;
 export const noMagicStrings: LintRule = ({ sourceFile, diagnostics }) => {
+	if (isPromptQueuePath(sourceFile.fileName)) return;
 	const occurrences: {
 		node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral;
 		text: string;

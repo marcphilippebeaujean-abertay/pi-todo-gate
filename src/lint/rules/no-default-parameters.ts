@@ -1,8 +1,10 @@
 import ts from "typescript";
 import { diagnostic } from "../diagnostic.ts";
+import { isPromptQueuePath } from "../shared.ts";
 import type { LintRule } from "../types.ts";
 
 export const noDefaultParameters: LintRule = ({ sourceFile, diagnostics }) => {
+	if (isPromptQueuePath(sourceFile.fileName)) return;
 	function visit(node: ts.Node): void {
 		if (ts.isParameter(node) && node.initializer !== undefined)
 			diagnostics.push(

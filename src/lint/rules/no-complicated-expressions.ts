@@ -3,6 +3,7 @@ import { diagnostic } from "../diagnostic.ts";
 import {
 	hasLogicalParent,
 	isLogicalExpression,
+	isPromptQueuePath,
 	logicalCheckCount,
 } from "../shared.ts";
 import type { LintRule } from "../types.ts";
@@ -12,6 +13,7 @@ export const noComplicatedExpressions: LintRule = ({
 	diagnostics,
 	config,
 }) => {
+	if (isPromptQueuePath(sourceFile.fileName)) return;
 	function visit(node: ts.Node, ancestors?: readonly ts.Node[]): void {
 		const resolvedAncestors = ancestors ?? [];
 

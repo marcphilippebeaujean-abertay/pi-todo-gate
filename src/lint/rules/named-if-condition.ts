@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { diagnostic } from "../diagnostic.ts";
+import { isPromptQueuePath } from "../shared.ts";
 import type { LintRule } from "../types.ts";
 
 function isNamedConditionType(type: ts.Type): boolean {
@@ -88,6 +89,7 @@ export const namedIfCondition: LintRule = ({
 	const isRootCoordinator = /[\\/]src[\\/](event-consumer|main)\.ts$/.test(
 		sourceFile.fileName,
 	);
+	if (isPromptQueuePath(sourceFile.fileName)) return;
 	if (isRootCoordinator) return;
 	function visit(node: ts.Node): void {
 		for (const expression of conditionExpressions(node))

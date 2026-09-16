@@ -151,7 +151,6 @@ function persistedStateEntry(
 		herdr?: Record<string, unknown>;
 		worktree?: Record<string, unknown>;
 		footer?: Record<string, unknown>;
-		exitProtocol?: Record<string, unknown>;
 	},
 	gitState: Record<string, unknown> = {},
 	session: Record<string, unknown> = {},
@@ -174,7 +173,6 @@ function persistedStateEntry(
 				herdr: moduleState.herdr ?? {},
 				worktree: moduleState.worktree ?? {},
 				footer: moduleState.footer ?? { footers: {} },
-				exitProtocol: moduleState.exitProtocol ?? { active: true },
 			},
 		},
 	};

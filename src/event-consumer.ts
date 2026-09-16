@@ -4,10 +4,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { RootEventPublisher } from "./event-publishers.ts";
-import type { ExitProtocolModule } from "./exit-protocol/module.ts";
 import type { FooterModule as FooterModuleType } from "./footer/module.ts";
 import type { PrModule } from "./pr/module.ts";
-import type { PromptQueue } from "./prompt-queue/queue.ts";
 import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
 import {
 	latestPersistedSessionState,
@@ -36,13 +34,12 @@ export interface RootComposition {
 	pi: ExtensionAPI;
 	dependencies: RootDependencies;
 	eventHandler: EventHandler;
-	promptQueue: PromptQueue;
+	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule;
 	sessionState: SessionState;
 	footer: FooterModuleType;
 	pr: PrModule;
 	todoist: TodoistModule;
 	worktree: WorktreeCleanup;
-	exitProtocol: ExitProtocolModule;
 	session: SessionRecord | null;
 	publisher: RootEventPublisher;
 	stateUpdateEpoch: { value: number };
@@ -74,7 +71,6 @@ function deactivate(root: Root): void {
 	root.session = null;
 	resetSessionState(root.sessionState, root.stateUpdateEpoch);
 	void root.publisher.publishSessionDeactivated();
-	root.promptQueue.reset();
 }
 
 function deactivateUnconfigured(root: Root): void {
@@ -315,9 +311,6 @@ export function updateModuleState(
 			break;
 		case "footer":
 			state.moduleState.footer = structuredClone(update.moduleState);
-			break;
-		case "exitProtocol":
-			state.moduleState.exitProtocol = structuredClone(update.moduleState);
 			break;
 	}
 	if (update.gitStatePatch !== undefined)

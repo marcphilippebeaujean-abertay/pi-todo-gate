@@ -138,7 +138,7 @@ describe("session shutdown", () => {
 		expect(await result).toBeUndefined();
 	});
 
-	it("wires Todoist merge handling before Exit Protocol prompts", async () => {
+	it("wires Todoist merge handling through Prompt Queue", async () => {
 		const confirm = vi.fn(async () => false);
 		const custom = vi.fn(async () => undefined);
 		const activationContext = {
@@ -159,9 +159,7 @@ describe("session shutdown", () => {
 				root: Parameters<typeof handleSessionStart>[0];
 			}
 		).root;
-		const enqueue = vi
-			.spyOn(root.promptQueue, "enqueue")
-			.mockImplementation(() => Promise.resolve(undefined));
+		expect(root).not.toHaveProperty("exitProtocol");
 		const session = {
 			context: activationContext,
 			project: { codingRoot: "/repo" },
@@ -187,12 +185,7 @@ describe("session shutdown", () => {
 			sessionId: "session",
 		});
 
-		expect(enqueue).toHaveBeenCalledTimes(2);
-		const queuedTasks = enqueue.mock.calls.map(
-			([task]) =>
-				task as (isCurrent: () => boolean) => Promise<unknown> | unknown,
-		);
-		await queuedTasks[0]?.(() => true);
+		await root.promptQueue.drain();
 		expect(confirm).toHaveBeenCalledOnce();
 		expect(custom).not.toHaveBeenCalled();
 	});
@@ -209,16 +202,12 @@ describe("session shutdown", () => {
 		} as unknown as EventHandler;
 		const footer = { deactivate: vi.fn() };
 		const worktree = { deactivate: vi.fn() };
-		const exitProtocol = { deactivate: vi.fn() };
 		eventHandler.sessionDeactivatedEvent.subscribe(() => footer.deactivate());
-		eventHandler.sessionDeactivatedEvent.subscribe(() =>
-			exitProtocol.deactivate(),
-		);
 		eventHandler.sessionDeactivatedEvent.subscribe(() => worktree.deactivate());
 		const runtime = {
 			eventHandler,
 			publisher: new RootEventPublisher(eventHandler),
-			promptQueue: { reset: vi.fn() },
+			promptQueue: { drain: vi.fn() },
 			sessionState: {
 				...createSessionState(),
 				session: { activeSessionId: "session" },
@@ -229,12 +218,10 @@ describe("session shutdown", () => {
 			pr: { deactivateSession: vi.fn() },
 			footer,
 			worktree,
-			exitProtocol,
 		} as unknown as Parameters<typeof handleSessionShutdown>[0];
 
 		handleSessionShutdown(runtime);
 
-		expect(runtime.promptQueue.reset).toHaveBeenCalledOnce();
 		expect(runtime.sessionState).toMatchObject({
 			session: { activeSessionId: null },
 			gitState: {},
@@ -247,13 +234,6 @@ describe("session shutdown", () => {
 		expect(
 			(runtime.worktree as unknown as { deactivate: ReturnType<typeof vi.fn> })
 				.deactivate,
-		).toHaveBeenCalledOnce();
-		expect(
-			(
-				runtime.exitProtocol as unknown as {
-					deactivate: ReturnType<typeof vi.fn>;
-				}
-			).deactivate,
 		).toHaveBeenCalledOnce();
 	});
 
@@ -319,7 +299,7 @@ describe("session shutdown", () => {
 			]),
 		);
 		expect(updates.map(({ moduleId }) => moduleId)).toEqual(
-			expect.arrayContaining(["worktree", "pr", "exitProtocol"]),
+			expect.arrayContaining(["worktree", "pr"]),
 		);
 		expect(root.sessionState.gitState).toMatchObject({
 			isWorktree: true,
