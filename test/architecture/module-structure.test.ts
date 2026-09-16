@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,6 +122,49 @@ describe("module structure checker", () => {
 
 	it("passes final production architecture constraints", async () => {
 		expect(await checkProductionArchitecture(PROJECT_ROOT)).toEqual([]);
+	});
+
+	it("rejects interactive prompt UI outside Prompt Queue", async () => {
+		const root = await mkdtemp(join(tmpdir(), "production-prompt-ownership-"));
+		const sourcePath = join(root, "src", "pr", "module.ts");
+		await mkdir(dirname(sourcePath), { recursive: true });
+		await writeFile(
+			sourcePath,
+			"export function prompt(context: { ui: { confirm(): Promise<boolean> } }) { return context.ui.confirm(); }\n",
+		);
+
+		expect(await checkProductionArchitecture(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					message: "interactive prompt UI must live in Prompt Queue",
+				}),
+			]),
+		);
+	});
+
+	it("removes Exit Protocol from lint scopes and reverse-import exceptions", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		const reversePromptQueueRules = config
+			.split("\n")
+			.filter((line) => line.includes("to-prompt-queue"));
+		expect(reversePromptQueueRules).not.toEqual(
+			expect.arrayContaining([
+				expect.stringContaining('dependencyTypesNot: ["type-only"]'),
+			]),
+		);
+
+		const ruleFiles = await readdir(join(PROJECT_ROOT, "src", "lint", "rules"));
+		const ruleSources = await Promise.all(
+			ruleFiles
+				.filter((file) => file.endsWith(".ts"))
+				.map((file) =>
+					readFile(join(PROJECT_ROOT, "src", "lint", "rules", file), "utf8"),
+				),
+		);
+		expect(ruleSources.join("\n")).not.toContain("exit-protocol");
 	});
 
 	it("reports forbidden compatibility APIs in production files", async () => {

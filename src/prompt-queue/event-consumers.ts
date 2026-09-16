@@ -8,6 +8,7 @@ import type {
 	TodoistModule,
 } from "../todoist/module.ts";
 import type { WorktreeCleanup } from "../worktree/module.ts";
+import { FAILED_ACTION_RESULT } from "./constants.ts";
 import type { ExitAction, PromptQueueModuleOptions } from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
 import {
@@ -40,7 +41,9 @@ export class PromptQueueConsumer {
 			if (session === undefined) return;
 			const isCurrent =
 				this.sessionState.session.activeSessionId === event.sessionId;
-			if (!isCurrent || session.context !== event.context) return;
+			const hasMatchingContext = session.context === event.context;
+			const isCurrentActivation = isCurrent && hasMatchingContext;
+			if (!isCurrentActivation) return;
 			this.context = event.context;
 			this.session = session;
 			this.sessionId = event.sessionId;
@@ -74,27 +77,43 @@ export class PromptQueueConsumer {
 		this.queue.reset();
 	}
 
+	private isCurrentJob(
+		context: ExtensionContext,
+		sessionId: string,
+		isQueuedCurrent: () => boolean,
+	): boolean {
+		const isQueueCurrent = isQueuedCurrent();
+		return isQueueCurrent && this.isCurrent(context, sessionId);
+	}
+
 	private isCurrent(context: ExtensionContext, sessionId: string): boolean {
-		return (
-			this.context === context &&
-			this.session !== null &&
-			this.session.context === context &&
-			this.sessionId === sessionId &&
-			this.sessionState.session.activeSessionId === sessionId
-		);
+		const hasContext = this.context === context;
+		if (!hasContext) return false;
+		const session = this.session;
+		const hasSession = session !== null;
+		if (!hasSession) return false;
+		const hasMatchingSessionContext = session.context === context;
+		if (!hasMatchingSessionContext) return false;
+		const hasMatchingSessionId = this.sessionId === sessionId;
+		if (!hasMatchingSessionId) return false;
+		return this.sessionState.session.activeSessionId === sessionId;
 	}
 
 	private onPrMerged(event: PrMergedEvent): void {
 		const context = this.context;
 		const session = this.session;
 		const sessionId = this.sessionId;
-		if (context === null || session === null || sessionId === null) return;
-		if (!this.isCurrent(context, event.sessionId)) return;
+		const hasContextAndSession = context !== null && session !== null;
+		const hasActiveSession = hasContextAndSession && sessionId !== null;
+		if (!hasActiveSession) return;
+		const isCurrentEvent = this.isCurrent(context, event.sessionId);
+		if (!isCurrentEvent) return;
 		const taskRef = this.sessionState.moduleState.todoist.taskRef;
 		const prUrl = event.prUrl;
 		const shouldCompleteTodoist = !event.taskMarkedAsCompleted;
 		const hasTask = taskRef !== undefined && prUrl !== null;
-		if (shouldCompleteTodoist && hasTask) {
+		const shouldQueueTodoist = shouldCompleteTodoist && hasTask;
+		if (shouldQueueTodoist) {
 			const snapshot: TodoistCompletionSnapshot = {
 				taskRef,
 				taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
@@ -118,21 +137,27 @@ export class PromptQueueConsumer {
 		snapshot: TodoistCompletionSnapshot,
 		isQueuedCurrent: () => boolean,
 	): Promise<void> {
-		if (
-			!context.hasUI ||
-			!isQueuedCurrent() ||
-			!this.isCurrent(context, snapshot.sessionId)
-		)
-			return;
+		const isCurrentBeforePrompt = this.isCurrentJob(
+			context,
+			snapshot.sessionId,
+			isQueuedCurrent,
+		);
+		const canPrompt = context.hasUI && isCurrentBeforePrompt;
+		if (!canPrompt) return;
 		const confirmed = await confirmTodoistCompletion(context, snapshot);
-		if (
-			!isQueuedCurrent() ||
-			!this.isCurrent(context, snapshot.sessionId) ||
-			!confirmed
-		)
-			return;
-		if (!isQueuedCurrent() || !this.isCurrent(context, snapshot.sessionId))
-			return;
+		const isCurrentAfterPrompt = this.isCurrentJob(
+			context,
+			snapshot.sessionId,
+			isQueuedCurrent,
+		);
+		const shouldComplete = isCurrentAfterPrompt && confirmed;
+		if (!shouldComplete) return;
+		const isCurrentBeforeCapability = this.isCurrentJob(
+			context,
+			snapshot.sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentBeforeCapability) return;
 		await this.todoist.completeMergedTask(snapshot);
 	}
 
@@ -141,35 +166,69 @@ export class PromptQueueConsumer {
 		sessionId: string,
 		isQueuedCurrent: () => boolean,
 	): Promise<void> {
-		if (
-			!context.hasUI ||
-			!isQueuedCurrent() ||
-			!this.isCurrent(context, sessionId)
-		)
-			return;
+		const isCurrentBeforePrompt = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		const canPrompt = context.hasUI && isCurrentBeforePrompt;
+		if (!canPrompt) return;
 		const info = this.worktree.getWorktreeInfo();
 		if (info === null) return;
-		const action = worktreeAction(info.worktreePath, info.branch, async () => {
-			if (!isQueuedCurrent() || !this.isCurrent(context, sessionId))
-				return "failed";
-			const dirty = await this.worktree.hasUncommittedChanges();
-			if (!isQueuedCurrent() || !this.isCurrent(context, sessionId))
-				return "failed";
-			let force = false;
-			if (dirty === true) {
-				force = await confirmDirtyWorktree(context, info.worktreePath);
-				if (!isQueuedCurrent() || !this.isCurrent(context, sessionId))
-					return "failed";
-			}
-			if (!isQueuedCurrent() || !this.isCurrent(context, sessionId))
-				return "failed";
-			return this.worktree.removeWorktree({ force });
-		});
+		const action = this.createWorktreeAction(
+			context,
+			sessionId,
+			isQueuedCurrent,
+			info.worktreePath,
+			info.branch,
+		);
 		const actions: readonly ExitAction[] = [action];
 		await presentExitActions(
 			context,
 			actions,
 			() => isQueuedCurrent() && this.isCurrent(context, sessionId),
 		);
+	}
+
+	private createWorktreeAction(
+		context: ExtensionContext,
+		sessionId: string,
+		isQueuedCurrent: () => boolean,
+		worktreePath: string,
+		branch: string,
+	): ExitAction {
+		return worktreeAction(worktreePath, branch, async () => {
+			const isCurrentBeforeStatus = this.isCurrentJob(
+				context,
+				sessionId,
+				isQueuedCurrent,
+			);
+			if (!isCurrentBeforeStatus) return FAILED_ACTION_RESULT;
+			const dirty = await this.worktree.hasUncommittedChanges();
+			const isCurrentAfterStatus = this.isCurrentJob(
+				context,
+				sessionId,
+				isQueuedCurrent,
+			);
+			if (!isCurrentAfterStatus) return FAILED_ACTION_RESULT;
+			let force = false;
+			const hasDirtyWorktree = dirty === true;
+			if (hasDirtyWorktree) {
+				force = await confirmDirtyWorktree(context, worktreePath);
+				const isCurrentAfterPrompt = this.isCurrentJob(
+					context,
+					sessionId,
+					isQueuedCurrent,
+				);
+				if (!isCurrentAfterPrompt) return FAILED_ACTION_RESULT;
+			}
+			const isCurrentBeforeCapability = this.isCurrentJob(
+				context,
+				sessionId,
+				isQueuedCurrent,
+			);
+			if (!isCurrentBeforeCapability) return FAILED_ACTION_RESULT;
+			return this.worktree.removeWorktree({ force });
+		});
 	}
 }

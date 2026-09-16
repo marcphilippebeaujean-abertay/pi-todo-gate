@@ -2,7 +2,6 @@ import ts from "typescript";
 import { diagnostic } from "../diagnostic.ts";
 import {
 	isConstInitializer,
-	isPromptQueuePath,
 	isSingleCharacterLiteral,
 	isStringLiteralLike,
 } from "../shared.ts";
@@ -11,7 +10,6 @@ export const noShortStringConstants: LintRule = ({
 	sourceFile,
 	diagnostics,
 }) => {
-	if (isPromptQueuePath(sourceFile.fileName)) return;
 	function visit(node: ts.Node, ancestors?: readonly ts.Node[]): void {
 		const resolvedAncestors = ancestors ?? [];
 		if (

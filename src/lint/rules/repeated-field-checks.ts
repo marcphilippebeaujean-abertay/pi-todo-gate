@@ -3,7 +3,6 @@ import { diagnostic } from "../diagnostic.ts";
 import {
 	isEqualityOperator,
 	isFunctionLike,
-	isPromptQueuePath,
 	unparenthesized,
 } from "../shared.ts";
 import type { LintRule } from "../types.ts";
@@ -20,7 +19,6 @@ function equalityPropertyAccesses(
 	return ts.isPropertyAccessExpression(left) ? [left] : [];
 }
 export const repeatedFieldChecks: LintRule = ({ sourceFile, diagnostics }) => {
-	if (isPromptQueuePath(sourceFile.fileName)) return;
 	function visit(node: ts.Node): void {
 		if (isFunctionLike(node) && node.body) {
 			const accesses = new Map<string, ts.PropertyAccessExpression[]>();

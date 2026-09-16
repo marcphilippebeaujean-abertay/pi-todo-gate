@@ -10,7 +10,7 @@ const ALLOWED_TYPE_FILES = new Set([
 	"module.ts",
 ]);
 const DOMAIN_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|exit-protocol|footer)[\\/][^\\/]+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/][^\\/]+\.ts$/;
 const RULE_ID = "domain-types-outside-state" as const;
 const MESSAGE =
 	"Domain interfaces and type aliases must live in internal-state.ts, events.ts, module-state.ts, or module.ts";

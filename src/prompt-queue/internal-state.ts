@@ -11,7 +11,24 @@ import type {
 	TodoistModule,
 } from "../todoist/module.ts";
 import type { WorktreeCleanup } from "../worktree/module.ts";
+import {
+	EXIT_ACTION_KEY,
+	type EXIT_CANCEL_KEY,
+	EXIT_SUBMIT_KEY,
+} from "./constants.ts";
 import type { PromptQueue } from "./queue.ts";
+
+export type PromptTask<T> = (isCurrent: () => boolean) => Promise<T> | T;
+
+export interface CommandDependencies {
+	pi?: ExtensionAPI;
+	eventHandler: EventHandler;
+	sessionState: SessionState;
+	pr: PrModule;
+	queue: PromptQueue;
+	getContext: () => ExtensionContext | null;
+	isCurrent: (context: ExtensionContext) => boolean;
+}
 
 export interface PromptQueueModuleOptions {
 	pi?: ExtensionAPI;
@@ -43,7 +60,10 @@ export type CustomUI = NonNullable<ExtensionContext["ui"]["custom"]>;
 export type CustomFactory = Parameters<CustomUI>[0];
 export type PickerTUI = Parameters<CustomFactory>[0];
 
-export type PickerFocus = "submit" | "cancel" | { type: "action"; id: string };
+export type PickerFocus =
+	| typeof EXIT_SUBMIT_KEY
+	| typeof EXIT_CANCEL_KEY
+	| { type: typeof EXIT_ACTION_KEY; id: string };
 
 export interface PickerState {
 	readonly actionIds: readonly string[];
@@ -55,23 +75,26 @@ export function initialPickerState(actionIds: readonly string[]): PickerState {
 	return {
 		actionIds: [...actionIds],
 		selectedIds: new Set(actionIds),
-		focused: "submit",
+		focused: EXIT_SUBMIT_KEY,
 	};
 }
 
 export function toggleAction(state: PickerState, id: string): PickerState {
-	if (!state.actionIds.includes(id)) return state;
+	const hasAction = state.actionIds.includes(id);
+	if (!hasAction) return state;
 	const selectedIds = new Set(state.selectedIds);
-	if (selectedIds.has(id)) selectedIds.delete(id);
+	const isSelected = selectedIds.has(id);
+	if (isSelected) selectedIds.delete(id);
 	else selectedIds.add(id);
 	return { ...state, selectedIds };
 }
 
 export function focusAction(state: PickerState, id: string): PickerState {
-	if (!state.actionIds.includes(id)) return state;
-	return { ...state, focused: { type: "action", id } };
+	const hasAction = state.actionIds.includes(id);
+	if (!hasAction) return state;
+	return { ...state, focused: { type: EXIT_ACTION_KEY, id } };
 }
 
 export function focusSubmit(state: PickerState): PickerState {
-	return { ...state, focused: "submit" };
+	return { ...state, focused: EXIT_SUBMIT_KEY };
 }

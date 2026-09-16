@@ -108,12 +108,23 @@ export async function checkProductionArchitecture(
 				correction: `remove ${identifier} from production architecture`,
 			});
 		}
+		const isPromptQueueFile = relativePath.startsWith("src/prompt-queue/");
 		if (source.includes("shared/prompt-queue"))
 			issues.push({
 				domain: "root",
 				path: relativePath,
 				message: "PromptQueue must not live under shared",
-				correction: "import PromptQueue from src/prompt-queue.ts",
+				correction: "import PromptQueue from src/prompt-queue/module.ts",
+			});
+		if (
+			!isPromptQueueFile &&
+			/\bui\??\.(?:confirm|custom)\s*\(/.test(source)
+		)
+			issues.push({
+				domain: relativePath.split("/")[1] ?? "root",
+				path: relativePath,
+				message: "interactive prompt UI must live in Prompt Queue",
+				correction: "move ui.confirm/ui.custom calls into src/prompt-queue/",
 			});
 		for (const [lineNumber, line] of source.split("\n").entries()) {
 			if (!line.includes(".on(")) continue;

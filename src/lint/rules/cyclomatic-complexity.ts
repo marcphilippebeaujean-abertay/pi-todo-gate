@@ -1,6 +1,5 @@
 import { diagnostic } from "../diagnostic.ts";
 import { collectFunctionMetrics } from "../function-metrics.ts";
-import { isPromptQueuePath } from "../shared.ts";
 import type { LintRule } from "../types.ts";
 
 const RULE_ID = "cyclomatic-complexity" as const;
@@ -11,7 +10,6 @@ export const cyclomaticComplexity: LintRule = ({
 	diagnostics,
 	config,
 }) => {
-	if (isPromptQueuePath(sourceFile.fileName)) return;
 	for (const metric of collectFunctionMetrics(sourceFile)) {
 		if (metric.complexity <= config.maxCyclomaticComplexity) continue;
 		diagnostics.push(

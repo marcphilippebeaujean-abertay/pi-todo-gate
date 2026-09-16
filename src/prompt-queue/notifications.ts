@@ -13,15 +13,3 @@ export function notifyNoUi(context: ExtensionContext): void {
 export function notifyNoPr(context: ExtensionContext): void {
 	context.ui.notify(NO_PR_MESSAGE, C.value.warning);
 }
-
-export function notifyMergeFailure(
-	context: ExtensionContext,
-	detail = "",
-): void {
-	const suffix = detail === "" ? "" : `: ${detail}`;
-	context.ui.notify(`Pull request merge failed${suffix}`, C.value.warning);
-}
-
-export function notifyMergeSucceeded(context: ExtensionContext): void {
-	context.ui.notify("Pull request merged", C.value.info);
-}

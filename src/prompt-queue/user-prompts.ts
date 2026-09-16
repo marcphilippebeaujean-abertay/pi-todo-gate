@@ -8,16 +8,11 @@ import {
 	EXIT_ACTION_KEY,
 	EXIT_CANCEL_KEY,
 	EXIT_CANCEL_LABEL,
-	EXIT_EMPTY,
-	EXIT_FOCUSED,
-	EXIT_SELECTED,
 	EXIT_SUBMIT_KEY,
 	EXIT_SUBMIT_LABEL,
 	EXIT_TAB_KEY,
 	EXIT_TITLE,
 	EXIT_TUI_MODE,
-	EXIT_UNFOCUSED,
-	EXIT_UNSELECTED,
 	MERGE_CONFIRM_MESSAGE,
 	MERGE_CONFIRM_TITLE_PREFIX,
 	REMOVE_WORKTREE_ACTION_ID,
@@ -110,23 +105,23 @@ export class ExitActionPicker {
 	}
 
 	render(width: number): string[] {
-		const rows: string[] = [EXIT_TITLE, EXIT_EMPTY];
+		const rows: string[] = [EXIT_TITLE, ""];
 		for (const action of this.actions) {
 			const focused = this.state.focused;
 			const isFocused = typeof focused === "object" && focused.id === action.id;
-			const marker = isFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED;
-			const checkmark = this.state.selectedIds.has(action.id)
-				? EXIT_SELECTED
-				: EXIT_UNSELECTED;
+			const marker = isFocused ? ">" : " ";
+			const isSelected = this.state.selectedIds.has(action.id);
+			const checkmark = isSelected ? "x" : " ";
 			rows.push(`${marker} [${checkmark}] ${action.label}`);
 		}
-		rows.push(EXIT_EMPTY);
-		const isSubmitFocused = this.state.focused === EXIT_SUBMIT_KEY;
-		const isCancelFocused = this.state.focused === EXIT_CANCEL_KEY;
+		rows.push("");
+		const focused = this.state.focused;
+		const isSubmitFocused = focused === EXIT_SUBMIT_KEY;
+		const isCancelFocused = focused === EXIT_CANCEL_KEY;
 		rows.push(
-			`${isSubmitFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED} ${EXIT_SUBMIT_LABEL}    ${isCancelFocused ? EXIT_FOCUSED : EXIT_UNFOCUSED} ${EXIT_CANCEL_LABEL}`,
+			`${isSubmitFocused ? ">" : " "} ${EXIT_SUBMIT_LABEL}    ${isCancelFocused ? ">" : " "} ${EXIT_CANCEL_LABEL}`,
 		);
-		return rows.map((row) => truncateToWidth(row, width, EXIT_EMPTY));
+		return rows.map((row) => truncateToWidth(row, width, ""));
 	}
 
 	handleInput(data: string): void {
@@ -190,8 +185,8 @@ export class ExitActionPicker {
 			typeof this.state.focused === "object"
 				? this.state.focused.id
 				: undefined;
-		if (targetId !== undefined || focusedId !== undefined)
-			return targetId === focusedId;
+		const hasObjectFocus = targetId !== undefined || focusedId !== undefined;
+		if (hasObjectFocus) return targetId === focusedId;
 		return target === this.state.focused;
 	}
 }
@@ -215,10 +210,33 @@ async function pickActions(
 	if (canUseCustomPicker) return pickWithCustomUI(custom, actions);
 	const selected: string[] = [];
 	for (const action of actions) {
-		if (await context.ui.confirm(EXIT_TITLE, action.label))
-			selected.push(action.id);
+		const confirmed = await context.ui.confirm(EXIT_TITLE, action.label);
+		if (confirmed) selected.push(action.id);
 	}
 	return selected;
+}
+
+async function executeAction(
+	context: ExtensionContext,
+	action: ExitAction,
+	isCurrent: () => boolean,
+): Promise<boolean> {
+	const isCurrentBeforeAction = isCurrent();
+	if (!isCurrentBeforeAction) return false;
+	try {
+		await action.execute();
+		return true;
+	} catch (error) {
+		const isCurrentAfterAction = isCurrent();
+		if (!isCurrentAfterAction) return false;
+		const detail = error instanceof Error ? error.message : String(error);
+		try {
+			context.ui.notify(`${EXIT_ACTION_FAILED}${detail}`, "warning");
+		} catch {
+			return false;
+		}
+		return true;
+	}
 }
 
 export async function presentExitActions(
@@ -226,22 +244,17 @@ export async function presentExitActions(
 	actions: readonly ExitAction[],
 	isCurrent: () => boolean,
 ): Promise<void> {
-	if (context === null || !context.hasUI || actions.length === 0) return;
+	const hasContext = context !== null;
+	const canPrompt = hasContext && context.hasUI;
+	const hasActions = actions.length > 0;
+	const canPresent = canPrompt && hasActions;
+	if (!canPresent) return;
 	const selected = await pickActions(context, actions);
-	if (!isCurrent()) return;
+	const isCurrentAfterPrompt = isCurrent();
+	if (!isCurrentAfterPrompt) return;
 	for (const action of selectedActions(actions, selected)) {
-		if (!isCurrent()) return;
-		try {
-			await action.execute();
-		} catch (error) {
-			if (!isCurrent()) return;
-			const detail = error instanceof Error ? error.message : String(error);
-			try {
-				context.ui.notify(`${EXIT_ACTION_FAILED}${detail}`, "warning");
-			} catch {
-				return;
-			}
-		}
+		const shouldContinue = await executeAction(context, action, isCurrent);
+		if (!shouldContinue) return;
 	}
 }
 

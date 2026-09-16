@@ -8,7 +8,7 @@ import "./user-prompts.ts";
 import "./notifications.ts";
 import "./module-state.ts";
 import "./queue.ts";
-import { registerPromptQueueCommands } from "./commands.ts";
+import { register } from "./commands.ts";
 import { PromptQueueConsumer } from "./event-consumers.ts";
 import type {
 	PromptQueueModule,
@@ -27,7 +27,7 @@ export function createPromptQueueModule(
 ): PromptQueueModule {
 	const queue = options.queue ?? new PromptQueue();
 	const consumer = new PromptQueueConsumer({ ...options, queue });
-	registerPromptQueueCommands({
+	register({
 		pi: options.pi,
 		eventHandler: options.eventHandler,
 		sessionState: options.sessionState,
