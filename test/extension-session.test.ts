@@ -160,6 +160,7 @@ describe("session shutdown", () => {
 			}
 		).root;
 		expect(root).not.toHaveProperty("exitProtocol");
+		expect(root.promptQueue).toBeDefined();
 		const session = {
 			context: activationContext,
 			project: { codingRoot: "/repo" },

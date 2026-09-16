@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
 	CANONICAL_FACETS,
@@ -11,6 +13,7 @@ import {
 } from "../../scripts/check-module-structure.ts";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const run = promisify(execFile);
 
 async function validFixture(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "module-structure-"));
@@ -140,6 +143,108 @@ describe("module structure checker", () => {
 				}),
 			]),
 		);
+	});
+
+	it("rejects prompt UI aliases and element calls outside Prompt Queue", async () => {
+		const root = await mkdtemp(join(tmpdir(), "production-prompt-aliases-"));
+		const sourcePath = join(root, "src", "pr", "module.ts");
+		await mkdir(dirname(sourcePath), { recursive: true });
+		await writeFile(
+			sourcePath,
+			[
+				"export function prompt(context: { ui: { confirm?: () => Promise<boolean>; custom?: () => Promise<void> } }) {",
+				"  const ui = context.ui;",
+				"  ui.confirm?.();",
+				'  context.ui["custom"]?.();',
+				"  const confirm = context.ui.confirm;",
+				"  confirm?.();",
+				"}",
+			].join("\\n"),
+		);
+
+		expect(await checkProductionArchitecture(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					message: "interactive prompt UI must live in Prompt Queue",
+				}),
+			]),
+		);
+	});
+
+	it("rejects root Prompt Queue and Exit Protocol paths", async () => {
+		const root = await mkdtemp(join(tmpdir(), "production-legacy-paths-"));
+		await mkdir(join(root, "src"), { recursive: true });
+		await writeFile(join(root, "src", "prompt-queue.ts"), "export {};\\n");
+		await mkdir(join(root, "src", "exit-protocol"), { recursive: true });
+		await writeFile(
+			join(root, "src", "exit-protocol", "module.ts"),
+			"export {};\\n",
+		);
+
+		expect(await checkProductionArchitecture(root)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: "src/prompt-queue.ts",
+					message: "legacy Prompt Queue root file is not allowed",
+				}),
+				expect.objectContaining({
+					path: "src/exit-protocol",
+					message: "Exit Protocol directory is not allowed",
+				}),
+			]),
+		);
+	});
+
+	it("enforces dependency boundaries with actual dependency-cruiser fixtures", async () => {
+		async function cruiseFixture(
+			files: Readonly<Record<string, string>>,
+		): Promise<string> {
+			const root = await mkdtemp(join(tmpdir(), "dependency-boundary-"));
+			await writeFile(
+				join(root, ".dependency-cruiser.cjs"),
+				await readFile(join(PROJECT_ROOT, ".dependency-cruiser.cjs"), "utf8"),
+			);
+			for (const [path, source] of Object.entries(files)) {
+				const filePath = join(root, path);
+				await mkdir(dirname(filePath), { recursive: true });
+				await writeFile(filePath, source);
+			}
+			try {
+				const result = await run(
+					join(PROJECT_ROOT, "node_modules", ".bin", "depcruise"),
+					["--config", ".dependency-cruiser.cjs", "src"],
+					{ cwd: root },
+				);
+				return `${result.stdout}${result.stderr}`;
+			} catch (error) {
+				const failure = error as { stdout?: string; stderr?: string };
+				return `${failure.stdout ?? ""}${failure.stderr ?? ""}`;
+			}
+		}
+
+		await expect(
+			cruiseFixture({
+				"src/prompt-queue/consumer.ts":
+					'import type { PrModule } from "../pr/module.ts";\nvoid (null as PrModule);\n',
+				"src/pr/module.ts": "export interface PrModule {}\n",
+			}),
+		).resolves.not.toContain("no-prompt-queue-to-pr");
+
+		await expect(
+			cruiseFixture({
+				"src/prompt-queue/consumer.ts":
+					'import type { State } from "../herdr/internal-state.ts";\nvoid (null as State);\n',
+				"src/herdr/internal-state.ts": "export interface State {}\n",
+			}),
+		).resolves.toContain("no-prompt-queue-to-internal-state");
+
+		await expect(
+			cruiseFixture({
+				"src/pr/consumer.ts":
+					'import type { PromptQueue } from "../prompt-queue/consumer.ts";\nvoid (null as PromptQueue);\n',
+				"src/prompt-queue/consumer.ts": "export interface PromptQueue {}\n",
+			}),
+		).resolves.toContain("no-pr-to-prompt-queue");
 	});
 
 	it("removes Exit Protocol from lint scopes and reverse-import exceptions", async () => {

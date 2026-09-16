@@ -50,7 +50,7 @@ module.exports = {
 		{ name: "no-shared-to-scoped-implementation", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|prompt-queue|footer)/(?!module-state\\.ts$)[^/]+\\.ts$" } },
 		{ name: "no-shared-to-internal-state", severity: "error", from: { path: "^src/shared/" }, to: { path: "^src/(pr|todoist|herdr|worktree|prompt-queue|footer)/internal-state\\.ts$" } },
 		{ name: "no-root-to-internal-state", severity: "error", from: { path: "^src/", pathNot: "^src/(shared|pr|todoist|herdr|worktree|prompt-queue|footer)/" }, to: { path: "^src/(pr|todoist|herdr|worktree|prompt-queue|footer)/internal-state\\.ts$" } },
-		{ name: "no-prompt-queue-to-internal-state", severity: "error", from: { path: "^src/prompt-queue/" }, to: { path: "^src/(pr|todoist|worktree)/internal-state\\.ts$" } },
+		{ name: "no-prompt-queue-to-internal-state", severity: "error", from: { path: "^src/prompt-queue/" }, to: { path: "^src/(pr|todoist|herdr|worktree|footer)/internal-state\\.ts$" } },
 		{ name: "no-scoped-domain-cycles", severity: "error", from: { path: "^src/" }, to: { circular: true, dependencyTypesNot: ["type-only"] } },
 		{ name: "no-orphans", severity: "error", from: { orphan: true, path: "^src/" }, to: {} },
 	],

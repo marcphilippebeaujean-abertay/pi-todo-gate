@@ -2,11 +2,24 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { createFooterModule } from "../src/footer/module.ts";
 import type { createPrModule } from "../src/pr/module.ts";
+import type {
+	createPromptQueueModule,
+	PromptQueueModuleOptions,
+} from "../src/prompt-queue/module.ts";
 import type { createTodoistModule } from "../src/todoist/module.ts";
 import type {
 	createWorktreeModule,
 	WorktreeCleanup,
 } from "../src/worktree/module.ts";
+
+type PublicPromptQueue = ReturnType<typeof createPromptQueueModule>;
+const promptQueue: PublicPromptQueue = {} as PublicPromptQueue;
+void promptQueue.drain;
+const promptQueueOptions: PromptQueueModuleOptions =
+	{} as PromptQueueModuleOptions;
+void promptQueueOptions.pr;
+void promptQueueOptions.todoist;
+void promptQueueOptions.worktree;
 
 type PublicPr = ReturnType<typeof createPrModule>;
 const merge: PublicPr = {} as PublicPr;
@@ -30,6 +43,11 @@ void ({} as PublicWorktree).sessionStart;
 describe("module API boundaries", () => {
 	it("exposes direct PR merge capability", () => {
 		expect(merge).toBeDefined();
+	});
+
+	it("exposes Prompt Queue composition with public capabilities", () => {
+		expect(promptQueue).toBeDefined();
+		expect(promptQueueOptions).toBeDefined();
 	});
 
 	it("exposes cleanup capability without lifecycle methods", () => {

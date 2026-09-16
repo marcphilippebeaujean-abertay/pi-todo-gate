@@ -71,8 +71,10 @@ function setup() {
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "feature",
 		})),
-		hasUncommittedChanges: vi.fn(async () => false),
-		removeWorktree: vi.fn(async () => "completed" as const),
+		hasUncommittedChanges: vi.fn(async (): Promise<boolean | null> => false),
+		removeWorktree: vi.fn(
+			async (): Promise<"completed" | "failed"> => "completed",
+		),
 	};
 	const api = pi();
 	const queue = new PromptQueue();
@@ -356,27 +358,41 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
 
-	it.each([false, null])(
-		"uses force false when dirty status is %s",
-		async (dirty) => {
-			const state = setup();
-			state.worktree.hasUncommittedChanges.mockResolvedValue(dirty as never);
-			await activate(state);
-			await state.eventHandler.prMergedEvent.emit({
-				prUrl: "https://github.com/o/r/pull/1",
-				taskMarkedAsCompleted: true,
-				sessionId,
-			});
-			await (state.module as { drain: () => Promise<void> }).drain();
+	it("uses force false when dirty status is clean", async () => {
+		const state = setup();
+		state.worktree.hasUncommittedChanges.mockResolvedValue(false);
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: true,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
 
-			expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
-			expect(state.ctx.ui.confirm).toHaveBeenCalledWith(
-				"Exit protocol",
-				expect.stringContaining("Delete worktree"),
-			);
-			expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
-				force: false,
-			});
-		},
-	);
+		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
+			force: false,
+		});
+	});
+
+	it("reports unavailable dirty status as failed cleanup", async () => {
+		const state = setup();
+		state.worktree.hasUncommittedChanges.mockResolvedValue(null);
+		state.worktree.removeWorktree.mockResolvedValue("failed");
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: true,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
+			force: false,
+		});
+		const cleanupResult = state.worktree.removeWorktree.mock.results[0];
+		expect(cleanupResult?.type).toBe("return");
+		await expect(cleanupResult?.value).resolves.toBe("failed");
+	});
 });

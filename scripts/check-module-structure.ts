@@ -1,5 +1,6 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import ts from "typescript";
 
 export const SCOPED_DOMAINS = [
 	"pr",
@@ -71,6 +72,76 @@ const SCOPED_EVENT_FILES =
 	/src\/(pr|todoist|herdr|worktree|prompt-queue|footer)\/events\.ts$/;
 const ALLOWED_NATIVE_ON =
 	/(?:^|\.)pi\.on\(|(?:^|\.)(?:child|stdout|stderr)\??\.on\(/;
+const INTERACTIVE_UI_METHODS = new Set(["confirm", "custom"]);
+
+function propertyName(node: ts.Expression): string | undefined {
+	if (ts.isPropertyAccessExpression(node)) return node.name.text;
+	if (
+		ts.isElementAccessExpression(node) &&
+		node.argumentExpression !== undefined &&
+		ts.isStringLiteral(node.argumentExpression)
+	)
+		return node.argumentExpression.text;
+	return undefined;
+}
+
+function hasInteractivePromptCall(source: string, fileName: string): boolean {
+	const sourceFile = ts.createSourceFile(
+		fileName,
+		source,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const uiAliases = new Set<string>();
+	const methodAliases = new Set<string>();
+	const isUiObject = (node: ts.Expression): boolean => {
+		if (ts.isIdentifier(node)) return uiAliases.has(node.text);
+		return propertyName(node) === "ui";
+	};
+	const isInteractiveMember = (node: ts.Expression): boolean => {
+		if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node))
+			return false;
+		const method = propertyName(node);
+		return method !== undefined && INTERACTIVE_UI_METHODS.has(method) && isUiObject(node.expression);
+	};
+	function collectAliases(node: ts.Node): void {
+		if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
+			if (ts.isIdentifier(node.name)) {
+				if (isUiObject(node.initializer)) uiAliases.add(node.name.text);
+				if (isInteractiveMember(node.initializer)) methodAliases.add(node.name.text);
+			}
+			if (ts.isObjectBindingPattern(node.name) && isUiObject(node.initializer))
+				for (const element of node.name.elements) {
+					const property = element.propertyName ?? element.name;
+					if (
+						ts.isIdentifier(element.name) &&
+						ts.isIdentifier(property) &&
+						INTERACTIVE_UI_METHODS.has(property.text)
+					)
+						methodAliases.add(element.name.text);
+				}
+		}
+		ts.forEachChild(node, collectAliases);
+	}
+	collectAliases(sourceFile);
+	let found = false;
+	function findCalls(node: ts.Node): void {
+		if (found) return;
+		if (ts.isCallExpression(node)) {
+			const expression = node.expression;
+			const isAliasCall =
+				ts.isIdentifier(expression) && methodAliases.has(expression.text);
+			if (isInteractiveMember(expression) || isAliasCall) {
+				found = true;
+				return;
+			}
+		}
+		ts.forEachChild(node, findCalls);
+	}
+	findCalls(sourceFile);
+	return found;
+}
 
 async function productionFiles(root: string): Promise<string[]> {
 	const files: string[] = [];
@@ -116,10 +187,7 @@ export async function checkProductionArchitecture(
 				message: "PromptQueue must not live under shared",
 				correction: "import PromptQueue from src/prompt-queue/module.ts",
 			});
-		if (
-			!isPromptQueueFile &&
-			/\bui\??\.(?:confirm|custom)\s*\(/.test(source)
-		)
+		if (!isPromptQueueFile && hasInteractivePromptCall(source, path))
 			issues.push({
 				domain: relativePath.split("/")[1] ?? "root",
 				path: relativePath,
@@ -182,7 +250,23 @@ export async function checkProductionArchitecture(
 			domain: "root",
 			path: relative(root, queuePath),
 			message: "PromptQueue must not live under shared",
-			correction: "move PromptQueue to src/prompt-queue.ts",
+			correction: "move PromptQueue to src/prompt-queue/queue.ts",
+		});
+	const rootQueuePath = join(root, "src", "prompt-queue.ts");
+	if (await isFile(rootQueuePath))
+		issues.push({
+			domain: "root",
+			path: relative(root, rootQueuePath),
+			message: "legacy Prompt Queue root file is not allowed",
+			correction: "use src/prompt-queue/queue.ts",
+		});
+	const exitProtocolPath = join(root, "src", "exit-protocol");
+	if (await isDirectory(exitProtocolPath))
+		issues.push({
+			domain: "root",
+			path: relative(root, exitProtocolPath),
+			message: "Exit Protocol directory is not allowed",
+			correction: "delete src/exit-protocol/",
 		});
 	const sharedEventsPath = join(root, "src", "shared", "events.ts");
 	if (await isFile(sharedEventsPath)) {
