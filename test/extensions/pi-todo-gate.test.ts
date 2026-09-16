@@ -363,7 +363,7 @@ describe("working tree status", () => {
 		},
 	);
 
-	it("starts exit protocol after an external gh pull request merge", async () => {
+	it("starts Prompt Queue after an external gh pull request merge", async () => {
 		const root = CONFIGURED_PROJECT;
 		const h = harness(root, [
 			persistedStateEntry({

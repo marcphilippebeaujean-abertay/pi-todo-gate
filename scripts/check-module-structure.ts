@@ -111,12 +111,14 @@ function hasInteractivePromptCall(source: string, fileName: string): boolean {
 				if (isUiObject(node.initializer)) uiAliases.add(node.name.text);
 				if (isInteractiveMember(node.initializer)) methodAliases.add(node.name.text);
 			}
-			if (ts.isObjectBindingPattern(node.name) && isUiObject(node.initializer))
+			if (ts.isObjectBindingPattern(node.name))
 				for (const element of node.name.elements) {
 					const property = element.propertyName ?? element.name;
+					if (!ts.isIdentifier(element.name) || !ts.isIdentifier(property))
+						continue;
+					if (property.text === "ui") uiAliases.add(element.name.text);
 					if (
-						ts.isIdentifier(element.name) &&
-						ts.isIdentifier(property) &&
+						isUiObject(node.initializer) &&
 						INTERACTIVE_UI_METHODS.has(property.text)
 					)
 						methodAliases.add(element.name.text);

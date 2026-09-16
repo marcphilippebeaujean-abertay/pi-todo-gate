@@ -171,6 +171,54 @@ describe("module structure checker", () => {
 		);
 	});
 
+	it("rejects destructured prompt UI aliases outside Prompt Queue", async () => {
+		const root = await mkdtemp(
+			join(tmpdir(), "production-prompt-destructuring-"),
+		);
+		const sourcePath = join(root, "src", "pr", "module.ts");
+		await mkdir(dirname(sourcePath), { recursive: true });
+		await writeFile(
+			sourcePath,
+			[
+				"export function prompt(context: { ui: { confirm: () => void; custom: () => void } }) {",
+				"  const { ui } = context;",
+				"  ui.confirm();",
+				"  const { ui: promptUi } = context;",
+				"  promptUi.custom();",
+				"}",
+			].join("\\n"),
+		);
+		const rejected = await checkProductionArchitecture(root);
+		expect(rejected).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					message: "interactive prompt UI must live in Prompt Queue",
+				}),
+			]),
+		);
+
+		const promptQueueRoot = await mkdtemp(
+			join(tmpdir(), "production-prompt-allowed-"),
+		);
+		const promptQueuePath = join(
+			promptQueueRoot,
+			"src",
+			"prompt-queue",
+			"user-prompts.ts",
+		);
+		await mkdir(dirname(promptQueuePath), { recursive: true });
+		await writeFile(
+			promptQueuePath,
+			[
+				"export function prompt(context: { ui: { confirm: () => void } }) {",
+				"  const { ui: promptUi } = context;",
+				"  promptUi.confirm();",
+				"}",
+			].join("\\n"),
+		);
+		expect(await checkProductionArchitecture(promptQueueRoot)).toEqual([]);
+	});
+
 	it("rejects root Prompt Queue and Exit Protocol paths", async () => {
 		const root = await mkdtemp(join(tmpdir(), "production-legacy-paths-"));
 		await mkdir(join(root, "src"), { recursive: true });
