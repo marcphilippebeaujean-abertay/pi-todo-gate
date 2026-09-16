@@ -316,7 +316,7 @@ describe("worktree event actions", () => {
 
 		expect(ctx.ui.notify).toHaveBeenCalledWith(
 			"Worktree /repo/.worktrees/feature has uncommitted work. Deleting it will permanently remove that work.",
-			"info",
+			"warning",
 		);
 		expect(ctx.ui.confirm).toHaveBeenCalledWith(
 			"Remove worktree with uncommitted changes?",

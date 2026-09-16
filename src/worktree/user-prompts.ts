@@ -15,7 +15,7 @@ export async function confirmDirtyRemoval(
 	notifyWorktree(
 		context,
 		`${CONFIRM_PREFIX}${worktree.worktreePath}${DIRTY_INFO_SUFFIX}`,
-		"info",
+		"warning",
 	);
 	return context.ui.confirm(
 		CONFIRM_TITLE,
