@@ -58,6 +58,139 @@ describe("Todoist completion capability", () => {
 		expect(currentSession.context.ui.confirm).not.toHaveBeenCalled();
 	});
 
+	it("completes successfully in a non-UI session without confirmation", async () => {
+		const eventHandler = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-1" };
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		const completeTask = vi.fn(async () => undefined);
+		const currentSession = session(false);
+		const module = createTodoistModule({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler,
+			sessionState,
+		});
+		await eventHandler.sessionActivatedEvent.emit({
+			context: currentSession.context,
+			sessionId: "session",
+			session: currentSession,
+		});
+
+		const result = await module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: PR_URL,
+			workRevision: 0,
+			sessionId: "session",
+		});
+
+		expect(result).toBe("completed");
+		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(currentSession.context.ui.confirm).not.toHaveBeenCalled();
+	});
+
+	it("suppresses completion when session deactivates before queued call", async () => {
+		const eventHandler = createSharedEvents();
+		const updates: unknown[] = [];
+		eventHandler.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-1" };
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		const completeTask = vi.fn(async () => undefined);
+		const currentSession = session(false);
+		let releaseQueue!: () => void;
+		const queued = new Promise<void>((resolve) => {
+			releaseQueue = resolve;
+		});
+		currentSession.operationQueue = queued;
+		const module = createTodoistModule({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler,
+			sessionState,
+		});
+		await eventHandler.sessionActivatedEvent.emit({
+			context: currentSession.context,
+			sessionId: "session",
+			session: currentSession,
+		});
+		const completion = module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: PR_URL,
+			workRevision: 0,
+			sessionId: "session",
+		});
+		await eventHandler.sessionDeactivatedEvent.emit(undefined);
+		releaseQueue();
+
+		expect(await completion).toBe("failed");
+		expect(completeTask).not.toHaveBeenCalled();
+		expect(
+			updates.filter((update) => (update as { persist?: boolean }).persist),
+		).toEqual([]);
+	});
+
+	it("rejects completion when session deactivates during Todoist call", async () => {
+		const eventHandler = createSharedEvents();
+		const updates: unknown[] = [];
+		eventHandler.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-1" };
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		let releaseCall!: () => void;
+		let markCallStarted!: () => void;
+		const callStarted = new Promise<void>((resolve) => {
+			markCallStarted = resolve;
+		});
+		const callBlocked = new Promise<void>((resolve) => {
+			releaseCall = resolve;
+		});
+		const completeTask = vi.fn(async () => {
+			markCallStarted();
+			await callBlocked;
+		});
+		const notify = vi.fn();
+		const currentSession = session(false);
+		currentSession.context.ui.notify = notify;
+		const module = createTodoistModule({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler,
+			sessionState,
+		});
+		await eventHandler.sessionActivatedEvent.emit({
+			context: currentSession.context,
+			sessionId: "session",
+			session: currentSession,
+		});
+		const completion = module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: PR_URL,
+			workRevision: 0,
+			sessionId: "session",
+		});
+		await callStarted;
+		await eventHandler.sessionDeactivatedEvent.emit(undefined);
+		releaseCall();
+
+		expect(await completion).toBe("failed");
+		expect(completeTask).toHaveBeenCalledOnce();
+		expect(
+			updates.filter((update) => (update as { persist?: boolean }).persist),
+		).toEqual([]);
+		expect(notify).not.toHaveBeenCalled();
+	});
+
 	it("rejects stale immutable snapshot before Todoist call", async () => {
 		const eventHandler = createSharedEvents();
 		const sessionState = createSessionState();
