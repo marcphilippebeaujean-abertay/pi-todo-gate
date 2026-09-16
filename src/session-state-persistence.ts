@@ -127,9 +127,6 @@ function serializeModuleState(
 		footer: descriptors.footer.serialize(
 			state.moduleState.footer,
 		) as unknown as ModuleState["footer"],
-		exitProtocol: descriptors.exitProtocol.serialize(
-			state.moduleState.exitProtocol,
-		) as unknown as ModuleState["exitProtocol"],
 	};
 }
 
@@ -143,7 +140,6 @@ function restoreModuleState(
 		herdr: descriptorState(descriptors.herdr, value.herdr),
 		worktree: descriptorState(descriptors.worktree, value.worktree),
 		footer: descriptorState(descriptors.footer, value.footer),
-		exitProtocol: descriptorState(descriptors.exitProtocol, value.exitProtocol),
 	};
 }
 

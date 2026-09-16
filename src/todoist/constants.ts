@@ -83,6 +83,3 @@ export const COMPLETION_FAILURE =
 export const INFO = "info";
 export const WARNING = "warning";
 export const TODOIST = "Todoist";
-export const COMPLETE_LABEL_PREFIX = 'Mark Todoist task "';
-export const COMPLETE_LABEL_SUFFIX = '" complete?';
-export const COMPLETED = "completed";

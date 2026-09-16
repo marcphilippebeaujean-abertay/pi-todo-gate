@@ -1,9 +1,3 @@
-import { fileURLToPath } from "node:url";
-
-export const mergeProtocolSkillPath = fileURLToPath(
-	new URL("../../skills/merge-protocol", import.meta.url),
-);
-
 export const GH_COMMAND = "gh";
 export const PR_COMMAND = "pr";
 export const JSON_FLAG = "--json";
@@ -42,14 +36,8 @@ export const PR_CANDIDATE = /https?:\/\/github\.com\/[^\s<>"']+/gi;
 export const TRAILING_PUNCTUATION = /[.,;:!?)}\]]+$/g;
 export const GITHUB_HOSTNAME = "github.com";
 export const GITHUB_URL_PREFIX = "https://github.com";
-export const CONFIRM_TITLE_PREFIX = "Merge PR ";
-export const CONFIRM_MESSAGE = "Confirm merge of pinned pull request.";
-export const NO_PR_MESSAGE = "No pinned pull request is available to merge";
-export const INACTIVE_MESSAGE = "Merge protocol is inactive for this project";
-export const NO_UI_MESSAGE = "Merge protocol requires an interactive UI";
 export const MERGE_FAILED_PREFIX = "Pull request merge failed";
 export const MERGE_SUCCEEDED = "Pull request merged";
-export const MERGE_PROTOCOL_COMMAND = "merge";
 export const MERGE_PR_MODE = "--merge";
 export const GIT_MERGE_VALUE_OPTIONS = new Set([
 	"-m",

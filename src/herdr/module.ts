@@ -33,7 +33,7 @@ export function createHerdrModule(
 		"herdr",
 	);
 	const tabOptions: HerdrTabOptions = {
-		commandRunner: options.commandRunner,
+		herdrClient: options.herdrClient,
 		spawnWorker: options.spawnWorker,
 		publishClaimInProgress: (claimInProgress) =>
 			statePublisher.publish(

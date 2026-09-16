@@ -6,7 +6,6 @@ import "./events.ts";
 import "./parsing.ts";
 import "./event-consumers.ts";
 import "./event-publishers.ts";
-import "./user-prompts.ts";
 import "./notifications.ts";
 
 export { TodoistClient } from "./client.ts";
@@ -24,10 +23,10 @@ import { completeMergedTask } from "./completion.ts";
 import {
 	maybeAnalyzeTaskClaim as analyzeTaskClaim,
 	registerTodoistLifecycleConsumers,
-	registerTodoistMergeConsumer,
 } from "./event-consumers.ts";
 import type {
 	ResolvedProject,
+	TodoistCompletionSnapshot,
 	TodoistModuleOptions,
 	TodoistOperations,
 	TodoistProjectMapping,
@@ -48,7 +47,12 @@ export interface SessionProject {
 
 export interface TodoistModule {
 	resolveSessionProject(cwd: string): Promise<SessionProject | null>;
+	completeMergedTask(
+		snapshot: TodoistCompletionSnapshot,
+	): Promise<import("../shared/exit-actions.ts").ExitActionResult>;
 }
+
+export type { TodoistCompletionSnapshot } from "./internal-state.ts";
 
 function recordValue(value: unknown): Record<string, unknown> | null {
 	const isValueRecord = isRecord(value);
@@ -118,6 +122,19 @@ class TodoistModuleImpl implements TodoistModule {
 	): Promise<ResolvedProject | null> {
 		const config = await this.loadProjectMapping();
 		return resolveConfiguredProject(cwd, config);
+	}
+
+	async completeMergedTask(
+		snapshot: TodoistCompletionSnapshot,
+	): Promise<import("../shared/exit-actions.ts").ExitActionResult> {
+		const session = this.currentSession;
+		if (session === null) return "failed";
+		return completeMergedTask(
+			this.operations(),
+			session,
+			session.context,
+			snapshot,
+		);
 	}
 
 	async resolveSessionProject(cwd: string): Promise<SessionProject | null> {
@@ -217,7 +234,6 @@ class TodoistModuleImpl implements TodoistModule {
 			getSession: () => this.currentSession,
 			projectRef: this.currentProjectRef,
 			todoist: this,
-			promptQueue: this.options.promptQueue,
 			exec: dependencies.exec,
 			taskClaimWorker: dependencies.taskClaimWorker,
 			taskRefreshWorker: dependencies.taskRefreshWorker,
@@ -226,25 +242,7 @@ class TodoistModuleImpl implements TodoistModule {
 			emitState: this.syncSessionState.bind(this),
 			updateTodoistState: this.updateTodoistState.bind(this),
 			dependencies,
-			completeMergedTask: undefined,
 		};
-		if (operations.completeMergedTask === undefined)
-			operations.completeMergedTask = (
-				session,
-				taskRef,
-				snapshot,
-				revision,
-				sessionId,
-			) =>
-				completeMergedTask(
-					operations,
-					session,
-					session.context,
-					taskRef,
-					snapshot,
-					revision,
-					sessionId,
-				);
 		return operations;
 	}
 
@@ -256,16 +254,15 @@ class TodoistModuleImpl implements TodoistModule {
 		const shouldSkipRegistration = !hasOperations;
 		if (shouldSkipRegistration) return;
 		this.registered = true;
-		registerTodoistMergeConsumer(operations);
 	}
 
-	private maybeAnalyzeTaskClaim(prompt: string): void {
+	private maybeAnalyzeTaskClaim(prompt: string, model?: string): void {
 		const session = this.currentSession;
 		if (session === null) return;
 		const operations = this.operations();
 		const hasOperations = operations !== null;
 		if (!hasOperations) return;
-		analyzeTaskClaim(operations, session, prompt);
+		analyzeTaskClaim(operations, session, prompt, model);
 	}
 }
 

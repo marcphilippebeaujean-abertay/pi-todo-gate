@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
-import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { completeMergedTask } from "../../src/todoist/completion.ts";
@@ -47,7 +46,6 @@ describe("Todoist module ownership", () => {
 		const events = createSharedEvents();
 		const registerCommand = vi.fn();
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState: createSessionState(),
 		});
@@ -76,7 +74,6 @@ describe("Todoist module ownership", () => {
 					},
 				},
 			}),
-			promptQueue: new PromptQueue(),
 			eventHandler: createSharedEvents(),
 			sessionState: createSessionState(),
 		});
@@ -98,7 +95,6 @@ describe("Todoist module ownership", () => {
 					"/valid": { todoistProjectRef: "project" },
 				},
 			}),
-			promptQueue: new PromptQueue(),
 			eventHandler: createSharedEvents(),
 			sessionState: createSessionState(),
 		});
@@ -126,7 +122,6 @@ describe("Todoist module ownership", () => {
 			},
 		);
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});
@@ -165,7 +160,6 @@ describe("Todoist module ownership", () => {
 	it("resets claim operation state from typed session reset", async () => {
 		const events = createSharedEvents();
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState: createSessionState(),
 		});
@@ -204,7 +198,6 @@ describe("Todoist module ownership", () => {
 		} as unknown as TodoistSession;
 		sessionState.session.activeSessionId = "old";
 		createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			taskClaimWorker: worker,
@@ -268,7 +261,6 @@ describe("Todoist module ownership", () => {
 			return { stdout: "", stderr: "", code: 1 };
 		});
 		createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			exec,
@@ -330,7 +322,6 @@ describe("Todoist module ownership", () => {
 					},
 				},
 			}),
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			exec: async () => ({ stdout: "", stderr: "", code: 1 }),
@@ -380,7 +371,6 @@ describe("Todoist module ownership", () => {
 			error: "not a task" as string | null,
 		}));
 		createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 			exec: async () => ({ stdout: "", stderr: "", code: 1 }),
@@ -420,7 +410,6 @@ describe("Todoist module projection", () => {
 			taskUrl: "https://app.todoist.com/app/task/42",
 		};
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});
@@ -443,9 +432,94 @@ describe("Todoist module projection", () => {
 });
 
 describe("Todoist module integration", () => {
+	it("completes merged task from immutable snapshot without confirmation", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = {
+			taskRef: "task-1",
+			taskName: "Implement feature",
+		};
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const confirm = vi.fn(async () => true);
+		const completeTask = vi.fn(async () => undefined);
+		const module = createTodoistModuleFactory({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler: events,
+			sessionState,
+		});
+		const session = {
+			context: {
+				cwd: "/repo",
+				hasUI: true,
+				ui: { confirm, notify: vi.fn() },
+			},
+			project: { codingRoot: "/repo" },
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			sessionId: "session",
+			session,
+		});
+
+		const snapshot = Object.freeze({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: sessionState.moduleState.pr.prUrl as string,
+			workRevision: 0,
+			sessionId: "session",
+		});
+		const result = await module.completeMergedTask(snapshot);
+
+		expect(result).toBe("completed");
+		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(confirm).not.toHaveBeenCalled();
+	});
+
+	it("rejects stale merged-task snapshot without completing", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-2" };
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+		const completeTask = vi.fn(async () => undefined);
+		const module = createTodoistModuleFactory({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler: events,
+			sessionState,
+		});
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: { codingRoot: "/repo" },
+			workRevision: 0,
+			sessionId: "session",
+			operationQueue: Promise.resolve(),
+		} as unknown as TodoistSession;
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			sessionId: "session",
+			session,
+		});
+
+		const result = await module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: sessionState.moduleState.pr.prUrl as string,
+			workRevision: 0,
+			sessionId: "session",
+		});
+
+		expect(result).toBe("failed");
+		expect(completeTask).not.toHaveBeenCalled();
+	});
+
 	it("completes merged task with default module dependencies", async () => {
 		const events = createSharedEvents();
-		const promptQueue = new PromptQueue();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
 		sessionState.moduleState.todoist = {
@@ -457,7 +531,6 @@ describe("Todoist module integration", () => {
 		const module = createTodoistModuleFactory({
 			loadConfig: async () => ({ projects: { "/repo": "project" } }),
 			createTodoistClient: () => ({ completeTask }),
-			promptQueue,
 			eventHandler: events,
 			sessionState,
 		});
@@ -477,14 +550,15 @@ describe("Todoist module integration", () => {
 			sessionId: "session",
 			session,
 		});
-		await events.prMergedEvent.emit({
-			prUrl: sessionState.moduleState.pr.prUrl,
-			taskMarkedAsCompleted: false,
+		const result = await module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: sessionState.moduleState.pr.prUrl as string,
+			workRevision: 0,
 			sessionId: "session",
 		});
-		await promptQueue.drain();
+		expect(result).toBe("completed");
 		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
-		void module;
 	});
 });
 
@@ -504,7 +578,6 @@ describe("Todoist task identity", () => {
 		} as unknown as TodoistSession;
 		registerModuleStateConsumer(events, sessionState, () => true);
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});
@@ -529,7 +602,6 @@ describe("Todoist task identity", () => {
 				state: TodoistState,
 				options: TodoistStateUpdateOptions,
 			) => module.updateState(state, options),
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			todoist: module,
 		} as never;
@@ -538,10 +610,13 @@ describe("Todoist task identity", () => {
 			operations,
 			session,
 			session.context as never,
-			"task-a",
-			{ taskRef: "task-a", prUrl: sessionState.moduleState.pr.prUrl },
-			0,
-			"session",
+			{
+				taskRef: "task-a",
+				taskName: "Task A",
+				prUrl: sessionState.moduleState.pr.prUrl as string,
+				workRevision: 0,
+				sessionId: "session",
+			},
 		);
 
 		expect(result).toBe("failed");
@@ -559,7 +634,6 @@ describe("Todoist task identity", () => {
 		} as unknown as TodoistSession;
 		registerModuleStateConsumer(events, sessionState, () => true);
 		const module = createTodoistModule({
-			promptQueue: new PromptQueue(),
 			eventHandler: events,
 			sessionState,
 		});

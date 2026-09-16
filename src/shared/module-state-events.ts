@@ -39,11 +39,6 @@ const moduleStateBuilders: ModuleStateBuilders = {
 		moduleState,
 		...options,
 	}),
-	exitProtocol: (moduleState, options) => ({
-		moduleId: "exitProtocol",
-		moduleState,
-		...options,
-	}),
 };
 
 export function createModuleStateUpdate<K extends ModuleId>(

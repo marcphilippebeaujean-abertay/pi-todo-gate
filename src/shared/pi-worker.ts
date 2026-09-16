@@ -22,7 +22,20 @@ const BASE_PI_WORKER_ARGS = [
 
 export interface PiWorkerOptions {
 	instructions?: string;
+	model?: string;
 	thinking?: string;
+}
+
+export interface PiModelReference {
+	provider: string;
+	id: string;
+}
+
+export function modelReference(
+	model: PiModelReference | undefined,
+): string | undefined {
+	if (model === undefined) return undefined;
+	return `${model.provider}/${model.id}`;
 }
 
 export function buildPiWorkerArgs(
@@ -32,6 +45,9 @@ export function buildPiWorkerArgs(
 	const resolvedOptions = options ?? {};
 	return [
 		...BASE_PI_WORKER_ARGS,
+		...(resolvedOptions.model === undefined
+			? []
+			: ["--model", resolvedOptions.model]),
 		...(resolvedOptions.instructions === undefined
 			? []
 			: ["--append-system-prompt", resolvedOptions.instructions]),

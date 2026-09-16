@@ -3,7 +3,6 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { PromptQueue } from "../../src/prompt-queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { register } from "../../src/todoist/commands.ts";
@@ -52,7 +51,6 @@ function runtime(): {
 		sessionState,
 		getSession: () => session,
 		projectRef: "Project",
-		promptQueue: new PromptQueue(),
 		eventHandler: createSharedEvents(),
 		todoist: { taskClaim: { pending: false, completed: false } },
 		updateTodoistState: update,

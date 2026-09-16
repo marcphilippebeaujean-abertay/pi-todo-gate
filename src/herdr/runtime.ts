@@ -7,7 +7,7 @@ import {
 	TAB_GET_COMMAND,
 	UTF8_ENCODING,
 } from "./constants.ts";
-import type { CommandRunner, CwdReference } from "./internal-state.ts";
+import type { CwdReference, HerdrClient } from "./internal-state.ts";
 
 export function isInsideHerdr(): boolean {
 	return process.env[HERDR_ENVIRONMENT] === "1";
@@ -25,10 +25,10 @@ export function runCommand(
 	});
 }
 
-export function boundCommandRunner(
+export function boundHerdrClient(
 	cwd: string | (() => string) | CwdReference,
 	execute?: typeof runCommand,
-): CommandRunner {
+): HerdrClient {
 	const run = execute ?? runCommand;
 	return (command, args) => {
 		const isFunctionReference = typeof cwd === "function";
@@ -46,13 +46,13 @@ function jsonResult<T>(output: string): T | undefined {
 	}
 }
 
-export function tabLabel(commandRunner: CommandRunner): string | undefined {
+export function tabLabel(herdrClient: HerdrClient): string | undefined {
 	const tabId = process.env.HERDR_TAB_ID;
 	const hasTabId = Boolean(tabId);
 	if (!hasTabId) return undefined;
 	const resolvedTabId = tabId ?? "";
 	const response = jsonResult<{ result?: { tab?: { label?: string } } }>(
-		commandRunner(HERDR_COMMAND, [
+		herdrClient(HERDR_COMMAND, [
 			TAB_GET_COMMAND[0],
 			TAB_GET_COMMAND[1],
 			resolvedTabId,

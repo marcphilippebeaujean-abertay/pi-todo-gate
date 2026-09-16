@@ -43,6 +43,7 @@ export function startPiWorker<TResult>(
 		resolvedOptions.command ?? DEFAULT_PI_COMMAND,
 		buildPiWorkerArgs(request.prompt, {
 			instructions: request.instructions,
+			model: request.model,
 			thinking: WORKER_HIGH_THINKING,
 		}),
 		{

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PromptQueue } from "../src/prompt-queue.ts";
+import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 
 describe("PromptQueue", () => {
 	it("runs prompts in enqueue order", async () => {

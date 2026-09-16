@@ -1,4 +1,3 @@
-import type { ExitProtocolModuleState } from "./exit-protocol/module-state.ts";
 import type { FooterModuleState } from "./footer/module-state.ts";
 import type { HerdrModuleState } from "./herdr/module-state.ts";
 import type { PrModuleState } from "./pr/module-state.ts";
@@ -10,7 +9,6 @@ import type {
 import type { TodoistModuleState } from "./todoist/module-state.ts";
 import type { WorktreeModuleState } from "./worktree/module-state.ts";
 
-export type { ExitProtocolModuleState } from "./exit-protocol/module-state.ts";
 export type {
 	FooterModuleState,
 	FooterStatusState,
@@ -42,7 +40,6 @@ export interface ModuleState {
 	herdr: HerdrModuleState;
 	worktree: WorktreeModuleState;
 	footer: FooterModuleState;
-	exitProtocol: ExitProtocolModuleState;
 }
 
 export type ModuleId = keyof ModuleState;
@@ -78,7 +75,6 @@ export function createSessionState(): SessionState {
 			herdr: {},
 			worktree: {},
 			footer: { footers: {} },
-			exitProtocol: { active: false },
 		},
 	};
 }

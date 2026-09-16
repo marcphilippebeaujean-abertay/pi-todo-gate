@@ -7,7 +7,7 @@ import { installHerdrTabClaim } from "../../src/herdr/event-consumers.ts";
 import {
 	CLAIM_WORKER_RESPONSE_TEMPLATE,
 	type ClaimWorkerRequest,
-	type CommandRunner,
+	type HerdrClient,
 	type StartBackgroundWorker,
 } from "../../src/herdr/internal-state.ts";
 import { createHerdrModule } from "../../src/herdr/module.ts";
@@ -35,9 +35,14 @@ function fakePi(): FakePi {
 	};
 }
 
-function context(cwd = "/repo", branch: unknown[] = []) {
+function context(
+	cwd = "/repo",
+	branch: unknown[] = [],
+	model?: { provider: string; id: string },
+) {
 	return {
 		cwd,
+		model,
 		ui: { notify: vi.fn() },
 		sessionManager: { getBranch: () => branch },
 	};
@@ -76,7 +81,7 @@ it("does not register unavailable Herdr setup", () => {
 	expect(sessionState.moduleState.herdr).toEqual({});
 });
 
-function worktreeRunner(commands: string[] = []): CommandRunner {
+function worktreeRunner(commands: string[] = []): HerdrClient {
 	return (command, args) => {
 		const input = args.join(" ");
 		commands.push([command, input].join(" "));
@@ -92,7 +97,7 @@ function worktreeRunner(commands: string[] = []): CommandRunner {
 	};
 }
 
-function ordinaryRunner(label = "probe"): CommandRunner {
+function ordinaryRunner(label = "probe"): HerdrClient {
 	return (command, args) => {
 		if (command === "herdr" && args.join(" ") === "tab get w1:t1")
 			return JSON.stringify({ result: { tab: { label } } });
@@ -102,7 +107,7 @@ function ordinaryRunner(label = "probe"): CommandRunner {
 	};
 }
 
-function mutableRunner(label: { value: string }): CommandRunner {
+function mutableRunner(label: { value: string }): HerdrClient {
 	return (command, args) => {
 		if (command === "herdr" && args.join(" ") === "tab get w1:t1")
 			return JSON.stringify({ result: { tab: { label: label.value } } });
@@ -115,7 +120,7 @@ function mutableRunner(label: { value: string }): CommandRunner {
 function actionRunner(
 	state: { tabId: string; label: string },
 	commands: string[],
-): CommandRunner {
+): HerdrClient {
 	return (command, args) => {
 		const input = args.join(" ");
 		commands.push(`${command} ${input}`);
@@ -201,7 +206,7 @@ describe("background Herdr tab claim", () => {
 			const backgroundWorker = worker();
 			const claimStates: boolean[] = [];
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
 					claimStates.push(claimInProgress);
@@ -210,7 +215,13 @@ describe("background Herdr tab claim", () => {
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "claim" },
-				context(),
+				context("/repo", [], {
+					provider: "anthropic",
+					id: "claude-sonnet-4-5",
+				}),
+			);
+			expect(backgroundWorker.requests[0]?.model).toBe(
+				"anthropic/claude-sonnet-4-5",
 			);
 			emitFailure(backgroundWorker.requests[0] as ClaimWorkerRequest);
 
@@ -228,7 +239,7 @@ describe("background Herdr tab claim", () => {
 			const claimStates: boolean[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
+				herdrClient: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
 					claimStates.push(claimInProgress);
@@ -283,7 +294,7 @@ describe("background Herdr tab claim", () => {
 			const backgroundWorker = worker();
 			const state = { tabId: "w1:t1", label: "7" };
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner(state, []),
+				herdrClient: actionRunner(state, []),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) =>
 					publisher.publish(
@@ -350,7 +361,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: worktreeRunner(commands),
+				herdrClient: worktreeRunner(commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -378,7 +389,7 @@ describe("background Herdr tab claim", () => {
 			const claimContext = context();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
+				herdrClient: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, claimContext);
@@ -415,7 +426,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -446,7 +457,7 @@ describe("background Herdr tab claim", () => {
 				return backgroundWorker.start(request);
 			});
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -471,7 +482,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
+				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -497,7 +508,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("dialog-editor"),
+				herdrClient: ordinaryRunner("dialog-editor"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -524,7 +535,7 @@ describe("background Herdr tab claim", () => {
 			const cancel = vi.fn();
 			const start = vi.fn(() => ({ cancel }));
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -551,7 +562,7 @@ describe("background Herdr tab claim", () => {
 			let claimReturned = false;
 			const label = { value: "7" };
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: mutableRunner(label),
+				herdrClient: mutableRunner(label),
 				startBackgroundWorker: backgroundWorker.start,
 				hasClaimReturnedSuccessfully: () => claimReturned,
 				onClaimReturnedSuccessfully: () => {
@@ -589,7 +600,7 @@ describe("background Herdr tab claim", () => {
 			const state = { tabId: "w1:t1", label: "7" };
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner(state, commands),
+				herdrClient: actionRunner(state, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -616,7 +627,7 @@ describe("background Herdr tab claim", () => {
 			const state = { tabId: "w1:t1", label: "7" };
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner(state, commands),
+				herdrClient: actionRunner(state, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -646,7 +657,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: actionRunner(
+				herdrClient: actionRunner(
 					{ tabId: "w1:t1", label: "dialog-editor" },
 					commands,
 				),
@@ -678,7 +689,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("dialog-editor"),
+				herdrClient: ordinaryRunner("dialog-editor"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -706,7 +717,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
+				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -733,7 +744,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
+				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -761,7 +772,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner(),
+				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -787,7 +798,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
-				commandRunner: ordinaryRunner("7"),
+				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
