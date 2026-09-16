@@ -67,18 +67,15 @@ async function completeMergedTaskNow(
 	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
-	taskRef: string,
-	stateSnapshot: TodoistCompletionSnapshot,
-	workRevision: number,
-	sessionId: string,
+	snapshot: TodoistCompletionSnapshot,
 ): Promise<import("../shared/exit-actions.ts").ExitActionResult> {
 	const isCurrent = isCurrentCompletion.bind(
 		null,
 		operations,
 		session,
-		stateSnapshot,
-		workRevision,
-		sessionId,
+		snapshot,
+		snapshot.workRevision,
+		snapshot.sessionId,
 	);
 	const isCurrentBeforeRequest = isCurrent();
 	if (!isCurrentBeforeRequest) return C.exit.failed;
@@ -88,7 +85,7 @@ async function completeMergedTaskNow(
 			createTodoistClient:
 				operations.createTodoistClient ??
 				operations.dependencies?.createTodoistClient,
-		}).completeTask(taskRef, isCurrent);
+		}).completeTask(snapshot.taskRef, isCurrent);
 		const isCurrentAfterRequest = isCurrent();
 		if (!isCurrentAfterRequest) return C.exit.failed;
 		await recordSuccessfulCompletion(operations, ctx);
@@ -105,22 +102,10 @@ export async function completeMergedTask(
 	operations: TodoistOperations,
 	session: SessionRecord,
 	ctx: ExtensionContext,
-	taskRef: string,
-	stateSnapshot: TodoistCompletionSnapshot,
-	workRevision: number,
-	sessionId: string,
+	snapshot: TodoistCompletionSnapshot,
 ): Promise<import("../shared/exit-actions.ts").ExitActionResult> {
 	return enqueueSessionOperation(
 		session,
-		completeMergedTaskNow.bind(
-			null,
-			operations,
-			session,
-			ctx,
-			taskRef,
-			stateSnapshot,
-			workRevision,
-			sessionId,
-		),
+		completeMergedTaskNow.bind(null, operations, session, ctx, snapshot),
 	);
 }

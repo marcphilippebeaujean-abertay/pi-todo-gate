@@ -1,9 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { PromptQueue } from "../prompt-queue/queue.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
-import type { ExitActionResult } from "../shared/exit-actions.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 
@@ -133,7 +131,6 @@ export interface TodoistLifecycleConsumerOptions {
 export interface TodoistModuleOptions {
 	pi?: import("@earendil-works/pi-coding-agent").ExtensionAPI;
 	loadConfig?: () => Promise<unknown>;
-	promptQueue: PromptQueue;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	exec?: Exec;
@@ -150,8 +147,11 @@ export interface TodoistModuleOptions {
 export type TodoistSession = SessionRecord;
 
 export interface TodoistCompletionSnapshot {
-	taskRef?: string;
-	prUrl?: string;
+	taskRef: string;
+	taskName: string;
+	prUrl: string;
+	workRevision: number;
+	sessionId: string;
 }
 
 export interface TodoistOperations {
@@ -159,7 +159,6 @@ export interface TodoistOperations {
 	getSession: () => TodoistSession | null;
 	projectRef: string;
 	todoist: TodoistTaskClaimController;
-	promptQueue: PromptQueue;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;
 	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
@@ -171,13 +170,6 @@ export interface TodoistOperations {
 		state: TodoistState,
 		options: TodoistStateUpdateOptions,
 	): Promise<void>;
-	completeMergedTask?(
-		session: TodoistSession,
-		taskRef: string,
-		stateSnapshot: TodoistCompletionSnapshot,
-		workRevision: number,
-		sessionId: string,
-	): Promise<ExitActionResult>;
 }
 
 export interface ClaimTaskData {

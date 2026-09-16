@@ -110,7 +110,6 @@ export function createExtensionState(
 	});
 	const todoist = createTodoistModule({
 		pi,
-		promptQueue,
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
