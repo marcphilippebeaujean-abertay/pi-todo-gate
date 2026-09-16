@@ -26,6 +26,25 @@ async function validFixture(): Promise<string> {
 }
 
 describe("module structure checker", () => {
+	it("protects Prompt Queue dependency direction", async () => {
+		const config = await readFile(
+			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
+			"utf8",
+		);
+		expect(config).toContain(
+			'from: { path: "^src/prompt-queue/" }, to: { path: "^src/pr/module\\\\.ts$" }',
+		);
+		expect(config).toContain(
+			'from: { path: "^src/prompt-queue/" }, to: { path: "^src/todoist/module\\\\.ts$" }',
+		);
+		expect(config).toContain(
+			'from: { path: "^src/prompt-queue/" }, to: { path: "^src/worktree/module\\\\.ts$" }',
+		);
+		expect(config).toContain("no-pr-to-prompt-queue");
+		expect(config).toContain("no-todoist-to-prompt-queue");
+		expect(config).toContain("no-worktree-to-prompt-queue");
+	});
+
 	it("protects worker and publisher modules from consumer imports", async () => {
 		const config = await readFile(
 			join(PROJECT_ROOT, ".dependency-cruiser.cjs"),
@@ -56,7 +75,7 @@ describe("module structure checker", () => {
 		expect(config).toContain("(?!module-state\\\\.ts$)");
 		expect(config).toContain("pathNot:");
 		expect(config).toContain(
-			"^src/(shared|pr|todoist|herdr|worktree|exit-protocol|footer)/",
+			"^src/(shared|pr|todoist|herdr|worktree|prompt-queue|exit-protocol|footer)/",
 		);
 	});
 

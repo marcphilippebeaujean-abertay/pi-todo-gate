@@ -9,7 +9,7 @@ import {
 } from "../../src/exit-protocol/internal-state.ts";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { exitProtocolStateDescriptor } from "../../src/exit-protocol/module-state.ts";
-import { PromptQueue } from "../../src/prompt-queue.ts";
+import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { ExitAction } from "../../src/shared/exit-actions.ts";
 import { createSessionState } from "../../src/state.ts";

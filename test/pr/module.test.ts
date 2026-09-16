@@ -11,7 +11,7 @@ import {
 	recordMergedPr,
 	removeMergedPr,
 } from "../../src/pr/parsing.ts";
-import { PromptQueue } from "../../src/prompt-queue.ts";
+import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createEventHandler } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";

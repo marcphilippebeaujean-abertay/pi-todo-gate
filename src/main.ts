@@ -17,7 +17,8 @@ import { herdrStateDescriptor } from "./herdr/module-state.ts";
 import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
 import { prStateDescriptor } from "./pr/module-state.ts";
-import { PromptQueue } from "./prompt-queue.ts";
+import "./prompt-queue/module.ts";
+import { PromptQueue } from "./prompt-queue/queue.ts";
 import {
 	type ModuleStateDescriptors,
 	serializeSessionState,
