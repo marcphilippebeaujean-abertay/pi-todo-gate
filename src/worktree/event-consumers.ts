@@ -191,11 +191,16 @@ class Worktree implements WorktreeConsumer {
 		void publishWorktreeState(this.eventHandler, {}, {});
 	}
 
-	getWorktreeInfo(): { worktreePath: string; branch: string } | null {
+	getWorktreeInfo(): {
+		worktreePath: string;
+		branch: string;
+		hasUncommittedChanges: boolean;
+	} | null {
 		if (this.baseline === null) return null;
 		return {
 			worktreePath: this.baseline.worktreePath,
 			branch: this.baseline.branch,
+			hasUncommittedChanges: this.hasUncommittedChanges,
 		};
 	}
 

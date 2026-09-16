@@ -30,6 +30,7 @@ const PR_URL = "https://github.com/o/r/pull/42";
 function setup(overrides: Record<string, unknown> = {}) {
 	const { promptQueue: promptQueueOverride, ...sessionOverrides } = overrides;
 	const confirm = vi.fn(async (_title: string) => true);
+	const select = vi.fn(async (_title: string, options: string[]) => options[0]);
 	const notify = vi.fn();
 	const completeTask = vi.fn(
 		async (_taskRef?: string, _isCurrent?: () => boolean) => undefined,
@@ -48,6 +49,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 			cwd: "/repo",
 			ui: {
 				confirm,
+				select,
 				notify,
 				theme: { fg: (_color: string, text: string) => text },
 			},
@@ -93,7 +95,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 		},
 	} as unknown as TodoistOperations;
 
-	return { runtime, session, confirm, notify, completeTask };
+	return { runtime, session, confirm, select, notify, completeTask };
 }
 
 async function emit(runtime: TodoistOperations) {
@@ -228,8 +230,14 @@ describe("Todoist merge consumer", () => {
 		const setupResult = setup();
 		const order: string[] = [];
 		setupResult.confirm.mockImplementation(async (title) => {
-			order.push(title.startsWith("Mark Todoist") ? "todoist" : "exit-prompt");
+			order.push(title.startsWith("Mark Todoist") ? "todoist" : "unexpected");
 			return true;
+		});
+		setupResult.select.mockImplementation(async (title, options) => {
+			order.push(
+				title.startsWith("Exit protocol") ? "exit-prompt" : "unexpected",
+			);
+			return options[0] ?? "No";
 		});
 		registerTodoistMergeConsumer(setupResult.runtime);
 		const exitModule = createTestExitProtocolModule({
@@ -237,7 +245,11 @@ describe("Todoist merge consumer", () => {
 			sessionState: setupResult.runtime.sessionState,
 			promptQueue: setupResult.runtime.promptQueue,
 			worktree: {
-				getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),
+				getWorktreeInfo: () => ({
+					worktreePath: "/repo",
+					branch: "feature",
+					hasUncommittedChanges: false,
+				}),
 				removeWorktree: async () => {
 					order.push("exit");
 					return "completed";

@@ -417,10 +417,10 @@ describe("working tree status", () => {
 			h.ctx,
 		);
 
-		expect(h.confirmations).toContainEqual({
-			title: "Exit protocol",
-			message:
-				'Delete worktree "/configured/project" and local branch "feature"',
+		expect(h.selections).toContainEqual({
+			title:
+				'Exit protocol\nDelete worktree "/configured/project" and local branch "feature"',
+			options: ["Yes", "No"],
 		});
 		expect(exec).not.toHaveBeenCalledWith(
 			"gh",

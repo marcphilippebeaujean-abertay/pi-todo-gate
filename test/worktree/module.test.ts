@@ -9,7 +9,11 @@ import { worktreeStateDescriptor } from "../../src/worktree/module-state.ts";
 type TestWorktreeModule = {
 	sessionStart(context: ExtensionContext, sessionId: string): Promise<void>;
 	deactivate(): void;
-	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
+	getWorktreeInfo(): {
+		worktreePath: string;
+		branch: string;
+		hasUncommittedChanges: boolean;
+	} | null;
 	removeWorktree(): Promise<unknown>;
 };
 
@@ -126,6 +130,7 @@ describe("worktree event actions", () => {
 		expect(module.getWorktreeInfo()).toEqual({
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "later",
+			hasUncommittedChanges: false,
 		});
 	});
 
@@ -152,6 +157,7 @@ describe("worktree event actions", () => {
 		expect(module.getWorktreeInfo()).toEqual({
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "feature",
+			hasUncommittedChanges: false,
 		});
 	});
 
@@ -172,6 +178,7 @@ describe("worktree event actions", () => {
 		expect(module.getWorktreeInfo()).toEqual({
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "feature",
+			hasUncommittedChanges: false,
 		});
 	});
 

@@ -40,9 +40,11 @@ export function addWorktreeExitAction(
 	if (worktree === undefined) return;
 	const info = worktree.getWorktreeInfo();
 	if (info === null) return;
+	const shouldDefaultToNo = info.hasUncommittedChanges;
 	request.addAction({
 		id: "remove-worktree",
 		label: `Delete worktree "${info.worktreePath}" and local branch "${info.branch}"`,
+		defaultAnswer: shouldDefaultToNo ? "no" : "yes",
 		execute: worktree.removeWorktree.bind(worktree),
 	});
 }

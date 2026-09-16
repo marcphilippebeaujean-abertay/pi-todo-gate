@@ -14,6 +14,7 @@ export * from "./module-state.ts";
 export interface WorktreeInfo {
 	worktreePath: string;
 	branch: string;
+	hasUncommittedChanges: boolean;
 }
 
 export interface WorktreeCleanup {

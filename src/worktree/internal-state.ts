@@ -29,7 +29,11 @@ export interface WorktreeModuleOptions {
 }
 
 export interface WorktreeConsumer {
-	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
+	getWorktreeInfo(): {
+		worktreePath: string;
+		branch: string;
+		hasUncommittedChanges: boolean;
+	} | null;
 	removeWorktree(): Promise<
 		import("../shared/exit-actions.ts").ExitActionResult
 	>;

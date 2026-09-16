@@ -1,12 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enqueueExitActions } from "../../src/exit-protocol/event-publishers.ts";
-import {
-	focusAction,
-	focusSubmit,
-	initialPickerState,
-	toggleAction,
-} from "../../src/exit-protocol/internal-state.ts";
 import { createExitProtocolModule } from "../../src/exit-protocol/module.ts";
 import { exitProtocolStateDescriptor } from "../../src/exit-protocol/module-state.ts";
 import { PromptQueue } from "../../src/prompt-queue.ts";
@@ -43,9 +37,13 @@ const actions: ExitAction[] = [
 	},
 ];
 
-function worktree(): never {
+function worktree(hasUncommittedChanges = false): never {
 	return {
-		getWorktreeInfo: () => ({ worktreePath: "/repo", branch: "feature" }),
+		getWorktreeInfo: () => ({
+			worktreePath: "/repo",
+			branch: "feature",
+			hasUncommittedChanges,
+		}),
 		removeWorktree: () => actions[0].execute(),
 	} as never;
 }
@@ -56,37 +54,8 @@ function context(overrides: Record<string, unknown> = {}) {
 		mode: "tui",
 		hasUI: true,
 		ui: {
-			theme: {
-				fg: (_color: string, text: string) => text,
-				bold: (text: string) => text,
-			},
-			custom: vi.fn(
-				async (
-					factory: (
-						tui: unknown,
-						theme: unknown,
-						kb: unknown,
-						done: (value: unknown) => void,
-					) => unknown,
-				) => {
-					let value: unknown;
-					const done = (next: unknown) => {
-						value = next;
-					};
-					const component = factory(
-						{ requestRender: vi.fn() },
-						{
-							fg: (_color: string, text: string) => text,
-							bold: (text: string) => text,
-						},
-						{},
-						done,
-					) as { handleInput(data: string): void };
-					component.handleInput("\r");
-					return value;
-				},
-			),
 			confirm: vi.fn(async () => true),
+			select: vi.fn(async () => "Yes"),
 			notify: vi.fn(),
 		},
 		...overrides,
@@ -106,36 +75,6 @@ describe("exit protocol state", () => {
 				exitProtocolStateDescriptor.serialize(state),
 			),
 		).toEqual(state);
-	});
-});
-
-describe("exit protocol picker state", () => {
-	it("starts with every action selected and Submit focused", () => {
-		const state = initialPickerState([
-			"complete-todoist-task",
-			"remove-worktree",
-		]);
-
-		expect([...state.selectedIds]).toEqual([
-			"complete-todoist-task",
-			"remove-worktree",
-		]);
-		expect(state.focused).toBe("submit");
-	});
-
-	it("toggles one action and can return focus to Submit", () => {
-		const initial = initialPickerState([
-			"complete-todoist-task",
-			"remove-worktree",
-		]);
-		const toggled = toggleAction(initial, "remove-worktree");
-
-		expect([...toggled.selectedIds]).toEqual(["complete-todoist-task"]);
-		expect(focusAction(toggled, "remove-worktree").focused).toEqual({
-			type: "action",
-			id: "remove-worktree",
-		});
-		expect(focusSubmit(toggled).focused).toBe("submit");
 	});
 });
 
@@ -210,8 +149,6 @@ describe("exit protocol presenter", () => {
 			taskMarkedAsCompleted: false,
 			sessionId: "session",
 		});
-
-		expect(ctx.ui.custom).not.toHaveBeenCalled();
 	});
 
 	it("uses injected lifecycle dependencies", async () => {
@@ -232,10 +169,10 @@ describe("exit protocol presenter", () => {
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-		expect(ctx.ui.custom).toHaveBeenCalledOnce();
+		expect(ctx.ui.select).toHaveBeenCalledOnce();
 	});
 
-	it("presents one combined prompt and submits all actions by default", async () => {
+	it("uses Yes-first prompt for clean worktree deletion", async () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
 		const ctx = context();
@@ -254,7 +191,64 @@ describe("exit protocol presenter", () => {
 		});
 		await queue.drain();
 
-		expect(ctx.ui.custom).toHaveBeenCalledOnce();
+		expect(ctx.ui.select).toHaveBeenCalledWith(
+			'Exit protocol\nDelete worktree "/repo" and local branch "feature"',
+			["Yes", "No"],
+		);
+		expect(actions[0].execute).toHaveBeenCalledOnce();
+	});
+
+	it("uses No-first prompt for dirty worktree deletion", async () => {
+		const events = createSharedEvents();
+		const queue = new PromptQueue();
+		const ctx = context({
+			ui: {
+				...context().ui,
+				select: vi.fn(async () => "No"),
+			},
+		});
+		const module = createTestExitProtocolModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+			promptQueue: queue,
+			worktree: worktree(true),
+		});
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+			sessionId: "session",
+		});
+		await queue.drain();
+
+		expect(ctx.ui.select).toHaveBeenCalledWith(
+			'Exit protocol\nDelete worktree "/repo" and local branch "feature"',
+			["No", "Yes"],
+		);
+		expect(actions[0].execute).not.toHaveBeenCalled();
+	});
+
+	it("submits clean worktree deletion when Yes is selected", async () => {
+		const events = createSharedEvents();
+		const queue = new PromptQueue();
+		const ctx = context();
+		const module = createTestExitProtocolModule({
+			eventHandler: events,
+			sessionState: createSessionState(),
+			promptQueue: queue,
+			worktree: worktree(),
+		});
+		module.sessionStart(ctx);
+
+		await events.prMergedEvent.emit({
+			prUrl: "pr",
+			taskMarkedAsCompleted: false,
+			sessionId: "session",
+		});
+		await queue.drain();
+
+		expect(ctx.ui.select).toHaveBeenCalledOnce();
 		expect(actions[0].execute).toHaveBeenCalledOnce();
 	});
 
@@ -276,7 +270,7 @@ describe("exit protocol presenter", () => {
 		});
 		await queue.drain();
 
-		expect(ctx.ui.custom).not.toHaveBeenCalled();
+		expect(ctx.ui.select).not.toHaveBeenCalled();
 	});
 
 	it("ignores a visible prompt that becomes stale after reset", async () => {
@@ -287,8 +281,8 @@ describe("exit protocol presenter", () => {
 			resolvePrompt = resolve;
 		});
 		const ctx = context();
-		const custom = vi.fn(() => prompt);
-		(ctx.ui as unknown as { custom: typeof custom }).custom = custom;
+		const select = vi.fn(() => prompt);
+		(ctx.ui as unknown as { select: typeof select }).select = select;
 		const module = createTestExitProtocolModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
@@ -313,11 +307,11 @@ describe("exit protocol presenter", () => {
 	it("uses sequential confirmations in RPC mode", async () => {
 		const events = createSharedEvents();
 		const queue = new PromptQueue();
-		const confirm = vi.fn(async () => true);
+		const select = vi.fn(async () => "Yes");
 		const ctx = context({
 			mode: "rpc",
 			ui: {
-				confirm,
+				select,
 				notify: vi.fn(),
 			},
 		});
@@ -336,6 +330,6 @@ describe("exit protocol presenter", () => {
 		});
 		await queue.drain();
 
-		expect(confirm).toHaveBeenCalledOnce();
+		expect(select).toHaveBeenCalledOnce();
 	});
 });
