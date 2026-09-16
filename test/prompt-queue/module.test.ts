@@ -138,7 +138,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
 
-	it("synchronously queues Todoist completion before exit picker", async () => {
+	it("synchronously queues Todoist completion before removal confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		state.sessionState.moduleState.todoist.taskRef = "42";
@@ -178,7 +178,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({ force: true });
 	});
 
-	it("runs exit picker after cancelled Todoist confirmation", async () => {
+	it("runs removal confirmation after cancelled Todoist confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.todoist.taskRef = "42";
 		(state.ctx.ui.confirm as ReturnType<typeof vi.fn>)
@@ -225,7 +225,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
 	});
 
-	it("runs Todoist completion before exit action", async () => {
+	it("runs Todoist completion before worktree removal", async () => {
 		const state = setup();
 		const order: string[] = [];
 		state.sessionState.moduleState.todoist.taskRef = "42";
@@ -248,30 +248,12 @@ describe("Prompt Queue orchestration", () => {
 		expect(order).toEqual(["todoist", "exit"]);
 	});
 
-	it("uses TUI picker selection to execute selected action", async () => {
+	it("uses yes-no confirmation for worktree removal in TUI mode", async () => {
 		const state = setup();
 		state.ctx.mode = "tui";
-		const custom = vi.fn(
-			async (
-				factory: (
-					tui: unknown,
-					theme: unknown,
-					keybindings: unknown,
-					done: (value: unknown) => void,
-				) => unknown,
-			) => {
-				let selected: unknown;
-				const done = (value: unknown) => {
-					selected = value;
-				};
-				const widget = factory({ requestRender: vi.fn() }, {}, {}, done) as {
-					handleInput(data: string): void;
-				};
-				widget.handleInput("\r");
-				return selected;
-			},
-		);
-		state.ctx.ui.custom = custom as never;
+		state.ctx.ui.custom = vi.fn(async () => {
+			throw new Error("custom picker must not run");
+		}) as never;
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
@@ -280,7 +262,8 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(custom).toHaveBeenCalledOnce();
+		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.ctx.ui.custom).not.toHaveBeenCalled();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
@@ -317,7 +300,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
 
-	it("continues with exit picker when Todoist capability fails", async () => {
+	it("continues with removal confirmation when Todoist capability fails", async () => {
 		const state = setup();
 		state.sessionState.moduleState.todoist.taskRef = "42";
 		state.todoist.completeMergedTask.mockRejectedValue(new Error("failed"));
@@ -334,16 +317,19 @@ describe("Prompt Queue orchestration", () => {
 		});
 	});
 
-	it("suppresses stale visible picker result", async () => {
+	it("suppresses stale worktree confirmation", async () => {
 		const state = setup();
 		state.ctx.mode = "tui";
-		let resolvePicker!: (value: readonly string[]) => void;
-		state.ctx.ui.custom = vi.fn(
+		let resolveConfirm!: (value: boolean) => void;
+		state.ctx.ui.confirm = vi.fn(
 			() =>
-				new Promise<readonly string[]>((resolve) => {
-					resolvePicker = resolve;
+				new Promise<boolean>((resolve) => {
+					resolveConfirm = resolve;
 				}),
-		) as never;
+		);
+		state.ctx.ui.custom = vi.fn(async () => {
+			throw new Error("custom picker must not run");
+		}) as never;
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
@@ -352,7 +338,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await Promise.resolve();
 		await state.eventHandler.sessionDeactivatedEvent.emit(undefined);
-		resolvePicker(["remove-worktree"]);
+		resolveConfirm(true);
 		await (state.module as { drain: () => Promise<void> }).drain();
 
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();

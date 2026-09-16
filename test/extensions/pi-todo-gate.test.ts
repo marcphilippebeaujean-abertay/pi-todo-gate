@@ -416,9 +416,9 @@ describe("working tree status", () => {
 		);
 
 		expect(h.confirmations).toContainEqual({
-			title: "Exit protocol",
+			title: "Remove worktree?",
 			message:
-				'Delete worktree "/configured/project" and local branch "feature"',
+				'Delete worktree "/configured/project" and local branch "feature"?',
 		});
 		expect(exec).not.toHaveBeenCalledWith(
 			"gh",

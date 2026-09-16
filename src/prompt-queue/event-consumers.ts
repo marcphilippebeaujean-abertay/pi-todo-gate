@@ -8,14 +8,12 @@ import type {
 	TodoistModule,
 } from "../todoist/module.ts";
 import type { WorktreeCleanup } from "../worktree/module.ts";
-import { FAILED_ACTION_RESULT } from "./constants.ts";
-import type { ExitAction, PromptQueueModuleOptions } from "./internal-state.ts";
+import type { PromptQueueModuleOptions } from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
 import {
 	confirmDirtyWorktree,
+	confirmRemoveWorktree,
 	confirmTodoistCompletion,
-	presentExitActions,
-	worktreeAction,
 } from "./user-prompts.ts";
 
 export class PromptQueueConsumer {
@@ -175,60 +173,62 @@ export class PromptQueueConsumer {
 		if (!canPrompt) return;
 		const info = this.worktree.getWorktreeInfo();
 		if (info === null) return;
-		const action = this.createWorktreeAction(
+		const confirmed = await confirmRemoveWorktree(
+			context,
+			info.worktreePath,
+			info.branch,
+		);
+		const isCurrentAfterPrompt = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		const shouldRemove = isCurrentAfterPrompt && confirmed;
+		if (!shouldRemove) return;
+		await this.removeWorktree(
 			context,
 			sessionId,
 			isQueuedCurrent,
 			info.worktreePath,
-			info.branch,
-		);
-		const actions: readonly ExitAction[] = [action];
-		await presentExitActions(
-			context,
-			actions,
-			() => isQueuedCurrent() && this.isCurrent(context, sessionId),
 		);
 	}
 
-	private createWorktreeAction(
+	private async removeWorktree(
 		context: ExtensionContext,
 		sessionId: string,
 		isQueuedCurrent: () => boolean,
 		worktreePath: string,
-		branch: string,
-	): ExitAction {
-		return worktreeAction(worktreePath, branch, async () => {
-			const isCurrentBeforeStatus = this.isCurrentJob(
+	): Promise<void> {
+		const isCurrentBeforeStatus = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentBeforeStatus) return;
+		const dirty = await this.worktree.hasUncommittedChanges();
+		const isCurrentAfterStatus = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentAfterStatus) return;
+		let force = false;
+		const hasDirtyWorktree = dirty === true;
+		if (hasDirtyWorktree) {
+			force = await confirmDirtyWorktree(context, worktreePath);
+			const isCurrentAfterPrompt = this.isCurrentJob(
 				context,
 				sessionId,
 				isQueuedCurrent,
 			);
-			if (!isCurrentBeforeStatus) return FAILED_ACTION_RESULT;
-			const dirty = await this.worktree.hasUncommittedChanges();
-			const isCurrentAfterStatus = this.isCurrentJob(
-				context,
-				sessionId,
-				isQueuedCurrent,
-			);
-			if (!isCurrentAfterStatus) return FAILED_ACTION_RESULT;
-			let force = false;
-			const hasDirtyWorktree = dirty === true;
-			if (hasDirtyWorktree) {
-				force = await confirmDirtyWorktree(context, worktreePath);
-				const isCurrentAfterPrompt = this.isCurrentJob(
-					context,
-					sessionId,
-					isQueuedCurrent,
-				);
-				if (!isCurrentAfterPrompt) return FAILED_ACTION_RESULT;
-			}
-			const isCurrentBeforeCapability = this.isCurrentJob(
-				context,
-				sessionId,
-				isQueuedCurrent,
-			);
-			if (!isCurrentBeforeCapability) return FAILED_ACTION_RESULT;
-			return this.worktree.removeWorktree({ force });
-		});
+			if (!isCurrentAfterPrompt) return;
+		}
+		const isCurrentBeforeCapability = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentBeforeCapability) return;
+		await this.worktree.removeWorktree({ force });
 	}
 }
