@@ -66,12 +66,6 @@ function descriptors(): {
 			restore: (value) => value as ModuleState["footer"],
 			serialize: (state) => structuredClone(state) as never,
 		},
-		exitProtocol: {
-			id: "exitProtocol",
-			createInitialState: () => structuredClone(initial.exitProtocol),
-			restore: (value) => value as ModuleState["exitProtocol"],
-			serialize: (state) => structuredClone(state) as never,
-		},
 	};
 }
 
@@ -118,7 +112,6 @@ function snapshot(): SessionState {
 		text: "ready",
 		isVisible: true,
 	};
-	state.moduleState.exitProtocol.active = true;
 	return state;
 }
 

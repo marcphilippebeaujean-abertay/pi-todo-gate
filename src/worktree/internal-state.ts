@@ -30,9 +30,10 @@ export interface WorktreeModuleOptions {
 
 export interface WorktreeConsumer {
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
-	removeWorktree(): Promise<
-		import("../shared/exit-actions.ts").ExitActionResult
-	>;
+	hasUncommittedChanges(): Promise<boolean | null>;
+	removeWorktree(options: {
+		force: boolean;
+	}): Promise<import("../shared/exit-actions.ts").ExitActionResult>;
 }
 
 export interface CleanupOptions {

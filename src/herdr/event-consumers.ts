@@ -30,12 +30,12 @@ import {
 import type {
 	ClaimWorkerHandle,
 	ClaimWorkerResponse,
-	CommandRunner,
+	HerdrClient,
 	HerdrTabOptions,
 	StartBackgroundWorker,
 } from "./internal-state.ts";
 import { notifyHerdrFailure } from "./notifications.ts";
-import { boundCommandRunner, isInsideHerdr, tabLabel } from "./runtime.ts";
+import { boundHerdrClient, isInsideHerdr, tabLabel } from "./runtime.ts";
 import { hasValidatedTabClaim } from "./tab-validation.ts";
 
 function currentId(value: string | undefined, subject: "pane" | "tab"): string {
@@ -45,7 +45,7 @@ function currentId(value: string | undefined, subject: "pane" | "tab"): string {
 }
 
 function applyClaimResponse(
-	commandRunner: CommandRunner,
+	herdrClient: HerdrClient,
 	tabId: string | undefined,
 	paneId: string | undefined,
 	response: ClaimWorkerResponse | undefined,
@@ -55,7 +55,7 @@ function applyClaimResponse(
 	switch (response.shouldMoveToNewTab) {
 		case true: {
 			const currentPaneId = currentId(paneId, "pane");
-			commandRunner(HERDR_COMMAND, [
+			herdrClient(HERDR_COMMAND, [
 				...PANE_MOVE_ARGS,
 				currentPaneId,
 				NEW_TAB_FLAG,
@@ -67,7 +67,7 @@ function applyClaimResponse(
 		}
 		case false: {
 			const currentTabId = currentId(tabId, "tab");
-			commandRunner(HERDR_COMMAND, [
+			herdrClient(HERDR_COMMAND, [
 				...TAB_RENAME_ARGS,
 				currentTabId,
 				response.tabName,
@@ -77,7 +77,7 @@ function applyClaimResponse(
 }
 
 class HerdrTabClaimConsumer {
-	private readonly commandRunner: CommandRunner;
+	private readonly herdrClient: HerdrClient;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
 	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
@@ -100,8 +100,8 @@ class HerdrTabClaimConsumer {
 	private claimContext: ExtensionContext | undefined;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
-		this.commandRunner =
-			options.commandRunner ?? boundCommandRunner(this.sessionCwdReference);
+		this.herdrClient =
+			options.herdrClient ?? boundHerdrClient(this.sessionCwdReference);
 		this.sessionCwd = options.cwd ?? process.cwd();
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.startWorker =
@@ -141,7 +141,7 @@ class HerdrTabClaimConsumer {
 		this.tabId = process.env.HERDR_TAB_ID;
 		this.paneId = process.env.HERDR_PANE_ID;
 		try {
-			this.initialLabel = tabLabel(this.commandRunner);
+			this.initialLabel = tabLabel(this.herdrClient);
 		} catch {
 			this.initialLabel = undefined;
 		}
@@ -198,7 +198,7 @@ class HerdrTabClaimConsumer {
 		const claimStatusUpdate = this.publishClaimInProgress(false);
 		try {
 			applyClaimResponse(
-				this.commandRunner,
+				this.herdrClient,
 				this.tabId,
 				this.paneId,
 				event.result,
@@ -209,7 +209,7 @@ class HerdrTabClaimConsumer {
 			return;
 		}
 		const isValidated = hasValidatedTabClaim(
-			this.commandRunner,
+			this.herdrClient,
 			this.initialLabel,
 			this.paneId,
 			event.result,

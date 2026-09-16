@@ -6,7 +6,6 @@ import "./events.ts";
 import "./event-consumers.ts";
 import "./event-publishers.ts";
 import "./notifications.ts";
-import "./user-prompts.ts";
 import { createWorktreeConsumer } from "./event-consumers.ts";
 import type { WorktreeModuleOptions } from "./internal-state.ts";
 
@@ -18,9 +17,10 @@ export interface WorktreeInfo {
 
 export interface WorktreeCleanup {
 	getWorktreeInfo(): WorktreeInfo | null;
-	removeWorktree(): Promise<
-		import("../shared/exit-actions.ts").ExitActionResult
-	>;
+	hasUncommittedChanges(): Promise<boolean | null>;
+	removeWorktree(options: {
+		force: boolean;
+	}): Promise<import("../shared/exit-actions.ts").ExitActionResult>;
 }
 
 export function createWorktreeModule(

@@ -5,7 +5,7 @@ import {
 	STRING_TYPE,
 	TAB_GET_ARGS,
 } from "./constants.ts";
-import type { ClaimWorkerResponse, CommandRunner } from "./internal-state.ts";
+import type { ClaimWorkerResponse, HerdrClient } from "./internal-state.ts";
 
 export function tabNameIsParseableAsInt(label: string | undefined): boolean {
 	if (label === undefined) return false;
@@ -45,25 +45,22 @@ function jsonResult<T>(output: string): T | undefined {
 	}
 }
 
-function tabLabel(
-	commandRunner: CommandRunner,
-	tabId: string,
-): string | undefined {
+function tabLabel(herdrClient: HerdrClient, tabId: string): string | undefined {
 	const response = jsonResult<{
 		result?: { tab?: { label?: unknown } };
-	}>(commandRunner(HERDR_COMMAND, [...TAB_GET_ARGS, tabId]));
+	}>(herdrClient(HERDR_COMMAND, [...TAB_GET_ARGS, tabId]));
 	const label = response?.result?.tab?.label;
 	const hasLabel = typeof label === STRING_TYPE;
 	return hasLabel ? (label as string).trim() : undefined;
 }
 
 function paneTabId(
-	commandRunner: CommandRunner,
+	herdrClient: HerdrClient,
 	paneId: string,
 ): string | undefined {
 	const response = jsonResult<{
 		result?: { pane?: { tab_id?: unknown } };
-	}>(commandRunner(HERDR_COMMAND, [...PANE_GET_ARGS, paneId]));
+	}>(herdrClient(HERDR_COMMAND, [...PANE_GET_ARGS, paneId]));
 	const tabId = response?.result?.pane?.tab_id;
 	const hasTabId = typeof tabId === STRING_TYPE;
 	const hasNonEmptyTabId = hasTabId && (tabId as string).length > 0;
@@ -71,7 +68,7 @@ function paneTabId(
 }
 
 export function hasValidatedTabClaim(
-	commandRunner: CommandRunner,
+	herdrClient: HerdrClient,
 	initialLabel: string | undefined,
 	paneId: string | undefined,
 	claim: ClaimWorkerResponse | undefined,
@@ -81,10 +78,10 @@ export function hasValidatedTabClaim(
 	const hasPaneId = paneId !== undefined;
 	if (!hasPaneId) return false;
 	try {
-		const observedTabId = paneTabId(commandRunner, paneId);
+		const observedTabId = paneTabId(herdrClient, paneId);
 		const hasObservedTab = observedTabId !== undefined;
 		if (!hasObservedTab) return false;
-		const currentLabel = tabLabel(commandRunner, observedTabId);
+		const currentLabel = tabLabel(herdrClient, observedTabId);
 		const hasDescriptiveLabel = labelIsDescriptive(currentLabel);
 		const hasChangedLabel = currentLabel !== initialLabel;
 		const currentTabLabel = currentLabel ?? "";

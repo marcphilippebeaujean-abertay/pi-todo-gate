@@ -3,8 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { createModuleStatePublisher } from "../event-publishers.ts";
-import type { PromptQueue } from "../prompt-queue/queue.ts";
-import { type Exec, spawnExec } from "../shared/command.ts";
+import { type CommandResult, type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type {
 	BeforeAgentStartEventPayload,
@@ -17,13 +16,12 @@ import type {
 } from "../shared/events.ts";
 import { branchTexts, textOf } from "../shared/extension-message.ts";
 import { inspectProject } from "../shared/project.ts";
+import { enqueueSessionOperation } from "../shared/session-operations.ts";
 import type { SessionState } from "../state.ts";
-import { register as registerMergeProtocol } from "./commands.ts";
 import { matchesPinnedPr, publishPrMerged } from "./event-publishers.ts";
-import { findOpenPr, isGithubPrAvailable } from "./git.ts";
+import { findOpenPr, isGithubPrAvailable, mergePinnedPr } from "./git.ts";
 import type {
 	OriginRequest,
-	PrCommandOptions,
 	PrModuleDependencies,
 	PrModuleOptions,
 	PrSession,
@@ -31,6 +29,7 @@ import type {
 	PrState,
 } from "./internal-state.ts";
 import { normalizePrState } from "./module-state.ts";
+import { notifyMergeFailure, notifyMergeSucceeded } from "./notifications.ts";
 import { githubPrUrls, recordMergedPr } from "./parsing.ts";
 import { installStateTool } from "./state-tool.ts";
 
@@ -50,6 +49,10 @@ const STRING_TYPE = "string";
 const BASH_COMMAND = "command";
 const GIT_MUTATION_RE =
 	/\bgit\s+(add|commit|merge|rebase|checkout|switch|cherry-pick)\b/;
+
+function failureDetail(detail: string): string {
+	return detail.replace(/\s+/g, " ").trim().slice(0, 200);
+}
 
 function isCurrentPrContext(
 	getSession: () => PrSession | null,
@@ -162,7 +165,6 @@ export async function handlePrToolResult(
 }
 
 export class PrConsumer {
-	private readonly promptQueue: PromptQueue;
 	private readonly pi: ExtensionAPI | undefined;
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
@@ -172,7 +174,6 @@ export class PrConsumer {
 	private readonly publishState;
 
 	constructor(options: PrModuleOptions) {
-		this.promptQueue = options.promptQueue;
 		this.pi = options.pi;
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
@@ -242,7 +243,6 @@ export class PrConsumer {
 		const alreadyRegistered = this.registrationsAvailable;
 		if (alreadyRegistered) return;
 		this.registrationsAvailable = true;
-		registerMergeProtocol(pi, this.commandDependencies());
 		installStateTool(pi, {
 			getSession: () => this.currentSession,
 			getPrState: () => this.state,
@@ -577,13 +577,44 @@ export class PrConsumer {
 		);
 	}
 
-	private enqueueSessionOperation<T>(
-		_session: PrSession,
-		operation: () => Promise<T>,
-	): Promise<T> {
-		return this.promptQueue
-			.enqueue(() => operation())
-			.then((result) => result as T);
+	public mergeActivePr(): Promise<boolean> {
+		const session = this.currentSession;
+		if (session === null) return Promise.resolve(false);
+		const prUrl = this.state.prUrl;
+		if (prUrl === undefined) return Promise.resolve(false);
+		const sessionId = this.sessionState.session.activeSessionId;
+		if (sessionId === null) return Promise.resolve(false);
+		return enqueueSessionOperation(session, async () => {
+			const isCurrentBeforeCommand = this.isCurrentSession(session, sessionId);
+			if (!isCurrentBeforeCommand) return false;
+			let result: CommandResult;
+			try {
+				result = await mergePinnedPr(
+					this.dependencies.exec ?? spawnExec,
+					session.context.cwd,
+					prUrl,
+				);
+			} catch (error) {
+				const isCurrentAfterFailure = this.isCurrentSession(session, sessionId);
+				if (!isCurrentAfterFailure) return false;
+				const detail = failureDetail(
+					error instanceof Error ? error.message : String(error),
+				);
+				notifyMergeFailure(session.context, detail);
+				return false;
+			}
+			const isCurrentAfterCommand = this.isCurrentSession(session, sessionId);
+			if (!isCurrentAfterCommand) return false;
+			const commandFailed = result.code !== 0;
+			if (commandFailed) {
+				notifyMergeFailure(session.context, failureDetail(result.stderr));
+				return false;
+			}
+			await publishPrMerged(this.eventHandler, prUrl, sessionId);
+			const isCurrentAfterEmit = this.isCurrentSession(session, sessionId);
+			if (isCurrentAfterEmit) notifyMergeSucceeded(session.context);
+			return true;
+		});
 	}
 
 	private async updatePrState(
@@ -592,18 +623,6 @@ export class PrConsumer {
 	): Promise<void> {
 		const normalizedState = normalizePrState(nextState);
 		await this.publishState.publish(normalizedState, { persist });
-	}
-
-	private commandDependencies(): PrCommandOptions {
-		return {
-			sessionState: this.sessionState,
-			eventHandler: this.eventHandler,
-			exec: this.dependencies.exec,
-			getSession: () => this.currentSession,
-			getPrState: () => this.state,
-			isCurrentSession: this.isCurrentSession.bind(this),
-			enqueueSessionOperation: this.enqueueSessionOperation.bind(this),
-		};
 	}
 
 	private async recordMerge(event: PrMergedEvent): Promise<void> {

@@ -3,7 +3,6 @@ import { modelReference } from "../shared/pi-worker.ts";
 import { inspectProject } from "../shared/project.ts";
 import {
 	CLAIM,
-	COMPLETED,
 	ERROR,
 	INVALID_RESULT,
 	TASK_URL,
@@ -17,16 +16,13 @@ import {
 import type { TaskClaimResultEvent } from "./events.ts";
 import type {
 	ClaimTaskData,
-	MergeRequest,
 	TaskClaimWorker,
 	TaskClaimWorkerResult,
-	TodoistCompletionSnapshot,
 	TodoistLifecycleConsumerOptions,
 	TodoistOperations,
 	TodoistSession,
 	TodoistState,
 } from "./internal-state.ts";
-import { confirmTaskCompletion } from "./user-prompts.ts";
 
 export function registerTodoistLifecycleConsumers(
 	options: TodoistLifecycleConsumerOptions,
@@ -73,40 +69,6 @@ function isSessionRecord(
 	session: TodoistSession,
 ): boolean {
 	return operations.getSession() === session;
-}
-
-function isCurrentMergeEvent(
-	operations: TodoistOperations,
-	session: TodoistSession,
-	event: MergeRequest,
-): boolean {
-	const isCurrentSession = isSessionRecord(operations, session);
-	const isSameSession =
-		event.sessionId === operations.sessionState.session.activeSessionId;
-	return isCurrentSession && isSameSession;
-}
-
-function mergeState(
-	operations: TodoistOperations,
-	session: TodoistSession,
-	sessionId: string,
-): {
-	taskName: string;
-	stateSnapshot: TodoistCompletionSnapshot;
-	workRevision: number;
-	sessionId: string;
-} {
-	const todoistState = operations.sessionState.moduleState.todoist;
-	const taskName = todoistState.taskName ?? todoistState.taskRef ?? "";
-	return {
-		taskName,
-		stateSnapshot: {
-			taskRef: todoistState.taskRef,
-			prUrl: operations.sessionState.moduleState.pr.prUrl,
-		},
-		workRevision: session.workRevision,
-		sessionId,
-	};
 }
 
 function isCurrentEvent(
@@ -225,9 +187,10 @@ export async function runTaskClaim(
 	try {
 		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 		const worktree = await inspectProject(exec, session.context.cwd);
-		const isCurrentSession =
-			operations.getSession() === session && isCurrentSessionId();
+		const isCurrentSession = operations.getSession() === session;
+		const isCurrentRootSessionId = isCurrentSessionId();
 		if (!isCurrentSession) return;
+		if (!isCurrentRootSessionId) return;
 		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
 		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
 		if (shouldSkipOrdinaryCheckout) {
@@ -284,97 +247,4 @@ export function maybeAnalyzeTaskClaim(
 	operation.pending = true;
 	operation.session = session;
 	void runTaskClaim(operations, session, prompt, expectedSessionId, model);
-}
-
-async function completeMergedTaskAfterPrompt(
-	operations: TodoistOperations,
-	session: TodoistSession,
-	event: MergeRequest,
-	taskRef: string,
-	taskName: string,
-	stateSnapshot: TodoistCompletionSnapshot,
-	workRevision: number,
-	sessionId: string,
-	isCurrent: () => boolean,
-): Promise<void> {
-	const isCurrentBeforePrompt =
-		isSessionRecord(operations, session) &&
-		isCurrentMergeEvent(operations, session, event);
-	const isPromptCurrent = isCurrentBeforePrompt && isCurrent();
-	if (!isPromptCurrent) return;
-	const confirmed = await confirmTaskCompletion(
-		session.context,
-		taskName,
-		taskRef,
-	);
-	const isConfirmed = confirmed === true;
-	const isCurrentAfterConfirm = isCurrent();
-	const shouldSkipCompletion = !isConfirmed || !isCurrentAfterConfirm;
-	if (shouldSkipCompletion) return;
-	const isCurrentSession = isSessionRecord(operations, session);
-	const isCurrentMergeAfterConfirm = isCurrentMergeEvent(
-		operations,
-		session,
-		event,
-	);
-	const isCurrentCompletion = isCurrentSession && isCurrentMergeAfterConfirm;
-	if (!isCurrentCompletion) return;
-	const completeMergedTask = operations.completeMergedTask;
-	const hasCompletionHandler = completeMergedTask !== undefined;
-	if (!hasCompletionHandler) return;
-	const result = await completeMergedTask(
-		session,
-		taskRef,
-		stateSnapshot,
-		workRevision,
-		sessionId,
-	);
-	const isCompleted = result === COMPLETED;
-	if (isCompleted) event.taskMarkedAsCompleted = true;
-}
-
-async function consumeMergedEvent(
-	operations: TodoistOperations,
-	event: MergeRequest,
-): Promise<void> {
-	const isAlreadyCompleted = event.taskMarkedAsCompleted === true;
-	if (isAlreadyCompleted) return;
-	const session = operations.getSession();
-	const hasNoSession = session === null;
-	if (hasNoSession) return;
-	const isCurrentMerge = isCurrentMergeEvent(operations, session, event);
-	if (!isCurrentMerge) return;
-	const hasInteractiveUi = session.context.hasUI;
-	if (!hasInteractiveUi) return;
-	const taskRef = operations.sessionState.moduleState.todoist.taskRef;
-	const hasNoTaskRef = taskRef === undefined;
-	if (hasNoTaskRef) return;
-	const { taskName, stateSnapshot, workRevision, sessionId } = mergeState(
-		operations,
-		session,
-		event.sessionId,
-	);
-	void operations.promptQueue
-		.enqueue((isCurrent) =>
-			completeMergedTaskAfterPrompt(
-				operations,
-				session,
-				event,
-				taskRef,
-				taskName,
-				stateSnapshot,
-				workRevision,
-				sessionId,
-				isCurrent,
-			),
-		)
-		.catch(() => undefined);
-}
-
-export function registerTodoistMergeConsumer(
-	operations: TodoistOperations,
-): void {
-	operations.eventHandler.prMergedEvent.subscribe(
-		consumeMergedEvent.bind(null, operations),
-	);
 }
