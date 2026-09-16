@@ -1,4 +1,7 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
@@ -77,6 +80,39 @@ export type TaskClaimWorkerResult = Type.Static<
 	typeof TaskClaimWorkerResultSchema
 >;
 
+export const TaskRefreshWorkerInputSchema = Type.Object({
+	sessionId: Type.String({ minLength: 1 }),
+	cwd: Type.String(),
+	taskRef: Type.String({ minLength: 1 }),
+	taskName: Type.String(),
+	taskDescription: Type.String(),
+	projectRef: Type.String(),
+	prRef: Type.Union([Type.String(), Type.Null()]),
+	worktree: Type.Object({
+		isWorktree: Type.Boolean(),
+		root: Type.Union([Type.String(), Type.Null()]),
+		branch: Type.Union([Type.String(), Type.Null()]),
+	}),
+});
+
+export type TaskRefreshWorkerInput = Type.Static<
+	typeof TaskRefreshWorkerInputSchema
+>;
+
+export const TaskRefreshWorkerResultSchema = Type.Object({
+	newTaskDescription: Type.Union([Type.String(), Type.Null()]),
+	newTaskName: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+	hasCompletedTask: Type.Boolean(),
+});
+
+export type TaskRefreshWorkerResult = Type.Static<
+	typeof TaskRefreshWorkerResultSchema
+>;
+
+export type TaskRefreshWorker = (
+	input: TaskRefreshWorkerInput,
+) => Promise<TaskRefreshWorkerResult>;
+
 export interface TodoistProjectSettings {
 	todoistProjectRef: string;
 	triggersOnlyOnWorktree?: boolean;
@@ -97,6 +133,7 @@ export type ProjectEntry = string | TodoistProjectSettings;
 export interface TodoistModuleState {
 	taskRef?: string;
 	taskName?: string;
+	taskDescription?: string;
 	taskUrl?: string;
 	todoistCompletionAttemptedAt?: string;
 	mergePromptedPrUrl?: string;
@@ -107,6 +144,13 @@ export type TodoistState = TodoistModuleState;
 export interface TodoistStateUpdateOptions {
 	persist: boolean;
 	gitStatePatch?: Partial<SessionState["gitState"]>;
+}
+
+export interface SelectedTaskContext {
+	session: TodoistSession;
+	sessionId: string;
+	taskRef: string;
+	workRevision: number;
 }
 
 export interface TodoistTaskClaimController {
@@ -127,6 +171,7 @@ export interface TodoistLifecycleConsumerOptions {
 	) => Promise<void>;
 	resetSession: () => void;
 	maybeAnalyzeTaskClaim: (prompt: string, model?: string) => void;
+	registerCommands: (pi: ExtensionAPI) => void;
 }
 
 export interface TodoistModuleOptions {
@@ -136,11 +181,13 @@ export interface TodoistModuleOptions {
 	sessionState: SessionState;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;
+	taskRefreshWorker?: TaskRefreshWorker;
 	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
 	/** @deprecated pass module dependencies directly. */
 	dependencies?: {
 		exec?: Exec;
 		taskClaimWorker?: TaskClaimWorker;
+		taskRefreshWorker?: TaskRefreshWorker;
 		createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
 	};
 }
@@ -162,6 +209,7 @@ export interface TodoistOperations {
 	todoist: TodoistTaskClaimController;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;
+	taskRefreshWorker?: TaskRefreshWorker;
 	createTodoistClient?: TodoistClientFactoryDependencies["createTodoistClient"];
 	/** @deprecated accepted only by legacy test adapters. */
 	dependencies: NonNullable<TodoistModuleOptions["dependencies"]>;

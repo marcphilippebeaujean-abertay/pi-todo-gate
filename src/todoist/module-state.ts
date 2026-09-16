@@ -7,6 +7,7 @@ import type {
 export interface TodoistModuleState {
 	taskRef?: string;
 	taskName?: string;
+	taskDescription?: string;
 	taskUrl?: string;
 	todoistCompletionAttemptedAt?: string;
 	mergePromptedPrUrl?: string;
@@ -18,6 +19,7 @@ function restoreTodoistState(value: unknown): TodoistModuleState {
 	const keys = [
 		"taskRef",
 		"taskName",
+		"taskDescription",
 		"taskUrl",
 		"todoistCompletionAttemptedAt",
 		"mergePromptedPrUrl",
