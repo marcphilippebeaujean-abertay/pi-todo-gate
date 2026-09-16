@@ -282,7 +282,11 @@ describe("Todoist module ownership", () => {
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
 		const session = {
-			context: { cwd: "/repo", hasUI: false },
+			context: {
+				cwd: "/repo",
+				hasUI: false,
+				model: { provider: "openai-codex", id: "gpt-5.6-luna" },
+			},
 			project: { codingRoot: "/repo" },
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
@@ -331,6 +335,7 @@ describe("Todoist module ownership", () => {
 		expect(worker).toHaveBeenCalledWith(
 			expect.objectContaining({
 				prompt: "claim this task",
+				model: "openai-codex/gpt-5.6-luna",
 				projectRef: "project",
 				prRef: null,
 			}),

@@ -41,6 +41,25 @@ describe("Pi worker helpers", () => {
 		);
 	});
 
+	it("passes selected provider and model to worker", () => {
+		expect(
+			buildPiWorkerArgs("Implement feature", {
+				model: "anthropic/claude-sonnet-4-5",
+			}),
+		).toEqual([
+			"--mode",
+			"json",
+			"-p",
+			"--no-extensions",
+			"--no-context-files",
+			"--tools",
+			"bash",
+			"--model",
+			"anthropic/claude-sonnet-4-5",
+			"Implement feature",
+		]);
+	});
+
 	it("extracts assistant text from string and multipart messages", () => {
 		expect(textFromAssistantMessage({ role: "user", content: "Ignore" })).toBe(
 			"",

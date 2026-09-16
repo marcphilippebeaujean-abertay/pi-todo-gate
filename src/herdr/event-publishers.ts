@@ -29,6 +29,7 @@ export function startClaimWorker(
 		{
 			prompt: request.prompt,
 			instructions: request.instructions,
+			model: request.model,
 			parseResult: parseClaimResult,
 			onResult: (result) =>
 				void request.events.claimCompletedEvent.emit({ result }),

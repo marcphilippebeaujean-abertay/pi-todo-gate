@@ -25,6 +25,7 @@ export type PiWorkerSpawner = (
 export interface PiWorkerRequest<TResult> {
 	prompt: string;
 	instructions: string;
+	model?: string;
 	parseResult(output: string): TResult | undefined;
 	onResult(result: TResult): void;
 	onFailure(message: string): void;
