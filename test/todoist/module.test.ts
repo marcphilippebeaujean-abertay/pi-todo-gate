@@ -476,7 +476,7 @@ describe("Todoist module integration", () => {
 		const result = await module.completeMergedTask(snapshot);
 
 		expect(result).toBe("completed");
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith("task-1");
 		expect(confirm).not.toHaveBeenCalled();
 	});
 
@@ -558,7 +558,7 @@ describe("Todoist module integration", () => {
 			sessionId: "session",
 		});
 		expect(result).toBe("completed");
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith("task-1");
 	});
 });
 

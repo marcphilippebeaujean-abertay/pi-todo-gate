@@ -65,6 +65,12 @@ export const MOVE = "move";
 export const CLAIM_WORKER_TIMEOUT_MS = 120_000;
 export const REFRESH_WORKER_TIMEOUT_MS = 120_000;
 export const TODOIST_TASK_ASSIGNED = "Todoist task assigned";
+export const TASK_CLAIM_SKIPPED_SESSION_CHANGE =
+	"Todoist task claim skipped because session changed";
+export const TASK_CLAIM_FINISHED_SESSION_CHANGE =
+	"Todoist task claim finished after session changed; current session state was not updated";
+export const TASK_CLAIM_UNKNOWN_AFTER_SESSION_CHANGE =
+	"Todoist task claim result unavailable after session changed; verify task status";
 export const REFRESH_TASK_COMMAND = "refresh_task";
 export const DROP_TASK_COMMAND = "drop_task";
 export const TODOIST_TASK_REFRESHED = "Todoist task refreshed";
@@ -80,6 +86,12 @@ export const COMMAND_DESCRIPTION_DROP =
 export const COMPLETION_SUCCESS = "Merged PR detected; Todoist task completed";
 export const COMPLETION_FAILURE =
 	"Merged PR detected, but Todoist task completion failed";
+export const COMPLETION_SKIPPED_SESSION_CHANGE =
+	"Todoist task completion skipped because session changed";
+export const COMPLETION_FINISHED_SESSION_CHANGE =
+	"Todoist task completion finished after session changed; current session state was not updated";
+export const COMPLETION_UNKNOWN_AFTER_SESSION_CHANGE =
+	"Todoist task completion result unavailable after session changed; verify task status";
 export const INFO = "info";
 export const WARNING = "warning";
 export const TODOIST = "Todoist";

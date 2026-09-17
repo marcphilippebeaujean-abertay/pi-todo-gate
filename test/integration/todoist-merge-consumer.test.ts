@@ -54,7 +54,7 @@ describe("Todoist completion capability", () => {
 		const result = await module.completeMergedTask(snapshot);
 
 		expect(result).toBe("completed");
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith("task-1");
 		expect(currentSession.context.ui.confirm).not.toHaveBeenCalled();
 	});
 
@@ -87,7 +87,7 @@ describe("Todoist completion capability", () => {
 		});
 
 		expect(result).toBe("completed");
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith("task-1");
 		expect(currentSession.context.ui.confirm).not.toHaveBeenCalled();
 	});
 
@@ -136,11 +136,15 @@ describe("Todoist completion capability", () => {
 		).toEqual([]);
 	});
 
-	it("rejects completion when session deactivates during Todoist call", async () => {
+	it("reports completion when session deactivates during Todoist call", async () => {
 		const eventHandler = createSharedEvents();
 		const updates: unknown[] = [];
+		const notifications: unknown[] = [];
 		eventHandler.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
+		});
+		eventHandler.sessionNotificationEvent.subscribe((notification) => {
+			notifications.push(notification);
 		});
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
@@ -183,12 +187,19 @@ describe("Todoist completion capability", () => {
 		await eventHandler.sessionDeactivatedEvent.emit(undefined);
 		releaseCall();
 
-		expect(await completion).toBe("failed");
+		expect(await completion).toBe("completed");
 		expect(completeTask).toHaveBeenCalledOnce();
 		expect(
 			updates.filter((update) => (update as { persist?: boolean }).persist),
 		).toEqual([]);
 		expect(notify).not.toHaveBeenCalled();
+		expect(notifications).toEqual([
+			{
+				message:
+					"Todoist task completion finished after session changed; current session state was not updated",
+				level: "warning",
+			},
+		]);
 	});
 
 	it("rejects stale immutable snapshot before Todoist call", async () => {
@@ -221,6 +232,49 @@ describe("Todoist completion capability", () => {
 
 		expect(result).toBe("failed");
 		expect(completeTask).not.toHaveBeenCalled();
+	});
+
+	it("skips Todoist completion after session changes before dispatch", async () => {
+		const eventHandler = createSharedEvents();
+		const notifications: unknown[] = [];
+		eventHandler.sessionNotificationEvent.subscribe((notification) => {
+			notifications.push(notification);
+		});
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-1" };
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		const completeTask = vi.fn(async () => undefined);
+		const currentSession = session(false);
+		const module = createTodoistModule({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler,
+			sessionState,
+		});
+		await eventHandler.sessionActivatedEvent.emit({
+			context: currentSession.context,
+			sessionId: "session",
+			session: currentSession,
+		});
+		sessionState.session.activeSessionId = "new-session";
+
+		const result = await module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: PR_URL,
+			workRevision: 0,
+			sessionId: "session",
+		});
+
+		expect(result).toBe("failed");
+		expect(completeTask).not.toHaveBeenCalled();
+		expect(notifications).toEqual([
+			{
+				message: "Todoist task completion skipped because session changed",
+				level: "warning",
+			},
+		]);
 	});
 
 	it("captures snapshot values before queued completion begins", async () => {
@@ -256,7 +310,7 @@ describe("Todoist completion capability", () => {
 		snapshot.workRevision = 10;
 		await completion;
 
-		expect(completeTask).toHaveBeenCalledWith("task-1", expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith("task-1");
 	});
 
 	it("publishes cleared state and completion notification after success", async () => {
