@@ -137,6 +137,14 @@ export class FooterEventConsumer {
 		this.display.start(nextContext, this.state);
 	}
 
+	setLoading(footerType: string, isLoading: boolean): void {
+		const current = this.state.footers[footerType];
+		if (current === undefined) return;
+		const isLoadingUnchanged = current.isLoading === isLoading;
+		if (isLoadingUnchanged) return;
+		this.update({ ...current, isLoading });
+	}
+
 	update(event: FooterUpdateEvent, force?: boolean): void {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;

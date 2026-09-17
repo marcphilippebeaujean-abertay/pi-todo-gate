@@ -5,6 +5,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPromptQueueModule } from "../../src/prompt-queue/module.ts";
 import { PromptQueue } from "../../src/prompt-queue/queue.ts";
+import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { SessionRecord } from "../../src/shared/session-state.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -77,6 +78,7 @@ function setup() {
 			async (): Promise<"completed" | "failed"> => "completed",
 		),
 	};
+	const footer = { setLoading: vi.fn() };
 	const api = pi();
 	const queue = new PromptQueue();
 	const module = createPromptQueueModule({
@@ -86,6 +88,7 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
+		footer,
 		queue,
 	});
 	return {
@@ -97,6 +100,7 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
+		footer,
 		queue,
 		module,
 	};
@@ -162,6 +166,39 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
+	});
+
+	it("shows footer loading during exit capabilities", async () => {
+		const state = setup();
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain?: () => Promise<void> }).drain?.();
+
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			1,
+			C.status.task,
+			true,
+		);
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			2,
+			C.status.task,
+			false,
+		);
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			3,
+			C.status.pr,
+			true,
+		);
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			4,
+			C.status.pr,
+			false,
+		);
 	});
 
 	it("passes dirty confirmation as force true", async () => {
