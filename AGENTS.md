@@ -7,3 +7,7 @@ Prefer `switch` when dispatching multiple mutually exclusive cases from one disc
 ## Session-bound background work
 
 Do not add repeated session-identity checks around ordinary read-only background work. For irreversible external mutations, use shared session-action guard at final dispatch and publish one session notification when dispatch is skipped or state synchronization is affected. Never pass originating `ExtensionContext` to notify a later session.
+
+## Superpowers documentation
+
+Do not add AI-generated Superpowers specs or plans under `docs/` to git. Keep them local and ignored.

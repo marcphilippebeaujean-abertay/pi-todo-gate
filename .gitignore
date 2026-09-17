@@ -22,8 +22,8 @@ coverage/
 # SDD scratch workspace
 /.superpowers/
 
-# Documentation (temporarily untracked)
-/docs/
+# AI-generated Superpowers documentation
+docs/
 
 # Git worktrees
 .worktrees/
