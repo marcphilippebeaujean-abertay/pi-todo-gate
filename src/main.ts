@@ -9,6 +9,7 @@ import type { FooterModule } from "./footer/module.ts";
 import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
 import { createHerdrModule } from "./herdr/module.ts";
 import { herdrStateDescriptor } from "./herdr/module-state.ts";
+import { isInsideHerdr } from "./herdr/runtime.ts";
 import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
 import { prStateDescriptor } from "./pr/module-state.ts";
@@ -99,6 +100,7 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
+		changeDirectoryToRoot: isInsideHerdr() ? process.chdir : undefined,
 	});
 	const pr = createPrModule({
 		pi,

@@ -17,7 +17,13 @@ type TestWorktreeModule = {
 const createTestWorktreeModule = (
 	options: Parameters<typeof createWorktreeModule>[0],
 ): TestWorktreeModule =>
-	createWorktreeModule(options) as unknown as TestWorktreeModule;
+	createWorktreeModule({
+		...options,
+		changeDirectory:
+			options.changeDirectory ??
+			options.dependencies?.changeDirectory ??
+			vi.fn(),
+	}) as unknown as TestWorktreeModule;
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };
@@ -248,6 +254,23 @@ describe("worktree event actions", () => {
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "later",
 		});
+	});
+
+	it("changes directory to main root after loading worktree", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const changeDirectoryToRoot = vi.fn();
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			exec: projectResult("abc", "def", "", "", []),
+			changeDirectoryToRoot,
+		});
+
+		await module.sessionStart(context(), "session");
+
+		expect(changeDirectoryToRoot).toHaveBeenCalledWith("/repo");
 	});
 
 	it("starts from shared session-activated event", async () => {
@@ -482,6 +505,7 @@ describe("worktree event actions", () => {
 		await Promise.resolve();
 		sessionState.session.activeSessionId = "new";
 		await module.sessionStart(ctx, "new");
+		changeDirectory.mockClear();
 		releaseConfirm();
 
 		expect(await cleanup).toBe("failed");

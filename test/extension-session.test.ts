@@ -145,6 +145,7 @@ describe("session shutdown", () => {
 			cwd: "/repo",
 			hasUI: true,
 			ui: { confirm, custom, setFooter: vi.fn(), theme: { fg: vi.fn() } },
+			sessionManager: { getSessionId: () => "session" },
 		} as never;
 		const pi = {
 			appendEntry: vi.fn(),
