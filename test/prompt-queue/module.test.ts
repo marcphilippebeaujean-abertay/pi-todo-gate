@@ -120,7 +120,7 @@ describe("Prompt Queue orchestration", () => {
 		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
 			pi: state.api,
 		});
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
@@ -134,7 +134,7 @@ describe("Prompt Queue orchestration", () => {
 		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
 			pi: state.api,
 		});
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
@@ -245,7 +245,7 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 			pi: state.api,
 		});
 		const enqueue = vi.spyOn(state.queue, "enqueue");
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(enqueue).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
