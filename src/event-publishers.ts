@@ -43,6 +43,13 @@ export class RootEventPublisher {
 		return this.eventHandler.sessionDeactivatedEvent.emit(undefined);
 	}
 
+	publishSessionNotification(
+		message: string,
+		level: "info" | "warning",
+	): Promise<void> {
+		return this.eventHandler.sessionNotificationEvent.emit({ message, level });
+	}
+
 	publishPiToolRegistrationsBecameAvailable(
 		payload: PiToolRegistrationsBecameAvailableEvent,
 	): Promise<void> {

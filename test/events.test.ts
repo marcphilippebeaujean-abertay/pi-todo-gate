@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { registerExtensionEventConsumers } from "../src/event-consumer.ts";
 import {
 	createModuleStatePublisher,
 	RootEventPublisher,
 } from "../src/event-publishers.ts";
 import { createSharedEvents, event } from "../src/shared/events.ts";
+import { createSessionState } from "../src/state.ts";
 
 describe("shared events", () => {
 	it("delivers typed payloads and supports unsubscribe", async () => {
@@ -131,5 +133,98 @@ describe("shared events", () => {
 		});
 
 		expect(order).toEqual(["first", "second"]);
+	});
+
+	it("routes notification to active session UI", async () => {
+		const events = createSharedEvents();
+		const activeNotify = vi.fn();
+		const activeSession = {
+			context: { ui: { notify: activeNotify } },
+		} as never;
+		const root = {
+			pi: { on: vi.fn() },
+			eventHandler: events,
+			session: activeSession,
+			sessionState: {
+				...createSessionState(),
+				session: { activeSessionId: "current" },
+			},
+		} as unknown as Parameters<typeof registerExtensionEventConsumers>[0];
+		registerExtensionEventConsumers(root);
+
+		await events.sessionNotificationEvent.emit({
+			message: "Worktree cleanup skipped",
+			level: "warning",
+		});
+
+		expect(activeNotify).toHaveBeenCalledWith(
+			"Worktree cleanup skipped",
+			"warning",
+		);
+	});
+
+	it("queues notification until matching session activates", async () => {
+		const events = createSharedEvents();
+		const notify = vi.fn();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "next";
+		const root = {
+			pi: { on: vi.fn() },
+			eventHandler: events,
+			session: null,
+			sessionState,
+		} as unknown as Parameters<typeof registerExtensionEventConsumers>[0];
+		registerExtensionEventConsumers(root);
+
+		await events.sessionNotificationEvent.emit({
+			message: "Todoist completion skipped",
+			level: "warning",
+		});
+		const session = {
+			context: { ui: { notify } },
+		} as unknown as NonNullable<
+			Parameters<typeof registerExtensionEventConsumers>[0]["session"]
+		>;
+		root.session = session;
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			sessionId: "next",
+			session,
+		});
+
+		expect(notify).toHaveBeenCalledWith(
+			"Todoist completion skipped",
+			"warning",
+		);
+	});
+
+	it("drops notification when no session is active", async () => {
+		const events = createSharedEvents();
+		const notify = vi.fn();
+		const root = {
+			pi: { on: vi.fn() },
+			eventHandler: events,
+			session: null,
+			sessionState: createSessionState(),
+		} as unknown as Parameters<typeof registerExtensionEventConsumers>[0];
+		registerExtensionEventConsumers(root);
+
+		await events.sessionNotificationEvent.emit({
+			message: "discard",
+			level: "info",
+		});
+		const laterSession = {
+			context: { ui: { notify } },
+		} as unknown as NonNullable<
+			Parameters<typeof registerExtensionEventConsumers>[0]["session"]
+		>;
+		root.session = laterSession;
+		await events.sessionActivatedEvent.emit({
+			context: laterSession.context,
+			sessionId: "later",
+			session: laterSession,
+		});
+
+		expect(notify).not.toHaveBeenCalled();
 	});
 });
