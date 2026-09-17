@@ -22,6 +22,9 @@ function context(overrides: Record<string, unknown> = {}): ExtensionContext {
 			notify: vi.fn(),
 			custom: vi.fn(async () => ["remove-worktree"]),
 		},
+		sessionManager: {
+			getSessionId: () => sessionId,
+		},
 		...overrides,
 	} as unknown as ExtensionContext;
 }
@@ -123,6 +126,21 @@ describe("Prompt Queue orchestration", () => {
 		await state.api.commands.get("merge")?.handler("", state.ctx);
 
 		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
+	});
+
+	it("accepts fresh command context for active session", async () => {
+		const state = setup();
+		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
+		await activate(state);
+		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: state.api,
+		});
+
+		const commandContext = context();
+		await state.api.commands.get("merge")?.handler("", commandContext);
+
+		expect(commandContext.ui.confirm).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
 	});
 
