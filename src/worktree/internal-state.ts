@@ -41,5 +41,6 @@ export interface CleanupOptions {
 	changeDirectory: (path: string) => void;
 	notify: (message: string, level?: "info" | "warning") => void;
 	isCurrent: () => boolean;
+	notifySession: (message: string) => Promise<void> | void;
 	worktreeRemoved?: { value: boolean };
 }
