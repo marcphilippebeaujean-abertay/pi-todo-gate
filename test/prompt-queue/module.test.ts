@@ -138,7 +138,7 @@ describe("Prompt Queue orchestration", () => {
 		});
 
 		const commandContext = context();
-		await state.api.commands.get("merge")?.handler("", commandContext);
+		await state.api.commands.get("tg_merge")?.handler("", commandContext);
 
 		expect(commandContext.ui.confirm).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
