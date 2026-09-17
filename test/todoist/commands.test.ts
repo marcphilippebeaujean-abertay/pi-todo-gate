@@ -82,14 +82,14 @@ describe("Todoist task commands", () => {
 	it("registers refresh and explicit drop commands", () => {
 		const { operations } = runtime();
 		expect([...commandHandlers(operations).keys()]).toEqual([
-			"refresh_task",
-			"drop_task",
+			"tg_refresh_task",
+			"tg_drop_task",
 		]);
 	});
 
 	it("refreshes current task state from typed worker result", async () => {
 		const { operations, worker, update } = runtime();
-		const handler = commandHandlers(operations).get("refresh_task")?.handler;
+		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
 		await handler?.("", context());
 
 		expect(worker).toHaveBeenCalledWith(
@@ -119,7 +119,7 @@ describe("Todoist task commands", () => {
 				hasCompletedTask: false,
 			};
 		});
-		const handler = commandHandlers(operations).get("refresh_task")?.handler;
+		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
 		await handler?.("", context());
 
 		expect(update).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe("Todoist task commands", () => {
 			newTaskName: null,
 			hasCompletedTask: true,
 		});
-		const handler = commandHandlers(operations).get("refresh_task")?.handler;
+		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
 		await handler?.("", context());
 
 		expect(update).toHaveBeenCalledWith(
@@ -149,7 +149,7 @@ describe("Todoist task commands", () => {
 
 	it("drops selected task locally without running worker", async () => {
 		const { operations, worker, update } = runtime();
-		const handler = commandHandlers(operations).get("drop_task")?.handler;
+		const handler = commandHandlers(operations).get("tg_drop_task")?.handler;
 		await handler?.("", context());
 
 		expect(worker).not.toHaveBeenCalled();
