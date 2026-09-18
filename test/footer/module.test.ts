@@ -16,6 +16,7 @@ import { createSessionState } from "../../src/state.ts";
 type TestFooterModule = {
 	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
 	update(event: unknown): void;
+	setLoading(footerType: string, isLoading: boolean): void;
 	getState(): FooterModuleState;
 	deactivate(): void;
 };
@@ -114,6 +115,48 @@ describe("footer module", () => {
 			const callsAfterLoading = h.statusCalls.length;
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
 			expect(h.statusCalls).toHaveLength(callsAfterLoading);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("toggles loading while preserving current footer text", async () => {
+		const h = harness();
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
+		await footer.sessionStart({}, h.context());
+
+		footer.update(update);
+		footer.setLoading(update.footerType, true);
+		expect(footer.getState().footers[update.footerType]).toEqual({
+			...update,
+			isLoading: true,
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: update.footerType,
+			text: update.text,
+		});
+
+		footer.setLoading(update.footerType, false);
+		expect(footer.getState().footers[update.footerType]).toEqual(update);
+	});
+
+	it("adds spinner frames to loading text without a spinner glyph", async () => {
+		vi.useFakeTimers();
+		try {
+			const h = harness();
+			const footer = createTestFooterModule({
+				eventHandler: h.events,
+				sessionState: h.sessionState,
+			});
+			await footer.sessionStart({}, h.context());
+
+			footer.update({ ...update, isLoading: true });
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
+
+			expect(h.statusCalls.at(-1)?.text).toBe(`⠙ ${update.text}`);
 		} finally {
 			vi.useRealTimers();
 		}

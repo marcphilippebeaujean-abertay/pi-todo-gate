@@ -69,7 +69,7 @@ function loadingText(text: string, frame: string): string {
 		const hasSpinner = text.includes(spinner);
 		if (hasSpinner) return text.replace(spinner, frame);
 	}
-	return text;
+	return `${frame} ${text}`;
 }
 
 export class FooterDisplay {

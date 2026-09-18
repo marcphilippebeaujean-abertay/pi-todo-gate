@@ -125,6 +125,7 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
+		footer,
 	});
 	const extensionState = {
 		pi,
