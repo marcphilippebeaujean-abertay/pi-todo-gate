@@ -58,8 +58,8 @@ describe("Todoist module ownership", () => {
 
 		expect(registerCommand).toHaveBeenCalledTimes(2);
 		expect(registerCommand.mock.calls.map(([name]) => name)).toEqual([
-			"refresh_task",
-			"drop_task",
+			"tg_refresh_task",
+			"tg_drop_task",
 		]);
 		void module;
 	});

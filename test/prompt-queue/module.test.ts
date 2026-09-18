@@ -23,6 +23,9 @@ function context(overrides: Record<string, unknown> = {}): ExtensionContext {
 			notify: vi.fn(),
 			custom: vi.fn(async () => ["remove-worktree"]),
 		},
+		sessionManager: {
+			getSessionId: () => sessionId,
+		},
 		...overrides,
 	} as unknown as ExtensionContext;
 }
@@ -124,9 +127,24 @@ describe("Prompt Queue orchestration", () => {
 		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
 			pi: state.api,
 		});
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(state.ctx.ui.confirm).toHaveBeenCalledOnce();
+		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
+	});
+
+	it("accepts fresh command context for active session", async () => {
+		const state = setup();
+		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
+		await activate(state);
+		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: state.api,
+		});
+
+		const commandContext = context();
+		await state.api.commands.get("tg_merge")?.handler("", commandContext);
+
+		expect(commandContext.ui.confirm).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
 	});
 
@@ -138,7 +156,7 @@ describe("Prompt Queue orchestration", () => {
 		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
 			pi: state.api,
 		});
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
@@ -282,7 +300,7 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 			pi: state.api,
 		});
 		const enqueue = vi.spyOn(state.queue, "enqueue");
-		await state.api.commands.get("merge")?.handler("", state.ctx);
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(enqueue).toHaveBeenCalledOnce();
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
