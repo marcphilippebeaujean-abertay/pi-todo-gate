@@ -35,6 +35,7 @@ class Worktree implements WorktreeConsumer {
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
+	private readonly changeDirectoryToRoot: ((path: string) => void) | undefined;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private uncommittedChanges = false;
@@ -48,6 +49,8 @@ class Worktree implements WorktreeConsumer {
 		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
 		this.changeDirectory =
 			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
+		this.changeDirectoryToRoot =
+			options.changeDirectoryToRoot ?? dependencies.changeDirectoryToRoot;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
@@ -152,6 +155,7 @@ class Worktree implements WorktreeConsumer {
 		if (project.root === null) return;
 		if (project.branch === null) return;
 		if (project.mainRoot === null) return;
+		this.changeDirectoryToRoot?.(project.mainRoot);
 		const state = await currentWorktreeState(this.exec, ctx.cwd);
 		if (state === null) return;
 		const isCurrentContextAfterState =

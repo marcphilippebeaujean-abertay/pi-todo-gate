@@ -1,6 +1,7 @@
 import ts from "typescript";
 import { compareDiagnostics } from "./diagnostic.ts";
 import { commandsOnlyRegister } from "./rules/commands-only-register.ts";
+import { commandsRequireTgPrefix } from "./rules/commands-require-tg-prefix.ts";
 import { cyclomaticComplexity } from "./rules/cyclomatic-complexity.ts";
 import { eventTypesLocation } from "./rules/event-types-location.ts";
 import { eventTypesOutsideEvents } from "./rules/event-types-outside-events.ts";
@@ -32,6 +33,7 @@ export type { LintDiagnostic, LintRuleId } from "./types.ts";
 
 const RULES: readonly LintRule[] = [
 	commandsOnlyRegister,
+	commandsRequireTgPrefix,
 	noWorkerConsumerCallbacks,
 	noDefaultParameters,
 	noShortStringConstants,

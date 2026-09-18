@@ -71,8 +71,8 @@ export const TASK_CLAIM_FINISHED_SESSION_CHANGE =
 	"Todoist task claim finished after session changed; current session state was not updated";
 export const TASK_CLAIM_UNKNOWN_AFTER_SESSION_CHANGE =
 	"Todoist task claim result unavailable after session changed; verify task status";
-export const REFRESH_TASK_COMMAND = "refresh_task";
-export const DROP_TASK_COMMAND = "drop_task";
+export const REFRESH_TASK_COMMAND = "tg_refresh_task";
+export const DROP_TASK_COMMAND = "tg_drop_task";
 export const TODOIST_TASK_REFRESHED = "Todoist task refreshed";
 export const TODOIST_TASK_DROPPED = "Todoist task dropped";
 export const TODOIST_TASK_NOT_SELECTED = "No Todoist task selected";

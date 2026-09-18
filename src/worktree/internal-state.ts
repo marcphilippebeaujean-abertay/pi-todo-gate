@@ -17,6 +17,7 @@ export interface WorktreeCurrentState {
 export interface WorktreeModuleDependencies {
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
+	changeDirectoryToRoot?: (path: string) => void;
 }
 
 export interface WorktreeModuleOptions {
@@ -24,6 +25,7 @@ export interface WorktreeModuleOptions {
 	sessionState: SessionState;
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
+	changeDirectoryToRoot?: (path: string) => void;
 	/** @deprecated pass module dependencies directly. */
 	dependencies?: WorktreeModuleDependencies;
 }
