@@ -17,7 +17,7 @@ export interface TodoistExec {
 }
 
 export interface TodoistClientLike {
-	completeTask(ref: string, isCurrent?: () => boolean): Promise<void>;
+	completeTask(ref: string): Promise<void>;
 }
 
 export interface TodoistClientFactoryDependencies {
@@ -27,8 +27,6 @@ export interface TodoistClientFactoryDependencies {
 		exec: Exec,
 	) => TodoistClientLike;
 }
-
-export type IsCurrentOperation = () => boolean;
 
 export interface TodoistTask {
 	id: string;
