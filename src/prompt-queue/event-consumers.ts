@@ -85,13 +85,12 @@ export class PromptQueueConsumer {
 	}
 
 	private isCurrent(context: ExtensionContext, sessionId: string): boolean {
-		const hasContext = this.context === context;
-		if (!hasContext) return false;
 		const session = this.session;
 		const hasSession = session !== null;
 		if (!hasSession) return false;
-		const hasMatchingSessionContext = session.context === context;
-		if (!hasMatchingSessionContext) return false;
+		const contextSessionId = context.sessionManager.getSessionId();
+		const hasMatchingContextSession = contextSessionId === sessionId;
+		if (!hasMatchingContextSession) return false;
 		const hasMatchingSessionId = this.sessionId === sessionId;
 		if (!hasMatchingSessionId) return false;
 		return this.sessionState.session.activeSessionId === sessionId;
