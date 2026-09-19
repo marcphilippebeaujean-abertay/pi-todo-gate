@@ -76,6 +76,11 @@ export interface ClaimErrorEvent {
 	error: string;
 }
 
+export interface ActionLoadingEvent {
+	action: string;
+	isLoading: boolean;
+}
+
 export interface SessionNotificationEvent {
 	message: string;
 	level: "info" | "warning";
@@ -137,6 +142,7 @@ export interface PiToolRegistrationsBecameAvailableEvent {
 
 export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
+	actionLoadingEvent: Event<ActionLoadingEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
 	toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
 	sessionResetEvent: Event<SessionResetEvent>;
@@ -150,10 +156,32 @@ export interface EventHandler {
 	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
 }
 
+export async function withLoading<T>(
+	eventHandler: EventHandler,
+	action: string,
+	operation: () => Promise<T>,
+	onFinally?: () => void | Promise<void>,
+): Promise<T> {
+	await eventHandler.actionLoadingEvent.emit({ action, isLoading: true });
+	try {
+		return await operation();
+	} finally {
+		try {
+			await onFinally?.();
+		} finally {
+			await eventHandler.actionLoadingEvent.emit({
+				action,
+				isLoading: false,
+			});
+		}
+	}
+}
+
 export function createSharedEvents(): EventHandler {
 	const prMergedEvent = event<PrMergedEvent>();
 	return {
 		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
+		actionLoadingEvent: event<ActionLoadingEvent>(),
 		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
 		toolResultEvent: event<{
 			event: ToolResultEvent;

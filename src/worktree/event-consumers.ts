@@ -145,11 +145,17 @@ class Worktree implements WorktreeConsumer {
 			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
+		const projectRoot = project.root;
 		if (isNotWorktree) {
-			await this.initializeNonWorktree(ctx, sessionId, isCurrentInitialization);
+			await this.initializeNonWorktree(
+				ctx,
+				sessionId,
+				isCurrentInitialization,
+				projectRoot !== null,
+			);
 			return;
 		}
-		if (project.root === null) return;
+		if (projectRoot === null) return;
 		if (project.branch === null) return;
 		if (project.mainRoot === null) return;
 		const state = await currentWorktreeState(this.exec, ctx.cwd);
@@ -158,7 +164,7 @@ class Worktree implements WorktreeConsumer {
 			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterState) return;
 		this.baseline = {
-			worktreePath: project.root,
+			worktreePath: projectRoot,
 			branch: project.branch,
 			mainRoot: project.mainRoot,
 			initialHead: state.currentHead,
@@ -166,6 +172,7 @@ class Worktree implements WorktreeConsumer {
 		};
 		this.uncommittedChanges = state.currentStatus !== EMPTY;
 		this.emitState({
+			isGitProject: true,
 			branch: project.branch,
 			isWorktree: project.isWorktree,
 			worktreeRoot: project.root,
@@ -178,6 +185,7 @@ class Worktree implements WorktreeConsumer {
 		ctx: ExtensionContext,
 		sessionId: string,
 		isCurrentInitialization: () => boolean,
+		isGitProject: boolean,
 	): Promise<void> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
 		const isCurrentAfterDirtyStatus =
@@ -186,7 +194,10 @@ class Worktree implements WorktreeConsumer {
 		const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
 		if (shouldSkipDirtyStatus) return;
 		this.uncommittedChanges = dirtyStatus;
-		this.emitState({ hasUncommittedChanges: dirtyStatus });
+		this.emitState({
+			isGitProject,
+			hasUncommittedChanges: dirtyStatus,
+		});
 	}
 
 	deactivate(): void {
@@ -284,7 +295,10 @@ class Worktree implements WorktreeConsumer {
 			isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrentAfterCleanup) return FAILED;
 		const worktreeWasRemoved = cleanupState.value;
-		if (worktreeWasRemoved) this.baseline = null;
+		if (worktreeWasRemoved) {
+			this.baseline = null;
+			this.emitState();
+		}
 		const cleanupCompleted = result === COMPLETED;
 		if (cleanupCompleted) notifyWorktree(this.context, successMessage);
 		return result;

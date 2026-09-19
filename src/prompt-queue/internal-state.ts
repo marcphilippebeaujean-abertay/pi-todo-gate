@@ -2,7 +2,6 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import type { FooterModule } from "../footer/module.ts";
 import type { PrModule } from "../pr/module.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
@@ -45,7 +44,6 @@ export interface PromptQueueModuleOptions {
 	pr: PrModule;
 	todoist: TodoistModule;
 	worktree: WorktreeCleanup;
-	footer: FooterModule;
 	queue?: PromptQueue;
 }
 

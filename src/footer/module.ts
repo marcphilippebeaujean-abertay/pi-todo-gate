@@ -11,9 +11,7 @@ import { FooterEventConsumer } from "./event-consumers.ts";
 import type { FooterModuleOptions } from "./internal-state.ts";
 
 export * from "./module-state.ts";
-export interface FooterModule {
-	setLoading(footerType: string, isLoading: boolean): void;
-}
+export type FooterModule = Record<never, never>;
 export function createFooterModule(options: FooterModuleOptions): FooterModule {
 	return new FooterEventConsumer(options);
 }

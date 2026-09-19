@@ -61,7 +61,7 @@ export interface HerdrTabRenameOptions {
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	publishClaimInProgress?: (claimInProgress: boolean) => void | Promise<void>;
+	withLoading?: (operation: () => Promise<void>) => Promise<void>;
 	hasClaimReturnedSuccessfully?: (ctx: ExtensionContext) => boolean;
 	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void | Promise<void>;
 }

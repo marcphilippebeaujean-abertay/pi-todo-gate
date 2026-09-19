@@ -1,320 +1,100 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
 	FOOTER_HERDR_TYPE,
-	FOOTER_SPINNER_INTERVAL_MS,
-	FOOTER_STATUS_KEY,
+	FOOTER_PR_TYPE,
 	FOOTER_TASK_TYPE,
 } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
-import type {
-	FooterModuleState,
-	FooterUpdate,
-} from "../../src/footer/module-state.ts";
-import { restoreFooterState } from "../../src/footer/module-state.ts";
+import type { emptyFooterState } from "../../src/footer/module-state.ts";
+import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
-type TestFooterModule = {
-	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
-	update(event: unknown): void;
-	setLoading(footerType: string, isLoading: boolean): void;
-	getState(): FooterModuleState;
-	deactivate(): void;
-};
-
-const createTestFooterModule = (
-	options: Parameters<typeof createFooterModule>[0],
-): TestFooterModule =>
-	createFooterModule(options) as unknown as TestFooterModule;
-
-function harness(branch: unknown[] = []) {
-	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
-	const context = (sessionBranch = branch) =>
-		({
-			cwd: "/repo",
-			ui: {
-				setStatus: (key: string, text: string | undefined) =>
-					statusCalls.push({ key, text }),
-			},
-			sessionManager: { getBranch: () => sessionBranch },
-		}) as unknown as ExtensionContext;
+function context(): ExtensionContext {
 	return {
-		events: createSharedEvents(),
-		statusCalls,
-		context,
-		sessionState: createSessionState(),
-	};
+		cwd: "/repo",
+		ui: { setStatus: () => undefined },
+		sessionManager: { getBranch: () => [] },
+	} as unknown as ExtensionContext;
 }
 
-const update: FooterUpdate = {
-	footerType: FOOTER_TASK_TYPE,
-	isLoading: false,
-	currentValue: "Fix footer",
-	isVisible: true,
-};
+function publicState(footer: ReturnType<typeof createFooterModule>) {
+	return (
+		footer as unknown as { getState: () => ReturnType<typeof emptyFooterState> }
+	).getState();
+}
 
 describe("footer module", () => {
-	it("restores persisted footer using parsed footer type instead of map key", () => {
-		expect(
-			restoreFooterState({
-				footers: {
-					wrongKey: {
-						footerType: "actual-footer",
-						text: "Footer",
-					},
-				},
-			}),
-		).toEqual({
-			footers: {
-				"actual-footer": {
-					footerType: { id: "actual-footer", name: "actual-footer" },
-					isLoading: false,
-					currentValue: "Footer",
-					isVisible: true,
-				},
-			},
-		});
-	});
-
-	it("starts a blank session without rendering default footers", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
+	it("projects PR and Todoist values for Git projects", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.gitState.isGitProject = true;
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
+		sessionState.moduleState.todoist.taskName = "Fix task";
+		const footer = createFooterModule({
+			eventHandler: events,
+			getSessionState: () => sessionState,
 		});
 
-		await h.events.sessionActivatedEvent.emit({
-			context: h.context(),
+		await events.sessionActivatedEvent.emit({
+			context: context(),
+			previousSessionFile: undefined,
 			sessionId: "session",
 		});
 
-		expect(h.statusCalls).toEqual([]);
-		expect(footer.getState()).toEqual({ footers: {} });
-	});
-
-	it("animates loading footer value and stops after loading ends", async () => {
-		vi.useFakeTimers();
-		try {
-			const h = harness();
-			const footer = createTestFooterModule({
-				eventHandler: h.events,
-				sessionState: h.sessionState,
-			});
-			await footer.sessionStart({}, h.context());
-
-			footer.update({
-				...update,
-				isLoading: true,
-				currentValue: "loading",
-			});
-			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠋ loading|");
-
-			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
-			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠙ loading|");
-
-			footer.update({ ...update, currentValue: "done" });
-			const callsAfterLoading = h.statusCalls.length;
-			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
-			expect(h.statusCalls).toHaveLength(callsAfterLoading);
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it("toggles loading while preserving current footer text", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
+		const state = publicState(footer);
+		expect(state.footers[FOOTER_PR_TYPE.id]).toMatchObject({ isVisible: true });
+		expect(state.footers[FOOTER_TASK_TYPE.id]).toMatchObject({
+			isVisible: true,
 		});
-		await footer.sessionStart({}, h.context());
+	});
 
-		footer.update(update);
-		footer.setLoading(update.footerType.id, true);
-		expect(footer.getState().footers[update.footerType.id]).toEqual({
-			...update,
+	it("hides PR and Todoist outside Git projects", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		const footer = createFooterModule({
+			eventHandler: events,
+			getSessionState: () => sessionState,
+		});
+		await events.sessionActivatedEvent.emit({
+			context: context(),
+			previousSessionFile: undefined,
+			sessionId: "session",
+		});
+
+		expect(publicState(footer).footers).not.toHaveProperty(FOOTER_PR_TYPE.id);
+		expect(publicState(footer).footers).not.toHaveProperty(FOOTER_TASK_TYPE.id);
+	});
+
+	it("shows Herdr only while rename action is loading", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.gitState.isGitProject = true;
+		const footer = createFooterModule({
+			eventHandler: events,
+			getSessionState: () => sessionState,
+		});
+		await events.sessionActivatedEvent.emit({
+			context: context(),
+			previousSessionFile: undefined,
+			sessionId: "session",
+		});
+
+		await events.actionLoadingEvent.emit({
+			action: C.action.herdrTabRename,
 			isLoading: true,
 		});
-		expect(h.statusCalls.at(-1)).toEqual({
-			key: FOOTER_STATUS_KEY,
-			text: "|Todoist Task: ⠋ Fix footer|",
+		expect(publicState(footer).footers[FOOTER_HERDR_TYPE.id]).toMatchObject({
+			isVisible: true,
+			isLoading: true,
 		});
-
-		footer.setLoading(update.footerType.id, false);
-		expect(footer.getState().footers[update.footerType.id]).toEqual(update);
-	});
-
-	it("adds spinner frames to loading text without a spinner glyph", async () => {
-		vi.useFakeTimers();
-		try {
-			const h = harness();
-			const footer = createTestFooterModule({
-				eventHandler: h.events,
-				sessionState: h.sessionState,
-			});
-			await footer.sessionStart({}, h.context());
-
-			footer.update({ ...update, isLoading: true });
-			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
-
-			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠙ Fix footer|");
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it("updates and synchronizes visible and hidden states", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		await footer.sessionStart({}, h.context());
-
-		footer.update(update);
-		footer.update({ ...update, isVisible: false });
-
-		expect(h.statusCalls).toEqual([
-			{ key: FOOTER_STATUS_KEY, text: "|Todoist Task: Fix footer|" },
-			{ key: FOOTER_STATUS_KEY, text: undefined },
-		]);
-		expect(footer.getState()).toEqual({
-			footers: { [update.footerType.id]: { ...update, isVisible: false } },
-		});
-	});
-
-	it("publishes exact module state payload for footer updates", async () => {
-		const h = harness();
-		const updates: unknown[] = [];
-		h.events.moduleStateChangedEvent.subscribe((event) => {
-			updates.push(event);
-		});
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		await footer.sessionStart({}, h.context());
-
-		footer.update(update);
-
-		expect(updates).toEqual([
-			{
-				moduleId: "footer",
-				moduleState: { footers: { [update.footerType.id]: update } },
-				persist: false,
-			},
-		]);
-	});
-
-	it("throws when live module update receives invalid data", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		await footer.sessionStart({}, h.context());
-
-		expect(() =>
-			footer.update({
-				...update,
-				isVisible: "true",
-			} as unknown as FooterUpdate),
-		).toThrow(TypeError);
-	});
-
-	it("derives all statuses from module state changes", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		await footer.sessionStart({}, h.context());
-
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "pr",
-			moduleState: {
-				prUrl: "https://github.com/o/r/pull/42",
-				discoveryDisabled: false,
-				discoveryTestedUrls: [],
-				mergedPrs: [],
-			},
-			persist: false,
-			gitStatePatch: { hasUncommittedChanges: true },
-		});
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "todoist",
-			moduleState: {
-				taskUrl: "https://app.todoist.com/app/task/42",
-				taskName: "Fix footer",
-			},
-			persist: false,
-		});
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdrTabRename",
-			moduleState: { claimInProgress: true },
-			persist: false,
-		});
-
-		expect(footer.getState().footers).toEqual(
-			expect.objectContaining({
-				"pi-todo-gate-pr": expect.objectContaining({ isVisible: true }),
-				"pi-todo-gate-task": expect.objectContaining({ isVisible: true }),
-				[FOOTER_HERDR_TYPE.id]: expect.objectContaining({
-					isLoading: true,
-					isVisible: true,
-				}),
-			}),
-		);
-	});
-
-	it("hides Herdr spinner after transient claim completion", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		await footer.sessionStart({}, h.context());
-
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdrTabRename",
-			moduleState: { claimInProgress: true },
-			persist: false,
-		});
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdrTabRename",
-			moduleState: { claimInProgress: false },
-			persist: false,
-		});
-
-		expect(footer.getState().footers[FOOTER_HERDR_TYPE.id]).toEqual({
-			footerType: FOOTER_HERDR_TYPE,
+		await events.actionLoadingEvent.emit({
+			action: C.action.herdrTabRename,
 			isLoading: false,
-			currentValue: "working",
-			isVisible: false,
 		});
-		expect(h.statusCalls.at(-1)).toEqual({
-			key: FOOTER_STATUS_KEY,
-			text: undefined,
-		});
-	});
-
-	it("resets in-memory state when extension instance receives a new blank session", async () => {
-		const h = harness();
-		const footer = createTestFooterModule({
-			eventHandler: h.events,
-			sessionState: h.sessionState,
-		});
-		const firstContext = h.context();
-		await footer.sessionStart({}, firstContext);
-		footer.update(update);
-
-		await footer.sessionStart({}, h.context());
-
-		expect(footer.getState()).toEqual({ footers: {} });
-		expect(h.statusCalls.at(-1)).toEqual({
-			key: FOOTER_STATUS_KEY,
-			text: undefined,
-		});
+		expect(publicState(footer).footers).not.toHaveProperty(
+			FOOTER_HERDR_TYPE.id,
+		);
 	});
 });

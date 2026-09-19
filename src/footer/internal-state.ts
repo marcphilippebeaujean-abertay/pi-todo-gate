@@ -1,11 +1,11 @@
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
 import type { FooterType } from "./events.ts";
-import type { FooterUpdate } from "./module-state.ts";
+import type { FooterEntryState } from "./module-state.ts";
 
 export interface FooterModuleOptions {
 	eventHandler: EventHandler;
-	sessionState: SessionState;
+	getSessionState: () => SessionState;
 }
 export type FooterSessionRecord = {
 	ui: {
@@ -15,7 +15,7 @@ export type FooterSessionRecord = {
 export type AnimationTimer = ReturnType<typeof setInterval>;
 export interface FooterAnimation {
 	timer: AnimationTimer | null;
-	event: FooterUpdate;
+	entry: FooterEntryState;
 	frameIndex: number;
 }
 export interface FooterRenderState {
@@ -52,6 +52,6 @@ export interface TodoistFooterTheme {
 export interface FooterEntry {
 	readonly footerType: FooterType;
 	readonly isVisible: boolean;
-	update(event: FooterUpdate): void;
+	update(entry: FooterEntryState): void;
 	render(): string;
 }

@@ -23,7 +23,6 @@ const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
 	"keeps native footer and publishes PR/task statuses";
 const TUI = "tui";
-const FOOTER_NONE_STATUS = "|PR Link: none|Todoist Task: none|";
 const CUSTOM = "custom";
 const PI_TODO_GATE_STATE_ENTRY = "pi-todo-gate-state";
 const PARENT = "parent";
@@ -61,7 +60,6 @@ const SET_PR = "set_pr";
 const HTTPS_GITHUB_COM_O_R_PULL_42 =
 	"https://github.com/owner/repo/pull/42?tab=files";
 const HTTPS_GITHUB_COM_O_R_PULL_42_2 = "https://github.com/owner/repo/pull/42";
-const PR_LINK = "PR Link:";
 const MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT =
 	"marks PR link while worktree is dirty and removes star after commit";
 const GIT_COMMIT_AM_DONE = "git commit -am done";
@@ -130,10 +128,7 @@ import { describe, expect, it, vi } from "vitest";
 import extension, {
 	type ExtensionDependencies,
 } from "../../extensions/pi-todo-gate.ts";
-import {
-	FOOTER_STATE_TYPE,
-	FOOTER_STATUS_KEY,
-} from "../../src/footer/constants.ts";
+import { FOOTER_STATE_TYPE } from "../../src/footer/constants.ts";
 import type { TodoistClient } from "../../src/todoist/client.ts";
 import type { TodoistProjectMapping } from "../../src/todoist/internal-state.ts";
 
@@ -324,11 +319,22 @@ describe("working tree status", () => {
 			]);
 			let isDirty = true;
 			const exec = async (command: string, args: string[]) => {
+				const input = args.join(" ");
+				const outputs: Record<string, string> = {
+					"rev-parse --show-toplevel": "/repo\n",
+					"branch --show-current": "main\n",
+					"worktree list --porcelain":
+						"worktree /repo\nHEAD abc\nbranch refs/heads/main\n",
+				};
 				const isStatus =
 					command === "git" &&
-					args.join(" ") === "status --porcelain=v1 --untracked-files=all";
+					input === "status --porcelain=v1 --untracked-files=all";
 				return {
-					stdout: isStatus && isDirty ? MODIFIED_FILE : EMPTY_STRING,
+					stdout: isStatus
+						? isDirty
+							? MODIFIED_FILE
+							: EMPTY_STRING
+						: (outputs[input] ?? EMPTY_STRING),
 					stderr: EMPTY_STRING,
 					code: 0,
 				};
@@ -511,10 +517,7 @@ describe("lazy activation", () => {
 		h.ctx.mode = TUI;
 		await start(h, { "/configured": MERGE_TD });
 		expect(h.footerCalls).toEqual([undefined]);
-		expect(h.statusCalls).toEqual([
-			{ key: FOOTER_STATUS_KEY, text: "|PR Link: none|" },
-			{ key: FOOTER_STATUS_KEY, text: FOOTER_NONE_STATUS },
-		]);
+		expect(h.statusCalls).toEqual([]);
 		expect(h.footerAppended).toHaveLength(0);
 	});
 });
@@ -1138,14 +1141,7 @@ describe("pi_todo_gate_state", () => {
 			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
-		expect(h.statusCalls).toContainEqual({
-			key: FOOTER_STATUS_KEY,
-			text: expect.stringContaining(PR_LINK),
-		});
-		expect(h.statusCalls).toContainEqual({
-			key: FOOTER_STATUS_KEY,
-			text: expect.stringContaining("Todoist Task: none"),
-		});
+		expect(h.statusCalls).toEqual([]);
 	});
 
 	it(CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION, async () => {

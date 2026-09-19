@@ -3,6 +3,8 @@ import type {
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { withLoading } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
 import { enqueueSessionOperation } from "../shared/session-operations.ts";
 import {
@@ -170,9 +172,11 @@ async function runRefreshTask(
 		return;
 	}
 	try {
-		await enqueueSessionOperation(
-			selectedTask.session,
-			refreshTaskNow.bind(null, operations, ctx, selectedTask),
+		await withLoading(operations.eventHandler, C.action.task, () =>
+			enqueueSessionOperation(
+				selectedTask.session,
+				refreshTaskNow.bind(null, operations, ctx, selectedTask),
+			),
 		);
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);

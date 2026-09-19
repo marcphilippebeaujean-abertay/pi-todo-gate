@@ -5,7 +5,6 @@ import type {
 } from "../shared/session-state.ts";
 
 export interface HerdrTabRenameModuleState {
-	claimInProgress?: boolean;
 	herdrClaimReturnedSuccessfully?: string;
 }
 
@@ -26,8 +25,5 @@ export const herdrTabRenameStateDescriptor: ModuleStateDescriptor<
 	id: "herdrTabRename",
 	createInitialState: () => ({}),
 	restore: restoreHerdrState,
-	serialize: (state): JsonValue => {
-		const { claimInProgress: _claimInProgress, ...durableState } = state;
-		return structuredClone(durableState) as JsonValue;
-	},
+	serialize: (state): JsonValue => structuredClone(state) as JsonValue,
 };

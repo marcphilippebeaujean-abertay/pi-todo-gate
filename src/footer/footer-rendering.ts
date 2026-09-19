@@ -19,7 +19,7 @@ import {
 	FOOTER_TEXT_COLOR,
 	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
-import type { FooterType, FooterUpdateEvent } from "./events.ts";
+import type { FooterType } from "./events.ts";
 import type {
 	FooterAnimation as Animation,
 	FooterData,
@@ -31,7 +31,10 @@ import type {
 	FooterSessionRecord as SessionRecord,
 	TodoistFooterTheme,
 } from "./internal-state.ts";
-import type { FooterModuleState as FooterState } from "./module-state.ts";
+import type {
+	FooterEntryState,
+	FooterModuleState as FooterState,
+} from "./module-state.ts";
 
 export class Footer implements FooterEntry {
 	private currentValue = "";
@@ -41,12 +44,12 @@ export class Footer implements FooterEntry {
 
 	constructor(public readonly footerType: FooterType) {}
 
-	update(event: FooterUpdateEvent): void {
-		const isMatchingFooter = event.footerType.id === this.footerType.id;
+	update(entry: FooterEntryState): void {
+		const isMatchingFooter = entry.footerType.id === this.footerType.id;
 		if (!isMatchingFooter) return;
-		this.currentValue = event.currentValue;
-		this.isLoading = event.isLoading;
-		this.isVisible = event.isVisible;
+		this.currentValue = entry.currentValue;
+		this.isLoading = entry.isLoading;
+		this.isVisible = entry.isVisible;
 		this.loadingFrame = FOOTER_SPINNER_FRAMES[0];
 	}
 
@@ -80,14 +83,14 @@ export class FooterDisplay {
 		this.clear();
 		this.context = context;
 		this.state = state;
-		for (const event of Object.values(state.footers))
-			this.syncEvent(context, event);
+		for (const entry of Object.values(state.footers))
+			this.syncEntry(context, entry);
 	}
 
-	update(state: FooterState, event: FooterUpdateEvent): void {
+	update(state: FooterState, entry: FooterEntryState): void {
 		this.state = state;
 		if (this.context === null) return;
-		this.syncEvent(this.context, event);
+		this.syncEntry(this.context, entry);
 	}
 
 	clear(): void {
@@ -142,38 +145,38 @@ export class FooterDisplay {
 		this.setStatus(FOOTER_STATUS_KEY, text);
 	}
 
-	private syncEvent(context: SessionRecord, event: FooterUpdateEvent): void {
-		this.stopAnimation(event.footerType.id);
-		const footer = this.footer(event.footerType);
-		footer.update(event);
+	private syncEntry(context: SessionRecord, entry: FooterEntryState): void {
+		this.stopAnimation(entry.footerType.id);
+		const footer = this.footer(entry.footerType);
+		footer.update(entry);
 		this.renderStatus();
-		const shouldAnimate = event.isLoading && event.isVisible;
+		const shouldAnimate = entry.isLoading && entry.isVisible;
 		if (!shouldAnimate) return;
 		const animation: Animation = {
 			timer: null,
-			event,
+			entry,
 			frameIndex: 0,
 		};
 		animation.timer = setInterval(
 			this.advanceAnimation.bind(this, animation, context),
 			FOOTER_SPINNER_INTERVAL_MS,
 		);
-		this.animations.set(event.footerType.id, animation);
+		this.animations.set(entry.footerType.id, animation);
 	}
 
 	private advanceAnimation(
 		animation: Animation,
 		_context: SessionRecord,
 	): void {
-		const current = this.state.footers[animation.event.footerType.id];
-		const isCurrent = current === animation.event;
+		const current = this.state.footers[animation.entry.footerType.id];
+		const isCurrent = current === animation.entry;
 		const isLoading = current?.isLoading === true;
 		const isVisible = current?.isVisible === true;
 		switch (true) {
 			case !isCurrent:
 			case !isLoading:
 			case !isVisible:
-				this.stopAnimation(animation.event.footerType.id);
+				this.stopAnimation(animation.entry.footerType.id);
 				return;
 			default:
 				break;

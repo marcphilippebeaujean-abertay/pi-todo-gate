@@ -1,9 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type {
-	EventHandler,
-	ModuleStateChangedEvent,
-} from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_HERDR_VALUE,
@@ -11,187 +8,130 @@ import {
 	FOOTER_TASK_TYPE,
 } from "./constants.ts";
 import { publishFooterState } from "./event-publishers.ts";
-import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
+import type { FooterType } from "./events.ts";
 import {
 	FooterDisplay,
 	renderPrStatus,
 	renderTaskStatusCompact,
 } from "./footer-rendering.ts";
 import type { FooterModuleOptions } from "./internal-state.ts";
-import type { FooterModuleState as FooterState } from "./module-state.ts";
-import {
-	applyFooterUpdate,
-	emptyFooterState,
-	parseFooterEvent,
-} from "./module-state.ts";
+import type { FooterEntryState, FooterModuleState } from "./module-state.ts";
+import { emptyFooterState } from "./module-state.ts";
 
 export class FooterEventConsumer {
 	private readonly eventHandler: EventHandler;
-	private readonly sessionState: FooterModuleOptions["sessionState"];
+	private readonly getSessionState: FooterModuleOptions["getSessionState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private state = emptyFooterState();
-	private currentPrUrl: string | undefined;
-	private currentTaskUrl: string | undefined;
-	private currentTaskName: string | undefined;
-	private hasUncommittedChanges = false;
-	private readonly display = new FooterDisplay();
+	private readonly loading = new Set<string>();
+	private readonly footerDisplay = new FooterDisplay();
 
 	constructor(options: FooterModuleOptions) {
 		this.eventHandler = options.eventHandler;
-		this.sessionState = options.sessionState;
-		this.eventHandler.moduleStateChangedEvent.subscribe((event) =>
-			this.refreshFromModuleState(event),
+		this.getSessionState = options.getSessionState;
+		this.eventHandler.actionLoadingEvent.subscribe((event) => {
+			const isLoading = event.isLoading;
+			if (isLoading) this.loading.add(event.action);
+			else this.loading.delete(event.action);
+			this.project(this.getSessionState());
+		});
+		this.eventHandler.sessionStateChangedEvent.subscribe(({ currentState }) =>
+			this.project(currentState),
 		);
-		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, previousSessionFile }) =>
-				this.sessionStart({ previousSessionFile }, context),
+		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
+			this.sessionStart(context),
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);
 	}
 
-	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
-		this.hasUncommittedChanges =
-			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;
-		switch (event.moduleId) {
-			case C.module.pr:
-				this.currentPrUrl = event.moduleState.prUrl;
-				this.refreshPrStatus(this.currentPrUrl);
-				return;
-			case C.module.worktree:
-				this.refreshPrStatus(this.currentPrUrl);
-				return;
-			case C.module.todoist:
-				this.currentTaskUrl = event.moduleState.taskUrl;
-				this.currentTaskName = event.moduleState.taskName;
-				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
-				return;
-			case C.module.herdrTabRename:
-				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
-				return;
-			case C.module.footer: {
-				const hasSameState =
-					JSON.stringify(this.state) === JSON.stringify(event.moduleState);
-				if (hasSameState) return;
-				this.state = structuredClone(event.moduleState);
-				if (this.context === null) return;
-				for (const footer of Object.values(this.state.footers))
-					this.display.update(this.state, footer);
-				return;
-			}
-			default:
-				return;
-		}
+	async sessionStart(nextContext: ExtensionContext): Promise<void> {
+		this.context = nextContext;
+		this.project(this.getSessionState(), true);
 	}
 
-	private refreshPrStatus(url?: string): void {
-		if (this.context === null) return;
-		this.update({
-			footerType: FOOTER_PR_TYPE,
-			isLoading: false,
-			currentValue: renderPrStatus(
-				url,
-				this.context.ui.theme,
-				this.hasUncommittedChanges,
-			),
-			isVisible: true,
-		});
-		this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName, true);
-	}
-
-	private refreshHerdrStatus(claimInProgress: boolean): void {
-		this.update({
-			footerType: FOOTER_HERDR_TYPE,
-			isLoading: claimInProgress,
-			currentValue: FOOTER_HERDR_VALUE,
-			isVisible: claimInProgress,
-		});
-	}
-
-	private refreshTaskStatus(
-		url?: string,
-		taskName?: string,
+	private project(
+		sessionState: ReturnType<FooterModuleOptions["getSessionState"]>,
 		force?: boolean,
 	): void {
-		if (this.context === null) return;
+		const next = this.deriveState(sessionState);
+		const unchanged = JSON.stringify(this.state) === JSON.stringify(next);
 		const shouldForce = force ?? false;
-		this.update(
-			{
-				footerType: FOOTER_TASK_TYPE,
-				isLoading: false,
-				currentValue: renderTaskStatusCompact(
-					url,
-					this.context.ui.theme,
-					taskName,
-				),
-				isVisible: true,
-			},
-			shouldForce,
-		);
-	}
-
-	async sessionStart(
-		_event: FooterSessionStartEvent,
-		nextContext: ExtensionContext,
-	): Promise<void> {
-		this.context = nextContext;
-		this.currentPrUrl = this.sessionState.moduleState.pr.prUrl;
-		this.currentTaskUrl = this.sessionState.moduleState.todoist.taskUrl;
-		this.currentTaskName = this.sessionState.moduleState.todoist.taskName;
-		this.hasUncommittedChanges =
-			this.sessionState.gitState.hasUncommittedChanges ?? false;
-		this.state = structuredClone(this.sessionState.moduleState.footer);
-		this.display.start(nextContext, this.state);
-	}
-
-	setLoading(footerType: string, isLoading: boolean): void {
-		const current = this.state.footers[footerType];
-		if (current === undefined) return;
-		const isLoadingUnchanged = current.isLoading === isLoading;
-		if (isLoadingUnchanged) return;
-		this.update({ ...current, isLoading });
-	}
-
-	update(event: FooterUpdateEvent, force?: boolean): void {
-		const parsed = parseFooterEvent(event);
-		if (this.context === null) return;
-		const previous = this.state.footers[parsed.footerType.id];
-		const hasPrevious = previous !== undefined;
-		const sameLoading = hasPrevious && previous.isLoading === parsed.isLoading;
-		const sameText =
-			hasPrevious && previous.currentValue === parsed.currentValue;
-		const sameVisibility =
-			hasPrevious && previous.isVisible === parsed.isVisible;
-		const sameCore = sameLoading && sameText;
-		const isUnchanged = sameCore && sameVisibility;
-		const shouldForce = force ?? false;
-		const shouldSkip = isUnchanged && !shouldForce;
+		const shouldSkip = unchanged && !shouldForce;
 		if (shouldSkip) return;
-		this.state = applyFooterUpdate(this.state, parsed);
-		void publishFooterState(this.eventHandler, { ...this.getState() });
-		this.display.update(this.state, parsed);
+		this.state = next;
+		const currentContext = this.context;
+		const shouldSkipProjection = currentContext === null;
+		if (shouldSkipProjection) return;
+		this.footerDisplay.start(currentContext, this.state);
+		void publishFooterState(this.eventHandler, this.state);
 	}
 
-	getState(): FooterState {
-		return {
-			footers: Object.fromEntries(
-				Object.entries(this.state.footers).map(([key, event]) => [
-					key,
-					{ ...event, footerType: { ...event.footerType } },
-				]),
-			),
+	private deriveState(
+		sessionState: ReturnType<FooterModuleOptions["getSessionState"]>,
+	): FooterModuleState {
+		const footers: Record<string, FooterEntryState> = {};
+		const isGitProject = sessionState.gitState.isGitProject === true;
+		const currentContext = this.context;
+		const shouldProjectGitFooters = isGitProject && currentContext !== null;
+		if (shouldProjectGitFooters) {
+			const theme = currentContext.ui.theme;
+			this.addFooter(
+				footers,
+				FOOTER_PR_TYPE,
+				renderPrStatus(
+					sessionState.moduleState.pr.prUrl,
+					theme,
+					sessionState.gitState.hasUncommittedChanges ?? false,
+				),
+				C.action.pr,
+			);
+			this.addFooter(
+				footers,
+				FOOTER_TASK_TYPE,
+				renderTaskStatusCompact(
+					sessionState.moduleState.todoist.taskUrl,
+					theme,
+					sessionState.moduleState.todoist.taskName,
+				),
+				C.action.task,
+			);
+		}
+		const isHerdrLoading = this.loading.has(C.action.herdrTabRename);
+		if (isHerdrLoading)
+			this.addFooter(
+				footers,
+				FOOTER_HERDR_TYPE,
+				FOOTER_HERDR_VALUE,
+				C.action.herdrTabRename,
+			);
+		return { footers };
+	}
+
+	private addFooter(
+		footers: Record<string, FooterEntryState>,
+		footerType: FooterType,
+		currentValue: string,
+		action: string,
+	): void {
+		footers[footerType.id] = {
+			footerType,
+			currentValue,
+			isVisible: true,
+			isLoading: this.loading.has(action),
 		};
 	}
 
+	getState(): FooterModuleState {
+		return structuredClone(this.state);
+	}
+
 	deactivate(): void {
-		this.display.deactivate();
+		this.loading.clear();
+		this.footerDisplay.deactivate();
 		this.context = null;
-		this.currentPrUrl = undefined;
-		this.currentTaskUrl = undefined;
-		this.currentTaskName = undefined;
-		this.hasUncommittedChanges = false;
 		this.state = emptyFooterState();
 	}
 }

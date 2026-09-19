@@ -1,5 +1,7 @@
 import { publishSessionNotification } from "../event-publishers.ts";
 import { spawnExec } from "../shared/command.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import { withLoading } from "../shared/events.ts";
 import { modelReference } from "../shared/pi-worker.ts";
 import { inspectProject } from "../shared/project.ts";
 import { runSessionAction } from "../shared/session-actions.ts";
@@ -331,5 +333,7 @@ export function maybeAnalyzeTaskClaim(
 	if (claimAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void runTaskClaim(operations, session, prompt, expectedSessionId, model);
+	void withLoading(operations.eventHandler, C.action.task, () =>
+		runTaskClaim(operations, session, prompt, expectedSessionId, model),
+	);
 }

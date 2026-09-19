@@ -11,8 +11,8 @@ import type { TodoistModuleState } from "./todoist/module-state.ts";
 import type { WorktreeModuleState } from "./worktree/module-state.ts";
 
 export type {
+	FooterEntryState,
 	FooterModuleState,
-	FooterStatusState,
 } from "./footer/module-state.ts";
 export type { HerdrTabRenameModuleState } from "./herdr-tab-rename/module-state.ts";
 export type { MergedPrState, PrModuleState } from "./pr/module-state.ts";
@@ -22,6 +22,7 @@ export type { TodoistModuleState } from "./todoist/module-state.ts";
 export type { WorktreeModuleState } from "./worktree/module-state.ts";
 
 export interface GitState {
+	isGitProject?: boolean;
 	remoteOrigin?: string;
 	mergeCompletedAt?: string;
 	branch?: string | null;

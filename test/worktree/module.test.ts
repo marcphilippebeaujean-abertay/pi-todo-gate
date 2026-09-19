@@ -256,6 +256,29 @@ describe("worktree event actions", () => {
 		});
 	});
 
+	it("marks Git worktree context explicitly", async () => {
+		const events = createSharedEvents();
+		const updates: Array<{ gitStatePatch?: { isGitProject?: boolean } }> = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push({ gitStatePatch: update.gitStatePatch });
+		});
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		const module = createTestWorktreeModule({
+			eventHandler: events,
+			sessionState,
+			exec: projectResult("abc", "def", "", "", []),
+		});
+
+		await module.sessionStart(context(), "session");
+
+		expect(updates).toContainEqual(
+			expect.objectContaining({
+				gitStatePatch: expect.objectContaining({ isGitProject: true }),
+			}),
+		);
+	});
+
 	it("starts from shared session-activated event", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{

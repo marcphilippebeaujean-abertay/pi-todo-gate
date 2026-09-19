@@ -4,7 +4,11 @@ import {
 	createModuleStatePublisher,
 	RootEventPublisher,
 } from "../src/event-publishers.ts";
-import { createSharedEvents, event } from "../src/shared/events.ts";
+import {
+	createSharedEvents,
+	event,
+	withLoading,
+} from "../src/shared/events.ts";
 import { createSessionState } from "../src/state.ts";
 
 describe("shared events", () => {
@@ -103,10 +107,48 @@ describe("shared events", () => {
 		expect(payloads).toEqual([{ pi }]);
 	});
 
-	it("exposes no footer-specific event channels", () => {
+	it("exposes generic action-loading channel without footer updates", () => {
 		const events = createSharedEvents();
+		expect(events).toHaveProperty("actionLoadingEvent");
 		expect(events).not.toHaveProperty("footerUpdateEvent");
 		expect(events).not.toHaveProperty("worktreeStatusEvent");
+	});
+
+	it("clears action loading after operation and completion callback", async () => {
+		const events = createSharedEvents();
+		const order: string[] = [];
+		events.actionLoadingEvent.subscribe(({ isLoading }) => {
+			order.push(isLoading ? "start" : "stop");
+		});
+
+		await withLoading(
+			events,
+			"todoist",
+			async () => {
+				order.push("operation");
+			},
+			async () => {
+				order.push("complete");
+			},
+		);
+
+		expect(order).toEqual(["start", "operation", "complete", "stop"]);
+	});
+
+	it("clears action loading when operation fails", async () => {
+		const events = createSharedEvents();
+		const loading: boolean[] = [];
+		events.actionLoadingEvent.subscribe(({ isLoading }) => {
+			loading.push(isLoading);
+		});
+
+		await expect(
+			withLoading(events, "todoist", async () => {
+				throw new Error("failed");
+			}),
+		).rejects.toThrow("failed");
+
+		expect(loading).toEqual([true, false]);
 	});
 
 	it("exposes one shared PR merge channel", () => {

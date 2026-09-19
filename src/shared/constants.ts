@@ -17,6 +17,7 @@ export const EXTENSION_CONSTANTS = {
 	status: {
 		pr: "pi-todo-gate-pr",
 		task: "pi-todo-gate-task",
+		herdr: "pi-todo-gate-herdr",
 	},
 	module: {
 		footer: "footer",
@@ -29,6 +30,10 @@ export const EXTENSION_CONSTANTS = {
 	action: {
 		status: "status",
 		setPr: "set_pr",
+		pr: "pr",
+		task: "todoist",
+		worktree: "worktree",
+		herdrTabRename: "herdr-tab-rename",
 		clearPr: "clear_pr",
 		clearAll: "clear_all",
 	},

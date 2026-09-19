@@ -97,7 +97,7 @@ export function createExtensionState(
 	const stateUpdateEpoch = { value: 0 };
 	const footer = createFooterModule({
 		eventHandler,
-		sessionState,
+		getSessionState: () => sessionState,
 	});
 	const worktree = createWorktreeModule({
 		eventHandler,
@@ -127,7 +127,6 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
-		footer,
 	});
 	const extensionState = {
 		pi,

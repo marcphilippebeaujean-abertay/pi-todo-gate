@@ -2,6 +2,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PrModule } from "../pr/module.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
+import { withLoading } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type {
@@ -22,7 +23,6 @@ export class PromptQueueConsumer {
 	private readonly pr: PrModule;
 	private readonly todoist: TodoistModule;
 	private readonly worktree: WorktreeCleanup;
-	private readonly footer: PromptQueueModuleOptions["footer"];
 	private readonly queue: PromptQueue;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
@@ -34,7 +34,6 @@ export class PromptQueueConsumer {
 		this.pr = options.pr;
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
-		this.footer = options.footer;
 		this.queue = options.queue ?? new PromptQueue();
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
@@ -239,9 +238,8 @@ export class PromptQueueConsumer {
 		if (shouldSkip) return;
 		try {
 			await this.runWithLoading(
-				C.status.task,
+				C.action.task,
 				this.todoist.completeMergedTask.bind(this.todoist, snapshot),
-				() => this.isCurrentJob(context, snapshot.sessionId, isQueuedCurrent),
 			);
 		} catch {
 			// Continue cleanup even when Todoist completion fails.
@@ -262,24 +260,16 @@ export class PromptQueueConsumer {
 		const shouldSkip = !isCurrentBeforeCapability;
 		if (shouldSkip) return false;
 		const result = await this.runWithLoading(
-			C.status.pr,
+			C.action.pr,
 			this.worktree.removeWorktree.bind(this.worktree, { force }),
-			() => this.isCurrentJob(context, sessionId, isQueuedCurrent),
 		);
 		return result === "completed";
 	}
 
-	private async runWithLoading<T>(
-		footerType: string,
+	private runWithLoading<T>(
+		action: string,
 		operation: () => Promise<T>,
-		isCurrent: () => boolean,
 	): Promise<T> {
-		this.footer.setLoading(footerType, true);
-		try {
-			return await operation();
-		} finally {
-			const isCurrentAfterOperation = isCurrent();
-			if (isCurrentAfterOperation) this.footer.setLoading(footerType, false);
-		}
+		return withLoading(this.eventHandler, action, operation);
 	}
 }

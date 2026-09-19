@@ -82,7 +82,6 @@ function setup() {
 			async (): Promise<"completed" | "failed"> => "completed",
 		),
 	};
-	const footer = { setLoading: vi.fn() };
 	const api = pi();
 	const queue = new PromptQueue();
 	const module = createPromptQueueModule({
@@ -92,7 +91,6 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
-		footer,
 		queue,
 	});
 	return {
@@ -104,7 +102,6 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
-		footer,
 		queue,
 		module,
 	};
@@ -191,26 +188,29 @@ Mark Todoist task "Task" complete and delete worktree "/repo/.worktrees/feature"
 			["Yes", "No"],
 		);
 		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
-		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
-			1,
-			C.status.task,
-			true,
-		);
-		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
-			2,
-			C.status.task,
-			false,
-		);
-		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
-			3,
-			C.status.pr,
-			true,
-		);
-		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
-			4,
-			C.status.pr,
-			false,
-		);
+	});
+
+	it("dispatches loading around Todoist completion without choosing final text", async () => {
+		const state = setup();
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		const loading: Array<{ action: string; isLoading: boolean }> = [];
+		state.eventHandler.actionLoadingEvent.subscribe((event) => {
+			loading.push(event);
+		});
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain?: () => Promise<void> }).drain?.();
+
+		expect(loading).toEqual([
+			{ action: C.action.task, isLoading: true },
+			{ action: C.action.task, isLoading: false },
+			{ action: C.action.pr, isLoading: true },
+			{ action: C.action.pr, isLoading: false },
+		]);
 	});
 
 	it("passes dirty confirmation as force true", async () => {
