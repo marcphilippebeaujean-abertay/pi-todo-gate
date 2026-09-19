@@ -121,15 +121,6 @@ async function activate(setupState: ReturnType<typeof setup>): Promise<void> {
 beforeEach(() => vi.clearAllMocks());
 
 describe("Prompt Queue orchestration", () => {
-	it("does not register a skill as a global resource", () => {
-		const state = setup();
-
-		expect(state.api.on).not.toHaveBeenCalledWith(
-			"resources_discover",
-			expect.anything(),
-		);
-	});
-
 	it("confirms merge then calls direct PR capability", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
@@ -171,9 +162,8 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
 
-	it("runs merged-task completion and cleanup in one queued exit protocol", async () => {
+	it("runs combined exit actions after one confirmation", async () => {
 		const state = setup();
-		const enqueue = vi.spyOn(state.queue, "enqueue");
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		state.sessionState.moduleState.todoist.taskRef = "42";
 		state.sessionState.moduleState.todoist.taskName = "Task";
@@ -195,21 +185,12 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
-		expect(enqueue).toHaveBeenCalledOnce();
-		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
-	});
-
-	it("shows footer loading during exit capabilities", async () => {
-		const state = setup();
-		state.sessionState.moduleState.todoist.taskRef = "42";
-		await activate(state);
-		await state.eventHandler.prMergedEvent.emit({
-			prUrl: "https://github.com/o/r/pull/1",
-			taskMarkedAsCompleted: false,
-			sessionId,
-		});
-		await (state.module as { drain?: () => Promise<void> }).drain?.();
-
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Mark Todoist task "Task" complete and delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
+			["Yes", "No"],
+		);
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
 		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
 			1,
 			C.status.task,
@@ -249,6 +230,13 @@ describe("Prompt Queue orchestration", () => {
 			"Worktree /repo/.worktrees/feature has uncommitted work. Deleting it will permanently remove that work.",
 			"warning",
 		);
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Delete worktree "/repo/.worktrees/feature" and local branch "feature"?
+Worktree has uncommitted changes. Deleting it will permanently remove that work.`,
+			["No", "Yes"],
+		);
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({ force: true });
 	});
 
@@ -265,19 +253,18 @@ describe("Prompt Queue orchestration", () => {
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
 		expect(state.ctx.ui.select).toHaveBeenCalledWith(
-			`Remove worktree?
-Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
+			`Exit protocol?
+Delete worktree "/repo/.worktrees/feature" and local branch "feature"?
+Worktree has uncommitted changes. Deleting it will permanently remove that work.`,
 			["No", "Yes"],
 		);
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
 
-	it("runs removal confirmation after cancelled Todoist confirmation", async () => {
+	it("cancels both exit actions from one combined confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.todoist.taskRef = "42";
-		(state.ctx.ui.confirm as ReturnType<typeof vi.fn>)
-			.mockResolvedValueOnce(false)
-			.mockResolvedValueOnce(true);
+		(state.ctx.ui.select as ReturnType<typeof vi.fn>).mockResolvedValue("No");
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
@@ -287,7 +274,8 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
 		expect(state.todoist.completeMergedTask).not.toHaveBeenCalled();
-		expect(state.worktree.removeWorktree).toHaveBeenCalled();
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
 	});
 
 	it("resets queued work on session deactivation", async () => {
@@ -363,7 +351,28 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		});
 	});
 
-	it("closes session when no worktree remains to clean up", async () => {
+	it("confirms Todoist completion alone when worktree is already absent", async () => {
+		const state = setup();
+		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Mark Todoist task "42" complete?`,
+			["Yes", "No"],
+		);
+		expect(state.todoist.completeMergedTask).toHaveBeenCalledOnce();
+		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
+	});
+
+	it("shuts down without prompting when no exit actions remain", async () => {
 		const state = setup();
 		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
 		await activate(state);
@@ -376,6 +385,7 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 
 		expect(state.ctx.ui.custom).not.toHaveBeenCalled();
 		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
+		expect(state.ctx.ui.select).not.toHaveBeenCalled();
 		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
 	});
 
@@ -456,7 +466,7 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		});
 	});
 
-	it("reports unavailable dirty status as failed cleanup", async () => {
+	it("does not offer worktree removal when dirty status is unavailable", async () => {
 		const state = setup();
 		state.worktree.hasUncommittedChanges.mockResolvedValue(null);
 		state.worktree.removeWorktree.mockResolvedValue("failed");

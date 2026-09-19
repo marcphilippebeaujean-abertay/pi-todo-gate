@@ -16,6 +16,18 @@ import type { PromptQueue } from "./queue.ts";
 
 export type PromptTask<T> = (isCurrent: () => boolean) => Promise<T> | T;
 
+export interface ExitProtocolPrompt {
+	taskName?: string;
+	worktreePath?: string;
+	branch?: string;
+	hasUncommittedChanges: boolean;
+}
+
+export interface ExitProtocolState {
+	worktree: { worktreePath: string; branch: string } | null;
+	dirty: boolean | null;
+}
+
 export interface CommandDependencies {
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;

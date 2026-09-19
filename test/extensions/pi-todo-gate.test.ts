@@ -419,7 +419,7 @@ describe("working tree status", () => {
 
 		expect(h.selections).toContainEqual({
 			title:
-				'Remove worktree?\nDelete worktree "/configured/project" and local branch "feature"?',
+				'Exit protocol?\nDelete worktree "/configured/project" and local branch "feature"?',
 			options: ["Yes", "No"],
 		});
 		expect(exec).not.toHaveBeenCalledWith(
