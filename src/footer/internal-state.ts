@@ -1,5 +1,6 @@
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
+import type { FooterType } from "./events.ts";
 import type { FooterUpdate } from "./module-state.ts";
 
 export interface FooterModuleOptions {
@@ -49,6 +50,7 @@ export interface TodoistFooterTheme {
 }
 
 export interface FooterEntry {
+	readonly footerType: FooterType;
 	readonly isVisible: boolean;
 	update(event: FooterUpdate): void;
 	render(): string;

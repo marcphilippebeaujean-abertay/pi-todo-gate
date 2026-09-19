@@ -3,7 +3,7 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const MODULE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/].+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/].+\.ts$/;
 const ROOT_PATH = /[\\/]src[\\/].+\.ts$/;
 const MODULE_STATE_NAME = "moduleState";
 const RULE_ID = "no-direct-module-state-write" as const;
@@ -101,7 +101,9 @@ function containingFunction(node: ts.Node): ts.Node | null {
 function scopedModuleId(fileName: string): string | undefined {
 	const normalized = fileName.replaceAll("\\", "/");
 	const match = normalized.match(/\/src\/([^/]+)\//);
-	return match?.[1];
+	const domain = match?.[1];
+	if (domain === "herdr-tab-rename") return "herdrTabRename";
+	return domain;
 }
 
 function publisherModuleId(node: ts.Expression): string | undefined {

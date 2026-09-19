@@ -162,7 +162,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
 
-	it("synchronously queues Todoist completion before removal confirmation", async () => {
+	it("runs combined exit actions after one confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		state.sessionState.moduleState.todoist.taskRef = "42";
@@ -193,11 +193,21 @@ Mark Todoist task "Task" complete and delete worktree "/repo/.worktrees/feature"
 		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
 		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
 			1,
-			C.status.pr,
+			C.status.task,
 			true,
 		);
 		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
 			2,
+			C.status.task,
+			false,
+		);
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			3,
+			C.status.pr,
+			true,
+		);
+		expect(state.footer.setLoading).toHaveBeenNthCalledWith(
+			4,
 			C.status.pr,
 			false,
 		);

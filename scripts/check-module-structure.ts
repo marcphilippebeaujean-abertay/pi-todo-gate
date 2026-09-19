@@ -5,7 +5,8 @@ import ts from "typescript";
 export const SCOPED_DOMAINS = [
 	"pr",
 	"todoist",
-	"herdr",
+	"herdr-tab-rename",
+	"review",
 	"worktree",
 	"prompt-queue",
 	"footer",
@@ -25,7 +26,7 @@ export const CANONICAL_FACETS = [
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
-	herdr: ["claim-worker-result.ts", "runtime.ts", "tab-validation.ts"],
+	"herdr-tab-rename": ["rename-worker-result.ts", "tab-validation.ts"],
 	pr: ["git.ts", "parsing.ts", "state-tool.ts"],
 	todoist: ["client.ts", "completion.ts", "config.ts", "parsing.ts"],
 	worktree: ["git.ts"],
@@ -69,7 +70,7 @@ const FORBIDDEN_IDENTIFIERS = [
 	"ModuleContext",
 ] as const;
 const SCOPED_EVENT_FILES =
-	/src\/(pr|todoist|herdr|worktree|prompt-queue|footer)\/events\.ts$/;
+	/src\/(pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)\/events\.ts$/;
 const ALLOWED_NATIVE_ON =
 	/(?:^|\.)pi\.on\(|(?:^|\.)(?:child|stdout|stderr)\??\.on\(/;
 const INTERACTIVE_UI_METHODS = new Set(["confirm", "custom"]);

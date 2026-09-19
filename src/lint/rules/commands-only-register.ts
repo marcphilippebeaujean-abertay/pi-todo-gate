@@ -5,7 +5,7 @@ import type { LintRule } from "../types.ts";
 
 const COMMANDS_FILE_NAME = "commands.ts";
 const COMMANDS_PATH =
-	/[\\/]src[\\/](?:pr|todoist|herdr|worktree|prompt-queue|footer)[\\/]commands\.ts$/;
+	/[\\/]src[\\/](?:pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/]commands\.ts$/;
 const RULE_ID = "commands-only-register" as const;
 const MESSAGE = "commands.ts may export only register";
 

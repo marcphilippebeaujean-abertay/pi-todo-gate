@@ -5,7 +5,7 @@ import type { LintRule } from "../types.ts";
 
 const COMMANDS_FILE_NAME = "commands.ts";
 const COMMANDS_PATH =
-	/[\\/]src[\\/](?:pr|todoist|herdr|worktree|prompt-queue|footer)[\\/]commands\.ts$/;
+	/[\\/]src[\\/](?:pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/]commands\.ts$/;
 const REGISTER_COMMAND_METHOD = "registerCommand";
 const TG_PREFIX = "tg_";
 const RULE_ID = "commands-require-tg-prefix" as const;

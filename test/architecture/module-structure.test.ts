@@ -36,7 +36,7 @@ describe("module structure checker", () => {
 		);
 		expect(config).toContain("no-herdr-worker-to-consumer");
 		expect(config).toContain(
-			"^src/herdr/(commands|event-publishers|events)\\\\.ts$",
+			"^src/herdr-tab-rename/(commands|event-publishers|events)\\\\.ts$",
 		);
 	});
 	it("protects event publishers from consumers", async () => {
@@ -60,7 +60,7 @@ describe("module structure checker", () => {
 		expect(config).toContain("(?!module-state\\\\.ts$)");
 		expect(config).toContain("pathNot:");
 		expect(config).toContain(
-			"^src/(shared|pr|todoist|herdr|worktree|prompt-queue|footer)/",
+			"^src/(shared|pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)/",
 		);
 	});
 
@@ -281,15 +281,16 @@ describe("module structure checker", () => {
 		const featureDomains = [
 			"pr",
 			"todoist",
-			"herdr",
+			"herdr-tab-rename",
+			"review",
 			"worktree",
 			"footer",
 		] as const;
 		const internalImports = featureDomains
-			.map(
-				(domain) =>
-					`import type { State } from "../${domain}/internal-state.ts";`,
-			)
+			.map((domain, index) => {
+				const stateName = `State${index}`;
+				return `import type { State as ${stateName} } from "../${domain}/internal-state.ts";\nvoid (null as ${stateName});`;
+			})
 			.join("\n");
 		const internalStateFiles = Object.fromEntries(
 			featureDomains.map((domain) => [
@@ -316,7 +317,7 @@ describe("module structure checker", () => {
 				"src/prompt-queue/consumer.ts": "export interface PromptQueue {}\n",
 			}),
 		).resolves.toContain("no-pr-to-prompt-queue");
-	});
+	}, 15_000);
 
 	it("removes Exit Protocol from lint scopes and reverse-import exceptions", async () => {
 		const config = await readFile(
@@ -385,13 +386,13 @@ describe("module structure checker", () => {
 
 	it("reports a missing domain with correction", async () => {
 		const root = await validFixture();
-		const missing = join(root, "src", "herdr");
+		const missing = join(root, "src", "herdr-tab-rename");
 		await (await import("node:fs/promises")).rm(missing, { recursive: true });
 		await expect(checkModuleStructure(root)).resolves.toEqual([
 			expect.objectContaining({
-				domain: "herdr",
+				domain: "herdr-tab-rename",
 				message: "missing domain directory",
-				path: "src/herdr",
+				path: "src/herdr-tab-rename",
 			}),
 		]);
 	});

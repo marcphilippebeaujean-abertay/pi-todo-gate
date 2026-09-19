@@ -1,0 +1,25 @@
+export const REVIEW_COMMAND = "tg_review";
+export const REVIEW_DESCRIPTION = "Open Pi reviewer for current PR";
+export const REVIEW_AGENT_NAME = "review";
+export const REVIEW_AGENT_KIND = "pi";
+export const REVIEW_AGENT_NO_EXTENSIONS = "--no-extensions";
+export const REVIEW_PANE_DIRECTION = "right";
+export const REVIEW_PROMPT_PREFIX = "Review PR ";
+export const REVIEW_PROMPT_MIDDLE = " code in ";
+export const REVIEW_PROMPT_SUFFIX =
+	". Inspect the current PR diff and source in this worktree. Report actionable findings with file paths, line references, severity, and concise reasoning. Do not modify files.";
+export const REVIEW_NO_PR = "No active PR to review";
+export const REVIEW_NO_PANE = "Current Herdr pane unavailable";
+export const REVIEW_FAILED = "Review pane failed: ";
+export const PANE = "pane";
+export const SPLIT = "split";
+export const DIRECTION_FLAG = "--direction";
+export const CWD_FLAG = "--cwd";
+export const FOCUS_FLAG = "--focus";
+export const AGENT = "agent";
+export const START = "start";
+export const KIND_FLAG = "--kind";
+export const PANE_FLAG = "--pane";
+export const ARGUMENT_SEPARATOR = "--";
+export const PROMPT = "prompt";
+export const WARNING = "warning";

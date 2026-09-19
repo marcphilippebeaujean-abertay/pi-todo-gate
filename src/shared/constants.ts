@@ -24,7 +24,7 @@ export const EXTENSION_CONSTANTS = {
 		work: "work",
 		pr: "pr",
 		todoist: "todoist",
-		herdr: "herdr",
+		herdrTabRename: "herdrTabRename",
 	},
 	action: {
 		status: "status",

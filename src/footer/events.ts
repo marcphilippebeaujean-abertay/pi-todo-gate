@@ -1,7 +1,12 @@
+export interface FooterType {
+	id: string;
+	name: string;
+}
+
 export interface FooterUpdateEvent {
-	footerType: string;
+	footerType: FooterType;
 	isLoading: boolean;
-	text: string;
+	currentValue: string;
 	isVisible: boolean;
 }
 

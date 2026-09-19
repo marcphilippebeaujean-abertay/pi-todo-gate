@@ -1,6 +1,7 @@
 import type { FooterModuleState } from "./footer/module-state.ts";
-import type { HerdrModuleState } from "./herdr/module-state.ts";
+import type { HerdrTabRenameModuleState } from "./herdr-tab-rename/module-state.ts";
 import type { PrModuleState } from "./pr/module-state.ts";
+import type { ReviewModuleState } from "./review/module-state.ts";
 import type {
 	SessionReader,
 	JsonValue as SharedJsonValue,
@@ -13,8 +14,9 @@ export type {
 	FooterModuleState,
 	FooterStatusState,
 } from "./footer/module-state.ts";
-export type { HerdrModuleState } from "./herdr/module-state.ts";
+export type { HerdrTabRenameModuleState } from "./herdr-tab-rename/module-state.ts";
 export type { MergedPrState, PrModuleState } from "./pr/module-state.ts";
+export type { ReviewModuleState } from "./review/module-state.ts";
 export type { SessionReader, SessionRecord } from "./shared/session-state.ts";
 export type { TodoistModuleState } from "./todoist/module-state.ts";
 export type { WorktreeModuleState } from "./worktree/module-state.ts";
@@ -36,8 +38,9 @@ export interface SessionMetadata {
 
 export interface ModuleState {
 	pr: PrModuleState;
+	review: ReviewModuleState;
 	todoist: TodoistModuleState;
-	herdr: HerdrModuleState;
+	herdrTabRename: HerdrTabRenameModuleState;
 	worktree: WorktreeModuleState;
 	footer: FooterModuleState;
 }
@@ -72,7 +75,8 @@ export function createSessionState(): SessionState {
 				mergedPrs: [],
 			},
 			todoist: {},
-			herdr: {},
+			review: {},
+			herdrTabRename: {},
 			worktree: {},
 			footer: { footers: {} },
 		},

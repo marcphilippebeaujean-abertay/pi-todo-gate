@@ -3,6 +3,11 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { BeforeAgentStartEvent } from "../shared/events.ts";
+import {
+	boundHerdrClient,
+	isInsideHerdr,
+	tabLabel,
+} from "../shared/herdr-client.ts";
 import { modelReference } from "../shared/pi-worker.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
@@ -31,11 +36,10 @@ import type {
 	ClaimWorkerHandle,
 	ClaimWorkerResponse,
 	HerdrClient,
-	HerdrTabOptions,
+	HerdrTabRenameOptions,
 	StartBackgroundWorker,
 } from "./internal-state.ts";
 import { notifyHerdrFailure } from "./notifications.ts";
-import { boundHerdrClient, isInsideHerdr, tabLabel } from "./runtime.ts";
 import { hasValidatedTabClaim } from "./tab-validation.ts";
 
 function currentId(value: string | undefined, subject: "pane" | "tab"): string {
@@ -76,18 +80,18 @@ function applyClaimResponse(
 	}
 }
 
-class HerdrTabClaimConsumer {
+class HerdrTabRenameConsumer {
 	private readonly herdrClient: HerdrClient;
 	private readonly startWorker: StartBackgroundWorker;
-	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
-	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
-	private readonly onClaimReturnedSuccessfully: HerdrTabOptions["onClaimReturnedSuccessfully"];
+	private readonly shouldActivate: HerdrTabRenameOptions["shouldActivate"];
+	private readonly hasStoredClaim: HerdrTabRenameOptions["hasClaimReturnedSuccessfully"];
+	private readonly onClaimReturnedSuccessfully: HerdrTabRenameOptions["onClaimReturnedSuccessfully"];
 	private readonly publishClaimInProgress: NonNullable<
-		HerdrTabOptions["publishClaimInProgress"]
+		HerdrTabRenameOptions["publishClaimInProgress"]
 	>;
 	private readonly events: HerdrEvents;
+	private readonly sessionState: HerdrTabRenameOptions["sessionState"];
 	private sessionCwd: string;
-	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
@@ -99,15 +103,22 @@ class HerdrTabClaimConsumer {
 	private paneId: string | undefined;
 	private claimContext: ExtensionContext | undefined;
 
-	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
-		this.herdrClient =
-			options.herdrClient ?? boundHerdrClient(this.sessionCwdReference);
-		this.sessionCwd = options.cwd ?? process.cwd();
-		this.sessionCwdReference.current = this.sessionCwd;
+	constructor(
+		pi: ExtensionAPI,
+		options: HerdrTabRenameOptions,
+		events: HerdrEvents,
+	) {
+		this.sessionCwd = process.cwd();
+		this.sessionState = options.sessionState;
+		this.herdrClient = options.herdrClient ?? boundHerdrClient(process.cwd());
 		this.startWorker =
 			options.startBackgroundWorker ??
 			((request) =>
-				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
+				defaultStartWorker(
+					this.sessionState?.gitState.worktreeRoot ?? this.sessionCwd,
+					options.spawnWorker,
+					request,
+				));
 		this.shouldActivate = options.shouldActivate;
 		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
 		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
@@ -126,7 +137,6 @@ class HerdrTabClaimConsumer {
 		this.worker = undefined;
 		this.claimContext = undefined;
 		this.sessionCwd = ctx.cwd;
-		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
 		const storedClaim = this.shouldHaveStoredClaim(ctx);
 		this.hasClaimReturnedSuccessfully = storedClaim;
@@ -253,12 +263,12 @@ class HerdrTabClaimConsumer {
 	}
 }
 
-export function installHerdrTabClaim(
+export function installHerdrTabRename(
 	pi: ExtensionAPI,
-	options?: HerdrTabOptions,
+	options?: HerdrTabRenameOptions,
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
 	const events = createHerdrEvents();
-	new HerdrTabClaimConsumer(pi, options ?? {}, events);
+	new HerdrTabRenameConsumer(pi, options ?? {}, events);
 }

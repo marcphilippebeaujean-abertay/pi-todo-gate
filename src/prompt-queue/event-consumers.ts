@@ -238,7 +238,11 @@ export class PromptQueueConsumer {
 		const shouldSkip = !isCurrentBeforeCapability;
 		if (shouldSkip) return;
 		try {
-			await this.todoist.completeMergedTask(snapshot);
+			await this.runWithLoading(
+				C.status.task,
+				this.todoist.completeMergedTask.bind(this.todoist, snapshot),
+				() => this.isCurrentJob(context, snapshot.sessionId, isQueuedCurrent),
+			);
 		} catch {
 			// Continue cleanup even when Todoist completion fails.
 		}
@@ -258,6 +262,7 @@ export class PromptQueueConsumer {
 		const shouldSkip = !isCurrentBeforeCapability;
 		if (shouldSkip) return false;
 		const result = await this.runWithLoading(
+			C.status.pr,
 			this.worktree.removeWorktree.bind(this.worktree, { force }),
 			() => this.isCurrentJob(context, sessionId, isQueuedCurrent),
 		);
@@ -265,15 +270,16 @@ export class PromptQueueConsumer {
 	}
 
 	private async runWithLoading<T>(
+		footerType: string,
 		operation: () => Promise<T>,
 		isCurrent: () => boolean,
 	): Promise<T> {
-		this.footer.setLoading(C.status.pr, true);
+		this.footer.setLoading(footerType, true);
 		try {
 			return await operation();
 		} finally {
-			const shouldClearLoading = isCurrent();
-			if (shouldClearLoading) this.footer.setLoading(C.status.pr, false);
+			const isCurrentAfterOperation = isCurrent();
+			if (isCurrentAfterOperation) this.footer.setLoading(footerType, false);
 		}
 	}
 }

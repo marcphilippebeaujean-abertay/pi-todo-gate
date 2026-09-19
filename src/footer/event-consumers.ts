@@ -4,7 +4,12 @@ import type {
 	EventHandler,
 	ModuleStateChangedEvent,
 } from "../shared/events.ts";
-import { FOOTER_HERDR_TYPE, FOOTER_HERDR_WORKING_STATUS } from "./constants.ts";
+import {
+	FOOTER_HERDR_TYPE,
+	FOOTER_HERDR_VALUE,
+	FOOTER_PR_TYPE,
+	FOOTER_TASK_TYPE,
+} from "./constants.ts";
 import { publishFooterState } from "./event-publishers.ts";
 import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
 import {
@@ -47,14 +52,6 @@ export class FooterEventConsumer {
 		);
 	}
 
-	setLoading(footerType: string, isLoading: boolean): void {
-		const current = this.state.footers[footerType];
-		if (current === undefined) return;
-		const isLoadingUnchanged = current.isLoading === isLoading;
-		if (isLoadingUnchanged) return;
-		this.update({ ...current, isLoading });
-	}
-
 	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
 		this.hasUncommittedChanges =
 			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;
@@ -71,7 +68,7 @@ export class FooterEventConsumer {
 				this.currentTaskName = event.moduleState.taskName;
 				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
 				return;
-			case C.module.herdr:
+			case C.module.herdrTabRename:
 				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
 				return;
 			case C.module.footer: {
@@ -92,9 +89,9 @@ export class FooterEventConsumer {
 	private refreshPrStatus(url?: string): void {
 		if (this.context === null) return;
 		this.update({
-			footerType: C.status.pr,
+			footerType: FOOTER_PR_TYPE,
 			isLoading: false,
-			text: renderPrStatus(
+			currentValue: renderPrStatus(
 				url,
 				this.context.ui.theme,
 				this.hasUncommittedChanges,
@@ -108,7 +105,7 @@ export class FooterEventConsumer {
 		this.update({
 			footerType: FOOTER_HERDR_TYPE,
 			isLoading: claimInProgress,
-			text: FOOTER_HERDR_WORKING_STATUS,
+			currentValue: FOOTER_HERDR_VALUE,
 			isVisible: claimInProgress,
 		});
 	}
@@ -122,9 +119,13 @@ export class FooterEventConsumer {
 		const shouldForce = force ?? false;
 		this.update(
 			{
-				footerType: C.status.task,
+				footerType: FOOTER_TASK_TYPE,
 				isLoading: false,
-				text: renderTaskStatusCompact(url, this.context.ui.theme, taskName),
+				currentValue: renderTaskStatusCompact(
+					url,
+					this.context.ui.theme,
+					taskName,
+				),
 				isVisible: true,
 			},
 			shouldForce,
@@ -145,13 +146,22 @@ export class FooterEventConsumer {
 		this.display.start(nextContext, this.state);
 	}
 
+	setLoading(footerType: string, isLoading: boolean): void {
+		const current = this.state.footers[footerType];
+		if (current === undefined) return;
+		const isLoadingUnchanged = current.isLoading === isLoading;
+		if (isLoadingUnchanged) return;
+		this.update({ ...current, isLoading });
+	}
+
 	update(event: FooterUpdateEvent, force?: boolean): void {
 		const parsed = parseFooterEvent(event);
 		if (this.context === null) return;
-		const previous = this.state.footers[parsed.footerType];
+		const previous = this.state.footers[parsed.footerType.id];
 		const hasPrevious = previous !== undefined;
 		const sameLoading = hasPrevious && previous.isLoading === parsed.isLoading;
-		const sameText = hasPrevious && previous.text === parsed.text;
+		const sameText =
+			hasPrevious && previous.currentValue === parsed.currentValue;
 		const sameVisibility =
 			hasPrevious && previous.isVisible === parsed.isVisible;
 		const sameCore = sameLoading && sameText;
@@ -169,7 +179,7 @@ export class FooterEventConsumer {
 			footers: Object.fromEntries(
 				Object.entries(this.state.footers).map(([key, event]) => [
 					key,
-					{ ...event },
+					{ ...event, footerType: { ...event.footerType } },
 				]),
 			),
 		};

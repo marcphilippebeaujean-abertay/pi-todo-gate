@@ -1,9 +1,13 @@
-import type { Exec } from "../shared/command.ts";
+import type { CommandResult, Exec } from "../shared/command.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
+import { runSessionAction } from "../shared/session-actions.ts";
 import {
 	BRANCH_ARGS,
 	BRANCH_FAILED,
+	BRANCH_SKIPPED_SESSION_CHANGE,
 	CLEANUP_FAILED,
+	CLEANUP_FINISHED_SESSION_CHANGE,
+	CLEANUP_SKIPPED_SESSION_CHANGE,
 	COMPLETED,
 	EMPTY,
 	FAILED,
@@ -83,15 +87,76 @@ function cleanupFailure(
 	return FAILED;
 }
 
+function runCleanupMutation<T>(
+	options: CleanupOptions,
+	action: () => Promise<T> | T,
+	notification: string,
+): ReturnType<typeof runSessionAction<T>> {
+	return runSessionAction(
+		options.isCurrent,
+		action,
+		options.notifySession.bind(null, notification),
+	);
+}
+
+async function removeWorktreeNow(
+	worktree: WorktreeBaseline,
+	removeArgs: string[],
+	options: CleanupOptions,
+): Promise<CommandResult | null> {
+	const removal = await runCleanupMutation(
+		options,
+		() =>
+			options.exec(GIT, removeArgs, {
+				cwd: worktree.mainRoot,
+			}),
+		CLEANUP_SKIPPED_SESSION_CHANGE,
+	);
+	const wasSkipped = !removal.started;
+	if (wasSkipped) return null;
+	const sessionChanged = !removal.currentAfterAction;
+	if (sessionChanged) {
+		await options.notifySession(CLEANUP_FINISHED_SESSION_CHANGE);
+		return null;
+	}
+	return removal.value;
+}
+
+async function deleteBranchNow(
+	worktree: WorktreeBaseline,
+	options: CleanupOptions,
+): Promise<CommandResult | null> {
+	const branchDeletion = await runCleanupMutation(
+		options,
+		() =>
+			options.exec(GIT, [...BRANCH_ARGS, worktree.branch], {
+				cwd: worktree.mainRoot,
+			}),
+		BRANCH_SKIPPED_SESSION_CHANGE,
+	);
+	const wasSkipped = !branchDeletion.started;
+	if (wasSkipped) return null;
+	const sessionChanged = !branchDeletion.currentAfterAction;
+	if (sessionChanged) {
+		await options.notifySession(BRANCH_SKIPPED_SESSION_CHANGE);
+		return null;
+	}
+	return branchDeletion.value;
+}
+
 export async function cleanupWorktree(
 	worktree: WorktreeBaseline,
 	force: boolean,
 	options: CleanupOptions,
 ): Promise<ExitActionResult> {
-	const isCurrent = options.isCurrent();
-	if (!isCurrent) return FAILED;
 	try {
-		options.changeDirectory(worktree.mainRoot);
+		const directoryChange = await runCleanupMutation(
+			options,
+			() => options.changeDirectory(worktree.mainRoot),
+			CLEANUP_SKIPPED_SESSION_CHANGE,
+		);
+		const wasDirectoryChangeSkipped = !directoryChange.started;
+		if (wasDirectoryChangeSkipped) return FAILED;
 	} catch (error) {
 		return cleanupFailure(options, errorDetail(error));
 	}
@@ -99,11 +164,9 @@ export async function cleanupWorktree(
 	const shouldForce = force;
 	if (shouldForce) removeArgs.push(FORCE_ARG);
 	removeArgs.push(worktree.worktreePath);
-	const removeResult = await options.exec(GIT, removeArgs, {
-		cwd: worktree.mainRoot,
-	});
-	const isCurrentAfterRemove = options.isCurrent();
-	if (!isCurrentAfterRemove) return FAILED;
+	const removeResult = await removeWorktreeNow(worktree, removeArgs, options);
+	const hasNoRemoveResult = removeResult === null;
+	if (hasNoRemoveResult) return FAILED;
 	const removeFailed = removeResult.code !== 0;
 	if (removeFailed)
 		return cleanupFailure(
@@ -113,13 +176,9 @@ export async function cleanupWorktree(
 
 	const worktreeRemoved = options.worktreeRemoved;
 	if (worktreeRemoved !== undefined) worktreeRemoved.value = true;
-	const branchResult = await options.exec(
-		GIT,
-		[...BRANCH_ARGS, worktree.branch],
-		{ cwd: worktree.mainRoot },
-	);
-	const isCurrentAfterBranch = options.isCurrent();
-	if (!isCurrentAfterBranch) return FAILED;
+	const branchResult = await deleteBranchNow(worktree, options);
+	const hasNoBranchResult = branchResult === null;
+	if (hasNoBranchResult) return FAILED;
 	const branchFailed = branchResult.code !== 0;
 	if (branchFailed) {
 		options.notify(

@@ -1,8 +1,3 @@
-import { fileURLToPath } from "node:url";
-
-export const mergeProtocolSkillPath = fileURLToPath(
-	new URL("../../skills/merge-protocol", import.meta.url),
-);
 export const MERGE_COMMAND = "tg_merge";
 export const MERGE_DESCRIPTION =
 	"Merge the active session's pinned pull request";
