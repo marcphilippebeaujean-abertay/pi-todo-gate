@@ -58,6 +58,39 @@ describe("Todoist completion capability", () => {
 		expect(currentSession.context.ui.confirm).not.toHaveBeenCalled();
 	});
 
+	it("completes merged snapshot without requiring active PR state", async () => {
+		const eventHandler = createSharedEvents();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.moduleState.todoist = { taskRef: "task-1" };
+		sessionState.moduleState.pr.prUrl = PR_URL;
+		const completeTask = vi.fn(async () => undefined);
+		const currentSession = session(false);
+		const module = createTodoistModule({
+			loadConfig: async () => ({ projects: { "/repo": "project" } }),
+			createTodoistClient: () => ({ completeTask }),
+			eventHandler,
+			sessionState,
+		});
+		await eventHandler.sessionActivatedEvent.emit({
+			context: currentSession.context,
+			sessionId: "session",
+			session: currentSession,
+		});
+		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/99";
+
+		const result = await module.completeMergedTask({
+			taskRef: "task-1",
+			taskName: "Implement feature",
+			prUrl: PR_URL,
+			workRevision: 0,
+			sessionId: "session",
+		});
+
+		expect(result).toBe("completed");
+		expect(completeTask).toHaveBeenCalledWith("task-1");
+	});
+
 	it("completes successfully in a non-UI session without confirmation", async () => {
 		const eventHandler = createSharedEvents();
 		const sessionState = createSessionState();
