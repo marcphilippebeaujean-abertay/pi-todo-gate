@@ -15,6 +15,7 @@ import { createSessionState } from "../../src/state.ts";
 
 type TestFooterModule = {
 	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
+	setLoading(footerType: string, isLoading: boolean): void;
 	update(event: unknown): void;
 	getState(): FooterModuleState;
 	deactivate(): void;
@@ -114,6 +115,26 @@ describe("footer module", () => {
 			const callsAfterLoading = h.statusCalls.length;
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
 			expect(h.statusCalls).toHaveLength(callsAfterLoading);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("shows an animated spinner before status text when loading starts", async () => {
+		vi.useFakeTimers();
+		try {
+			const h = harness();
+			const footer = createTestFooterModule({
+				eventHandler: h.events,
+				sessionState: h.sessionState,
+			});
+			await footer.sessionStart({}, h.context());
+			footer.update(update);
+
+			footer.setLoading(update.footerType, true);
+			expect(h.statusCalls.at(-1)?.text).toBe("⠋ Todoist Task: Fix footer |");
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
+			expect(h.statusCalls.at(-1)?.text).toBe("⠙ Todoist Task: Fix footer |");
 		} finally {
 			vi.useRealTimers();
 		}

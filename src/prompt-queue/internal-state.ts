@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { FooterModule } from "../footer/module.ts";
 import type { PrModule } from "../pr/module.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { ExitActionResult } from "../shared/exit-actions.ts";
@@ -14,6 +15,18 @@ import type { WorktreeCleanup } from "../worktree/module.ts";
 import type { PromptQueue } from "./queue.ts";
 
 export type PromptTask<T> = (isCurrent: () => boolean) => Promise<T> | T;
+
+export interface ExitProtocolPrompt {
+	taskName?: string;
+	worktreePath?: string;
+	branch?: string;
+	hasUncommittedChanges: boolean;
+}
+
+export interface ExitProtocolState {
+	worktree: { worktreePath: string; branch: string } | null;
+	dirty: boolean | null;
+}
 
 export interface CommandDependencies {
 	pi?: ExtensionAPI;
@@ -32,6 +45,7 @@ export interface PromptQueueModuleOptions {
 	pr: PrModule;
 	todoist: TodoistModule;
 	worktree: WorktreeCleanup;
+	footer: FooterModule;
 	queue?: PromptQueue;
 }
 

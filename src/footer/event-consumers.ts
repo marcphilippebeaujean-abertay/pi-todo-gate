@@ -47,6 +47,14 @@ export class FooterEventConsumer {
 		);
 	}
 
+	setLoading(footerType: string, isLoading: boolean): void {
+		const current = this.state.footers[footerType];
+		if (current === undefined) return;
+		const isLoadingUnchanged = current.isLoading === isLoading;
+		if (isLoadingUnchanged) return;
+		this.update({ ...current, isLoading });
+	}
+
 	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
 		this.hasUncommittedChanges =
 			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;

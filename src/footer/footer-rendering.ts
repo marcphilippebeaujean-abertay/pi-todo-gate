@@ -69,7 +69,7 @@ function loadingText(text: string, frame: string): string {
 		const hasSpinner = text.includes(spinner);
 		if (hasSpinner) return text.replace(spinner, frame);
 	}
-	return text;
+	return `${frame} ${text}`;
 }
 
 export class FooterDisplay {
@@ -143,9 +143,14 @@ export class FooterDisplay {
 		const footer = this.footer(event.footerType);
 		footer.update(event);
 		const isHidden = !footer.isVisible;
-		const visibleText = isHidden ? undefined : footer.render();
-		this.setStatus(event.footerType, visibleText);
 		const shouldAnimate = event.isLoading && event.isVisible;
+		const initialFrame = FOOTER_SPINNER_FRAMES[0];
+		const visibleText = isHidden
+			? undefined
+			: shouldAnimate
+				? loadingText(footer.render(), initialFrame)
+				: footer.render();
+		this.setStatus(event.footerType, visibleText);
 		if (!shouldAnimate) return;
 		const animation: Animation = {
 			timer: null,
