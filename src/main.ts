@@ -27,11 +27,20 @@ import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
 
+import { isInsideHerdr } from "./shared/herdr-client.ts";
+import { isRecord } from "./shared/records.ts";
 import { isSubagent } from "./shared/session.ts";
 import { createSessionState } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
 import { createTodoistModule } from "./todoist/module.ts";
 import { todoistStateDescriptor } from "./todoist/module-state.ts";
+import type { TodoistProjectMapping } from "./todoist/parsing.ts";
+import {
+	loadConfig as loadTodoistConfig,
+	parseProjectEntry,
+	resolveConfiguredProject,
+} from "./todoist/parsing.ts";
+import type { WorktreeCleanup } from "./worktree/module.ts";
 import { createWorktreeModule } from "./worktree/module.ts";
 import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 
@@ -57,9 +66,13 @@ interface ExtensionState {
 	promptQueue: PromptQueueModule;
 	eventHandler: EventHandler;
 	footer: FooterModule;
-	pr: PrModule;
-	todoist: TodoistModule;
-	worktree: import("./worktree/module.ts").WorktreeCleanup;
+	pr: PrModule | null;
+	todoist: TodoistModule | null;
+	worktree: WorktreeCleanup | null;
+}
+
+interface CreateExtensionStateOptions {
+	lazyModules?: boolean;
 }
 
 interface ModuleSetupDependencies {
@@ -75,7 +88,9 @@ interface ModuleSetupDependencies {
 export function createExtensionState(
 	pi: ExtensionAPI,
 	dependencies?: ExtensionDependencies,
+	options?: CreateExtensionStateOptions,
 ): ExtensionState {
+	const stateOptions = options ?? {};
 	const providedDependencies = dependencies ?? {};
 	const moduleDependencies: ModuleSetupDependencies = providedDependencies;
 	const eventHandler = createEventHandler();
@@ -99,27 +114,33 @@ export function createExtensionState(
 		eventHandler,
 		getSessionState: () => sessionState,
 	});
-	const worktree = createWorktreeModule({
-		eventHandler,
-		sessionState,
-		exec: moduleDependencies.exec,
-	});
-	const pr = createPrModule({
-		pi,
-		eventHandler,
-		sessionState,
-		exec: moduleDependencies.exec,
-	});
-	const todoist = createTodoistModule({
-		pi,
-		eventHandler,
-		sessionState,
-		exec: moduleDependencies.exec,
-		loadConfig: moduleDependencies.loadConfig,
-		taskClaimWorker: moduleDependencies.taskClaimWorker,
-		taskRefreshWorker: moduleDependencies.taskRefreshWorker,
-		createTodoistClient: moduleDependencies.createTodoistClient,
-	});
+	const worktree = stateOptions.lazyModules
+		? null
+		: createWorktreeModule({
+				eventHandler,
+				sessionState,
+				exec: moduleDependencies.exec,
+			});
+	const pr = stateOptions.lazyModules
+		? null
+		: createPrModule({
+				pi,
+				eventHandler,
+				sessionState,
+				exec: moduleDependencies.exec,
+			});
+	const todoist = stateOptions.lazyModules
+		? null
+		: createTodoistModule({
+				pi,
+				eventHandler,
+				sessionState,
+				exec: moduleDependencies.exec,
+				loadConfig: moduleDependencies.loadConfig,
+				taskClaimWorker: moduleDependencies.taskClaimWorker,
+				taskRefreshWorker: moduleDependencies.taskRefreshWorker,
+				createTodoistClient: moduleDependencies.createTodoistClient,
+			});
 	const promptQueue = createPromptQueueModule({
 		pi,
 		eventHandler,
@@ -127,7 +148,6 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
-		deferRegistration: true,
 	});
 	const extensionState = {
 		pi,
@@ -144,6 +164,7 @@ export function createExtensionState(
 		dependencies: {
 			openSession: providedDependencies.openSession,
 			exec: providedDependencies.exec,
+			resolveSessionProject: providedDependencies.resolveSessionProject,
 		},
 		eventHandler,
 		promptQueue,
@@ -152,6 +173,7 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
+		installModules: () => undefined,
 		session: null,
 		publisher: new RootEventPublisher(eventHandler),
 		stateUpdateEpoch,
@@ -162,12 +184,63 @@ export function createExtensionState(
 	return Object.assign(extensionState, { root });
 }
 
+function todoistProjectMapping(value: unknown): TodoistProjectMapping {
+	if (!isRecord(value) || !isRecord(value.projects)) return { projects: {} };
+	const projects: TodoistProjectMapping["projects"] = {};
+	for (const [path, project] of Object.entries(value.projects)) {
+		const parsed = parseProjectEntry(path, project);
+		if (parsed !== null) projects[parsed[0]] = parsed[1];
+	}
+	return { projects };
+}
+
+async function resolveConfiguredSessionProject(
+	dependencies: ModuleSetupDependencies,
+	cwd: string,
+): Promise<{
+	codingRoot: string;
+	triggersOnlyOnWorktree?: boolean;
+} | null> {
+	const loaded = dependencies.loadConfig
+		? await dependencies.loadConfig()
+		: await loadTodoistConfig();
+	const resolved = resolveConfiguredProject(cwd, todoistProjectMapping(loaded));
+	if (resolved === null) return null;
+	return {
+		codingRoot: resolved.codingRoot,
+		triggersOnlyOnWorktree: resolved.triggersOnlyOnWorktree,
+	};
+}
+
 function startExtensions(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
 ): void {
-	const moduleDependencies: ModuleSetupDependencies = dependencies;
-	const extensionState = createExtensionState(pi, dependencies);
+	let hasCachedConfig = false;
+	let cachedConfig: unknown;
+	const moduleDependencies: ModuleSetupDependencies = {
+		...dependencies,
+		loadConfig: async (path) => {
+			if (hasCachedConfig) return cachedConfig;
+			cachedConfig = dependencies.loadConfig
+				? await dependencies.loadConfig(path)
+				: await loadTodoistConfig(path);
+			hasCachedConfig = true;
+			return cachedConfig;
+		},
+	};
+	const resolveSessionProject =
+		dependencies.resolveSessionProject ??
+		resolveConfiguredSessionProject.bind(null, moduleDependencies);
+	const extensionState = createExtensionState(
+		pi,
+		{ ...dependencies, ...moduleDependencies, resolveSessionProject },
+		{ lazyModules: true },
+	);
+	extensionState.eventHandler.sessionResetEvent.subscribe(() => {
+		hasCachedConfig = false;
+		cachedConfig = undefined;
+	});
 	const root = (
 		extensionState as ExtensionState & {
 			root: Parameters<typeof registerExtensionEventConsumers>[0];
@@ -181,19 +254,65 @@ function startExtensions(
 		root.persistSessionState,
 	);
 	registerExtensionEventConsumers(root);
-	createHerdrTabRenameModule(pi, {
-		eventHandler: extensionState.eventHandler,
-		sessionState: extensionState.sessionState,
-		herdrClient: moduleDependencies.herdrClient,
-		spawnWorker: moduleDependencies.herdrSpawnWorker,
-	});
-	createReviewModule({
-		pi,
-		eventHandler: extensionState.eventHandler,
-		sessionState: extensionState.sessionState,
-		herdrClient: moduleDependencies.herdrClient,
-		deferRegistration: true,
-	});
+	let reviewRegistered = false;
+	root.installModules = ({ isGitProject, isTodoistProject }) => {
+		const worktree =
+			root.worktree ??
+			(isGitProject
+				? createWorktreeModule({
+						eventHandler: extensionState.eventHandler,
+						sessionState: extensionState.sessionState,
+						exec: moduleDependencies.exec,
+					})
+				: null);
+		const pr =
+			root.pr ??
+			(isGitProject
+				? createPrModule({
+						pi,
+						eventHandler: extensionState.eventHandler,
+						sessionState: extensionState.sessionState,
+						exec: moduleDependencies.exec,
+					})
+				: null);
+		const todoist =
+			root.todoist ??
+			(isTodoistProject
+				? createTodoistModule({
+						pi,
+						eventHandler: extensionState.eventHandler,
+						sessionState: extensionState.sessionState,
+						exec: moduleDependencies.exec,
+						loadConfig: moduleDependencies.loadConfig,
+						taskClaimWorker: moduleDependencies.taskClaimWorker,
+						taskRefreshWorker: moduleDependencies.taskRefreshWorker,
+						createTodoistClient: moduleDependencies.createTodoistClient,
+					})
+				: null);
+		extensionState.pr = pr;
+		extensionState.todoist = todoist;
+		extensionState.worktree = worktree;
+		root.pr = pr;
+		root.todoist = todoist;
+		root.worktree = worktree;
+		extensionState.promptQueue.setModules({ pr, todoist, worktree });
+		if (reviewRegistered) return;
+		if (!isGitProject) return;
+		if (!isInsideHerdr()) return;
+		reviewRegistered = true;
+		createReviewModule({
+			pi,
+			sessionState: extensionState.sessionState,
+			herdrClient: moduleDependencies.herdrClient,
+		});
+	};
+	if (isInsideHerdr())
+		createHerdrTabRenameModule(pi, {
+			eventHandler: extensionState.eventHandler,
+			sessionState: extensionState.sessionState,
+			herdrClient: moduleDependencies.herdrClient,
+			spawnWorker: moduleDependencies.herdrSpawnWorker,
+		});
 }
 
 export default function extension(

@@ -109,8 +109,6 @@ async function runReview(
 	dependencies: ReviewCommandDependencies,
 	context: ExtensionCommandContext,
 ): Promise<void> {
-	const isGitProject = dependencies.sessionState.gitState.isGitProject === true;
-	if (!isGitProject) return;
 	const prUrl = dependencies.sessionState.moduleState.pr.prUrl;
 	const hasPrUrl = prUrl !== undefined && prUrl.trim() !== "";
 	if (!hasPrUrl) {

@@ -496,7 +496,7 @@ describe("lazy activation", () => {
 		}));
 		await start(h, { "/configured": MERGE_TD }, { exec });
 		expect(h.tools).toHaveLength(0);
-		expect(h.commands).toHaveLength(0);
+		expect(h.commands.map(({ name }) => name)).toEqual(["tg_merge"]);
 		expect(h.appended).toHaveLength(0);
 	});
 
@@ -535,6 +535,7 @@ describe("lazy activation", () => {
 		await start(h, { [CONFIGURED_PROJECT]: MERGE_TD }, { exec });
 		expect(h.tools).toHaveLength(0);
 		expect(h.commands.map(({ name }) => name)).toEqual([
+			"tg_merge",
 			"tg_refresh_task",
 			"tg_drop_task",
 		]);

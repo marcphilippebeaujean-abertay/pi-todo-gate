@@ -124,12 +124,4 @@ describe("review command", () => {
 
 		expect(fixture.calls).toEqual([]);
 	});
-
-	it("does not open pane from a non-Git session", async () => {
-		const fixture = setup();
-		fixture.dependencies.sessionState.gitState.isGitProject = false;
-		await fixture.handler("", context());
-
-		expect(fixture.calls).toEqual([]);
-	});
 });

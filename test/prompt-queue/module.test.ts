@@ -372,6 +372,23 @@ Mark Todoist task "42" complete?`,
 		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
 	});
 
+	it("skips unavailable capabilities in exit protocol", async () => {
+		const state = setup();
+		state.module.setModules({ pr: null, todoist: null, worktree: null });
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.select).not.toHaveBeenCalled();
+		expect(state.todoist.completeMergedTask).not.toHaveBeenCalled();
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
+	});
+
 	it("shuts down without prompting when no exit actions remain", async () => {
 		const state = setup();
 		state.worktree.getWorktreeInfo.mockReturnValue(null as never);

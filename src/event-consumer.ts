@@ -40,9 +40,13 @@ export interface RootComposition {
 	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule;
 	sessionState: SessionState;
 	footer: FooterModuleType;
-	pr: PrModule;
-	todoist: TodoistModule;
-	worktree: WorktreeCleanup;
+	pr: PrModule | null;
+	todoist: TodoistModule | null;
+	worktree: WorktreeCleanup | null;
+	installModules: (capabilities: {
+		isGitProject: boolean;
+		isTodoistProject: boolean;
+	}) => void;
 	session: SessionRecord | null;
 	publisher: RootEventPublisher;
 	stateUpdateEpoch: { value: number };
@@ -95,9 +99,7 @@ async function inheritPreviousState(
 	const previous: SessionReader =
 		root.dependencies.openSession?.(previousSessionFile) ??
 		SessionManager.open(previousSessionFile);
-	const previousProject = await root.todoist.resolveSessionProject(
-		previous.getCwd(),
-	);
+	const previousProject = await resolveSessionProject(root, previous.getCwd());
 	const sameCodingProject = previousProject?.codingRoot === project.codingRoot;
 	if (!sameCodingProject) return { state, hasPendingHandoffContext: false };
 	const persisted = latestPersistedSessionState(previous.getBranch());
@@ -130,12 +132,22 @@ export function isCurrentSession(root: Root, sessionId: string): boolean {
 	return getActiveSessionId(root) === sessionId;
 }
 
+async function resolveSessionProject(
+	root: Root,
+	cwd: string,
+): Promise<SessionProject | null> {
+	const configuredResolver = root.dependencies.resolveSessionProject;
+	if (configuredResolver !== undefined) return configuredResolver(cwd);
+	if (root.todoist !== null) return root.todoist.resolveSessionProject(cwd);
+	return null;
+}
+
 async function resolveSessionCapabilities(
 	root: Root,
 	sessionId: string,
 	ctx: ExtensionContext,
 ): Promise<{ project: SessionProject; isGitProject: boolean } | null> {
-	const project = await root.todoist.resolveSessionProject(ctx.cwd);
+	const project = await resolveSessionProject(root, ctx.cwd);
 	const isCurrentAfterTodoist = isCurrentSession(root, sessionId);
 	if (!isCurrentAfterTodoist) return null;
 	const projectInfo = await inspectProject(
@@ -252,6 +264,10 @@ export async function handleSessionStart(
 	if (!isCurrentSession(root, sessionId)) return;
 	const capabilities = await resolveSessionCapabilities(root, sessionId, ctx);
 	if (capabilities === null) return;
+	root.installModules({
+		isGitProject: capabilities.isGitProject,
+		isTodoistProject: capabilities.project.isTodoistProject === true,
+	});
 	const activated = await activateConfigured(
 		root,
 		sessionId,

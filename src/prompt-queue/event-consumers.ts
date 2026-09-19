@@ -20,15 +20,13 @@ import { confirmExitProtocol } from "./user-prompts.ts";
 export class PromptQueueConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
-	private readonly pr: PrModule;
-	private readonly todoist: TodoistModule;
-	private readonly worktree: WorktreeCleanup;
+	private pr: PrModule | null;
+	private todoist: TodoistModule | null;
+	private worktree: WorktreeCleanup | null;
 	private readonly queue: PromptQueue;
-	private readonly deferRegistration: boolean;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
 	private sessionId: string | null = null;
-	private commandRegistrar: (() => void) | undefined;
 
 	constructor(options: PromptQueueModuleOptions) {
 		this.eventHandler = options.eventHandler;
@@ -37,7 +35,6 @@ export class PromptQueueConsumer {
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
 		this.queue = options.queue ?? new PromptQueue();
-		this.deferRegistration = options.deferRegistration === true;
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
 			if (session === undefined) return;
@@ -49,10 +46,6 @@ export class PromptQueueConsumer {
 			this.context = event.context;
 			this.session = session;
 			this.sessionId = event.sessionId;
-			const shouldRegisterCommands =
-				options.deferRegistration === true &&
-				session.project?.isGitProject !== false;
-			if (shouldRegisterCommands) this.commandRegistrar?.();
 		});
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
@@ -63,10 +56,14 @@ export class PromptQueueConsumer {
 		);
 	}
 
-	setCommandRegistrar(registrar: () => void): void {
-		this.commandRegistrar = registrar;
-		const shouldRegisterImmediately = !this.deferRegistration;
-		if (shouldRegisterImmediately) registrar();
+	setModules(modules: {
+		pr: PrModule | null;
+		todoist: TodoistModule | null;
+		worktree: WorktreeCleanup | null;
+	}): void {
+		this.pr = modules.pr;
+		this.todoist = modules.todoist;
+		this.worktree = modules.worktree;
 	}
 
 	drain(): Promise<void> {
@@ -75,6 +72,10 @@ export class PromptQueueConsumer {
 
 	getContext(): ExtensionContext | null {
 		return this.context;
+	}
+
+	getPr(): PrModule | null {
+		return this.pr;
 	}
 
 	isCurrentContext(context: ExtensionContext): boolean {
@@ -121,23 +122,41 @@ export class PromptQueueConsumer {
 		if (!isCurrentEvent) return;
 		const taskRef = this.sessionState.moduleState.todoist.taskRef;
 		const prUrl = event.prUrl;
-		const shouldCompleteTodoist = !event.taskMarkedAsCompleted;
-		const hasTask = taskRef !== undefined && prUrl !== null;
-		const shouldQueueTodoist = shouldCompleteTodoist && hasTask;
-		const todoistSnapshot = shouldQueueTodoist
-			? ({
-					taskRef,
-					taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
-					prUrl,
-					workRevision: session.workRevision,
-					sessionId,
-				} satisfies TodoistCompletionSnapshot)
-			: undefined;
+		const todoistSnapshot = this.todoistSnapshot(
+			event,
+			taskRef,
+			prUrl,
+			session,
+			sessionId,
+		);
 		void this.queue
 			.enqueue((isCurrent) =>
 				this.runExitProtocol(context, sessionId, todoistSnapshot, isCurrent),
 			)
 			.catch(() => undefined);
+	}
+
+	private todoistSnapshot(
+		event: PrMergedEvent,
+		taskRef: string | undefined,
+		prUrl: string | null,
+		session: SessionRecord,
+		sessionId: string,
+	): TodoistCompletionSnapshot | undefined {
+		const isTaskMarkedAsCompleted = event.taskMarkedAsCompleted;
+		if (isTaskMarkedAsCompleted) return undefined;
+		const hasTask = taskRef !== undefined && prUrl !== null;
+		const hasNoTask = !hasTask;
+		if (hasNoTask) return undefined;
+		const hasNoTodoistModule = this.todoist === null;
+		if (hasNoTodoistModule) return undefined;
+		return {
+			taskRef,
+			taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
+			prUrl,
+			workRevision: session.workRevision,
+			sessionId,
+		};
 	}
 
 	private async runExitProtocol(
@@ -223,10 +242,13 @@ export class PromptQueueConsumer {
 		);
 		const canReadStatus = context.hasUI && isCurrentBeforeStatus;
 		if (!canReadStatus) return null;
-		const worktree = this.worktree.getWorktreeInfo();
+		const hasWorktreeModule = this.worktree !== null;
+		const worktree = hasWorktreeModule
+			? (this.worktree?.getWorktreeInfo() ?? null)
+			: null;
 		const hasWorktree = worktree !== null;
 		const dirty = hasWorktree
-			? await this.worktree.hasUncommittedChanges()
+			? ((await this.worktree?.hasUncommittedChanges()) ?? null)
 			: false;
 		const isCurrentAfterStatus = this.isCurrentJob(
 			context,
@@ -249,10 +271,13 @@ export class PromptQueueConsumer {
 		);
 		const shouldSkip = !isCurrentBeforeCapability;
 		if (shouldSkip) return;
+		const todoist = this.todoist;
+		const hasTodoistModule = todoist !== null;
+		if (!hasTodoistModule) return;
 		try {
 			await this.runWithLoading(
 				C.action.task,
-				this.todoist.completeMergedTask.bind(this.todoist, snapshot),
+				todoist.completeMergedTask.bind(todoist, snapshot),
 			);
 		} catch {
 			// Continue cleanup even when Todoist completion fails.
@@ -272,9 +297,12 @@ export class PromptQueueConsumer {
 		);
 		const shouldSkip = !isCurrentBeforeCapability;
 		if (shouldSkip) return false;
+		const worktree = this.worktree;
+		const hasWorktreeModule = worktree !== null;
+		if (!hasWorktreeModule) return false;
 		const result = await this.runWithLoading(
 			C.action.pr,
-			this.worktree.removeWorktree.bind(this.worktree, { force }),
+			worktree.removeWorktree.bind(worktree, { force }),
 		);
 		return result === "completed";
 	}

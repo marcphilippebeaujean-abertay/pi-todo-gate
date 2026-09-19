@@ -26,19 +26,15 @@ export function createPromptQueueModule(
 ): PromptQueueModule {
 	const queue = options.queue ?? new PromptQueue();
 	const consumer = new PromptQueueConsumer({ ...options, queue });
-	let registered = false;
-	consumer.setCommandRegistrar(() => {
-		if (registered) return;
-		registered = true;
-		register({
-			pi: options.pi,
-			eventHandler: options.eventHandler,
-			sessionState: options.sessionState,
-			pr: options.pr,
-			queue,
-			getContext: consumer.getContext.bind(consumer),
-			isCurrent: consumer.isCurrentContext.bind(consumer),
-		});
+	register({
+		pi: options.pi,
+		eventHandler: options.eventHandler,
+		sessionState: options.sessionState,
+		pr: options.pr,
+		getPr: consumer.getPr.bind(consumer),
+		queue,
+		getContext: consumer.getContext.bind(consumer),
+		isCurrent: consumer.isCurrentContext.bind(consumer),
 	});
 	return consumer;
 }

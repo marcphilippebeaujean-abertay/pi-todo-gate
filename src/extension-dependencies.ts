@@ -10,4 +10,8 @@ export interface ExtensionDependencies {
 	taskClaimWorker?: unknown;
 	herdrClient?: unknown;
 	herdrSpawnWorker?: unknown;
+	resolveSessionProject?: (cwd: string) => Promise<{
+		codingRoot: string;
+		triggersOnlyOnWorktree?: boolean;
+	} | null>;
 }

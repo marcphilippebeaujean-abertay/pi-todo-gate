@@ -31,7 +31,8 @@ export interface CommandDependencies {
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	pr: PrModule;
+	pr: PrModule | null;
+	getPr?: () => PrModule | null;
 	queue: PromptQueue;
 	getContext: () => ExtensionContext | null;
 	isCurrent: (context: ExtensionContext) => boolean;
@@ -41,15 +42,19 @@ export interface PromptQueueModuleOptions {
 	pi?: ExtensionAPI;
 	eventHandler: EventHandler;
 	sessionState: SessionState;
-	pr: PrModule;
-	todoist: TodoistModule;
-	worktree: WorktreeCleanup;
+	pr: PrModule | null;
+	todoist: TodoistModule | null;
+	worktree: WorktreeCleanup | null;
 	queue?: PromptQueue;
-	deferRegistration?: boolean;
 }
 
 export interface PromptQueueModule {
 	drain(): Promise<void>;
+	setModules(modules: {
+		pr: PrModule | null;
+		todoist: TodoistModule | null;
+		worktree: WorktreeCleanup | null;
+	}): void;
 }
 
 export interface PromptContext {
