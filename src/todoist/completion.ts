@@ -31,9 +31,7 @@ function isCurrentCompletionState(
 	const isCurrentTask =
 		operations.sessionState.moduleState.todoist.taskRef ===
 		stateSnapshot.taskRef;
-	const isCurrentPr =
-		operations.sessionState.moduleState.pr.prUrl === stateSnapshot.prUrl;
-	return [isCurrentRevision, isCurrentTask, isCurrentPr].every(Boolean);
+	return [isCurrentRevision, isCurrentTask].every(Boolean);
 }
 
 function isCurrentSession(
