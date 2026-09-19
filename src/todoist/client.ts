@@ -22,7 +22,6 @@ import {
 	VIEW,
 } from "./constants.ts";
 import type {
-	IsCurrentOperation,
 	TodoistClientFactoryDependencies,
 	TodoistClientLike,
 	TodoistExec,
@@ -35,7 +34,6 @@ import {
 	sanitizeError,
 	stringValue,
 	TodoistError,
-	TodoistOperationCancelled,
 	taskFromPayload,
 } from "./parsing.ts";
 
@@ -45,18 +43,9 @@ export class TodoistClient {
 	private async run(
 		args: readonly string[],
 		parseJson?: boolean,
-		isCurrent?: IsCurrentOperation,
 	): Promise<unknown> {
 		const shouldParseJson = parseJson ?? true;
-		if (isCurrent !== undefined) {
-			const isCurrentBeforeRun = isCurrent();
-			if (!isCurrentBeforeRun) throw new TodoistOperationCancelled();
-		}
 		const result = await this.exec.run(args);
-		if (isCurrent !== undefined) {
-			const isCurrentAfterRun = isCurrent();
-			if (!isCurrentAfterRun) throw new TodoistOperationCancelled();
-		}
 		const commandFailed = result.code !== 0;
 		if (commandFailed) {
 			const family = args.slice(0, 2).join(" ");
@@ -67,15 +56,8 @@ export class TodoistClient {
 			: result.stdout;
 	}
 
-	async resolveProject(
-		ref: string,
-		isCurrent?: IsCurrentOperation,
-	): Promise<{ id: string; name: string }> {
-		const payload = await this.run(
-			[PROJECT, LIST, JSON_OUTPUT_FLAG],
-			true,
-			isCurrent,
-		);
+	async resolveProject(ref: string): Promise<{ id: string; name: string }> {
+		const payload = await this.run([PROJECT, LIST, JSON_OUTPUT_FLAG], true);
 		const rows = childList(payload).map(record);
 		const hasIdPrefix = ref.startsWith(ID);
 		const target = hasIdPrefix ? ref.slice(ID.length) : ref;
@@ -92,12 +74,9 @@ export class TodoistClient {
 		return { id: stringValue(match.id), name: stringValue(match.name) };
 	}
 
-	async getTask(
-		ref: string,
-		isCurrent?: IsCurrentOperation,
-	): Promise<TodoistTask> {
+	async getTask(ref: string): Promise<TodoistTask> {
 		const task = taskFromPayload(
-			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG], true, isCurrent),
+			await this.run([TASK, VIEW, ref, JSON_OUTPUT_FLAG], true),
 		);
 		const hasNoTaskUrl = !task.url && !task.webUrl;
 		if (hasNoTaskUrl) task.url = `https://app.todoist.com/app/task/${task.id}`;
@@ -107,7 +86,6 @@ export class TodoistClient {
 	private async resolveSectionName(
 		task: TodoistTask,
 		projectId: string,
-		isCurrent?: IsCurrentOperation,
 	): Promise<string | null | undefined> {
 		const hasSectionName = Boolean(task.sectionName);
 		if (hasSectionName) return task.sectionName;
@@ -116,7 +94,6 @@ export class TodoistClient {
 		const sections = await this.run(
 			[SECTION, LIST, PROJECT_FLAG, `${ID}${projectId}`, JSON_OUTPUT_FLAG],
 			true,
-			isCurrent,
 		);
 		const section = childList(sections)
 			.map(record)
@@ -125,23 +102,15 @@ export class TodoistClient {
 		return hasSection ? stringValue(section.name) || null : null;
 	}
 
-	async claimTask(
-		ref: string,
-		project: { id: string },
-		isCurrent?: IsCurrentOperation,
-	): Promise<TodoistTask> {
-		const task = await this.getTask(ref, isCurrent);
+	async claimTask(ref: string, project: { id: string }): Promise<TodoistTask> {
+		const task = await this.getTask(ref);
 		const isOutsideProject = task.projectId !== project.id;
 		if (isOutsideProject)
 			throw new TodoistError(
 				TASK_CLAIM,
 				TASK_IS_OUTSIDE_THE_CONFIGURED_PROJECT,
 			);
-		let sectionName = await this.resolveSectionName(
-			task,
-			project.id,
-			isCurrent,
-		);
+		let sectionName = await this.resolveSectionName(task, project.id);
 		const isInProgress =
 			sectionName?.trim().toLowerCase() === IN_PROGRESS_VALUE;
 		const needsInProgressMove = !isInProgress;
@@ -157,7 +126,6 @@ export class TodoistClient {
 					`${ID}${project.id}`,
 				],
 				false,
-				isCurrent,
 			);
 			sectionName = IN_PROGRESS_LABEL;
 		}
@@ -175,7 +143,6 @@ export class TodoistClient {
 		title: string,
 		description: string,
 		project: { id: string },
-		isCurrent?: IsCurrentOperation,
 	): Promise<TodoistTask> {
 		const task = taskFromPayload(
 			await this.run(
@@ -192,7 +159,6 @@ export class TodoistClient {
 					JSON_OUTPUT_FLAG,
 				],
 				true,
-				isCurrent,
 			),
 		);
 		return {
@@ -204,11 +170,8 @@ export class TodoistClient {
 		};
 	}
 
-	async completeTask(
-		ref: string,
-		isCurrent?: IsCurrentOperation,
-	): Promise<void> {
-		await this.run([TASK, COMPLETE, ref], false, isCurrent);
+	async completeTask(ref: string): Promise<void> {
+		await this.run([TASK, COMPLETE, ref], false);
 	}
 }
 

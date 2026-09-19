@@ -1637,7 +1637,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(completeTask).toHaveBeenCalledWith(TASK_1, expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith(TASK_1);
 		const clearing = h.tools[0].execute(
 			CALL,
 			{ action: CLEAR_TASK },

@@ -126,12 +126,8 @@ async function requestRefreshResult(
 	ctx: ExtensionCommandContext,
 	taskContext: SelectedTaskContext,
 ): Promise<TaskRefreshWorkerResult | undefined> {
-	const isCurrentBeforeInspection = isCurrentTask(operations, taskContext);
-	if (!isCurrentBeforeInspection) return undefined;
 	const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 	const worktree = await inspectProject(exec, ctx.cwd);
-	const isCurrentAfterInspection = isCurrentTask(operations, taskContext);
-	if (!isCurrentAfterInspection) return undefined;
 	const worker =
 		operations.taskRefreshWorker ??
 		operations.dependencies?.taskRefreshWorker ??
@@ -149,6 +145,8 @@ async function refreshTaskNow(
 	const result = await requestRefreshResult(operations, ctx, taskContext);
 	const shouldIgnoreResult = result === undefined;
 	if (shouldIgnoreResult) return;
+	const isCurrentBeforePersist = isCurrentTask(operations, taskContext);
+	if (!isCurrentBeforePersist) return;
 	const nextState = applyRefreshResult(
 		operations.sessionState.moduleState.todoist,
 		result,
