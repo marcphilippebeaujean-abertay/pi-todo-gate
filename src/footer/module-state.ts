@@ -3,14 +3,12 @@ import type {
 	ModuleStateDescriptor,
 } from "../shared/session-state.ts";
 import {
-	requireBoolean,
 	requireNonEmptyString,
 	requireRecord,
 	requireString,
 } from "../shared/validation.ts";
 import {
 	FOOTER_CURRENT_VALUE_FIELD,
-	FOOTER_EVENT_LABEL,
 	FOOTER_FOOTERS_LABEL,
 	FOOTER_HERDR_TYPE,
 	FOOTER_PERSISTED_LABEL,
@@ -19,17 +17,13 @@ import {
 	FOOTER_TASK_TYPE,
 	FOOTER_TEXT_FIELD,
 	FOOTER_TYPE_FIELD,
-	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
 import type { FooterType } from "./events.ts";
 
-export interface FooterUpdate {
+export interface FooterEntryState {
 	footerType: FooterType;
 	currentValue: string;
 	isVisible: boolean;
-}
-
-export interface FooterEntryState extends FooterUpdate {
 	isLoading: boolean;
 }
 
@@ -37,13 +31,13 @@ export interface FooterModuleState {
 	footers: Record<string, FooterEntryState>;
 }
 
-export interface PersistedFooterUpdate {
+export interface PersistedFooterEntry {
 	footerType: FooterType;
 	currentValue: string | null;
 }
 
 export interface PersistedFooterState {
-	footers: Record<string, PersistedFooterUpdate>;
+	footers: Record<string, PersistedFooterEntry>;
 }
 
 const KNOWN_FOOTER_TYPES = [
@@ -78,32 +72,6 @@ function legacyCurrentValue(footerType: FooterType, text: string): string {
 		default:
 			return text;
 	}
-}
-
-function eventCurrentValue(
-	event: Record<string, unknown>,
-	footerType: FooterType,
-): string {
-	const hasCurrentValue = Object.hasOwn(event, FOOTER_CURRENT_VALUE_FIELD);
-	if (hasCurrentValue)
-		return requireString(
-			event[FOOTER_CURRENT_VALUE_FIELD],
-			FOOTER_CURRENT_VALUE_FIELD,
-		);
-	return legacyCurrentValue(
-		footerType,
-		requireString(event[FOOTER_TEXT_FIELD], FOOTER_TEXT_FIELD),
-	);
-}
-
-export function parseFooterEvent(value: unknown): FooterUpdate {
-	const event = requireRecord(value, FOOTER_EVENT_LABEL);
-	const footerType = parseFooterType(event.footerType);
-	return {
-		footerType,
-		currentValue: eventCurrentValue(event, footerType),
-		isVisible: requireBoolean(event.isVisible, FOOTER_VISIBLE_FIELD),
-	};
 }
 
 export function emptyFooterState(): FooterModuleState {
@@ -184,7 +152,7 @@ export function restoreFooterState(value: unknown): FooterModuleState | null {
 export function serializeFooterState(
 	state: FooterModuleState,
 ): PersistedFooterState {
-	const footers: Record<string, PersistedFooterUpdate> = {};
+	const footers: Record<string, PersistedFooterEntry> = {};
 	for (const event of Object.values(state.footers)) {
 		const isTransientHerdr = event.footerType.id === FOOTER_HERDR_TYPE.id;
 		if (isTransientHerdr) continue;
@@ -196,35 +164,6 @@ export function serializeFooterState(
 		};
 	}
 	return { footers };
-}
-
-export function applyFooterUpdate(
-	state: FooterModuleState,
-	event: FooterUpdate,
-	isLoading?: boolean,
-): FooterModuleState {
-	const loading = isLoading ?? false;
-	return {
-		footers: {
-			...state.footers,
-			[event.footerType.id]: { ...event, isLoading: loading },
-		},
-	};
-}
-
-export function applyFooterLoading(
-	state: FooterModuleState,
-	footerType: FooterType,
-	isLoading: boolean,
-): FooterModuleState {
-	const current = state.footers[footerType.id];
-	if (current === undefined) return state;
-	return {
-		footers: {
-			...state.footers,
-			[footerType.id]: { ...current, isLoading },
-		},
-	};
 }
 
 export const footerStateDescriptor: ModuleStateDescriptor<

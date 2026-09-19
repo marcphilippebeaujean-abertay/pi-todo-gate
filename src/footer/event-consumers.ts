@@ -1,9 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type {
-	EventHandler,
-	FooterSessionStartEvent,
-} from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_HERDR_VALUE,
@@ -42,19 +39,15 @@ export class FooterEventConsumer {
 		this.eventHandler.sessionStateChangedEvent.subscribe(({ currentState }) =>
 			this.project(currentState),
 		);
-		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, previousSessionFile }) =>
-				this.sessionStart({ previousSessionFile }, context),
+		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
+			this.sessionStart(context),
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
 		);
 	}
 
-	async sessionStart(
-		_event: FooterSessionStartEvent,
-		nextContext: ExtensionContext,
-	): Promise<void> {
+	async sessionStart(nextContext: ExtensionContext): Promise<void> {
 		this.context = nextContext;
 		this.project(this.getSessionState(), true);
 	}

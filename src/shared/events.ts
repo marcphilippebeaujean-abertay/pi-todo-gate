@@ -81,10 +81,6 @@ export interface ActionLoadingEvent {
 	isLoading: boolean;
 }
 
-export interface FooterSessionStartEvent {
-	previousSessionFile?: string;
-}
-
 export interface SessionNotificationEvent {
 	message: string;
 	level: "info" | "warning";

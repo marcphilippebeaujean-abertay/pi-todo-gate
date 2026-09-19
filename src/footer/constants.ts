@@ -16,7 +16,6 @@ export const FOOTER_TASK_TYPE = {
 } as const satisfies FooterType;
 export const FOOTER_HERDR_VALUE = "working";
 export const FOOTER_CUSTOM_ENTRY_TYPE = "custom";
-export const FOOTER_EVENT_LABEL = "footer event";
 export const FOOTER_STATE_LABEL = "footer state";
 export const FOOTER_FOOTERS_LABEL = "footer state footers";
 export const FOOTER_PERSISTED_LABEL = "persisted footer";
@@ -24,7 +23,6 @@ export const FOOTER_TYPE_FIELD = "footerType";
 export const FOOTER_LOADING_FIELD = "isLoading";
 export const FOOTER_TEXT_FIELD = "text";
 export const FOOTER_CURRENT_VALUE_FIELD = "currentValue";
-export const FOOTER_VISIBLE_FIELD = "isVisible";
 export const FOOTER_SPINNER_INTERVAL_MS = 100;
 export const FOOTER_SPINNER_FRAMES = [
 	"⠋",

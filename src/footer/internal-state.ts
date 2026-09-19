@@ -15,7 +15,7 @@ export type FooterSessionRecord = {
 export type AnimationTimer = ReturnType<typeof setInterval>;
 export interface FooterAnimation {
 	timer: AnimationTimer | null;
-	event: FooterEntryState;
+	entry: FooterEntryState;
 	frameIndex: number;
 }
 export interface FooterRenderState {
@@ -52,6 +52,6 @@ export interface TodoistFooterTheme {
 export interface FooterEntry {
 	readonly footerType: FooterType;
 	readonly isVisible: boolean;
-	update(event: FooterEntryState): void;
+	update(entry: FooterEntryState): void;
 	render(): string;
 }
