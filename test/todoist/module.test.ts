@@ -78,7 +78,7 @@ describe("Todoist module ownership", () => {
 			sessionState: createSessionState(),
 		});
 
-		expect(await module.resolveSessionProject("/repo/src")).toEqual({
+		expect(await module.resolveConfiguredProject("/repo/src")).toEqual({
 			codingRoot: "/repo",
 			triggersOnlyOnWorktree: false,
 		});
@@ -99,11 +99,11 @@ describe("Todoist module ownership", () => {
 			sessionState: createSessionState(),
 		});
 
-		expect(await module.resolveSessionProject("/null")).toBeNull();
-		expect(await module.resolveSessionProject("/number")).toBeNull();
-		expect(await module.resolveSessionProject("/array")).toBeNull();
-		expect(await module.resolveSessionProject("/missing")).toBeNull();
-		expect(await module.resolveSessionProject("/valid")).toEqual({
+		expect(await module.resolveConfiguredProject("/null")).toBeNull();
+		expect(await module.resolveConfiguredProject("/number")).toBeNull();
+		expect(await module.resolveConfiguredProject("/array")).toBeNull();
+		expect(await module.resolveConfiguredProject("/missing")).toBeNull();
+		expect(await module.resolveConfiguredProject("/valid")).toEqual({
 			codingRoot: "/valid",
 			triggersOnlyOnWorktree: true,
 		});

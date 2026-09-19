@@ -165,7 +165,7 @@ export function createExtensionState(
 		dependencies: {
 			openSession: providedDependencies.openSession,
 			exec: providedDependencies.exec,
-			resolveSessionProject: providedDependencies.resolveSessionProject,
+			resolveConfiguredProject: providedDependencies.resolveConfiguredProject,
 		},
 		eventHandler,
 		promptQueue,
@@ -227,12 +227,16 @@ function startExtensions(
 			return cachedConfig;
 		},
 	};
-	const resolveSessionProject =
-		dependencies.resolveSessionProject ??
+	const resolveConfiguredProject =
+		dependencies.resolveConfiguredProject ??
 		resolveConfiguredSessionProject.bind(null, moduleDependencies);
 	const extensionState = createExtensionState(
 		pi,
-		{ ...dependencies, ...moduleDependencies, resolveSessionProject },
+		{
+			...dependencies,
+			...moduleDependencies,
+			resolveConfiguredProject,
+		},
 		{ lazyModules: true },
 	);
 	extensionState.eventHandler.sessionResetEvent.subscribe(() => {

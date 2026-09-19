@@ -91,7 +91,7 @@ export interface RootDependencies {
 	loadConfig?: (path?: string) => Promise<unknown>;
 	openSession?: (path: string) => SessionReader;
 	exec?: import("./shared/command.ts").Exec;
-	resolveSessionProject?: (
+	resolveConfiguredProject?: (
 		cwd: string,
 	) => Promise<import("./shared/session-state.ts").SessionProject | null>;
 }

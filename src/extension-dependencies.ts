@@ -10,5 +10,5 @@ export interface ExtensionDependencies {
 	taskClaimWorker?: unknown;
 	herdrClient?: unknown;
 	herdrSpawnWorker?: unknown;
-	resolveSessionProject?: (cwd: string) => Promise<SessionProject | null>;
+	resolveConfiguredProject?: (cwd: string) => Promise<SessionProject | null>;
 }

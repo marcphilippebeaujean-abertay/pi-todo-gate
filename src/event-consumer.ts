@@ -100,7 +100,10 @@ async function inheritPreviousState(
 	const previous: SessionReader =
 		root.dependencies.openSession?.(previousSessionFile) ??
 		SessionManager.open(previousSessionFile);
-	const previousProject = await resolveSessionProject(root, previous.getCwd());
+	const previousProject = await resolveConfiguredProject(
+		root,
+		previous.getCwd(),
+	);
 	const sameCodingProject = previousProject?.codingRoot === project.codingRoot;
 	if (!sameCodingProject) return { state, hasPendingHandoffContext: false };
 	const persisted = latestPersistedSessionState(previous.getBranch());
@@ -133,13 +136,13 @@ export function isCurrentSession(root: Root, sessionId: string): boolean {
 	return getActiveSessionId(root) === sessionId;
 }
 
-async function resolveSessionProject(
+async function resolveConfiguredProject(
 	root: Root,
 	cwd: string,
 ): Promise<SessionProject | null> {
-	const configuredResolver = root.dependencies.resolveSessionProject;
+	const configuredResolver = root.dependencies.resolveConfiguredProject;
 	if (configuredResolver !== undefined) return configuredResolver(cwd);
-	if (root.todoist !== null) return root.todoist.resolveSessionProject(cwd);
+	if (root.todoist !== null) return root.todoist.resolveConfiguredProject(cwd);
 	return null;
 }
 
@@ -148,7 +151,7 @@ async function resolveSessionCapabilities(
 	sessionId: string,
 	ctx: ExtensionContext,
 ): Promise<SessionProject | null> {
-	const project = await resolveSessionProject(root, ctx.cwd);
+	const project = await resolveConfiguredProject(root, ctx.cwd);
 	const isCurrentAfterTodoist = isCurrentSession(root, sessionId);
 	if (!isCurrentAfterTodoist) return null;
 	const projectInfo = await inspectProject(

@@ -44,7 +44,7 @@ import {
 export type { SessionProject } from "../shared/session-state.ts";
 
 export interface TodoistModule {
-	resolveSessionProject(cwd: string): Promise<SessionProject | null>;
+	resolveConfiguredProject(cwd: string): Promise<SessionProject | null>;
 	completeMergedTask(
 		snapshot: TodoistCompletionSnapshot,
 	): Promise<import("../shared/exit-actions.ts").ExitActionResult>;
@@ -115,7 +115,7 @@ class TodoistModuleImpl implements TodoistModule {
 		return { projects };
 	}
 
-	private async resolveConfiguredProject(
+	private async resolveTodoistProject(
 		cwd: string,
 	): Promise<ResolvedProject | null> {
 		const config = await this.loadProjectMapping();
@@ -135,8 +135,8 @@ class TodoistModuleImpl implements TodoistModule {
 		);
 	}
 
-	async resolveSessionProject(cwd: string): Promise<SessionProject | null> {
-		const resolved = await this.resolveConfiguredProject(cwd);
+	async resolveConfiguredProject(cwd: string): Promise<SessionProject | null> {
+		const resolved = await this.resolveTodoistProject(cwd);
 		this.pendingProjects.set(cwd, resolved);
 		if (resolved === null) return null;
 		return {
@@ -152,7 +152,7 @@ class TodoistModuleImpl implements TodoistModule {
 		const hasPendingProject = this.pendingProjects.has(session.context.cwd);
 		const resolved = hasPendingProject
 			? (this.pendingProjects.get(session.context.cwd) ?? null)
-			: await this.resolveConfiguredProject(session.context.cwd);
+			: await this.resolveTodoistProject(session.context.cwd);
 		this.pendingProjects.delete(session.context.cwd);
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
 		const hasCurrentSessionId = activeSessionId === sessionId;
