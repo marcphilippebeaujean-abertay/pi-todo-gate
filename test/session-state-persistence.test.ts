@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FOOTER_TASK_TYPE } from "../src/footer/constants.ts";
 import {
 	latestPersistedSessionState,
 	type ModuleStateDescriptor,
@@ -106,10 +107,10 @@ function snapshot(): SessionState {
 		initialHead: "abc",
 		initialStatus: "",
 	};
-	state.moduleState.footer.footers.status = {
-		footerType: "status",
+	state.moduleState.footer.footers[FOOTER_TASK_TYPE.id] = {
+		footerType: FOOTER_TASK_TYPE,
 		isLoading: false,
-		text: "ready",
+		currentValue: "ready",
 		isVisible: true,
 	};
 	return state;

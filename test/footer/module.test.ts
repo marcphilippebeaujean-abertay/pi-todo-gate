@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_SPINNER_INTERVAL_MS,
+	FOOTER_STATUS_KEY,
+	FOOTER_TASK_TYPE,
 } from "../../src/footer/constants.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
 import type {
@@ -45,9 +47,9 @@ function harness(branch: unknown[] = []) {
 }
 
 const update: FooterUpdate = {
-	footerType: "pi-todo-gate-task",
+	footerType: FOOTER_TASK_TYPE,
 	isLoading: false,
-	text: "Todoist Task: Fix footer |",
+	currentValue: "Fix footer",
 	isVisible: true,
 };
 
@@ -65,9 +67,9 @@ describe("footer module", () => {
 		).toEqual({
 			footers: {
 				"actual-footer": {
-					footerType: "actual-footer",
+					footerType: { id: "actual-footer", name: "actual-footer" },
 					isLoading: false,
-					text: "Footer",
+					currentValue: "Footer",
 					isVisible: true,
 				},
 			},
@@ -90,7 +92,7 @@ describe("footer module", () => {
 		expect(footer.getState()).toEqual({ footers: {} });
 	});
 
-	it("animates loading footer text and stops after loading ends", async () => {
+	it("animates loading footer value and stops after loading ends", async () => {
 		vi.useFakeTimers();
 		try {
 			const h = harness();
@@ -103,14 +105,14 @@ describe("footer module", () => {
 			footer.update({
 				...update,
 				isLoading: true,
-				text: "Todoist Task: ⠋ loading |",
+				currentValue: "loading",
 			});
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
+			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠋ loading|");
 
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
-			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
+			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠙ loading|");
 
-			footer.update({ ...update, text: "Todoist Task: done |" });
+			footer.update({ ...update, currentValue: "done" });
 			const callsAfterLoading = h.statusCalls.length;
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
 			expect(h.statusCalls).toHaveLength(callsAfterLoading);
@@ -131,11 +133,11 @@ describe("footer module", () => {
 		footer.update({ ...update, isVisible: false });
 
 		expect(h.statusCalls).toEqual([
-			{ key: update.footerType, text: update.text },
-			{ key: update.footerType, text: undefined },
+			{ key: FOOTER_STATUS_KEY, text: "|Todoist Task: Fix footer|" },
+			{ key: FOOTER_STATUS_KEY, text: undefined },
 		]);
 		expect(footer.getState()).toEqual({
-			footers: { [update.footerType]: { ...update, isVisible: false } },
+			footers: { [update.footerType.id]: { ...update, isVisible: false } },
 		});
 	});
 
@@ -156,7 +158,7 @@ describe("footer module", () => {
 		expect(updates).toEqual([
 			{
 				moduleId: "footer",
-				moduleState: { footers: { [update.footerType]: update } },
+				moduleState: { footers: { [update.footerType.id]: update } },
 				persist: false,
 			},
 		]);
@@ -215,7 +217,7 @@ describe("footer module", () => {
 			expect.objectContaining({
 				"pi-todo-gate-pr": expect.objectContaining({ isVisible: true }),
 				"pi-todo-gate-task": expect.objectContaining({ isVisible: true }),
-				[FOOTER_HERDR_TYPE]: expect.objectContaining({
+				[FOOTER_HERDR_TYPE.id]: expect.objectContaining({
 					isLoading: true,
 					isVisible: true,
 				}),
@@ -242,14 +244,14 @@ describe("footer module", () => {
 			persist: false,
 		});
 
-		expect(footer.getState().footers[FOOTER_HERDR_TYPE]).toEqual({
+		expect(footer.getState().footers[FOOTER_HERDR_TYPE.id]).toEqual({
 			footerType: FOOTER_HERDR_TYPE,
 			isLoading: false,
-			text: "| Herdr: ⠋ working",
+			currentValue: "working",
 			isVisible: false,
 		});
 		expect(h.statusCalls.at(-1)).toEqual({
-			key: FOOTER_HERDR_TYPE,
+			key: FOOTER_STATUS_KEY,
 			text: undefined,
 		});
 	});
@@ -268,7 +270,7 @@ describe("footer module", () => {
 
 		expect(footer.getState()).toEqual({ footers: {} });
 		expect(h.statusCalls.at(-1)).toEqual({
-			key: update.footerType,
+			key: FOOTER_STATUS_KEY,
 			text: undefined,
 		});
 	});

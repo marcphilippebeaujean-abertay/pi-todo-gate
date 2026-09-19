@@ -4,13 +4,10 @@ const HTTPS_GITHUB_COM_OWNER_REPO_PULL_42 =
 	"https://github.com/owner/repo/pull/42";
 const HTTPS_APP_TODOIST_COM_APP_TASK_7 = "https://app.todoist.com/app/task/7";
 const IMPLEMENT_FEATURE = "Implement feature";
-const MUTED_PR_LINK_MUTED = "<muted>| PR Link: </muted>";
 const VALUE_4_M_ACCENT_42_ACCENT_24_M =
 	"\u001b[4m<accent>#42</accent>\u001b[24m";
 const VALUE_4_M_ACCENT_42_STAR_ACCENT_24_M =
 	"\u001b[4m<accent>#42*</accent>\u001b[24m";
-const MUTED_MUTED = "<muted> |</muted>";
-const MUTED_TODOIST_TASK_MUTED = "<muted>Todoist Task: </muted>";
 const VALUE_4_M_ACCENT_IMPLEMENT_FEATU_ACCENT_24 =
 	"\u001b[4m<accent>Implement featu...</accent>\u001b[24m";
 const VALUE_7 = "#7";
@@ -44,7 +41,7 @@ const RENDERS_CURRENT_STATE_AND_REQUESTS_REFRESH_ON =
 	"renders current state and requests refresh on branch changes";
 const MAIN = "main";
 const FEATURE = "feature";
-const PR_LINK_PREFIX = "| PR Link: ";
+const PR_LINK_PREFIX = "#";
 const PR_NUMBER = "#42";
 const BOUNDED_PR_NUMBER = "#12345…";
 
@@ -69,19 +66,34 @@ const styledTheme: FooterTheme = {
 };
 
 describe("Footer entries", () => {
+	it("renders named footer values with generic loading animation", () => {
+		const herdr = { id: "herdr", name: "Herdr" } as const;
+		const footer = new Footer(herdr);
+		footer.update({
+			footerType: herdr,
+			isLoading: true,
+			currentValue: "working",
+			isVisible: true,
+		});
+
+		expect(footer.render()).toBe("Herdr: ⠋ working");
+	});
+
 	it("updates only its own value and renders visible entries with separators", () => {
-		const task = new Footer("task", "Task: ");
-		const pr = new Footer("pr", "PR: ");
+		const taskType = { id: "task", name: "Task" } as const;
+		const prType = { id: "pr", name: "PR" } as const;
+		const task = new Footer(taskType);
+		const pr = new Footer(prType);
 		task.update({
-			footerType: "task",
+			footerType: taskType,
 			isLoading: false,
-			text: "work",
+			currentValue: "work",
 			isVisible: true,
 		});
 		pr.update({
-			footerType: "pr",
+			footerType: prType,
 			isLoading: false,
-			text: "42",
+			currentValue: "42",
 			isVisible: true,
 		});
 
@@ -111,11 +123,10 @@ describe("renderFooterLine", () => {
 			styledTheme,
 			IMPLEMENT_FEATURE,
 		);
-		expect(pr).toContain(MUTED_PR_LINK_MUTED);
 		expect(pr).toContain(VALUE_4_M_ACCENT_42_ACCENT_24_M);
-		expect(pr).toContain(MUTED_MUTED);
-		expect(task).toContain(MUTED_TODOIST_TASK_MUTED);
+		expect(pr).not.toContain("PR Link");
 		expect(task).toContain(VALUE_4_M_ACCENT_IMPLEMENT_FEATU_ACCENT_24);
+		expect(task).not.toContain("Todoist Task");
 		expect(task).not.toContain(VALUE_7);
 	});
 
@@ -250,9 +261,7 @@ describe("renderPrStatus", () => {
 
 describe("Todoist footer rendering", () => {
 	it("bounds compact task status with a trailing divider", () => {
-		expect(renderTaskStatusCompact(undefined, theme)).toBe(
-			"Todoist Task: none |",
-		);
+		expect(renderTaskStatusCompact(undefined, theme)).toBe("none");
 	});
 
 	it("renders a linked task with a bounded name", () => {
@@ -267,8 +276,6 @@ describe("Todoist footer rendering", () => {
 	});
 
 	it("renders a missing task safely", () => {
-		expect(renderTaskStatus(undefined, styledTheme)).toContain(
-			"<muted>Todoist Task: </muted><text>none</text><muted> |</muted>",
-		);
+		expect(renderTaskStatus(undefined, styledTheme)).toBe("<text>none</text>");
 	});
 });

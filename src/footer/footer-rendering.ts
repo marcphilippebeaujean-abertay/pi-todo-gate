@@ -8,21 +8,18 @@ import {
 	FOOTER_DIM,
 	FOOTER_HTTP_PROTOCOL,
 	FOOTER_HTTPS_PROTOCOL,
-	FOOTER_MUTED_COLOR,
 	FOOTER_NO_PR_LABEL,
 	FOOTER_NONE_TEXT,
 	FOOTER_OPEN_TASK_LABEL,
-	FOOTER_PR_LINK_LABEL,
-	FOOTER_PR_SEPARATOR,
 	FOOTER_SPINNER_FRAMES,
 	FOOTER_SPINNER_INTERVAL_MS,
+	FOOTER_STATUS_KEY,
 	FOOTER_STATUS_SEPARATOR,
 	FOOTER_TASK_NONE_LABEL,
-	FOOTER_TASK_SEPARATOR,
 	FOOTER_TEXT_COLOR,
 	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
-import type { FooterUpdateEvent } from "./events.ts";
+import type { FooterType, FooterUpdateEvent } from "./events.ts";
 import type {
 	FooterAnimation as Animation,
 	FooterData,
@@ -37,23 +34,32 @@ import type {
 import type { FooterModuleState as FooterState } from "./module-state.ts";
 
 export class Footer implements FooterEntry {
-	private value = "";
+	private currentValue = "";
+	private loadingFrame: string = FOOTER_SPINNER_FRAMES[0];
+	isLoading = false;
 	isVisible = false;
 
-	constructor(
-		public readonly footerType: string,
-		private readonly prefix: string,
-	) {}
+	constructor(public readonly footerType: FooterType) {}
 
 	update(event: FooterUpdateEvent): void {
-		const isMatchingFooter = event.footerType === this.footerType;
+		const isMatchingFooter = event.footerType.id === this.footerType.id;
 		if (!isMatchingFooter) return;
-		this.value = event.text;
+		this.currentValue = event.currentValue;
+		this.isLoading = event.isLoading;
 		this.isVisible = event.isVisible;
+		this.loadingFrame = FOOTER_SPINNER_FRAMES[0];
+	}
+
+	setLoadingFrame(frame: string): void {
+		this.loadingFrame = frame;
 	}
 
 	render(): string {
-		return `${this.prefix}${this.value}`;
+		const isLoading = this.isLoading;
+		const value = isLoading
+			? `${this.loadingFrame} ${this.currentValue}`
+			: this.currentValue;
+		return `${this.footerType.name}: ${value}`;
 	}
 }
 
@@ -64,18 +70,9 @@ export function renderFooter(footers: readonly FooterEntry[]): string {
 		.join("|")}|`;
 }
 
-function loadingText(text: string, frame: string): string {
-	for (const spinner of FOOTER_SPINNER_FRAMES) {
-		const hasSpinner = text.includes(spinner);
-		if (hasSpinner) return text.replace(spinner, frame);
-	}
-	return text;
-}
-
 export class FooterDisplay {
 	private context: SessionRecord | null = null;
 	private state: FooterState = { footers: {} };
-	private renderedFooterTypes = new Set<string>();
 	private animations = new Map<string, Animation>();
 	private readonly footers = new Map<string, Footer>();
 
@@ -98,9 +95,7 @@ export class FooterDisplay {
 			this.stopAnimation(footerType);
 		const hasContext = this.context !== null;
 		if (!hasContext) return;
-		for (const footerType of this.renderedFooterTypes)
-			this.setStatus(footerType, undefined);
-		this.renderedFooterTypes = new Set<string>();
+		this.setStatus(FOOTER_STATUS_KEY, undefined);
 		this.footers.clear();
 	}
 
@@ -110,20 +105,20 @@ export class FooterDisplay {
 		this.state = { footers: {} };
 	}
 
-	private footer(footerType: string): Footer {
-		const existing = this.footers.get(footerType);
+	private footer(footerType: FooterType): Footer {
+		const existing = this.footers.get(footerType.id);
 		if (existing !== undefined) return existing;
-		const created = new Footer(footerType, "");
-		this.footers.set(footerType, created);
+		const created = new Footer(footerType);
+		this.footers.set(footerType.id, created);
 		return created;
 	}
 
-	private stopAnimation(footerType: string): void {
-		const animation = this.animations.get(footerType);
+	private stopAnimation(footerTypeId: string): void {
+		const animation = this.animations.get(footerTypeId);
 		const hasAnimation = animation !== undefined;
 		if (!hasAnimation) return;
 		if (animation.timer !== null) clearInterval(animation.timer);
-		this.animations.delete(footerType);
+		this.animations.delete(footerTypeId);
 	}
 
 	private setStatus(footerType: string, text: string | undefined): void {
@@ -137,14 +132,21 @@ export class FooterDisplay {
 		}
 	}
 
+	private renderStatus(): void {
+		const hasVisibleFooter = [...this.footers.values()].some(
+			(footer) => footer.isVisible,
+		);
+		const text = hasVisibleFooter
+			? renderFooter([...this.footers.values()])
+			: undefined;
+		this.setStatus(FOOTER_STATUS_KEY, text);
+	}
+
 	private syncEvent(context: SessionRecord, event: FooterUpdateEvent): void {
-		this.stopAnimation(event.footerType);
-		this.renderedFooterTypes.add(event.footerType);
+		this.stopAnimation(event.footerType.id);
 		const footer = this.footer(event.footerType);
 		footer.update(event);
-		const isHidden = !footer.isVisible;
-		const visibleText = isHidden ? undefined : footer.render();
-		this.setStatus(event.footerType, visibleText);
+		this.renderStatus();
 		const shouldAnimate = event.isLoading && event.isVisible;
 		if (!shouldAnimate) return;
 		const animation: Animation = {
@@ -156,19 +158,22 @@ export class FooterDisplay {
 			this.advanceAnimation.bind(this, animation, context),
 			FOOTER_SPINNER_INTERVAL_MS,
 		);
-		this.animations.set(event.footerType, animation);
+		this.animations.set(event.footerType.id, animation);
 	}
 
-	private advanceAnimation(animation: Animation, context: SessionRecord): void {
-		const current = this.state.footers[animation.event.footerType];
+	private advanceAnimation(
+		animation: Animation,
+		_context: SessionRecord,
+	): void {
+		const current = this.state.footers[animation.event.footerType.id];
 		const isCurrent = current === animation.event;
-		const isLoading = current.isLoading;
-		const isVisible = current.isVisible;
+		const isLoading = current?.isLoading === true;
+		const isVisible = current?.isVisible === true;
 		switch (true) {
 			case !isCurrent:
 			case !isLoading:
 			case !isVisible:
-				this.stopAnimation(animation.event.footerType);
+				this.stopAnimation(animation.event.footerType.id);
 				return;
 			default:
 				break;
@@ -176,12 +181,8 @@ export class FooterDisplay {
 		animation.frameIndex =
 			(animation.frameIndex + 1) % FOOTER_SPINNER_FRAMES.length;
 		const frame = FOOTER_SPINNER_FRAMES[animation.frameIndex];
-		const text = loadingText(this.footer(current.footerType).render(), frame);
-		try {
-			context.ui.setStatus(current.footerType, text);
-		} catch {
-			// Headless modes may not expose status UI.
-		}
+		this.footer(current.footerType).setLoadingFrame(frame);
+		this.renderStatus();
 	}
 }
 
@@ -242,13 +243,14 @@ export function renderPrStatus(
 	const isUncommitted = hasUncommittedChanges ?? false;
 	const normalized = normalizedPrUrl(url);
 	const number = prNumber(url);
-	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
 	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
 	const hasNoPr = normalized === null || number === null;
-	if (hasNoPr)
-		return `${muted(FOOTER_PR_LINK_LABEL)}${value("none")}${muted(FOOTER_PR_SEPARATOR)}`;
+	if (hasNoPr) return value(FOOTER_NONE_TEXT);
 	const dirtyMarker = isUncommitted ? "*" : "";
-	return `${muted(FOOTER_PR_LINK_LABEL)}${hyperlink(linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme), normalized)}${muted(FOOTER_PR_SEPARATOR)}`;
+	return hyperlink(
+		linkText(`#${boundedPrNumber(number)}${dirtyMarker}`, theme),
+		normalized,
+	);
 }
 
 function taskLinkText(text: string, theme?: TodoistFooterTheme): string {
@@ -295,29 +297,24 @@ function renderTaskStatusValue(
 	url: string | undefined,
 	theme: TodoistFooterTheme | undefined,
 	taskName: string | undefined,
-	includeSeparator: boolean,
 ): string {
-	const muted = (text: string) => theme?.fg(FOOTER_MUTED_COLOR, text) ?? text;
 	const value = (text: string) => theme?.fg(FOOTER_TEXT_COLOR, text) ?? text;
-	const createTaskLabel = (taskValue: string): string => {
-		const suffix = includeSeparator ? muted(FOOTER_TASK_SEPARATOR) : "";
-		return `${muted(FOOTER_TODOIST_TASK_LABEL)}${taskValue}${suffix}`;
-	};
 	const hasUrl = Boolean(url);
-	if (!hasUrl) return createTaskLabel(value(FOOTER_NONE_TEXT));
+	if (!hasUrl) return value(FOOTER_NONE_TEXT);
 	const inputUrl = url ?? "";
 	try {
 		const parsed = new URL(inputUrl);
 		const protocol = parsed.protocol;
 		const isSupportedProtocol =
 			protocol === FOOTER_HTTP_PROTOCOL || protocol === FOOTER_HTTPS_PROTOCOL;
-		if (!isSupportedProtocol) return createTaskLabel(value(FOOTER_NONE_TEXT));
+		if (!isSupportedProtocol) return value(FOOTER_NONE_TEXT);
 		const id = parsed.pathname.match(/\/task\/([^/]+)\/?$/)?.[1];
-		return createTaskLabel(
-			hyperlink(taskLinkText(displayTaskName(taskName, id), theme), inputUrl),
+		return hyperlink(
+			taskLinkText(displayTaskName(taskName, id), theme),
+			inputUrl,
 		);
 	} catch {
-		return createTaskLabel(value(FOOTER_NONE_TEXT));
+		return value(FOOTER_NONE_TEXT);
 	}
 }
 
@@ -326,7 +323,7 @@ export function renderTaskStatus(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	return renderTaskStatusValue(url, theme, taskName, true);
+	return renderTaskStatusValue(url, theme, taskName);
 }
 
 export function renderTaskStatusCompact(
@@ -334,7 +331,7 @@ export function renderTaskStatusCompact(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	return renderTaskStatusValue(url, theme, taskName, true);
+	return renderTaskStatusValue(url, theme, taskName);
 }
 
 export function renderFooterLine(
