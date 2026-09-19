@@ -2,16 +2,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { createModuleStatePublisher } from "../../src/event-publishers.ts";
-import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr/constants.ts";
-import { installHerdrTabClaim } from "../../src/herdr/event-consumers.ts";
+import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr-tab-rename/constants.ts";
+import { installHerdrTabRename } from "../../src/herdr-tab-rename/event-consumers.ts";
 import {
 	CLAIM_WORKER_RESPONSE_TEMPLATE,
 	type ClaimWorkerRequest,
 	type HerdrClient,
 	type StartBackgroundWorker,
-} from "../../src/herdr/internal-state.ts";
-import { createHerdrModule } from "../../src/herdr/module.ts";
-import { herdrStateDescriptor } from "../../src/herdr/module-state.ts";
+} from "../../src/herdr-tab-rename/internal-state.ts";
+import { createHerdrTabRenameModule } from "../../src/herdr-tab-rename/module.ts";
+import { herdrTabRenameStateDescriptor } from "../../src/herdr-tab-rename/module-state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
@@ -70,7 +70,7 @@ it("does not register unavailable Herdr setup", () => {
 	delete process.env.HERDR_ENV;
 	const pi = fakePi();
 	const sessionState = createSessionState();
-	createHerdrModule(pi as unknown as ExtensionAPI, {
+	createHerdrTabRenameModule(pi as unknown as ExtensionAPI, {
 		eventHandler: createSharedEvents(),
 		sessionState,
 	});
@@ -78,7 +78,7 @@ it("does not register unavailable Herdr setup", () => {
 	else process.env.HERDR_ENV = previousHerdr;
 
 	expect(pi.handlers).toEqual(new Map());
-	expect(sessionState.moduleState.herdr).toEqual({});
+	expect(sessionState.moduleState.herdrTabRename).toEqual({});
 });
 
 function worktreeRunner(commands: string[] = []): HerdrClient {
@@ -176,21 +176,21 @@ function emitFailure(
 describe("Herdr state ownership", () => {
 	it("restores only serializable Herdr claim state", () => {
 		expect(
-			herdrStateDescriptor.restore({
+			herdrTabRenameStateDescriptor.restore({
 				herdrClaimReturnedSuccessfully: "true",
 			}),
 		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
 		expect(
-			herdrStateDescriptor.restore({
+			herdrTabRenameStateDescriptor.restore({
 				claimInProgress: true,
 				herdrClaimReturnedSuccessfully: "true",
 			}),
 		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
-		expect(herdrStateDescriptor.serialize({ claimInProgress: true })).toEqual(
-			{},
-		);
 		expect(
-			herdrStateDescriptor.restore({
+			herdrTabRenameStateDescriptor.serialize({ claimInProgress: true }),
+		).toEqual({});
+		expect(
+			herdrTabRenameStateDescriptor.restore({
 				pending: Promise.resolve(),
 				seen: new Set<string>(),
 			}),
@@ -205,7 +205,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const backgroundWorker = worker();
 			const claimStates: boolean[] = [];
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
@@ -238,7 +238,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const claimStates: boolean[] = [];
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) => {
@@ -279,13 +279,13 @@ describe("background Herdr tab claim", () => {
 			const events = createSharedEvents();
 			const sessionState = createSessionState();
 			registerModuleStateConsumer(events, sessionState);
-			const publisher = createModuleStatePublisher(events, "herdr");
+			const publisher = createModuleStatePublisher(events, "herdrTabRename");
 			const updates: Array<{
-				moduleState: typeof sessionState.moduleState.herdr;
+				moduleState: typeof sessionState.moduleState.herdrTabRename;
 				persist: boolean;
 			}> = [];
 			events.moduleStateChangedEvent.subscribe((update) => {
-				if (update.moduleId === "herdr")
+				if (update.moduleId === "herdrTabRename")
 					updates.push({
 						moduleState: update.moduleState,
 						persist: update.persist,
@@ -293,13 +293,13 @@ describe("background Herdr tab claim", () => {
 			});
 			const backgroundWorker = worker();
 			const state = { tabId: "w1:t1", label: "7" };
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner(state, []),
 				startBackgroundWorker: backgroundWorker.start,
 				publishClaimInProgress: (claimInProgress) =>
 					publisher.publish(
 						{
-							...sessionState.moduleState.herdr,
+							...sessionState.moduleState.herdrTabRename,
 							claimInProgress,
 						},
 						{ persist: false },
@@ -307,7 +307,7 @@ describe("background Herdr tab claim", () => {
 				onClaimReturnedSuccessfully: () =>
 					publisher.publish(
 						{
-							...sessionState.moduleState.herdr,
+							...sessionState.moduleState.herdrTabRename,
 							herdrClaimReturnedSuccessfully: "true",
 						},
 						{ persist: true },
@@ -360,7 +360,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const commands: string[] = [];
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: worktreeRunner(commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -388,7 +388,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const claimContext = context();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -425,7 +425,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -456,7 +456,7 @@ describe("background Herdr tab claim", () => {
 					throw new Error("worker unavailable");
 				return backgroundWorker.start(request);
 			});
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: start,
 			});
@@ -481,7 +481,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -507,7 +507,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("dialog-editor"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -534,7 +534,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const cancel = vi.fn();
 			const start = vi.fn(() => ({ cancel }));
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: start,
 			});
@@ -561,7 +561,7 @@ describe("background Herdr tab claim", () => {
 			const backgroundWorker = worker();
 			let claimReturned = false;
 			const label = { value: "7" };
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: mutableRunner(label),
 				startBackgroundWorker: backgroundWorker.start,
 				hasClaimReturnedSuccessfully: () => claimReturned,
@@ -599,7 +599,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const state = { tabId: "w1:t1", label: "7" };
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner(state, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -626,7 +626,7 @@ describe("background Herdr tab claim", () => {
 			const commands: string[] = [];
 			const state = { tabId: "w1:t1", label: "7" };
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner(state, commands),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -656,7 +656,7 @@ describe("background Herdr tab claim", () => {
 			const pi = fakePi();
 			const commands: string[] = [];
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner(
 					{ tabId: "w1:t1", label: "dialog-editor" },
 					commands,
@@ -688,7 +688,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("dialog-editor"),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -716,7 +716,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -743,7 +743,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -771,7 +771,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner(),
 				startBackgroundWorker: backgroundWorker.start,
 			});
@@ -797,7 +797,7 @@ describe("background Herdr tab claim", () => {
 		try {
 			const pi = fakePi();
 			const backgroundWorker = worker();
-			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
+			installHerdrTabRename(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
 			});

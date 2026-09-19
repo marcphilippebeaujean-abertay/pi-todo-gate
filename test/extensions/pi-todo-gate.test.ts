@@ -148,7 +148,8 @@ function persistedStateEntry(
 	moduleState: {
 		pr?: Record<string, unknown>;
 		todoist?: Record<string, unknown>;
-		herdr?: Record<string, unknown>;
+		review?: Record<string, unknown>;
+		herdrTabRename?: Record<string, unknown>;
 		worktree?: Record<string, unknown>;
 		footer?: Record<string, unknown>;
 	},
@@ -170,7 +171,8 @@ function persistedStateEntry(
 					...moduleState.pr,
 				},
 				todoist: moduleState.todoist ?? {},
-				herdr: moduleState.herdr ?? {},
+				review: moduleState.review ?? {},
+				herdrTabRename: moduleState.herdrTabRename ?? {},
 				worktree: moduleState.worktree ?? {},
 				footer: moduleState.footer ?? { footers: {} },
 			},

@@ -304,8 +304,8 @@ export function updateModuleState(
 		case "todoist":
 			state.moduleState.todoist = structuredClone(update.moduleState);
 			break;
-		case "herdr":
-			state.moduleState.herdr = structuredClone(update.moduleState);
+		case "herdrTabRename":
+			state.moduleState.herdrTabRename = structuredClone(update.moduleState);
 			break;
 		case "worktree":
 			state.moduleState.worktree = structuredClone(update.moduleState);

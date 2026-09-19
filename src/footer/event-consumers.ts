@@ -63,7 +63,7 @@ export class FooterEventConsumer {
 				this.currentTaskName = event.moduleState.taskName;
 				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
 				return;
-			case C.module.herdr:
+			case C.module.herdrTabRename:
 				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
 				return;
 			case C.module.footer: {

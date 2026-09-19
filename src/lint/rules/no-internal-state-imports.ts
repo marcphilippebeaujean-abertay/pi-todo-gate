@@ -3,7 +3,7 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const INTERNAL_STATE_PATTERN =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/]internal-state\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/]internal-state\.ts$/;
 const RULE_ID = "no-internal-state-imports" as const;
 const PRIVATE_MESSAGE =
 	"Internal state is private to its owning module; import module-state.ts or module.ts instead";
@@ -13,7 +13,8 @@ const SHARED_MESSAGE =
 type ScopedDomain =
 	| "pr"
 	| "todoist"
-	| "herdr"
+	| "herdr-tab-rename"
+	| "review"
 	| "worktree"
 	| "prompt-queue"
 	| "footer";
@@ -27,7 +28,7 @@ function sourceDomain(
 ): ScopedDomain | "shared" | "root" | null {
 	const normalized = normalizedPath(filePath);
 	const match = normalized.match(
-		/\/src\/(pr|todoist|herdr|worktree|prompt-queue|footer)\//,
+		/\/src\/(pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)\//,
 	);
 	if (match !== null) return match[1] as ScopedDomain;
 	if (/\/src\/shared\//.test(normalized)) return "shared";

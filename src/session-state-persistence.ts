@@ -118,9 +118,12 @@ function serializeModuleState(
 		todoist: descriptors.todoist.serialize(
 			state.moduleState.todoist,
 		) as unknown as ModuleState["todoist"],
-		herdr: descriptors.herdr.serialize(
-			state.moduleState.herdr,
-		) as unknown as ModuleState["herdr"],
+		review: descriptors.review.serialize(
+			state.moduleState.review,
+		) as unknown as ModuleState["review"],
+		herdrTabRename: descriptors.herdrTabRename.serialize(
+			state.moduleState.herdrTabRename,
+		) as unknown as ModuleState["herdrTabRename"],
 		worktree: descriptors.worktree.serialize(
 			state.moduleState.worktree,
 		) as unknown as ModuleState["worktree"],
@@ -134,10 +137,16 @@ function restoreModuleState(
 	value: PersistedSessionState["moduleState"],
 	descriptors: ModuleStateDescriptors,
 ): ModuleState {
+	const persisted = value as ModuleState & { herdr?: unknown };
+	const herdrTabRenameState = persisted.herdrTabRename ?? persisted.herdr;
 	return {
 		pr: descriptorState(descriptors.pr, value.pr),
 		todoist: descriptorState(descriptors.todoist, value.todoist),
-		herdr: descriptorState(descriptors.herdr, value.herdr),
+		review: descriptorState(descriptors.review, value.review),
+		herdrTabRename: descriptorState(
+			descriptors.herdrTabRename,
+			herdrTabRenameState,
+		),
 		worktree: descriptorState(descriptors.worktree, value.worktree),
 		footer: descriptorState(descriptors.footer, value.footer),
 	};

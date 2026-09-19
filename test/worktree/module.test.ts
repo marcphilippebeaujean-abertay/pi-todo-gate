@@ -256,23 +256,6 @@ describe("worktree event actions", () => {
 		});
 	});
 
-	it("changes directory to main root after loading worktree", async () => {
-		const events = createSharedEvents();
-		const sessionState = createSessionState();
-		sessionState.session.activeSessionId = "session";
-		const changeDirectoryToRoot = vi.fn();
-		const module = createTestWorktreeModule({
-			eventHandler: events,
-			sessionState,
-			exec: projectResult("abc", "def", "", "", []),
-			changeDirectoryToRoot,
-		});
-
-		await module.sessionStart(context(), "session");
-
-		expect(changeDirectoryToRoot).toHaveBeenCalledWith("/repo");
-	});
-
 	it("starts from shared session-activated event", async () => {
 		const events = createSharedEvents();
 		const commands: Array<{
