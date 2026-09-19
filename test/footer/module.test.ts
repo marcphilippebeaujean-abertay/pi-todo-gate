@@ -4,18 +4,20 @@ import {
 	FOOTER_HERDR_TYPE,
 	FOOTER_SPINNER_INTERVAL_MS,
 } from "../../src/footer/constants.ts";
+import type { FooterLoadingEvent } from "../../src/footer/events.ts";
 import { createFooterModule } from "../../src/footer/module.ts";
 import type {
 	FooterModuleState,
 	FooterUpdate,
 } from "../../src/footer/module-state.ts";
 import { restoreFooterState } from "../../src/footer/module-state.ts";
-import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSharedEvents, withLoading } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
 type TestFooterModule = {
 	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
 	update(event: unknown): void;
+	setLoading(event: FooterLoadingEvent): void;
 	getState(): FooterModuleState;
 	deactivate(): void;
 };
@@ -46,12 +48,27 @@ function harness(branch: unknown[] = []) {
 
 const update: FooterUpdate = {
 	footerType: "pi-todo-gate-task",
-	isLoading: false,
 	text: "Todoist Task: Fix footer |",
 	isVisible: true,
 };
 
 describe("footer module", () => {
+	it("clears loading through event dispatch when work fails", async () => {
+		const events = createSharedEvents();
+		const loading: boolean[] = [];
+		events.footerLoadingEvent.subscribe(({ isLoading }) => {
+			loading.push(isLoading);
+		});
+
+		await expect(
+			withLoading(events, "task", async () => {
+				throw new Error("failed");
+			}),
+		).rejects.toThrow("failed");
+
+		expect(loading).toEqual([true, false]);
+	});
+
 	it("restores persisted footer using parsed footer type instead of map key", () => {
 		expect(
 			restoreFooterState({
@@ -78,7 +95,7 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 
 		await h.events.sessionActivatedEvent.emit({
@@ -96,21 +113,22 @@ describe("footer module", () => {
 			const h = harness();
 			const footer = createTestFooterModule({
 				eventHandler: h.events,
-				sessionState: h.sessionState,
+				getInitialState: () => h.sessionState.moduleState.footer,
 			});
 			await footer.sessionStart({}, h.context());
 
 			footer.update({
 				...update,
-				isLoading: true,
 				text: "Todoist Task: ⠋ loading |",
 			});
+			footer.setLoading({ footerType: update.footerType, isLoading: true });
 			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠋ loading |");
 
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
 			expect(h.statusCalls.at(-1)?.text).toBe("Todoist Task: ⠙ loading |");
 
 			footer.update({ ...update, text: "Todoist Task: done |" });
+			footer.setLoading({ footerType: update.footerType, isLoading: false });
 			const callsAfterLoading = h.statusCalls.length;
 			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS * 2);
 			expect(h.statusCalls).toHaveLength(callsAfterLoading);
@@ -123,7 +141,7 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		await footer.sessionStart({}, h.context());
 
@@ -135,7 +153,9 @@ describe("footer module", () => {
 			{ key: update.footerType, text: undefined },
 		]);
 		expect(footer.getState()).toEqual({
-			footers: { [update.footerType]: { ...update, isVisible: false } },
+			footers: {
+				[update.footerType]: { ...update, isLoading: false, isVisible: false },
+			},
 		});
 	});
 
@@ -147,7 +167,7 @@ describe("footer module", () => {
 		});
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		await footer.sessionStart({}, h.context());
 
@@ -156,7 +176,11 @@ describe("footer module", () => {
 		expect(updates).toEqual([
 			{
 				moduleId: "footer",
-				moduleState: { footers: { [update.footerType]: update } },
+				moduleState: {
+					footers: {
+						[update.footerType]: { ...update, isLoading: false },
+					},
+				},
 				persist: false,
 			},
 		]);
@@ -166,7 +190,7 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		await footer.sessionStart({}, h.context());
 
@@ -178,79 +202,48 @@ describe("footer module", () => {
 		).toThrow(TypeError);
 	});
 
-	it("derives all statuses from module state changes", async () => {
+	it("does not derive footer statuses from module state changes", async () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		await footer.sessionStart({}, h.context());
 
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "pr",
-			moduleState: {
-				prUrl: "https://github.com/o/r/pull/42",
-				discoveryDisabled: false,
-				discoveryTestedUrls: [],
-				mergedPrs: [],
-			},
-			persist: false,
-			gitStatePatch: { hasUncommittedChanges: true },
-		});
 		await h.events.moduleStateChangedEvent.emit({
 			moduleId: "todoist",
-			moduleState: {
-				taskUrl: "https://app.todoist.com/app/task/42",
-				taskName: "Fix footer",
-			},
-			persist: false,
-		});
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
-			moduleState: { claimInProgress: true },
+			moduleState: { taskUrl: "https://app.todoist.com/app/task/42" },
 			persist: false,
 		});
 
-		expect(footer.getState().footers).toEqual(
-			expect.objectContaining({
-				"pi-todo-gate-pr": expect.objectContaining({ isVisible: true }),
-				"pi-todo-gate-task": expect.objectContaining({ isVisible: true }),
-				[FOOTER_HERDR_TYPE]: expect.objectContaining({
-					isLoading: true,
-					isVisible: true,
-				}),
-			}),
-		);
+		expect(footer.getState()).toEqual({ footers: {} });
 	});
 
-	it("hides Herdr spinner after transient claim completion", async () => {
+	it("hides Herdr spinner after explicit loading completion", async () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		await footer.sessionStart({}, h.context());
 
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
-			moduleState: { claimInProgress: true },
-			persist: false,
+		footer.update({
+			footerType: FOOTER_HERDR_TYPE,
+			text: "Herdr: ⠋ working |",
+			isVisible: true,
 		});
-		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
-			moduleState: { claimInProgress: false },
-			persist: false,
-		});
+		footer.setLoading({ footerType: FOOTER_HERDR_TYPE, isLoading: true });
+		footer.setLoading({ footerType: FOOTER_HERDR_TYPE, isLoading: false });
 
 		expect(footer.getState().footers[FOOTER_HERDR_TYPE]).toEqual({
 			footerType: FOOTER_HERDR_TYPE,
 			isLoading: false,
 			text: "Herdr: ⠋ working |",
-			isVisible: false,
+			isVisible: true,
 		});
 		expect(h.statusCalls.at(-1)).toEqual({
 			key: FOOTER_HERDR_TYPE,
-			text: undefined,
+			text: "Herdr: ⠋ working |",
 		});
 	});
 
@@ -258,7 +251,7 @@ describe("footer module", () => {
 		const h = harness();
 		const footer = createTestFooterModule({
 			eventHandler: h.events,
-			sessionState: h.sessionState,
+			getInitialState: () => h.sessionState.moduleState.footer,
 		});
 		const firstContext = h.context();
 		await footer.sessionStart({}, firstContext);

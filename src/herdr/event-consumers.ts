@@ -82,9 +82,7 @@ class HerdrTabClaimConsumer {
 	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
 	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
 	private readonly onClaimReturnedSuccessfully: HerdrTabOptions["onClaimReturnedSuccessfully"];
-	private readonly publishClaimInProgress: NonNullable<
-		HerdrTabOptions["publishClaimInProgress"]
-	>;
+	private readonly withLoading: NonNullable<HerdrTabOptions["withLoading"]>;
 	private readonly events: HerdrEvents;
 	private sessionCwd: string;
 	private readonly sessionCwdReference = { current: process.cwd() };
@@ -98,6 +96,8 @@ class HerdrTabClaimConsumer {
 	private tabId: string | undefined;
 	private paneId: string | undefined;
 	private claimContext: ExtensionContext | undefined;
+	private workerCompletion: Promise<void> | undefined;
+	private resolveWorkerCompletion: (() => void) | undefined;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
 		this.herdrClient =
@@ -111,8 +111,8 @@ class HerdrTabClaimConsumer {
 		this.shouldActivate = options.shouldActivate;
 		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
 		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
-		this.publishClaimInProgress =
-			options.publishClaimInProgress ?? (() => undefined);
+		this.withLoading =
+			options.withLoading ?? (async (operation) => operation());
 		this.events = events;
 		this.events.claimCompletedEvent.subscribe(this.completeClaim.bind(this));
 		this.events.claimFailedEvent.subscribe(this.failClaim.bind(this));
@@ -123,8 +123,11 @@ class HerdrTabClaimConsumer {
 
 	private sessionStart(_event: unknown, ctx: ExtensionContext): void {
 		this.worker?.cancel();
+		this.resolveWorkerCompletion?.();
 		this.worker = undefined;
 		this.claimContext = undefined;
+		this.workerCompletion = undefined;
+		this.resolveWorkerCompletion = undefined;
 		this.sessionCwd = ctx.cwd;
 		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
@@ -134,7 +137,6 @@ class HerdrTabClaimConsumer {
 		this.initialLabel = undefined;
 		this.tabId = undefined;
 		this.paneId = undefined;
-		this.publishClaimInProgress(false);
 		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
 		const shouldSkip = !this.herdrAvailable || isDisabled;
 		if (shouldSkip) return;
@@ -167,6 +169,10 @@ class HerdrTabClaimConsumer {
 		if (shouldSkip) return;
 		this.herdrBackgroundWorkerDispatched = true;
 		this.claimContext = ctx;
+		this.workerCompletion = new Promise<void>((resolve) => {
+			this.resolveWorkerCompletion = resolve;
+		});
+		void this.withLoading(() => this.workerCompletion as Promise<void>);
 		try {
 			this.worker = this.startWorker({
 				prompt: event.prompt ?? "",
@@ -174,7 +180,6 @@ class HerdrTabClaimConsumer {
 				model: modelReference(ctx.model),
 				events: this.events,
 			});
-			this.publishClaimInProgress(true);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
 			this.failClaim({
@@ -195,34 +200,36 @@ class HerdrTabClaimConsumer {
 		this.herdrBackgroundWorkerReturned = true;
 		this.worker = undefined;
 		this.claimContext = undefined;
-		const claimStatusUpdate = this.publishClaimInProgress(false);
 		try {
-			applyClaimResponse(
+			try {
+				applyClaimResponse(
+					this.herdrClient,
+					this.tabId,
+					this.paneId,
+					event.result,
+				);
+			} catch (error) {
+				const detail = error instanceof Error ? error.message : String(error);
+				notifyHerdrFailure(context, `${TAB_CLAIM_ACTION_FAILED}: ${detail}`);
+				return;
+			}
+			const isValidated = hasValidatedTabClaim(
 				this.herdrClient,
-				this.tabId,
+				this.initialLabel,
 				this.paneId,
 				event.result,
 			);
-		} catch (error) {
-			const detail = error instanceof Error ? error.message : String(error);
-			notifyHerdrFailure(context, `${TAB_CLAIM_ACTION_FAILED}: ${detail}`);
-			return;
+			if (isValidated) {
+				this.hasValidatedClaim = true;
+				this.hasClaimReturnedSuccessfully = true;
+				const markerUpdate = this.onClaimReturnedSuccessfully?.(context);
+				if (markerUpdate instanceof Promise) await markerUpdate;
+				return;
+			}
+			notifyHerdrFailure(context, TAB_CLAIM_FAILED);
+		} finally {
+			this.finishWorker();
 		}
-		const isValidated = hasValidatedTabClaim(
-			this.herdrClient,
-			this.initialLabel,
-			this.paneId,
-			event.result,
-		);
-		if (isValidated) {
-			if (claimStatusUpdate instanceof Promise) await claimStatusUpdate;
-			this.hasValidatedClaim = true;
-			this.hasClaimReturnedSuccessfully = true;
-			const markerUpdate = this.onClaimReturnedSuccessfully?.(context);
-			if (markerUpdate instanceof Promise) await markerUpdate;
-			return;
-		}
-		notifyHerdrFailure(context, TAB_CLAIM_FAILED);
 	}
 
 	private failClaim(event: ClaimFailedEvent): void {
@@ -236,15 +243,22 @@ class HerdrTabClaimConsumer {
 		this.herdrBackgroundWorkerReturned = true;
 		this.worker = undefined;
 		this.claimContext = undefined;
-		this.publishClaimInProgress(false);
+		this.finishWorker();
 		notifyHerdrFailure(context, event.message);
+	}
+
+	private finishWorker(): void {
+		const resolve = this.resolveWorkerCompletion;
+		this.resolveWorkerCompletion = undefined;
+		this.workerCompletion = undefined;
+		resolve?.();
 	}
 
 	private sessionShutdown(): void {
 		this.worker?.cancel();
+		this.finishWorker();
 		this.worker = undefined;
 		this.claimContext = undefined;
-		this.publishClaimInProgress(false);
 		this.hasValidatedClaim = false;
 		this.hasClaimReturnedSuccessfully = false;
 		this.herdrBackgroundWorkerDispatched = false;

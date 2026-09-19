@@ -12,7 +12,7 @@ import {
 } from "../../src/herdr/internal-state.ts";
 import { createHerdrModule } from "../../src/herdr/module.ts";
 import { herdrStateDescriptor } from "../../src/herdr/module-state.ts";
-import { createSharedEvents } from "../../src/shared/events.ts";
+import { createSharedEvents, withLoading } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
 const WORKER_FAILED = "worker failed";
@@ -186,9 +186,7 @@ describe("Herdr state ownership", () => {
 				herdrClaimReturnedSuccessfully: "true",
 			}),
 		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
-		expect(herdrStateDescriptor.serialize({ claimInProgress: true })).toEqual(
-			{},
-		);
+		expect(herdrStateDescriptor.serialize({})).toEqual({});
 		expect(
 			herdrStateDescriptor.restore({
 				pending: Promise.resolve(),
@@ -208,8 +206,13 @@ describe("background Herdr tab claim", () => {
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
 				herdrClient: ordinaryRunner("7"),
 				startBackgroundWorker: backgroundWorker.start,
-				publishClaimInProgress: (claimInProgress) => {
-					claimStates.push(claimInProgress);
+				withLoading: async (operation) => {
+					claimStates.push(true);
+					try {
+						await operation();
+					} finally {
+						claimStates.push(false);
+					}
 				},
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -224,8 +227,9 @@ describe("background Herdr tab claim", () => {
 				"anthropic/claude-sonnet-4-5",
 			);
 			emitFailure(backgroundWorker.requests[0] as ClaimWorkerRequest);
+			await new Promise((resolve) => setTimeout(resolve, 0));
 
-			expect(claimStates).toEqual([false, true, false]);
+			expect(claimStates).toEqual([true, false]);
 		} finally {
 			restore();
 		}
@@ -241,8 +245,13 @@ describe("background Herdr tab claim", () => {
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner({ tabId: "w1:t1", label: "7" }, commands),
 				startBackgroundWorker: backgroundWorker.start,
-				publishClaimInProgress: (claimInProgress) => {
-					claimStates.push(claimInProgress);
+				withLoading: async (operation) => {
+					claimStates.push(true);
+					try {
+						await operation();
+					} finally {
+						claimStates.push(false);
+					}
 				},
 			});
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
@@ -266,13 +275,13 @@ describe("background Herdr tab claim", () => {
 			expect(backgroundWorker.start).toHaveBeenCalledOnce();
 			expect(commands).toContain("herdr tab rename w1:t1 dialog-editor");
 			expect(commands).not.toContain("herdr tab rename w1:t1 late-result");
-			expect(claimStates).toEqual([false, true, false]);
+			expect(claimStates).toEqual([true, false]);
 		} finally {
 			restore();
 		}
 	});
 
-	it("awaits hidden spinner before publishing durable success marker", async () => {
+	it("publishes loading separately from durable success marker", async () => {
 		const restore = herdrEnvironment();
 		try {
 			const pi = fakePi();
@@ -284,6 +293,10 @@ describe("background Herdr tab claim", () => {
 				moduleState: typeof sessionState.moduleState.herdr;
 				persist: boolean;
 			}> = [];
+			const loading: boolean[] = [];
+			events.footerLoadingEvent.subscribe(({ isLoading }) => {
+				loading.push(isLoading);
+			});
 			events.moduleStateChangedEvent.subscribe((update) => {
 				if (update.moduleId === "herdr")
 					updates.push({
@@ -296,14 +309,8 @@ describe("background Herdr tab claim", () => {
 			installHerdrTabClaim(pi as unknown as ExtensionAPI, {
 				herdrClient: actionRunner(state, []),
 				startBackgroundWorker: backgroundWorker.start,
-				publishClaimInProgress: (claimInProgress) =>
-					publisher.publish(
-						{
-							...sessionState.moduleState.herdr,
-							claimInProgress,
-						},
-						{ persist: false },
-					),
+				withLoading: (operation) =>
+					withLoading(events, "pi-todo-gate-herdr", operation),
 				onClaimReturnedSuccessfully: () =>
 					publisher.publish(
 						{
@@ -316,6 +323,7 @@ describe("background Herdr tab claim", () => {
 			await pi.handlers.get("session_start")?.[0]?.({}, context());
 			await new Promise((resolve) => setTimeout(resolve, 0));
 			updates.length = 0;
+			loading.length = 0;
 			await pi.handlers.get("before_agent_start")?.[0]?.(
 				{ prompt: "claim" },
 				context(),
@@ -325,14 +333,10 @@ describe("background Herdr tab claim", () => {
 			});
 			await new Promise((resolve) => setTimeout(resolve, 0));
 
+			expect(loading).toEqual([true, false]);
 			expect(updates).toEqual([
-				{ moduleState: { claimInProgress: true }, persist: false },
-				{ moduleState: { claimInProgress: false }, persist: false },
 				{
-					moduleState: {
-						claimInProgress: false,
-						herdrClaimReturnedSuccessfully: "true",
-					},
+					moduleState: { herdrClaimReturnedSuccessfully: "true" },
 					persist: true,
 				},
 			]);

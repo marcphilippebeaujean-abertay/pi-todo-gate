@@ -22,7 +22,6 @@ import {
 	FOOTER_TEXT_COLOR,
 	FOOTER_TODOIST_TASK_LABEL,
 } from "./constants.ts";
-import type { FooterUpdateEvent } from "./events.ts";
 import type {
 	FooterAnimation as Animation,
 	FooterData,
@@ -34,7 +33,10 @@ import type {
 	FooterSessionRecord as SessionRecord,
 	TodoistFooterTheme,
 } from "./internal-state.ts";
-import type { FooterModuleState as FooterState } from "./module-state.ts";
+import type {
+	FooterModuleState as FooterState,
+	FooterStatusState,
+} from "./module-state.ts";
 
 export class Footer implements FooterEntry {
 	private value = "";
@@ -45,7 +47,7 @@ export class Footer implements FooterEntry {
 		private readonly prefix: string,
 	) {}
 
-	update(event: FooterUpdateEvent): void {
+	update(event: FooterStatusState): void {
 		const isMatchingFooter = event.footerType === this.footerType;
 		if (!isMatchingFooter) return;
 		this.value = event.text;
@@ -87,7 +89,7 @@ export class FooterDisplay {
 			this.syncEvent(context, event);
 	}
 
-	update(state: FooterState, event: FooterUpdateEvent): void {
+	update(state: FooterState, event: FooterStatusState): void {
 		this.state = state;
 		if (this.context === null) return;
 		this.syncEvent(this.context, event);
@@ -137,7 +139,7 @@ export class FooterDisplay {
 		}
 	}
 
-	private syncEvent(context: SessionRecord, event: FooterUpdateEvent): void {
+	private syncEvent(context: SessionRecord, event: FooterStatusState): void {
 		this.stopAnimation(event.footerType);
 		this.renderedFooterTypes.add(event.footerType);
 		const footer = this.footer(event.footerType);

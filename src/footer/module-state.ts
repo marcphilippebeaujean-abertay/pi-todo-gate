@@ -19,7 +19,7 @@ import {
 	FOOTER_TYPE_FIELD,
 	FOOTER_VISIBLE_FIELD,
 } from "./constants.ts";
-import type { FooterUpdateEvent } from "./events.ts";
+import type { FooterLoadingEvent, FooterUpdateEvent } from "./events.ts";
 
 export type FooterUpdate = FooterUpdateEvent;
 
@@ -48,9 +48,16 @@ export function parseFooterEvent(value: unknown): FooterUpdate {
 	const event = requireRecord(value, FOOTER_EVENT_LABEL);
 	return {
 		footerType: requireNonEmptyString(event.footerType, FOOTER_TYPE_FIELD),
-		isLoading: requireBoolean(event.isLoading, FOOTER_LOADING_FIELD),
 		text: requireString(event.text, FOOTER_TEXT_FIELD),
 		isVisible: requireBoolean(event.isVisible, FOOTER_VISIBLE_FIELD),
+	};
+}
+
+export function parseFooterLoadingEvent(value: unknown): FooterLoadingEvent {
+	const event = requireRecord(value, FOOTER_EVENT_LABEL);
+	return {
+		footerType: requireNonEmptyString(event.footerType, FOOTER_TYPE_FIELD),
+		isLoading: requireBoolean(event.isLoading, FOOTER_LOADING_FIELD),
 	};
 }
 
@@ -79,7 +86,7 @@ function persistedLoading(value: unknown): boolean {
 	return value;
 }
 
-function parsePersistedFooter(value: unknown): FooterUpdate | undefined {
+function parsePersistedFooter(value: unknown): FooterStatusState | undefined {
 	try {
 		const footer = requireRecord(value, FOOTER_PERSISTED_LABEL);
 		const footerType = requireNonEmptyString(
@@ -113,7 +120,7 @@ export function restoreFooterState(value: unknown): FooterModuleState | null {
 	} catch {
 		return null;
 	}
-	const restored: Record<string, FooterUpdate> = {};
+	const restored: Record<string, FooterStatusState> = {};
 	for (const footer of Object.values(footers)) {
 		const parsed = parsePersistedFooter(footer);
 		const isTransientHerdrFooter = parsed?.footerType === FOOTER_HERDR_TYPE;
@@ -150,10 +157,28 @@ export function applyFooterUpdate(
 	state: FooterModuleState,
 	event: FooterUpdate,
 ): FooterModuleState {
+	const current = state.footers[event.footerType];
 	return {
 		footers: {
 			...state.footers,
-			[event.footerType]: event,
+			[event.footerType]: {
+				...event,
+				isLoading: current?.isLoading ?? false,
+			},
+		},
+	};
+}
+
+export function applyFooterLoading(
+	state: FooterModuleState,
+	event: FooterLoadingEvent,
+): FooterModuleState {
+	const current = state.footers[event.footerType];
+	if (current === undefined) return state;
+	return {
+		footers: {
+			...state.footers,
+			[event.footerType]: { ...current, isLoading: event.isLoading },
 		},
 	};
 }

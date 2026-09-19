@@ -76,6 +76,17 @@ export interface ClaimErrorEvent {
 	error: string;
 }
 
+export interface FooterUpdateEvent {
+	footerType: string;
+	text: string;
+	isVisible: boolean;
+}
+
+export interface FooterLoadingEvent {
+	footerType: string;
+	isLoading: boolean;
+}
+
 export type ModuleStateChangedEvent = {
 	[K in ModuleId]: {
 		moduleId: K;
@@ -132,6 +143,8 @@ export interface PiToolRegistrationsBecameAvailableEvent {
 
 export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
+	footerUpdateEvent: Event<FooterUpdateEvent>;
+	footerLoadingEvent: Event<FooterLoadingEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
 	toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
 	sessionResetEvent: Event<SessionResetEvent>;
@@ -144,10 +157,36 @@ export interface EventHandler {
 	piToolRegistrationsBecameAvailableEvent: Event<PiToolRegistrationsBecameAvailableEvent>;
 }
 
+export async function withLoading<T>(
+	eventHandler: EventHandler,
+	footerType: string,
+	operation: () => Promise<T>,
+	onFinally?: () => void | Promise<void>,
+): Promise<T> {
+	await eventHandler.footerLoadingEvent.emit({
+		footerType,
+		isLoading: true,
+	});
+	try {
+		return await operation();
+	} finally {
+		try {
+			await onFinally?.();
+		} finally {
+			await eventHandler.footerLoadingEvent.emit({
+				footerType,
+				isLoading: false,
+			});
+		}
+	}
+}
+
 export function createSharedEvents(): EventHandler {
 	const prMergedEvent = event<PrMergedEvent>();
 	return {
 		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
+		footerUpdateEvent: event<FooterUpdateEvent>(),
+		footerLoadingEvent: event<FooterLoadingEvent>(),
 		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
 		toolResultEvent: event<{
 			event: ToolResultEvent;

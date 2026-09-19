@@ -1,6 +1,8 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PrModule } from "../pr/module.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
+import { withLoading } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type {
@@ -155,7 +157,11 @@ export class PromptQueueConsumer {
 			isQueuedCurrent,
 		);
 		if (!isCurrentBeforeCapability) return;
-		await this.todoist.completeMergedTask(snapshot);
+		await withLoading(
+			this.eventHandler,
+			C.status.task,
+			this.todoist.completeMergedTask.bind(this.todoist, snapshot),
+		);
 	}
 
 	private async presentExit(
@@ -237,6 +243,10 @@ export class PromptQueueConsumer {
 			isQueuedCurrent,
 		);
 		if (!isCurrentBeforeCapability) return;
-		await this.worktree.removeWorktree({ force });
+		await withLoading(
+			this.eventHandler,
+			C.status.pr,
+			this.worktree.removeWorktree.bind(this.worktree, { force }),
+		);
 	}
 }

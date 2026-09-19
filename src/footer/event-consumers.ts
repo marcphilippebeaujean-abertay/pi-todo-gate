@@ -4,39 +4,42 @@ import type {
 	EventHandler,
 	ModuleStateChangedEvent,
 } from "../shared/events.ts";
-import { FOOTER_HERDR_TYPE, FOOTER_HERDR_WORKING_STATUS } from "./constants.ts";
 import { publishFooterState } from "./event-publishers.ts";
-import type { FooterSessionStartEvent, FooterUpdateEvent } from "./events.ts";
-import {
-	FooterDisplay,
-	renderPrStatus,
-	renderTaskStatusCompact,
-} from "./footer-rendering.ts";
+import type {
+	FooterLoadingEvent,
+	FooterSessionStartEvent,
+	FooterUpdateEvent,
+} from "./events.ts";
+import { FooterDisplay } from "./footer-rendering.ts";
 import type { FooterModuleOptions } from "./internal-state.ts";
 import type { FooterModuleState as FooterState } from "./module-state.ts";
 import {
+	applyFooterLoading,
 	applyFooterUpdate,
 	emptyFooterState,
 	parseFooterEvent,
+	parseFooterLoadingEvent,
 } from "./module-state.ts";
 
 export class FooterEventConsumer {
 	private readonly eventHandler: EventHandler;
-	private readonly sessionState: FooterModuleOptions["sessionState"];
+	private readonly getInitialState: FooterModuleOptions["getInitialState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private state = emptyFooterState();
-	private currentPrUrl: string | undefined;
-	private currentTaskUrl: string | undefined;
-	private currentTaskName: string | undefined;
-	private hasUncommittedChanges = false;
 	private readonly display = new FooterDisplay();
 
 	constructor(options: FooterModuleOptions) {
 		this.eventHandler = options.eventHandler;
-		this.sessionState = options.sessionState;
+		this.getInitialState = options.getInitialState;
 		this.eventHandler.moduleStateChangedEvent.subscribe((event) =>
 			this.refreshFromModuleState(event),
+		);
+		this.eventHandler.footerUpdateEvent.subscribe((event) =>
+			this.update(event),
+		);
+		this.eventHandler.footerLoadingEvent.subscribe((event) =>
+			this.setLoading(event),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
 			({ context, previousSessionFile }) =>
@@ -48,79 +51,16 @@ export class FooterEventConsumer {
 	}
 
 	private refreshFromModuleState(event: ModuleStateChangedEvent): void {
-		this.hasUncommittedChanges =
-			event.gitStatePatch?.hasUncommittedChanges ?? this.hasUncommittedChanges;
-		switch (event.moduleId) {
-			case C.module.pr:
-				this.currentPrUrl = event.moduleState.prUrl;
-				this.refreshPrStatus(this.currentPrUrl);
-				return;
-			case C.module.worktree:
-				this.refreshPrStatus(this.currentPrUrl);
-				return;
-			case C.module.todoist:
-				this.currentTaskUrl = event.moduleState.taskUrl;
-				this.currentTaskName = event.moduleState.taskName;
-				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
-				return;
-			case C.module.herdr:
-				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
-				return;
-			case C.module.footer: {
-				const hasSameState =
-					JSON.stringify(this.state) === JSON.stringify(event.moduleState);
-				if (hasSameState) return;
-				this.state = structuredClone(event.moduleState);
-				if (this.context === null) return;
-				for (const footer of Object.values(this.state.footers))
-					this.display.update(this.state, footer);
-				return;
-			}
-			default:
-				return;
-		}
-	}
-
-	private refreshPrStatus(url?: string): void {
-		if (this.context === null) return;
-		this.update({
-			footerType: C.status.pr,
-			isLoading: false,
-			text: renderPrStatus(
-				url,
-				this.context.ui.theme,
-				this.hasUncommittedChanges,
-			),
-			isVisible: true,
-		});
-		this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName, true);
-	}
-
-	private refreshHerdrStatus(claimInProgress: boolean): void {
-		this.update({
-			footerType: FOOTER_HERDR_TYPE,
-			isLoading: claimInProgress,
-			text: FOOTER_HERDR_WORKING_STATUS,
-			isVisible: claimInProgress,
-		});
-	}
-
-	private refreshTaskStatus(
-		url?: string,
-		taskName?: string,
-		force?: boolean,
-	): void {
-		if (this.context === null) return;
-		const shouldForce = force ?? false;
-		this.update(
-			{
-				footerType: C.status.task,
-				isLoading: false,
-				text: renderTaskStatusCompact(url, this.context.ui.theme, taskName),
-				isVisible: true,
-			},
-			shouldForce,
-		);
+		const isFooterUpdate = event.moduleId === C.module.footer;
+		if (!isFooterUpdate) return;
+		const hasSameState =
+			JSON.stringify(this.state) === JSON.stringify(event.moduleState);
+		if (hasSameState) return;
+		this.state = structuredClone(event.moduleState);
+		const hasContext = this.context !== null;
+		if (!hasContext) return;
+		for (const footer of Object.values(this.state.footers))
+			this.display.update(this.state, footer);
 	}
 
 	async sessionStart(
@@ -128,32 +68,40 @@ export class FooterEventConsumer {
 		nextContext: ExtensionContext,
 	): Promise<void> {
 		this.context = nextContext;
-		this.currentPrUrl = this.sessionState.moduleState.pr.prUrl;
-		this.currentTaskUrl = this.sessionState.moduleState.todoist.taskUrl;
-		this.currentTaskName = this.sessionState.moduleState.todoist.taskName;
-		this.hasUncommittedChanges =
-			this.sessionState.gitState.hasUncommittedChanges ?? false;
-		this.state = structuredClone(this.sessionState.moduleState.footer);
+		this.state = structuredClone(this.getInitialState());
 		this.display.start(nextContext, this.state);
 	}
 
 	update(event: FooterUpdateEvent, force?: boolean): void {
 		const parsed = parseFooterEvent(event);
-		if (this.context === null) return;
+		const hasContext = this.context !== null;
+		if (!hasContext) return;
 		const previous = this.state.footers[parsed.footerType];
 		const hasPrevious = previous !== undefined;
-		const sameLoading = hasPrevious && previous.isLoading === parsed.isLoading;
 		const sameText = hasPrevious && previous.text === parsed.text;
 		const sameVisibility =
 			hasPrevious && previous.isVisible === parsed.isVisible;
-		const sameCore = sameLoading && sameText;
-		const isUnchanged = sameCore && sameVisibility;
+		const isUnchanged = sameText && sameVisibility;
 		const shouldForce = force ?? false;
 		const shouldSkip = isUnchanged && !shouldForce;
 		if (shouldSkip) return;
 		this.state = applyFooterUpdate(this.state, parsed);
 		void publishFooterState(this.eventHandler, { ...this.getState() });
-		this.display.update(this.state, parsed);
+		this.display.update(this.state, this.state.footers[parsed.footerType]);
+	}
+
+	setLoading(event: FooterLoadingEvent): void {
+		const parsed = parseFooterLoadingEvent(event);
+		const hasContext = this.context !== null;
+		if (!hasContext) return;
+		const current = this.state.footers[parsed.footerType];
+		const hasCurrent = current !== undefined;
+		if (!hasCurrent) return;
+		const isLoadingUnchanged = current.isLoading === parsed.isLoading;
+		if (isLoadingUnchanged) return;
+		this.state = applyFooterLoading(this.state, parsed);
+		void publishFooterState(this.eventHandler, { ...this.getState() });
+		this.display.update(this.state, this.state.footers[parsed.footerType]);
 	}
 
 	getState(): FooterState {
@@ -170,10 +118,6 @@ export class FooterEventConsumer {
 	deactivate(): void {
 		this.display.deactivate();
 		this.context = null;
-		this.currentPrUrl = undefined;
-		this.currentTaskUrl = undefined;
-		this.currentTaskName = undefined;
-		this.hasUncommittedChanges = false;
 		this.state = emptyFooterState();
 	}
 }

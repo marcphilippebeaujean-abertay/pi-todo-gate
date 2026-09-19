@@ -282,7 +282,10 @@ class Worktree implements WorktreeConsumer {
 			isCurrentWorktree(this.baseline, worktree);
 		if (!isCurrentAfterCleanup) return FAILED;
 		const worktreeWasRemoved = cleanupState.value;
-		if (worktreeWasRemoved) this.baseline = null;
+		if (worktreeWasRemoved) {
+			this.baseline = null;
+			this.emitState();
+		}
 		const cleanupCompleted = result === COMPLETED;
 		if (cleanupCompleted) notifyWorktree(this.context, successMessage);
 		return result;

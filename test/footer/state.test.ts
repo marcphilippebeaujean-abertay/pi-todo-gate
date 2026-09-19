@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FOOTER_HERDR_TYPE } from "../../src/footer/constants.ts";
 import {
 	type FooterModuleState as FooterState,
+	type FooterStatusState,
 	type FooterUpdate,
 	footerStateDescriptor,
 	parseFooterEvent,
@@ -9,14 +10,14 @@ import {
 	serializeFooterState,
 } from "../../src/footer/module-state.ts";
 
-const visible: FooterUpdate = {
+const visible: FooterStatusState = {
 	footerType: "task",
 	isLoading: true,
 	text: "Todoist Task: work |",
 	isVisible: true,
 };
 
-const hidden: FooterUpdate = {
+const hidden: FooterStatusState = {
 	footerType: "herdr",
 	isLoading: false,
 	text: "Herdr: working |",
@@ -45,15 +46,22 @@ describe("footer state", () => {
 
 describe("footer event parsing", () => {
 	it("returns an exact live event object", () => {
-		expect(parseFooterEvent({ ...visible, ignored: "drop me" })).toEqual(
-			visible,
-		);
+		const event: FooterUpdate = {
+			footerType: visible.footerType,
+			text: visible.text,
+			isVisible: visible.isVisible,
+		};
+		expect(parseFooterEvent({ ...event, ignored: "drop me" })).toEqual(event);
 	});
 
 	it("throws when live event contract is invalid", () => {
-		expect(() => parseFooterEvent({ ...visible, isLoading: "true" })).toThrow(
-			TypeError,
-		);
+		expect(() =>
+			parseFooterEvent({
+				footerType: visible.footerType,
+				text: visible.text,
+				isVisible: "true",
+			}),
+		).toThrow(TypeError);
 	});
 });
 

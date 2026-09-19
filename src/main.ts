@@ -94,7 +94,7 @@ export function createExtensionState(
 	const stateUpdateEpoch = { value: 0 };
 	const footer = createFooterModule({
 		eventHandler,
-		sessionState,
+		getInitialState: () => sessionState.moduleState.footer,
 	});
 	const worktree = createWorktreeModule({
 		eventHandler,

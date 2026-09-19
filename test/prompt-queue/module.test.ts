@@ -5,6 +5,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPromptQueueModule } from "../../src/prompt-queue/module.ts";
 import { PromptQueue } from "../../src/prompt-queue/queue.ts";
+import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import type { SessionRecord } from "../../src/shared/session-state.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -180,6 +181,29 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
+	});
+
+	it("dispatches loading around Todoist completion without choosing final text", async () => {
+		const state = setup();
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		const loading: Array<{ footerType: string; isLoading: boolean }> = [];
+		state.eventHandler.footerLoadingEvent.subscribe((event) => {
+			loading.push(event);
+		});
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain?: () => Promise<void> }).drain?.();
+
+		expect(loading).toEqual([
+			{ footerType: C.status.task, isLoading: true },
+			{ footerType: C.status.task, isLoading: false },
+			{ footerType: C.status.pr, isLoading: true },
+			{ footerType: C.status.pr, isLoading: false },
+		]);
 	});
 
 	it("passes dirty confirmation as force true", async () => {

@@ -4,6 +4,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { RootEventPublisher } from "./event-publishers.ts";
+import { publishFooterUpdate } from "./footer/event-publishers.ts";
+import {
+	renderPrStatus,
+	renderTaskStatusCompact,
+} from "./footer/footer-rendering.ts";
 import type { FooterModule as FooterModuleType } from "./footer/module.ts";
 import type { PrModule } from "./pr/module.ts";
 import type { ModuleStateDescriptors } from "./session-state-persistence.ts";
@@ -359,7 +364,64 @@ export function registerModuleStateConsumer(
 	return () => updateQueue;
 }
 
+function publishPrFooter(root: Root): void {
+	const context = root.session?.context;
+	if (context === undefined) return;
+	void publishFooterUpdate(root.eventHandler, {
+		footerType: C.status.pr,
+		text: renderPrStatus(
+			root.sessionState.moduleState.pr.prUrl,
+			context.ui.theme,
+			root.sessionState.gitState.hasUncommittedChanges ?? false,
+		),
+		isVisible: true,
+	});
+	void publishFooterUpdate(root.eventHandler, {
+		footerType: C.status.task,
+		text: renderTaskStatusCompact(
+			root.sessionState.moduleState.todoist.taskUrl,
+			context.ui.theme,
+			root.sessionState.moduleState.todoist.taskName,
+		),
+		isVisible: true,
+	});
+}
+
+function publishTaskFooter(root: Root): void {
+	const context = root.session?.context;
+	if (context === undefined) return;
+	void publishFooterUpdate(root.eventHandler, {
+		footerType: C.status.task,
+		text: renderTaskStatusCompact(
+			root.sessionState.moduleState.todoist.taskUrl,
+			context.ui.theme,
+			root.sessionState.moduleState.todoist.taskName,
+		),
+		isVisible: true,
+	});
+}
+
+function handleFooterProjection(
+	root: Root,
+	update: ModuleStateChangedEvent,
+): void {
+	switch (update.moduleId) {
+		case C.module.pr:
+		case C.module.worktree:
+			publishPrFooter(root);
+			return;
+		case C.module.todoist:
+			publishTaskFooter(root);
+			return;
+		default:
+			return;
+	}
+}
+
 export function registerExtensionEventConsumers(root: Root): void {
+	root.eventHandler.moduleStateChangedEvent.subscribe((update) =>
+		handleFooterProjection(root, update),
+	);
 	root.pi.on(C.event.sessionStart, handleSessionStart.bind(null, root));
 	root.pi.on(C.event.messageEnd, handleMessageEnd.bind(null, root));
 	root.pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, root));

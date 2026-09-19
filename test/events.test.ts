@@ -3,7 +3,11 @@ import {
 	createModuleStatePublisher,
 	RootEventPublisher,
 } from "../src/event-publishers.ts";
-import { createSharedEvents, event } from "../src/shared/events.ts";
+import {
+	createSharedEvents,
+	event,
+	withLoading,
+} from "../src/shared/events.ts";
 
 describe("shared events", () => {
 	it("delivers typed payloads and supports unsubscribe", async () => {
@@ -55,6 +59,52 @@ describe("shared events", () => {
 		expect(order).toEqual(["first", "second", "third"]);
 	});
 
+	it("runs completion callback before clearing shared loading state", async () => {
+		const events = createSharedEvents();
+		const order: string[] = [];
+		events.footerLoadingEvent.subscribe(({ isLoading }) => {
+			order.push(isLoading ? "start" : "stop");
+		});
+
+		await withLoading(
+			events,
+			"task",
+			async () => {
+				order.push("operation");
+			},
+			async () => {
+				order.push("complete");
+			},
+		);
+
+		expect(order).toEqual(["start", "operation", "complete", "stop"]);
+	});
+
+	it("clears shared loading state when operation fails", async () => {
+		const events = createSharedEvents();
+		const loading: boolean[] = [];
+		events.footerLoadingEvent.subscribe(({ isLoading }) => {
+			loading.push(isLoading);
+		});
+
+		let completed = false;
+		await expect(
+			withLoading(
+				events,
+				"task",
+				async () => {
+					throw new Error("failed");
+				},
+				() => {
+					completed = true;
+				},
+			),
+		).rejects.toThrow("failed");
+
+		expect(completed).toBe(true);
+		expect(loading).toEqual([true, false]);
+	});
+
 	it("binds module publisher to its module ID", async () => {
 		const events = createSharedEvents();
 		const updates: unknown[] = [];
@@ -101,9 +151,10 @@ describe("shared events", () => {
 		expect(payloads).toEqual([{ pi }]);
 	});
 
-	it("exposes no footer-specific event channels", () => {
+	it("exposes footer value and loading event channels", () => {
 		const events = createSharedEvents();
-		expect(events).not.toHaveProperty("footerUpdateEvent");
+		expect(events).toHaveProperty("footerUpdateEvent");
+		expect(events).toHaveProperty("footerLoadingEvent");
 		expect(events).not.toHaveProperty("worktreeStatusEvent");
 	});
 
