@@ -16,8 +16,8 @@ const DOES_NOT_ACTIVATE_FOR_DISPATCHED_SUBAGENT =
 const SKIPS_ANY_DEFINED_SUBAGENT_MARKER = "skips any defined subagent marker";
 const UNCONFIGURED_PROJECT = "/unconfigured/project";
 const MERGE_TD = "merge-td";
-const REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION =
-	"registers state tool before session activation";
+const DOES_NOT_REGISTER_STATE_TOOL_BEFORE_SESSION_ACTIVATION =
+	"does not register state tool before session activation";
 const CONFIGURED_PROJECT = "/configured/project";
 const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
@@ -137,6 +137,7 @@ type TestTool = {
 	name: string;
 	execute: (...args: unknown[]) => Promise<unknown> | unknown;
 };
+type TestCommand = { name: string };
 type StateToolResult = { content: Array<{ text: string }> };
 
 function persistedStateEntry(
@@ -183,6 +184,7 @@ function harness(
 ) {
 	const handlers = new Map<string, TestHandler>();
 	const tools: TestTool[] = [];
+	const commands: TestCommand[] = [];
 	const appended: unknown[] = [];
 	const footerAppended: unknown[] = [];
 	const notifications: string[] = [];
@@ -190,12 +192,27 @@ function harness(
 	const selections: Array<{ title: string; options: string[] }> = [];
 	const footerCalls: unknown[] = [];
 	const statusCalls: Array<{ key: string; text: string | undefined }> = [];
+	const exec = async (command: string, args: string[]) => {
+		const input = [command, ...args].join(" ");
+		if (input === "git rev-parse --show-toplevel")
+			return { stdout: `${cwd}\n`, stderr: EMPTY_STRING, code: 0 };
+		if (input === "git branch --show-current")
+			return { stdout: "main\n", stderr: EMPTY_STRING, code: 0 };
+		if (input === "git worktree list --porcelain")
+			return {
+				stdout: `worktree ${cwd}\nHEAD abc\nbranch refs/heads/main\n`,
+				stderr: EMPTY_STRING,
+				code: 0,
+			};
+		return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+	};
 	const pi = {
 		on: (event: string, handler: unknown) => {
 			if (typeof handler === "function")
 				if (!handlers.has(event)) handlers.set(event, handler as TestHandler);
 		},
 		registerTool: (tool: unknown) => tools.push(tool as TestTool),
+		registerCommand: (name: string) => commands.push({ name }),
 		appendEntry: (type: string, data: unknown) => {
 			const entry = { type, data };
 			if (type === FOOTER_STATE_TYPE) footerAppended.push(entry);
@@ -227,17 +244,14 @@ function harness(
 			getSessionFile: () => SESSIONS_CURRENT_JSONL,
 			getSessionDir: () => SESSIONS,
 		},
-		exec: async () => ({
-			stdout: EMPTY_STRING,
-			stderr: EMPTY_STRING,
-			code: 0,
-		}),
+		exec,
 	} as unknown as ExtensionContext;
 	return {
 		pi,
 		ctx,
 		handlers,
 		tools,
+		commands,
 		appended,
 		footerAppended,
 		notifications,
@@ -245,6 +259,7 @@ function harness(
 		statusCalls,
 		confirmations,
 		selections,
+		exec,
 	};
 }
 
@@ -300,6 +315,7 @@ async function start(
 ) {
 	extension(h.pi, {
 		loadConfig: async () => config(projects),
+		exec: h.exec,
 		...dependencies,
 	});
 	await h.handlers.get(SESSION_START)?.(
@@ -473,43 +489,76 @@ describe("lazy activation", () => {
 
 	it(REGISTERS_TOOL_WITHOUT_PERFORMING_EXTERNAL_WORK, async () => {
 		const h = harness(UNCONFIGURED_PROJECT);
-		await start(h, { "/configured": MERGE_TD });
-		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
+		const exec = vi.fn(async () => ({
+			stdout: EMPTY_STRING,
+			stderr: EMPTY_STRING,
+			code: 1,
+		}));
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		expect(h.tools).toHaveLength(0);
+		expect(h.commands.map(({ name }) => name)).toEqual(["tg_merge"]);
 		expect(h.appended).toHaveLength(0);
-		await expect(
-			h.tools[0]?.execute(
-				"call",
-				{ action: "status" },
-				undefined,
-				undefined,
-				h.ctx,
-			),
-		).rejects.toThrow("pi-todo-gate is inactive for this project");
+	});
+
+	it("starts unregistered Git project without registering Todoist", async () => {
+		const h = harness(UNCONFIGURED_PROJECT);
+		const exec = vi.fn(async (command: string, args: string[]) => {
+			const input = [command, ...args].join(" ");
+			if (input === "git rev-parse --show-toplevel")
+				return {
+					stdout: `${UNCONFIGURED_PROJECT}\n`,
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
+			if (input === "git branch --show-current")
+				return { stdout: "main\n", stderr: EMPTY_STRING, code: 0 };
+			if (input === "git worktree list --porcelain")
+				return {
+					stdout: `worktree ${UNCONFIGURED_PROJECT}\nHEAD abc\nbranch refs/heads/main\n`,
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
+			return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 1 };
+		});
+		await start(h, { "/configured": MERGE_TD }, { exec });
+		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
+		expect(h.commands.map(({ name }) => name)).not.toContain("tg_refresh_task");
+	});
+
+	it("registers Todoist independently for a non-Git project", async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const exec = vi.fn(async () => ({
+			stdout: EMPTY_STRING,
+			stderr: EMPTY_STRING,
+			code: 1,
+		}));
+		await start(h, { [CONFIGURED_PROJECT]: MERGE_TD }, { exec });
+		expect(h.tools).toHaveLength(0);
+		expect(h.commands.map(({ name }) => name)).toEqual([
+			"tg_merge",
+			"tg_refresh_task",
+			"tg_drop_task",
+		]);
 	});
 
 	it(DOES_NOT_START_WORKTREE_FOR_AN_UNMATCHED_PROJECT, async () => {
 		const h = harness(UNCONFIGURED_PROJECT);
 		const exec = vi.fn(async () => ({
-			stdout: "worktree",
+			stdout: EMPTY_STRING,
 			stderr: EMPTY_STRING,
-			code: 0,
+			code: 1,
 		}));
 		await start(h, { "/configured": MERGE_TD }, { exec });
-		expect(exec).not.toHaveBeenCalled();
+		expect(exec).toHaveBeenCalled();
+		expect(h.tools).toHaveLength(0);
 	});
 
-	it(REGISTERS_STATE_TOOL_BEFORE_SESSION_ACTIVATION, async () => {
+	it(DOES_NOT_REGISTER_STATE_TOOL_BEFORE_SESSION_ACTIVATION, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		extension(h.pi, {
 			loadConfig: async () => config({ "/configured": MERGE_TD }),
 		});
-		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
-
-		await h.handlers.get(SESSION_START)?.(
-			{ type: SESSION_START, reason: STARTUP },
-			h.ctx,
-		);
-		expect(h.tools.map((tool) => tool.name)).toEqual([PI_TODO_GATE_STATE_TOOL]);
+		expect(h.tools).toHaveLength(0);
 	});
 
 	it(KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK, async () => {
@@ -517,7 +566,7 @@ describe("lazy activation", () => {
 		h.ctx.mode = TUI;
 		await start(h, { "/configured": MERGE_TD });
 		expect(h.footerCalls).toEqual([undefined]);
-		expect(h.statusCalls).toEqual([]);
+		expect(h.statusCalls.length).toBeGreaterThan(0);
 		expect(h.footerAppended).toHaveLength(0);
 	});
 });
@@ -928,6 +977,12 @@ describe("hidden lifecycle context", () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const exec = vi.fn(async (command: string, args: string[]) => {
 			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return {
+					stdout: `${CONFIGURED_PROJECT}\n`,
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
 			if (key === "git remote get-url origin")
 				return { stdout: `${REMOTE_ORIGIN}\n`, stderr: EMPTY_STRING, code: 0 };
 			if (command !== "gh")
@@ -976,6 +1031,12 @@ describe("hidden lifecycle context", () => {
 		let remoteLookupCount = 0;
 		const exec = vi.fn(async (command: string, args: string[]) => {
 			const key = [command, ...args].join(" ");
+			if (key === "git rev-parse --show-toplevel")
+				return {
+					stdout: `${CONFIGURED_PROJECT}\n`,
+					stderr: EMPTY_STRING,
+					code: 0,
+				};
 			if (key === "git remote get-url origin") {
 				remoteLookupCount += 1;
 				return remoteLookupCount <= 2
@@ -1119,13 +1180,19 @@ describe("pi_todo_gate_state", () => {
 			),
 		]);
 		const exec = async (_command: string, args: string[]) =>
-			args.join(" ") === "remote get-url origin"
+			args.join(" ") === "rev-parse --show-toplevel"
 				? {
-						stdout: `${REMOTE_ORIGIN}\n`,
+						stdout: `${CONFIGURED_PROJECT}\n`,
 						stderr: EMPTY_STRING,
 						code: 0,
 					}
-				: { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+				: args.join(" ") === "remote get-url origin"
+					? {
+							stdout: `${REMOTE_ORIGIN}\n`,
+							stderr: EMPTY_STRING,
+							code: 0,
+						}
+					: { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
 		await start(h, { "/configured": MERGE_TD }, { exec });
 		const result = (await h.tools[0].execute(
 			CALL,
@@ -1141,7 +1208,7 @@ describe("pi_todo_gate_state", () => {
 			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
-		expect(h.statusCalls).toEqual([]);
+		expect(h.statusCalls.length).toBeGreaterThan(0);
 	});
 
 	it(CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION, async () => {

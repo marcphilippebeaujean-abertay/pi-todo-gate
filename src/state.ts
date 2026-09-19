@@ -17,12 +17,15 @@ export type {
 export type { HerdrTabRenameModuleState } from "./herdr-tab-rename/module-state.ts";
 export type { MergedPrState, PrModuleState } from "./pr/module-state.ts";
 export type { ReviewModuleState } from "./review/module-state.ts";
-export type { SessionReader, SessionRecord } from "./shared/session-state.ts";
+export type {
+	SessionProject,
+	SessionReader,
+	SessionRecord,
+} from "./shared/session-state.ts";
 export type { TodoistModuleState } from "./todoist/module-state.ts";
 export type { WorktreeModuleState } from "./worktree/module-state.ts";
 
 export interface GitState {
-	isGitProject?: boolean;
 	remoteOrigin?: string;
 	mergeCompletedAt?: string;
 	branch?: string | null;
@@ -87,6 +90,10 @@ export function createSessionState(): SessionState {
 export interface RootDependencies {
 	loadConfig?: (path?: string) => Promise<unknown>;
 	openSession?: (path: string) => SessionReader;
+	exec?: import("./shared/command.ts").Exec;
+	resolveSessionProject?: (
+		cwd: string,
+	) => Promise<import("./shared/session-state.ts").SessionProject | null>;
 }
 
 export type { ExtensionDependencies } from "./extension-dependencies.ts";

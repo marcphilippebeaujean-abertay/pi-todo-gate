@@ -31,6 +31,7 @@ export function createPromptQueueModule(
 		eventHandler: options.eventHandler,
 		sessionState: options.sessionState,
 		pr: options.pr,
+		getPr: consumer.getPr.bind(consumer),
 		queue,
 		getContext: consumer.getContext.bind(consumer),
 		isCurrent: consumer.isCurrentContext.bind(consumer),

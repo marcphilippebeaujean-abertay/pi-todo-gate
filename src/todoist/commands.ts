@@ -87,6 +87,10 @@ function clearSelectedTask(state: TodoistState): TodoistState {
 	};
 }
 
+function currentProjectRef(operations: TodoistOperations): string {
+	return operations.getProjectRef();
+}
+
 function refreshInput(
 	operations: TodoistOperations,
 	taskContext: SelectedTaskContext,
@@ -100,7 +104,7 @@ function refreshInput(
 		taskRef,
 		taskName: state.taskName ?? taskRef,
 		taskDescription: state.taskDescription ?? NO_TASK_DESCRIPTION,
-		projectRef: operations.projectRef,
+		projectRef: currentProjectRef(operations),
 		prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 		worktree,
 	};

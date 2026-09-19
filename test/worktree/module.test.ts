@@ -256,9 +256,11 @@ describe("worktree event actions", () => {
 		});
 	});
 
-	it("marks Git worktree context explicitly", async () => {
+	it("publishes Git worktree state", async () => {
 		const events = createSharedEvents();
-		const updates: Array<{ gitStatePatch?: { isGitProject?: boolean } }> = [];
+		const updates: Array<{
+			gitStatePatch?: { branch?: string | null };
+		}> = [];
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push({ gitStatePatch: update.gitStatePatch });
 		});
@@ -274,7 +276,7 @@ describe("worktree event actions", () => {
 
 		expect(updates).toContainEqual(
 			expect.objectContaining({
-				gitStatePatch: expect.objectContaining({ isGitProject: true }),
+				gitStatePatch: expect.objectContaining({ branch: "feature" }),
 			}),
 		);
 	});

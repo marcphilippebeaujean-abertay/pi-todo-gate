@@ -16,12 +16,16 @@ export interface ModuleStateDescriptor<K extends string, State> {
 	serialize(state: State): JsonValue;
 }
 
+export interface SessionProject {
+	codingRoot: string;
+	triggersOnlyOnWorktree?: boolean;
+	isTodoistProject?: boolean;
+	isGitProject?: boolean;
+}
+
 export interface SessionRecord {
 	context: ExtensionContext;
-	project: {
-		codingRoot: string;
-		triggersOnlyOnWorktree?: boolean;
-	};
+	project: SessionProject;
 	hasPendingHandoffContext: boolean;
 	hasPerformedAnyGitMutations: boolean;
 	workRevision: number;

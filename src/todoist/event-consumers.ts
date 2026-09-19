@@ -32,21 +32,25 @@ import type {
 	TodoistState,
 } from "./internal-state.ts";
 
-export function registerTodoistLifecycleConsumers(
+function canRegisterTodoistCommands(
+	options: TodoistLifecycleConsumerOptions,
+): boolean {
+	const noActiveSession = options.sessionState.session.activeSessionId === null;
+	if (noActiveSession) return true;
+	const session = options.getSession();
+	if (session === null) return false;
+	return session.project?.isTodoistProject !== false;
+}
+
+function registerTodoistSessionActivation(
 	options: TodoistLifecycleConsumerOptions,
 ): void {
-	let commandsRegistered = false;
-	options.eventHandler.piToolRegistrationsBecameAvailableEvent.subscribe(
-		({ pi }) => {
-			if (commandsRegistered) return;
-			commandsRegistered = true;
-			options.registerCommands(pi);
-		},
-	);
 	options.eventHandler.sessionActivatedEvent.subscribe(
 		({ context, session, sessionId }) => {
 			const hasNoSession = session === undefined;
 			if (hasNoSession) return;
+			const isTodoistProject = session.project?.isTodoistProject !== false;
+			if (!isTodoistProject) return;
 			const isCurrentContext = session.context === context;
 			if (!isCurrentContext) return;
 			const isCurrentSession =
@@ -55,6 +59,22 @@ export function registerTodoistLifecycleConsumers(
 			return options.activateSession(session, sessionId);
 		},
 	);
+}
+
+export function registerTodoistLifecycleConsumers(
+	options: TodoistLifecycleConsumerOptions,
+): void {
+	let commandsRegistered = false;
+	options.eventHandler.piToolRegistrationsBecameAvailableEvent.subscribe(
+		({ pi }) => {
+			if (commandsRegistered) return;
+			const canRegister = canRegisterTodoistCommands(options);
+			if (!canRegister) return;
+			commandsRegistered = true;
+			options.registerCommands(pi);
+		},
+	);
+	registerTodoistSessionActivation(options);
 	options.eventHandler.sessionResetEvent.subscribe(() =>
 		options.resetSession(),
 	);
@@ -217,7 +237,7 @@ async function dispatchTaskClaim(
 				model,
 				prompt,
 				cwd: session.context.cwd,
-				projectRef: operations.projectRef,
+				projectRef: operations.getProjectRef(),
 				prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 				worktree,
 			}),

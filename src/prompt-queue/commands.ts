@@ -32,6 +32,12 @@ async function runMerge(
 		notifyNoUi(context);
 		return;
 	}
+	const pr = dependencies.getPr?.() ?? dependencies.pr;
+	const hasPrModule = pr !== null;
+	if (!hasPrModule) {
+		notifyInactive(context);
+		return;
+	}
 	const prUrl = dependencies.sessionState.moduleState.pr.prUrl;
 	const hasValidPrUrl = typeof prUrl === "string" && prUrl.trim() !== "";
 	if (!hasValidPrUrl) {
@@ -51,7 +57,7 @@ async function runMerge(
 			const isCurrentBeforeCapability =
 				isCurrent() && dependencies.isCurrent(context);
 			if (!isCurrentBeforeCapability) return;
-			await dependencies.pr.mergeActivePr();
+			await pr.mergeActivePr();
 		})
 		.catch(() => undefined);
 }

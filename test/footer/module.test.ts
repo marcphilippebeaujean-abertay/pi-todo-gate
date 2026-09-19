@@ -29,7 +29,6 @@ describe("footer module", () => {
 	it("projects PR and Todoist values for Git projects", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		sessionState.gitState.isGitProject = true;
 		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		sessionState.moduleState.todoist.taskName = "Fix task";
 		const footer = createFooterModule({
@@ -41,6 +40,7 @@ describe("footer module", () => {
 			context: context(),
 			previousSessionFile: undefined,
 			sessionId: "session",
+			session: { project: { isGitProject: true } } as never,
 		});
 
 		const state = publicState(footer);
@@ -70,7 +70,6 @@ describe("footer module", () => {
 	it("shows Herdr only while rename action is loading", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		sessionState.gitState.isGitProject = true;
 		const footer = createFooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
@@ -79,6 +78,7 @@ describe("footer module", () => {
 			context: context(),
 			previousSessionFile: undefined,
 			sessionId: "session",
+			session: { project: { isGitProject: true } } as never,
 		});
 
 		await events.actionLoadingEvent.emit({

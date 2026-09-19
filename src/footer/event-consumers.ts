@@ -23,6 +23,7 @@ export class FooterEventConsumer {
 	private readonly getSessionState: FooterModuleOptions["getSessionState"];
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
+	private isGitProject = false;
 	private state = emptyFooterState();
 	private readonly loading = new Set<string>();
 	private readonly footerDisplay = new FooterDisplay();
@@ -39,12 +40,17 @@ export class FooterEventConsumer {
 		this.eventHandler.sessionStateChangedEvent.subscribe(({ currentState }) =>
 			this.project(currentState),
 		);
-		this.eventHandler.sessionActivatedEvent.subscribe(({ context }) =>
-			this.sessionStart(context),
+		this.eventHandler.sessionActivatedEvent.subscribe(
+			({ context, session }) => {
+				if (session === undefined) return;
+				this.isGitProject = session.project.isGitProject === true;
+				return this.sessionStart(context);
+			},
 		);
-		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
-			this.deactivate(),
-		);
+		this.eventHandler.sessionDeactivatedEvent.subscribe(() => {
+			this.isGitProject = false;
+			this.deactivate();
+		});
 	}
 
 	async sessionStart(nextContext: ExtensionContext): Promise<void> {
@@ -73,9 +79,9 @@ export class FooterEventConsumer {
 		sessionState: ReturnType<FooterModuleOptions["getSessionState"]>,
 	): FooterModuleState {
 		const footers: Record<string, FooterEntryState> = {};
-		const isGitProject = sessionState.gitState.isGitProject === true;
 		const currentContext = this.context;
-		const shouldProjectGitFooters = isGitProject && currentContext !== null;
+		const shouldProjectGitFooters =
+			this.isGitProject && currentContext !== null;
 		if (shouldProjectGitFooters) {
 			const theme = currentContext.ui.theme;
 			this.addFooter(

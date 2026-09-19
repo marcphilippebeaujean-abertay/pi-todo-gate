@@ -387,9 +387,9 @@ describe("session shutdown", () => {
 			expect.objectContaining({
 				schemaVersion: 1,
 				session: { inheritedFromSessionId: "previous-session" },
-				gitState: {
+				gitState: expect.objectContaining({
 					remoteOrigin: "https://current.example/repo.git",
-				},
+				}),
 			}),
 		]);
 	});
@@ -573,9 +573,13 @@ describe("session shutdown", () => {
 		);
 		releaseFirst({ projects: { "/repo": "project" } });
 		await Promise.all([first, second]);
-		expect(root.session).toBeNull();
+		expect(root.session?.project).toMatchObject({
+			isGitProject: false,
+			isTodoistProject: false,
+			triggersOnlyOnWorktree: true,
+		});
 		expect(root.sessionState).toMatchObject({
-			session: { activeSessionId: null },
+			session: { activeSessionId: "new-session" },
 			gitState: {},
 			moduleState: createSessionState().moduleState,
 		});

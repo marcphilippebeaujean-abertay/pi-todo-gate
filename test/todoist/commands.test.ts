@@ -50,7 +50,7 @@ function runtime(): {
 	const operations = {
 		sessionState,
 		getSession: () => session,
-		projectRef: "Project",
+		getProjectRef: () => "Project",
 		eventHandler: createSharedEvents(),
 		todoist: { taskClaim: { pending: false, completed: false } },
 		updateTodoistState: update,
@@ -87,8 +87,9 @@ describe("Todoist task commands", () => {
 		]);
 	});
 
-	it("refreshes current task state from typed worker result", async () => {
+	it("refreshes task using current project reference", async () => {
 		const { operations, worker, update } = runtime();
+		operations.getProjectRef = () => "Current project";
 		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
 		await handler?.("", context());
 
@@ -97,6 +98,7 @@ describe("Todoist task commands", () => {
 				taskRef: "task-1",
 				taskName: "Old task",
 				taskDescription: "Old details",
+				projectRef: "Current project",
 			}),
 		);
 		expect(update).toHaveBeenCalledWith(
