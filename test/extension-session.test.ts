@@ -577,6 +577,7 @@ describe("session shutdown", () => {
 		expect(root.session?.project).toMatchObject({
 			isGitProject: false,
 			isTodoistProject: false,
+			triggersOnlyOnWorktree: true,
 		});
 		expect(root.sessionState).toMatchObject({
 			session: { activeSessionId: "new-session" },

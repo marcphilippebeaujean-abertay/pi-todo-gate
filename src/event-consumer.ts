@@ -148,6 +148,7 @@ async function resolveSessionCapabilities(
 		projectInfo.root !== null || projectInfo.remoteOrigin !== null;
 	const sessionProject: SessionProject = project ?? {
 		codingRoot: ctx.cwd,
+		triggersOnlyOnWorktree: true,
 		isTodoistProject: false,
 		isGitProject,
 	};
