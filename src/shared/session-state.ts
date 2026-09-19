@@ -21,6 +21,8 @@ export interface SessionRecord {
 	project: {
 		codingRoot: string;
 		triggersOnlyOnWorktree?: boolean;
+		isTodoistProject?: boolean;
+		isGitProject?: boolean;
 	};
 	hasPendingHandoffContext: boolean;
 	hasPerformedAnyGitMutations: boolean;

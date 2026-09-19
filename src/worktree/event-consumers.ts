@@ -52,7 +52,11 @@ class Worktree implements WorktreeConsumer {
 			this.consumeToolResult(event, context),
 		);
 		this.eventHandler.sessionActivatedEvent.subscribe(
-			({ context, sessionId }) => this.sessionStart(context, sessionId),
+			({ context, session, sessionId }) => {
+				const isNonGitProject = session?.project?.isGitProject === false;
+				if (isNonGitProject) return;
+				return this.sessionStart(context, sessionId);
+			},
 		);
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),

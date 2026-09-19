@@ -43,6 +43,8 @@ import {
 export interface SessionProject {
 	codingRoot: string;
 	triggersOnlyOnWorktree?: boolean;
+	isTodoistProject?: boolean;
+	isGitProject?: boolean;
 }
 
 export interface TodoistModule {
@@ -159,13 +161,29 @@ class TodoistModuleImpl implements TodoistModule {
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
 		const hasCurrentSessionId = activeSessionId === sessionId;
 		const isCurrentSession = hasCurrentSessionId;
-		const hasResolvedProject = resolved !== null;
-		const canActivate = hasResolvedProject && isCurrentSession;
+		const canActivate = this.canActivateSession(
+			session,
+			resolved,
+			isCurrentSession,
+		);
 		if (!canActivate) return;
+		if (resolved === null) return;
 		this.resetTaskClaim();
 		this.currentSession = session;
 		this.currentProjectRef = resolved.todoistProjectRef;
 		await this.syncSessionState(session);
+	}
+
+	private canActivateSession(
+		session: TodoistSession,
+		resolved: ResolvedProject | null,
+		isCurrentSession: boolean,
+	): boolean {
+		const hasResolvedProject = resolved !== null;
+		if (!hasResolvedProject) return false;
+		const isTodoistProject = session.project?.isTodoistProject !== false;
+		if (!isTodoistProject) return false;
+		return isCurrentSession;
 	}
 
 	private async syncSessionState(session: TodoistSession): Promise<void> {

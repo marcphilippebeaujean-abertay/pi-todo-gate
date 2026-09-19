@@ -24,9 +24,11 @@ export class PromptQueueConsumer {
 	private readonly todoist: TodoistModule;
 	private readonly worktree: WorktreeCleanup;
 	private readonly queue: PromptQueue;
+	private readonly deferRegistration: boolean;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
 	private sessionId: string | null = null;
+	private commandRegistrar: (() => void) | undefined;
 
 	constructor(options: PromptQueueModuleOptions) {
 		this.eventHandler = options.eventHandler;
@@ -35,6 +37,7 @@ export class PromptQueueConsumer {
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
 		this.queue = options.queue ?? new PromptQueue();
+		this.deferRegistration = options.deferRegistration === true;
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
 			if (session === undefined) return;
@@ -46,6 +49,10 @@ export class PromptQueueConsumer {
 			this.context = event.context;
 			this.session = session;
 			this.sessionId = event.sessionId;
+			const shouldRegisterCommands =
+				options.deferRegistration === true &&
+				session.project?.isGitProject !== false;
+			if (shouldRegisterCommands) this.commandRegistrar?.();
 		});
 		this.eventHandler.sessionDeactivatedEvent.subscribe(() =>
 			this.deactivate(),
@@ -54,6 +61,12 @@ export class PromptQueueConsumer {
 		this.eventHandler.prMergedEvent.subscribe((event) =>
 			this.onPrMerged(event),
 		);
+	}
+
+	setCommandRegistrar(registrar: () => void): void {
+		this.commandRegistrar = registrar;
+		const shouldRegisterImmediately = !this.deferRegistration;
+		if (shouldRegisterImmediately) registrar();
 	}
 
 	drain(): Promise<void> {

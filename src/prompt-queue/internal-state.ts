@@ -45,6 +45,7 @@ export interface PromptQueueModuleOptions {
 	todoist: TodoistModule;
 	worktree: WorktreeCleanup;
 	queue?: PromptQueue;
+	deferRegistration?: boolean;
 }
 
 export interface PromptQueueModule {

@@ -87,6 +87,7 @@ export function createSessionState(): SessionState {
 export interface RootDependencies {
 	loadConfig?: (path?: string) => Promise<unknown>;
 	openSession?: (path: string) => SessionReader;
+	exec?: import("./shared/command.ts").Exec;
 }
 
 export type { ExtensionDependencies } from "./extension-dependencies.ts";

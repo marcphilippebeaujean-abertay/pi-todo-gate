@@ -127,6 +127,7 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
+		deferRegistration: true,
 	});
 	const extensionState = {
 		pi,
@@ -142,6 +143,7 @@ export function createExtensionState(
 		pi,
 		dependencies: {
 			openSession: providedDependencies.openSession,
+			exec: providedDependencies.exec,
 		},
 		eventHandler,
 		promptQueue,
@@ -187,10 +189,11 @@ function startExtensions(
 	});
 	createReviewModule({
 		pi,
+		eventHandler: extensionState.eventHandler,
 		sessionState: extensionState.sessionState,
 		herdrClient: moduleDependencies.herdrClient,
+		deferRegistration: true,
 	});
-	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }
 
 export default function extension(

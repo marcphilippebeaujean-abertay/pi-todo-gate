@@ -11,6 +11,7 @@ import {
 	latestPersistedSessionState,
 	restoreSessionState,
 } from "./session-state-persistence.ts";
+import { spawnExec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type {
 	BeforeAgentStartEvent,
@@ -22,6 +23,7 @@ import type {
 	SessionStartEvent,
 	ToolResultEvent,
 } from "./shared/events.ts";
+import { inspectProject } from "./shared/project.ts";
 import type { SessionReader, SessionRecord } from "./shared/session-state.ts";
 import {
 	createSessionState,
@@ -128,16 +130,44 @@ export function isCurrentSession(root: Root, sessionId: string): boolean {
 	return getActiveSessionId(root) === sessionId;
 }
 
+async function resolveSessionCapabilities(
+	root: Root,
+	sessionId: string,
+	ctx: ExtensionContext,
+): Promise<{ project: SessionProject; isGitProject: boolean } | null> {
+	const project = await root.todoist.resolveSessionProject(ctx.cwd);
+	const isCurrentAfterTodoist = isCurrentSession(root, sessionId);
+	if (!isCurrentAfterTodoist) return null;
+	const projectInfo = await inspectProject(
+		root.dependencies.exec ?? spawnExec,
+		ctx.cwd,
+	);
+	const isCurrentAfterGit = isCurrentSession(root, sessionId);
+	if (!isCurrentAfterGit) return null;
+	const isGitProject =
+		projectInfo.root !== null || projectInfo.remoteOrigin !== null;
+	const sessionProject: SessionProject = project ?? {
+		codingRoot: ctx.cwd,
+		isTodoistProject: false,
+		isGitProject,
+	};
+	if (project !== null) sessionProject.isTodoistProject = true;
+	sessionProject.isGitProject = isGitProject;
+	return { project: sessionProject, isGitProject };
+}
+
 async function activateConfigured(
 	root: Root,
 	sessionId: string,
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 	project: SessionProject,
+	isGitProject: boolean,
 ): Promise<{
 	session: SessionRecord;
 	branch: readonly unknown[];
 	hasPendingHandoffContext: boolean;
+	isGitProject: boolean;
 } | null> {
 	const branch = ctx.sessionManager.getBranch();
 	const persisted = latestPersistedSessionState(branch);
@@ -158,7 +188,10 @@ async function activateConfigured(
 		...state.session,
 		activeSessionId: ctx.sessionManager.getSessionId(),
 	};
-	root.sessionState.gitState = state.gitState;
+	root.sessionState.gitState = {
+		...state.gitState,
+		isGitProject,
+	};
 	root.sessionState.moduleState = state.moduleState;
 	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
 	const session: SessionRecord = {
@@ -179,7 +212,7 @@ async function activateConfigured(
 		sessionId,
 	});
 	if (!isCurrentSession(root, sessionId)) return null;
-	return { session, branch, hasPendingHandoffContext };
+	return { session, branch, hasPendingHandoffContext, isGitProject };
 }
 
 async function persistInheritedState(
@@ -216,22 +249,22 @@ export async function handleSessionStart(
 	root.sessionState.session.activeSessionId = sessionId;
 	await root.publisher.publishSessionReset();
 	if (!isCurrentSession(root, sessionId)) return;
-	const project = await root.todoist.resolveSessionProject(ctx.cwd);
-	if (!isCurrentSession(root, sessionId)) return;
-	if (project === null) {
-		resetSessionState(root.sessionState, root.stateUpdateEpoch);
-		manageActiveTools(root, true);
-		return;
-	}
+	const capabilities = await resolveSessionCapabilities(root, sessionId, ctx);
+	if (capabilities === null) return;
 	const activated = await activateConfigured(
 		root,
 		sessionId,
 		event,
 		ctx,
-		project,
+		capabilities.project,
+		capabilities.isGitProject,
 	);
 	if (activated === null || !isCurrentSession(root, sessionId)) return;
-	const { branch, hasPendingHandoffContext } = activated;
+	const {
+		branch,
+		hasPendingHandoffContext,
+		isGitProject: gitProject,
+	} = activated;
 	await root.stateUpdatesDrained();
 	if (!isCurrentSession(root, sessionId)) return;
 	const inheritedStateReady = await persistInheritedState(
@@ -240,8 +273,12 @@ export async function handleSessionStart(
 		hasPendingHandoffContext,
 	);
 	if (!inheritedStateReady) return;
-	manageActiveTools(root);
+	manageActiveTools(root, !gitProject);
 	if (ctx.mode === C.value.tui) ctx.ui.setFooter(undefined);
+	await root.publisher.publishPiToolRegistrationsBecameAvailable({
+		pi: root.pi,
+	});
+	if (!gitProject) return;
 	await publishInitialPrDiscovery(root, sessionId, branch);
 	if (!isCurrentSession(root, sessionId)) return;
 }
