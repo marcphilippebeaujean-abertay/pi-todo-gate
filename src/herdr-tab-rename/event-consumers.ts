@@ -3,6 +3,11 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { BeforeAgentStartEvent } from "../shared/events.ts";
+import {
+	boundHerdrClient,
+	isInsideHerdr,
+	tabLabel,
+} from "../shared/herdr-client.ts";
 import { modelReference } from "../shared/pi-worker.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
@@ -35,7 +40,6 @@ import type {
 	StartBackgroundWorker,
 } from "./internal-state.ts";
 import { notifyHerdrFailure } from "./notifications.ts";
-import { boundHerdrClient, isInsideHerdr, tabLabel } from "./runtime.ts";
 import { hasValidatedTabClaim } from "./tab-validation.ts";
 
 function currentId(value: string | undefined, subject: "pane" | "tab"): string {

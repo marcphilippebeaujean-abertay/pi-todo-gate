@@ -4,8 +4,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import {
 	boundHerdrClient,
+	currentPaneId,
 	HERDR_COMMAND,
-	HERDR_PANE_ID,
 } from "../shared/herdr-client.ts";
 import {
 	AGENT,
@@ -62,13 +62,6 @@ function paneIdFrom(output: string): string {
 	return paneId;
 }
 
-function currentPaneId(): string {
-	const paneId = process.env[HERDR_PANE_ID]?.trim();
-	const hasPaneId = paneId !== undefined && paneId !== "";
-	if (!hasPaneId) throw new Error(REVIEW_NO_PANE);
-	return paneId;
-}
-
 function reviewPrompt(prUrl: string, worktreePath: string): string {
 	return `${REVIEW_PROMPT_PREFIX}${prUrl}${REVIEW_PROMPT_MIDDLE}${worktreePath}${REVIEW_PROMPT_SUFFIX}`;
 }
@@ -79,10 +72,13 @@ function openReviewPane(
 	worktreePath: string,
 ): void {
 	const herdrClient = client ?? boundHerdrClient(worktreePath);
+	const sourcePaneId = currentPaneId();
+	const hasSourcePaneId = sourcePaneId !== undefined;
+	if (!hasSourcePaneId) throw new Error(REVIEW_NO_PANE);
 	const splitOutput = herdrClient(HERDR_COMMAND, [
 		PANE,
 		SPLIT,
-		currentPaneId(),
+		sourcePaneId,
 		DIRECTION_FLAG,
 		REVIEW_PANE_DIRECTION,
 		CWD_FLAG,

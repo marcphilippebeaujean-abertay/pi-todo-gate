@@ -1,5 +1,4 @@
 import "./commands.ts";
-import "./runtime.ts";
 import "./constants.ts";
 import "./internal-state.ts";
 import "./event-consumers.ts";
@@ -9,12 +8,12 @@ import "./user-prompts.ts";
 import "./notifications.ts";
 
 import { createModuleStatePublisher } from "../event-publishers.ts";
+import { isInsideHerdr } from "../shared/herdr-client.ts";
 import { HERDR_CLAIM_RETURNED } from "./constants.ts";
 import type {
 	HerdrTabRenameModuleSetupOptions,
 	HerdrTabRenameOptions,
 } from "./internal-state.ts";
-import { isInsideHerdr } from "./runtime.ts";
 
 export type HerdrTabRenameModule = Record<never, never>;
 

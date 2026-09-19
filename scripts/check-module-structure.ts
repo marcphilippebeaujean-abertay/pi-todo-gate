@@ -26,7 +26,7 @@ export const CANONICAL_FACETS = [
 ] as const;
 
 const ADDITIONAL_FACETS: Readonly<Record<string, readonly string[]>> = {
-	"herdr-tab-rename": ["rename-worker-result.ts", "runtime.ts", "tab-validation.ts"],
+	"herdr-tab-rename": ["rename-worker-result.ts", "tab-validation.ts"],
 	pr: ["git.ts", "parsing.ts", "state-tool.ts"],
 	todoist: ["client.ts", "completion.ts", "config.ts", "parsing.ts"],
 	worktree: ["git.ts"],
