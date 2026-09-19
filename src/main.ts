@@ -30,6 +30,7 @@ import { createEventHandler } from "./shared/events.ts";
 import { isInsideHerdr } from "./shared/herdr-client.ts";
 import { isRecord } from "./shared/records.ts";
 import { isSubagent } from "./shared/session.ts";
+import type { SessionProject } from "./shared/session-state.ts";
 import { createSessionState } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
 import { createTodoistModule } from "./todoist/module.ts";
@@ -197,10 +198,7 @@ function todoistProjectMapping(value: unknown): TodoistProjectMapping {
 async function resolveConfiguredSessionProject(
 	dependencies: ModuleSetupDependencies,
 	cwd: string,
-): Promise<{
-	codingRoot: string;
-	triggersOnlyOnWorktree?: boolean;
-} | null> {
+): Promise<SessionProject | null> {
 	const loaded = dependencies.loadConfig
 		? await dependencies.loadConfig()
 		: await loadTodoistConfig();
@@ -255,7 +253,9 @@ function startExtensions(
 	);
 	registerExtensionEventConsumers(root);
 	let reviewRegistered = false;
-	root.installModules = ({ isGitProject, isTodoistProject }) => {
+	root.installModules = (project: SessionProject) => {
+		const isGitProject = project.isGitProject === true;
+		const isTodoistProject = project.isTodoistProject === true;
 		const worktree =
 			root.worktree ??
 			(isGitProject

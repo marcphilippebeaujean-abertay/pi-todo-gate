@@ -27,7 +27,6 @@ function setup(): {
 	process.env.HERDR_PANE_ID = "w1:p1";
 	const sessionState = createSessionState();
 	sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
-	sessionState.gitState.isGitProject = true;
 	sessionState.gitState.worktreeRoot = worktreePath;
 	const calls: Array<{ command: string; args: string[] }> = [];
 	const herdrClient = vi.fn((command: string, args: string[]) => {

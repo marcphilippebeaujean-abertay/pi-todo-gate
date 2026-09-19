@@ -1,5 +1,5 @@
 import type { Exec } from "./shared/command.ts";
-import type { SessionReader } from "./shared/session-state.ts";
+import type { SessionProject, SessionReader } from "./shared/session-state.ts";
 
 /** Optional seams used by the extension entrypoint and module tests. */
 export interface ExtensionDependencies {
@@ -10,8 +10,5 @@ export interface ExtensionDependencies {
 	taskClaimWorker?: unknown;
 	herdrClient?: unknown;
 	herdrSpawnWorker?: unknown;
-	resolveSessionProject?: (cwd: string) => Promise<{
-		codingRoot: string;
-		triggersOnlyOnWorktree?: boolean;
-	} | null>;
+	resolveSessionProject?: (cwd: string) => Promise<SessionProject | null>;
 }

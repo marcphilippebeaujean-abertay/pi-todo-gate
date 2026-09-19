@@ -18,6 +18,7 @@ export {
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { isRecord } from "../shared/records.ts";
+import type { SessionProject } from "../shared/session-state.ts";
 import { register as registerTodoistCommands } from "./commands.ts";
 import { completeMergedTask } from "./completion.ts";
 import {
@@ -40,12 +41,7 @@ import {
 	resolveConfiguredProject,
 } from "./parsing.ts";
 
-export interface SessionProject {
-	codingRoot: string;
-	triggersOnlyOnWorktree?: boolean;
-	isTodoistProject?: boolean;
-	isGitProject?: boolean;
-}
+export type { SessionProject } from "../shared/session-state.ts";
 
 export interface TodoistModule {
 	resolveSessionProject(cwd: string): Promise<SessionProject | null>;

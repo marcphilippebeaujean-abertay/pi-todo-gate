@@ -388,7 +388,6 @@ describe("session shutdown", () => {
 				schemaVersion: 1,
 				session: { inheritedFromSessionId: "previous-session" },
 				gitState: expect.objectContaining({
-					isGitProject: true,
 					remoteOrigin: "https://current.example/repo.git",
 				}),
 			}),
@@ -581,7 +580,7 @@ describe("session shutdown", () => {
 		});
 		expect(root.sessionState).toMatchObject({
 			session: { activeSessionId: "new-session" },
-			gitState: { isGitProject: false },
+			gitState: {},
 			moduleState: createSessionState().moduleState,
 		});
 	});

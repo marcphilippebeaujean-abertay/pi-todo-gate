@@ -51,7 +51,6 @@ function isGitState(value: unknown): value is GitState {
 		isOptionalValue(value.remoteOrigin, STRING_TYPE),
 		isOptionalValue(value.mergeCompletedAt, STRING_TYPE),
 		isOptionalValue(value.branch, STRING_TYPE, true),
-		isOptionalValue(value.isGitProject, BOOLEAN_TYPE),
 		isOptionalValue(value.isWorktree, BOOLEAN_TYPE),
 		isOptionalValue(value.worktreeRoot, STRING_TYPE, true),
 		isOptionalValue(value.mainRoot, STRING_TYPE, true),
@@ -62,8 +61,6 @@ function isGitState(value: unknown): value is GitState {
 
 function restoreGitState(value: GitState): GitState {
 	const restored: GitState = {};
-	if (value.isGitProject !== undefined)
-		restored.isGitProject = value.isGitProject;
 	if (value.remoteOrigin !== undefined)
 		restored.remoteOrigin = value.remoteOrigin;
 	if (value.mergeCompletedAt !== undefined)

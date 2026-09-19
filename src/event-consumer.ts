@@ -24,13 +24,17 @@ import type {
 	ToolResultEvent,
 } from "./shared/events.ts";
 import { inspectProject } from "./shared/project.ts";
-import type { SessionReader, SessionRecord } from "./shared/session-state.ts";
+import type {
+	SessionProject,
+	SessionReader,
+	SessionRecord,
+} from "./shared/session-state.ts";
 import {
 	createSessionState,
 	type RootDependencies,
 	type SessionState,
 } from "./state.ts";
-import type { SessionProject, TodoistModule } from "./todoist/module.ts";
+import type { TodoistModule } from "./todoist/module.ts";
 import type { WorktreeCleanup } from "./worktree/module.ts";
 
 export interface RootComposition {
@@ -43,10 +47,7 @@ export interface RootComposition {
 	pr: PrModule | null;
 	todoist: TodoistModule | null;
 	worktree: WorktreeCleanup | null;
-	installModules: (capabilities: {
-		isGitProject: boolean;
-		isTodoistProject: boolean;
-	}) => void;
+	installModules: (project: SessionProject) => void;
 	session: SessionRecord | null;
 	publisher: RootEventPublisher;
 	stateUpdateEpoch: { value: number };
@@ -146,7 +147,7 @@ async function resolveSessionCapabilities(
 	root: Root,
 	sessionId: string,
 	ctx: ExtensionContext,
-): Promise<{ project: SessionProject; isGitProject: boolean } | null> {
+): Promise<SessionProject | null> {
 	const project = await resolveSessionProject(root, ctx.cwd);
 	const isCurrentAfterTodoist = isCurrentSession(root, sessionId);
 	if (!isCurrentAfterTodoist) return null;
@@ -166,7 +167,7 @@ async function resolveSessionCapabilities(
 	};
 	if (project !== null) sessionProject.isTodoistProject = true;
 	sessionProject.isGitProject = isGitProject;
-	return { project: sessionProject, isGitProject };
+	return sessionProject;
 }
 
 async function activateConfigured(
@@ -175,12 +176,10 @@ async function activateConfigured(
 	event: SessionStartEvent,
 	ctx: ExtensionContext,
 	project: SessionProject,
-	isGitProject: boolean,
 ): Promise<{
 	session: SessionRecord;
 	branch: readonly unknown[];
 	hasPendingHandoffContext: boolean;
-	isGitProject: boolean;
 } | null> {
 	const branch = ctx.sessionManager.getBranch();
 	const persisted = latestPersistedSessionState(branch);
@@ -201,10 +200,7 @@ async function activateConfigured(
 		...state.session,
 		activeSessionId: ctx.sessionManager.getSessionId(),
 	};
-	root.sessionState.gitState = {
-		...state.gitState,
-		isGitProject,
-	};
+	root.sessionState.gitState = state.gitState;
 	root.sessionState.moduleState = state.moduleState;
 	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
 	const session: SessionRecord = {
@@ -225,7 +221,7 @@ async function activateConfigured(
 		sessionId,
 	});
 	if (!isCurrentSession(root, sessionId)) return null;
-	return { session, branch, hasPendingHandoffContext, isGitProject };
+	return { session, branch, hasPendingHandoffContext };
 }
 
 async function persistInheritedState(
@@ -264,24 +260,17 @@ export async function handleSessionStart(
 	if (!isCurrentSession(root, sessionId)) return;
 	const capabilities = await resolveSessionCapabilities(root, sessionId, ctx);
 	if (capabilities === null) return;
-	root.installModules({
-		isGitProject: capabilities.isGitProject,
-		isTodoistProject: capabilities.project.isTodoistProject === true,
-	});
+	root.installModules(capabilities);
 	const activated = await activateConfigured(
 		root,
 		sessionId,
 		event,
 		ctx,
-		capabilities.project,
-		capabilities.isGitProject,
+		capabilities,
 	);
 	if (activated === null || !isCurrentSession(root, sessionId)) return;
-	const {
-		branch,
-		hasPendingHandoffContext,
-		isGitProject: gitProject,
-	} = activated;
+	const { branch, hasPendingHandoffContext } = activated;
+	const gitProject = capabilities.isGitProject === true;
 	await root.stateUpdatesDrained();
 	if (!isCurrentSession(root, sessionId)) return;
 	const inheritedStateReady = await persistInheritedState(

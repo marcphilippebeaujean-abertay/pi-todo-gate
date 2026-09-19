@@ -147,12 +147,7 @@ class Worktree implements WorktreeConsumer {
 		const isNotWorktree = !project.isWorktree;
 		const projectRoot = project.root;
 		if (isNotWorktree) {
-			await this.initializeNonWorktree(
-				ctx,
-				sessionId,
-				isCurrentInitialization,
-				projectRoot !== null,
-			);
+			await this.initializeNonWorktree(ctx, sessionId, isCurrentInitialization);
 			return;
 		}
 		if (projectRoot === null) return;
@@ -172,7 +167,6 @@ class Worktree implements WorktreeConsumer {
 		};
 		this.uncommittedChanges = state.currentStatus !== EMPTY;
 		this.emitState({
-			isGitProject: true,
 			branch: project.branch,
 			isWorktree: project.isWorktree,
 			worktreeRoot: project.root,
@@ -185,7 +179,6 @@ class Worktree implements WorktreeConsumer {
 		ctx: ExtensionContext,
 		sessionId: string,
 		isCurrentInitialization: () => boolean,
-		isGitProject: boolean,
 	): Promise<void> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
 		const isCurrentAfterDirtyStatus =
@@ -195,7 +188,6 @@ class Worktree implements WorktreeConsumer {
 		if (shouldSkipDirtyStatus) return;
 		this.uncommittedChanges = dirtyStatus;
 		this.emitState({
-			isGitProject,
 			hasUncommittedChanges: dirtyStatus,
 		});
 	}
