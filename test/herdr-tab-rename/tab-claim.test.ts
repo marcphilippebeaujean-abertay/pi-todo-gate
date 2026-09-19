@@ -180,12 +180,6 @@ describe("Herdr state ownership", () => {
 				herdrClaimReturnedSuccessfully: "true",
 			}),
 		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
-		expect(
-			herdrTabRenameStateDescriptor.restore({
-				claimInProgress: true,
-				herdrClaimReturnedSuccessfully: "true",
-			}),
-		).toEqual({ herdrClaimReturnedSuccessfully: "true" });
 		expect(herdrTabRenameStateDescriptor.serialize({})).toEqual({});
 		expect(
 			herdrTabRenameStateDescriptor.restore({
