@@ -6,8 +6,6 @@ const PI_TODO_GATE_AGENT = "pi-todo-gate-agent-";
 const EXTENSIONS = "extensions";
 const SKILLS = "skills";
 const PI_TODO_GATE = "pi-todo-gate";
-const MERGE_PROTOCOL = "merge-protocol";
-const SKILL_MD = "SKILL.md";
 const INDEX_TS = "index.ts";
 const UTF8_ENCODING = "utf8";
 const EXPORT_DEFAULT = "export { default }";
@@ -32,9 +30,11 @@ import { execFile } from "node:child_process";
 import {
 	chmod,
 	cp,
+	lstat,
 	mkdir,
 	mkdtemp,
 	readFile,
+	symlink,
 	writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -64,17 +64,15 @@ describe("install.sh", () => {
 		);
 	});
 
-	it("does not install the merge protocol skill globally", async () => {
+	it("removes legacy globally installed skill link", async () => {
 		const agentDir = await mkdtemp(join(TMP, PI_TODO_GATE_AGENT));
+		const legacySkills = join(agentDir, SKILLS, PI_TODO_GATE);
+		await mkdir(dirname(legacySkills), { recursive: true });
+		await symlink(join(dirname(script), SKILLS), legacySkills);
+
 		await execute([], { PI_CODING_AGENT_DIR: agentDir });
-		const skill = join(
-			agentDir,
-			SKILLS,
-			PI_TODO_GATE,
-			MERGE_PROTOCOL,
-			SKILL_MD,
-		);
-		await expect(readFile(skill, UTF8_ENCODING)).rejects.toMatchObject({
+
+		await expect(lstat(legacySkills)).rejects.toMatchObject({
 			code: "ENOENT",
 		});
 	});
