@@ -204,6 +204,7 @@ export interface TodoistOperations {
 	sessionState: SessionState;
 	getSession: () => TodoistSession | null;
 	projectRef: string;
+	getProjectRef?: () => string;
 	todoist: TodoistTaskClaimController;
 	exec?: Exec;
 	taskClaimWorker?: TaskClaimWorker;

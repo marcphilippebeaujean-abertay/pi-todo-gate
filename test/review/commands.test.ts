@@ -27,6 +27,7 @@ function setup(): {
 	process.env.HERDR_PANE_ID = "w1:p1";
 	const sessionState = createSessionState();
 	sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
+	sessionState.gitState.isGitProject = true;
 	sessionState.gitState.worktreeRoot = worktreePath;
 	const calls: Array<{ command: string; args: string[] }> = [];
 	const herdrClient = vi.fn((command: string, args: string[]) => {
@@ -119,6 +120,14 @@ describe("review command", () => {
 	it("does not open pane when no PR is pinned", async () => {
 		const fixture = setup();
 		fixture.dependencies.sessionState.moduleState.pr.prUrl = undefined;
+		await fixture.handler("", context());
+
+		expect(fixture.calls).toEqual([]);
+	});
+
+	it("does not open pane from a non-Git session", async () => {
+		const fixture = setup();
+		fixture.dependencies.sessionState.gitState.isGitProject = false;
 		await fixture.handler("", context());
 
 		expect(fixture.calls).toEqual([]);

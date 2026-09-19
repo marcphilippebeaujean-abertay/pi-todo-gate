@@ -251,6 +251,7 @@ class TodoistModuleImpl implements TodoistModule {
 			sessionState: this.options.sessionState,
 			getSession: () => this.currentSession,
 			projectRef: this.currentProjectRef,
+			getProjectRef: () => this.currentProjectRef,
 			todoist: this,
 			exec: dependencies.exec,
 			taskClaimWorker: dependencies.taskClaimWorker,
