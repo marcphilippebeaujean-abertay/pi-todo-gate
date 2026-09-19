@@ -121,6 +121,15 @@ async function activate(setupState: ReturnType<typeof setup>): Promise<void> {
 beforeEach(() => vi.clearAllMocks());
 
 describe("Prompt Queue orchestration", () => {
+	it("does not register a skill as a global resource", () => {
+		const state = setup();
+
+		expect(state.api.on).not.toHaveBeenCalledWith(
+			"resources_discover",
+			expect.anything(),
+		);
+	});
+
 	it("confirms merge then calls direct PR capability", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";

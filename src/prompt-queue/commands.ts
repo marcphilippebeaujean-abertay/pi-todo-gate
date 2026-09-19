@@ -1,9 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import {
-	MERGE_COMMAND,
-	MERGE_DESCRIPTION,
-	mergeProtocolSkillPath,
-} from "./constants.ts";
+import { MERGE_COMMAND, MERGE_DESCRIPTION } from "./constants.ts";
 import type { CommandDependencies } from "./internal-state.ts";
 import { notifyInactive, notifyNoPr, notifyNoUi } from "./notifications.ts";
 import { confirmMerge } from "./user-prompts.ts";
@@ -11,7 +7,6 @@ import { confirmMerge } from "./user-prompts.ts";
 export function register(dependencies: CommandDependencies): void {
 	const pi = dependencies.pi;
 	if (pi === undefined) return;
-	pi.on("resources_discover", () => ({ skillPaths: [mergeProtocolSkillPath] }));
 	if (typeof pi.registerCommand !== "function") return;
 	pi.registerCommand(MERGE_COMMAND, {
 		description: MERGE_DESCRIPTION,
