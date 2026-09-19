@@ -1,6 +1,6 @@
 export const FOOTER_STATE_TYPE = "pi-todo-gate-footer-state";
 export const FOOTER_HERDR_TYPE = "pi-todo-gate-herdr";
-export const FOOTER_HERDR_WORKING_STATUS = "Herdr: ⠋ working |";
+export const FOOTER_HERDR_WORKING_STATUS = "| Herdr: ⠋ working";
 export const FOOTER_CUSTOM_ENTRY_TYPE = "custom";
 export const FOOTER_EVENT_LABEL = "footer event";
 export const FOOTER_STATE_LABEL = "footer state";

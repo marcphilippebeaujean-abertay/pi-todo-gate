@@ -61,7 +61,7 @@ export function renderFooter(footers: readonly FooterEntry[]): string {
 	return `|${footers
 		.filter((footer) => footer.isVisible)
 		.map((footer) => footer.render())
-		.join("|")}`;
+		.join("|")}|`;
 }
 
 function loadingText(text: string, frame: string): string {
@@ -334,7 +334,7 @@ export function renderTaskStatusCompact(
 	theme?: TodoistFooterTheme,
 	taskName?: string,
 ): string {
-	return renderTaskStatusValue(url, theme, taskName, false);
+	return renderTaskStatusValue(url, theme, taskName, true);
 }
 
 export function renderFooterLine(

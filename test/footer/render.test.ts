@@ -58,6 +58,7 @@ import {
 	renderPrLabel,
 	renderPrStatus,
 	renderTaskStatus,
+	renderTaskStatusCompact,
 } from "../../src/footer/footer-rendering.ts";
 import type { FooterTheme } from "../../src/footer/internal-state.ts";
 
@@ -81,12 +82,12 @@ describe("Footer entries", () => {
 			footerType: "pr",
 			isLoading: false,
 			text: "42",
-			isVisible: false,
+			isVisible: true,
 		});
 
 		expect(task.isVisible).toBe(true);
-		expect(pr.isVisible).toBe(false);
-		expect(renderFooter([task, pr])).toBe("|Task: work");
+		expect(pr.isVisible).toBe(true);
+		expect(renderFooter([task, pr])).toBe("|Task: work|PR: 42|");
 	});
 });
 
@@ -248,6 +249,12 @@ describe("renderPrStatus", () => {
 });
 
 describe("Todoist footer rendering", () => {
+	it("bounds compact task status with a trailing divider", () => {
+		expect(renderTaskStatusCompact(undefined, theme)).toBe(
+			"Todoist Task: none |",
+		);
+	});
+
 	it("renders a linked task with a bounded name", () => {
 		const status = renderTaskStatus(
 			"https://app.todoist.com/app/task/7",

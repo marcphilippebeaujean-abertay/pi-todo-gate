@@ -245,7 +245,7 @@ describe("footer module", () => {
 		expect(footer.getState().footers[FOOTER_HERDR_TYPE]).toEqual({
 			footerType: FOOTER_HERDR_TYPE,
 			isLoading: false,
-			text: "Herdr: ⠋ working |",
+			text: "| Herdr: ⠋ working",
 			isVisible: false,
 		});
 		expect(h.statusCalls.at(-1)).toEqual({
