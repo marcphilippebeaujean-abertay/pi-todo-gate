@@ -50,8 +50,7 @@ function runtime(): {
 	const operations = {
 		sessionState,
 		getSession: () => session,
-		projectRef: "Project",
-		getProjectRef: undefined,
+		getProjectRef: () => "Project",
 		eventHandler: createSharedEvents(),
 		todoist: { taskClaim: { pending: false, completed: false } },
 		updateTodoistState: update,

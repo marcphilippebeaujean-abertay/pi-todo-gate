@@ -237,7 +237,7 @@ async function dispatchTaskClaim(
 				model,
 				prompt,
 				cwd: session.context.cwd,
-				projectRef: operations.projectRef,
+				projectRef: operations.getProjectRef(),
 				prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 				worktree,
 			}),

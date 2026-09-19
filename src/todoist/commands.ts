@@ -88,7 +88,7 @@ function clearSelectedTask(state: TodoistState): TodoistState {
 }
 
 function currentProjectRef(operations: TodoistOperations): string {
-	return operations.getProjectRef?.() ?? operations.projectRef;
+	return operations.getProjectRef();
 }
 
 function refreshInput(
