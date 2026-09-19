@@ -23,6 +23,7 @@ function context(overrides: Record<string, unknown> = {}): ExtensionContext {
 			notify: vi.fn(),
 			custom: vi.fn(async () => ["remove-worktree"]),
 		},
+		shutdown: vi.fn(),
 		sessionManager: {
 			getSessionId: () => sessionId,
 		},
@@ -158,7 +159,7 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).not.toHaveBeenCalled();
 	});
 
-	it("synchronously queues Todoist completion before removal confirmation", async () => {
+	it("runs combined exit actions after one confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		state.sessionState.moduleState.todoist.taskRef = "42";
@@ -181,14 +182,20 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Mark Todoist task "Task" complete and delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
+			["Yes", "No"],
+		);
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
 	});
 
 	it("dispatches loading around Todoist completion without choosing final text", async () => {
 		const state = setup();
 		state.sessionState.moduleState.todoist.taskRef = "42";
 		await activate(state);
-		const loading: Array<{ footerType: string; isLoading: boolean }> = [];
-		state.eventHandler.footerLoadingEvent.subscribe((event) => {
+		const loading: Array<{ action: string; isLoading: boolean }> = [];
+		state.eventHandler.actionLoadingEvent.subscribe((event) => {
 			loading.push(event);
 		});
 		await state.eventHandler.prMergedEvent.emit({
@@ -199,10 +206,10 @@ describe("Prompt Queue orchestration", () => {
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
 		expect(loading).toEqual([
-			{ footerType: C.status.task, isLoading: true },
-			{ footerType: C.status.task, isLoading: false },
-			{ footerType: C.status.pr, isLoading: true },
-			{ footerType: C.status.pr, isLoading: false },
+			{ action: C.action.task, isLoading: true },
+			{ action: C.action.task, isLoading: false },
+			{ action: C.action.pr, isLoading: true },
+			{ action: C.action.pr, isLoading: false },
 		]);
 	});
 
@@ -223,6 +230,13 @@ describe("Prompt Queue orchestration", () => {
 			"Worktree /repo/.worktrees/feature has uncommitted work. Deleting it will permanently remove that work.",
 			"warning",
 		);
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Delete worktree "/repo/.worktrees/feature" and local branch "feature"?
+Worktree has uncommitted changes. Deleting it will permanently remove that work.`,
+			["No", "Yes"],
+		);
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({ force: true });
 	});
 
@@ -239,19 +253,18 @@ describe("Prompt Queue orchestration", () => {
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
 		expect(state.ctx.ui.select).toHaveBeenCalledWith(
-			`Remove worktree?
-Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
+			`Exit protocol?
+Delete worktree "/repo/.worktrees/feature" and local branch "feature"?
+Worktree has uncommitted changes. Deleting it will permanently remove that work.`,
 			["No", "Yes"],
 		);
 		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
 	});
 
-	it("runs removal confirmation after cancelled Todoist confirmation", async () => {
+	it("cancels both exit actions from one combined confirmation", async () => {
 		const state = setup();
 		state.sessionState.moduleState.todoist.taskRef = "42";
-		(state.ctx.ui.confirm as ReturnType<typeof vi.fn>)
-			.mockResolvedValueOnce(false)
-			.mockResolvedValueOnce(true);
+		(state.ctx.ui.select as ReturnType<typeof vi.fn>).mockResolvedValue("No");
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",
@@ -261,7 +274,8 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
 		expect(state.todoist.completeMergedTask).not.toHaveBeenCalled();
-		expect(state.worktree.removeWorktree).toHaveBeenCalled();
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
 	});
 
 	it("resets queued work on session deactivation", async () => {
@@ -337,7 +351,28 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		});
 	});
 
-	it("does not present empty actions", async () => {
+	it("confirms Todoist completion alone when worktree is already absent", async () => {
+		const state = setup();
+		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
+		state.sessionState.moduleState.todoist.taskRef = "42";
+		await activate(state);
+		await state.eventHandler.prMergedEvent.emit({
+			prUrl: "https://github.com/o/r/pull/1",
+			taskMarkedAsCompleted: false,
+			sessionId,
+		});
+		await (state.module as { drain: () => Promise<void> }).drain();
+
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Exit protocol?
+Mark Todoist task "42" complete?`,
+			["Yes", "No"],
+		);
+		expect(state.todoist.completeMergedTask).toHaveBeenCalledOnce();
+		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
+	});
+
+	it("shuts down without prompting when no exit actions remain", async () => {
 		const state = setup();
 		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
 		await activate(state);
@@ -350,6 +385,8 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 
 		expect(state.ctx.ui.custom).not.toHaveBeenCalled();
 		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
+		expect(state.ctx.ui.select).not.toHaveBeenCalled();
+		expect(state.ctx.shutdown).toHaveBeenCalledOnce();
 	});
 
 	it("does not prompt or call capabilities without UI", async () => {
@@ -429,7 +466,7 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		});
 	});
 
-	it("reports unavailable dirty status as failed cleanup", async () => {
+	it("does not offer worktree removal when dirty status is unavailable", async () => {
 		const state = setup();
 		state.worktree.hasUncommittedChanges.mockResolvedValue(null);
 		state.worktree.removeWorktree.mockResolvedValue("failed");
@@ -441,12 +478,8 @@ Delete worktree "/repo/.worktrees/feature" and local branch "feature"?`,
 		});
 		await (state.module as { drain: () => Promise<void> }).drain();
 
-		expect(state.ctx.ui.select).toHaveBeenCalledOnce();
-		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
-			force: false,
-		});
-		const cleanupResult = state.worktree.removeWorktree.mock.results[0];
-		expect(cleanupResult?.type).toBe("return");
-		await expect(cleanupResult?.value).resolves.toBe("failed");
+		expect(state.ctx.ui.select).not.toHaveBeenCalled();
+		expect(state.worktree.removeWorktree).not.toHaveBeenCalled();
+		expect(state.ctx.shutdown).not.toHaveBeenCalled();
 	});
 });

@@ -16,7 +16,6 @@ import type {
 } from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
 
-export { mergeProtocolSkillPath } from "./constants.ts";
 export type {
 	PromptQueueModule,
 	PromptQueueModuleOptions,

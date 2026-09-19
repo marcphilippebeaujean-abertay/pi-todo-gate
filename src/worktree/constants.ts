@@ -18,6 +18,12 @@ export const REMOVAL_FAILED = "worktree removal failed";
 export const BRANCH_FAILED = "branch deletion failed";
 export const REMOVED_BRANCH_FAILED =
 	"Worktree removed, but local branch deletion failed: ";
+export const CLEANUP_SKIPPED_SESSION_CHANGE =
+	"Worktree cleanup skipped because session changed";
+export const CLEANUP_FINISHED_SESSION_CHANGE =
+	"Worktree removal finished after session changed; branch deletion skipped";
+export const BRANCH_SKIPPED_SESSION_CHANGE =
+	"Worktree removed after session changed; local branch deletion skipped";
 export const INFO = "info";
 export const WARNING = "warning";
 export const COMPLETED = "completed";

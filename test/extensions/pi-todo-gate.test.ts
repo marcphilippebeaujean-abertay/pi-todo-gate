@@ -23,10 +23,6 @@ const PI_TODO_GATE_STATE_TOOL = "pi_todo_gate_state";
 const KEEPS_NATIVE_FOOTER_AND_PUBLISHES_PR_TASK =
 	"keeps native footer and publishes PR/task statuses";
 const TUI = "tui";
-const PI_TODO_GATE_PR = "pi-todo-gate-pr";
-const PR_LINK_NONE = "| PR Link: none |";
-const PI_TODO_GATE_TASK = "pi-todo-gate-task";
-const TODOIST_TASK_NONE = "Todoist Task: none";
 const CUSTOM = "custom";
 const PI_TODO_GATE_STATE_ENTRY = "pi-todo-gate-state";
 const PARENT = "parent";
@@ -64,7 +60,6 @@ const SET_PR = "set_pr";
 const HTTPS_GITHUB_COM_O_R_PULL_42 =
 	"https://github.com/owner/repo/pull/42?tab=files";
 const HTTPS_GITHUB_COM_O_R_PULL_42_2 = "https://github.com/owner/repo/pull/42";
-const PR_LINK = "PR Link:";
 const MARKS_PR_LINK_WHILE_WORKTREE_IS_DIRTY_AND_REMOVES_STAR_AFTER_COMMIT =
 	"marks PR link while worktree is dirty and removes star after commit";
 const GIT_COMMIT_AM_DONE = "git commit -am done";
@@ -148,7 +143,8 @@ function persistedStateEntry(
 	moduleState: {
 		pr?: Record<string, unknown>;
 		todoist?: Record<string, unknown>;
-		herdr?: Record<string, unknown>;
+		review?: Record<string, unknown>;
+		herdrTabRename?: Record<string, unknown>;
 		worktree?: Record<string, unknown>;
 		footer?: Record<string, unknown>;
 	},
@@ -170,7 +166,8 @@ function persistedStateEntry(
 					...moduleState.pr,
 				},
 				todoist: moduleState.todoist ?? {},
-				herdr: moduleState.herdr ?? {},
+				review: moduleState.review ?? {},
+				herdrTabRename: moduleState.herdrTabRename ?? {},
 				worktree: moduleState.worktree ?? {},
 				footer: moduleState.footer ?? { footers: {} },
 			},
@@ -322,11 +319,22 @@ describe("working tree status", () => {
 			]);
 			let isDirty = true;
 			const exec = async (command: string, args: string[]) => {
+				const input = args.join(" ");
+				const outputs: Record<string, string> = {
+					"rev-parse --show-toplevel": "/repo\n",
+					"branch --show-current": "main\n",
+					"worktree list --porcelain":
+						"worktree /repo\nHEAD abc\nbranch refs/heads/main\n",
+				};
 				const isStatus =
 					command === "git" &&
-					args.join(" ") === "status --porcelain=v1 --untracked-files=all";
+					input === "status --porcelain=v1 --untracked-files=all";
 				return {
-					stdout: isStatus && isDirty ? MODIFIED_FILE : EMPTY_STRING,
+					stdout: isStatus
+						? isDirty
+							? MODIFIED_FILE
+							: EMPTY_STRING
+						: (outputs[input] ?? EMPTY_STRING),
 					stderr: EMPTY_STRING,
 					code: 0,
 				};
@@ -417,7 +425,7 @@ describe("working tree status", () => {
 
 		expect(h.selections).toContainEqual({
 			title:
-				'Remove worktree?\nDelete worktree "/configured/project" and local branch "feature"?',
+				'Exit protocol?\nDelete worktree "/configured/project" and local branch "feature"?',
 			options: ["Yes", "No"],
 		});
 		expect(exec).not.toHaveBeenCalledWith(
@@ -509,10 +517,7 @@ describe("lazy activation", () => {
 		h.ctx.mode = TUI;
 		await start(h, { "/configured": MERGE_TD });
 		expect(h.footerCalls).toEqual([undefined]);
-		expect(h.statusCalls).toEqual([
-			{ key: PI_TODO_GATE_PR, text: PR_LINK_NONE },
-			{ key: PI_TODO_GATE_TASK, text: TODOIST_TASK_NONE },
-		]);
+		expect(h.statusCalls).toEqual([]);
 		expect(h.footerAppended).toHaveLength(0);
 	});
 });
@@ -804,22 +809,28 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain(
+				"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
+			),
+		);
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "try the task claim again" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() =>
+			expect(latestModuleState(h, "todoist")).toMatchObject({
+				taskRef: "44",
+				taskName: "Retry task",
+			}),
+		);
 
 		expect(h.selections).toHaveLength(0);
-		expect(worker).toHaveBeenCalledTimes(2);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
-		expect(latestModuleState(h, "todoist")).toMatchObject({
-			taskRef: "44",
-			taskName: "Retry task",
-		});
 	});
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
@@ -1130,14 +1141,7 @@ describe("pi_todo_gate_state", () => {
 			prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2,
 		});
 		expect(result.content[0].text).toContain(VALUE_42);
-		expect(h.statusCalls).toContainEqual({
-			key: PI_TODO_GATE_PR,
-			text: expect.stringContaining(PR_LINK),
-		});
-		expect(h.statusCalls).toContainEqual({
-			key: PI_TODO_GATE_TASK,
-			text: TODOIST_TASK_NONE,
-		});
+		expect(h.statusCalls).toEqual([]);
 	});
 
 	it(CLEANS_UP_CONFIGURED_UI_WHEN_A_SESSION, async () => {
@@ -1631,7 +1635,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(completeTask).toHaveBeenCalledWith(TASK_1, expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith(TASK_1);
 		const clearing = h.tools[0].execute(
 			CALL,
 			{ action: CLEAR_TASK },

@@ -10,13 +10,12 @@ import type {
 	TodoistModule,
 } from "../todoist/module.ts";
 import type { WorktreeCleanup } from "../worktree/module.ts";
-import type { PromptQueueModuleOptions } from "./internal-state.ts";
+import type {
+	ExitProtocolState,
+	PromptQueueModuleOptions,
+} from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
-import {
-	confirmDirtyWorktree,
-	confirmRemoveWorktree,
-	confirmTodoistCompletion,
-} from "./user-prompts.ts";
+import { confirmExitProtocol } from "./user-prompts.ts";
 
 export class PromptQueueConsumer {
 	private readonly eventHandler: EventHandler;
@@ -112,23 +111,117 @@ export class PromptQueueConsumer {
 		const shouldCompleteTodoist = !event.taskMarkedAsCompleted;
 		const hasTask = taskRef !== undefined && prUrl !== null;
 		const shouldQueueTodoist = shouldCompleteTodoist && hasTask;
-		if (shouldQueueTodoist) {
-			const snapshot: TodoistCompletionSnapshot = {
-				taskRef,
-				taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
-				prUrl,
-				workRevision: session.workRevision,
-				sessionId,
-			};
-			void this.queue
-				.enqueue((isCurrent) =>
-					this.completeTodoist(context, snapshot, isCurrent),
-				)
-				.catch(() => undefined);
-		}
+		const todoistSnapshot = shouldQueueTodoist
+			? ({
+					taskRef,
+					taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
+					prUrl,
+					workRevision: session.workRevision,
+					sessionId,
+				} satisfies TodoistCompletionSnapshot)
+			: undefined;
 		void this.queue
-			.enqueue((isCurrent) => this.presentExit(context, sessionId, isCurrent))
+			.enqueue((isCurrent) =>
+				this.runExitProtocol(context, sessionId, todoistSnapshot, isCurrent),
+			)
 			.catch(() => undefined);
+	}
+
+	private async runExitProtocol(
+		context: ExtensionContext,
+		sessionId: string,
+		todoistSnapshot: TodoistCompletionSnapshot | undefined,
+		isQueuedCurrent: () => boolean,
+	): Promise<void> {
+		const state = await this.prepareExitProtocol(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (state === null) return;
+		const worktree = state.worktree;
+		const dirty = state.dirty;
+		const hasWorktree = worktree !== null;
+		const canRemoveWorktree = hasWorktree && dirty !== null;
+		const hasTodoistTask = todoistSnapshot !== undefined;
+		const hasAction = hasTodoistTask || canRemoveWorktree;
+		if (!hasAction) {
+			this.shutdownIfNoExitAction(context, hasWorktree);
+			return;
+		}
+		const confirmed = await confirmExitProtocol(context, {
+			taskName: todoistSnapshot?.taskName,
+			worktreePath: canRemoveWorktree ? worktree.worktreePath : undefined,
+			branch: canRemoveWorktree ? worktree.branch : undefined,
+			hasUncommittedChanges: dirty === true,
+		});
+		const isCurrentAfterPrompt = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		const shouldExecute = isCurrentAfterPrompt && confirmed;
+		if (!shouldExecute) return;
+		const cleanupCompleted = await this.executeExitActions(
+			context,
+			sessionId,
+			todoistSnapshot,
+			state,
+			canRemoveWorktree,
+			isQueuedCurrent,
+		);
+		const shouldShutdown = cleanupCompleted;
+		if (shouldShutdown) context.shutdown();
+	}
+
+	private shutdownIfNoExitAction(
+		context: ExtensionContext,
+		hasWorktree: boolean,
+	): void {
+		const shouldShutdown = !hasWorktree;
+		if (shouldShutdown) context.shutdown();
+	}
+
+	private async executeExitActions(
+		context: ExtensionContext,
+		sessionId: string,
+		todoistSnapshot: TodoistCompletionSnapshot | undefined,
+		state: ExitProtocolState,
+		canRemoveWorktree: boolean,
+		isQueuedCurrent: () => boolean,
+	): Promise<boolean> {
+		const hasTodoistTask = todoistSnapshot !== undefined;
+		if (hasTodoistTask)
+			await this.completeTodoist(context, todoistSnapshot, isQueuedCurrent);
+		if (!canRemoveWorktree) return state.worktree === null;
+		const force = state.dirty === true;
+		return this.removeWorktree(context, sessionId, isQueuedCurrent, force);
+	}
+
+	private async prepareExitProtocol(
+		context: ExtensionContext,
+		sessionId: string,
+		isQueuedCurrent: () => boolean,
+	): Promise<ExitProtocolState | null> {
+		const isCurrentBeforeStatus = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		const canReadStatus = context.hasUI && isCurrentBeforeStatus;
+		if (!canReadStatus) return null;
+		const worktree = this.worktree.getWorktreeInfo();
+		const hasWorktree = worktree !== null;
+		const dirty = hasWorktree
+			? await this.worktree.hasUncommittedChanges()
+			: false;
+		const isCurrentAfterStatus = this.isCurrentJob(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (!isCurrentAfterStatus) return null;
+		return { worktree, dirty };
 	}
 
 	private async completeTodoist(
@@ -136,117 +229,47 @@ export class PromptQueueConsumer {
 		snapshot: TodoistCompletionSnapshot,
 		isQueuedCurrent: () => boolean,
 	): Promise<void> {
-		const isCurrentBeforePrompt = this.isCurrentJob(
-			context,
-			snapshot.sessionId,
-			isQueuedCurrent,
-		);
-		const canPrompt = context.hasUI && isCurrentBeforePrompt;
-		if (!canPrompt) return;
-		const confirmed = await confirmTodoistCompletion(context, snapshot);
-		const isCurrentAfterPrompt = this.isCurrentJob(
-			context,
-			snapshot.sessionId,
-			isQueuedCurrent,
-		);
-		const shouldComplete = isCurrentAfterPrompt && confirmed;
-		if (!shouldComplete) return;
 		const isCurrentBeforeCapability = this.isCurrentJob(
 			context,
 			snapshot.sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentBeforeCapability) return;
-		await withLoading(
-			this.eventHandler,
-			C.status.task,
-			this.todoist.completeMergedTask.bind(this.todoist, snapshot),
-		);
-	}
-
-	private async presentExit(
-		context: ExtensionContext,
-		sessionId: string,
-		isQueuedCurrent: () => boolean,
-	): Promise<void> {
-		const isCurrentBeforePrompt = this.isCurrentJob(
-			context,
-			sessionId,
-			isQueuedCurrent,
-		);
-		const canPrompt = context.hasUI && isCurrentBeforePrompt;
-		if (!canPrompt) return;
-		const info = this.worktree.getWorktreeInfo();
-		if (info === null) return;
-		const dirty = await this.worktree.hasUncommittedChanges();
-		const isCurrentAfterStatus = this.isCurrentJob(
-			context,
-			sessionId,
-			isQueuedCurrent,
-		);
-		if (!isCurrentAfterStatus) return;
-		const hasDirtyWorktree = dirty === true;
-		const confirmed = await confirmRemoveWorktree(
-			context,
-			info.worktreePath,
-			info.branch,
-			hasDirtyWorktree,
-		);
-		const isCurrentAfterPrompt = this.isCurrentJob(
-			context,
-			sessionId,
-			isQueuedCurrent,
-		);
-		const shouldRemove = isCurrentAfterPrompt && confirmed;
-		if (!shouldRemove) return;
-		await this.removeWorktree(
-			context,
-			sessionId,
-			isQueuedCurrent,
-			info.worktreePath,
-		);
+		const shouldSkip = !isCurrentBeforeCapability;
+		if (shouldSkip) return;
+		try {
+			await this.runWithLoading(
+				C.action.task,
+				this.todoist.completeMergedTask.bind(this.todoist, snapshot),
+			);
+		} catch {
+			// Continue cleanup even when Todoist completion fails.
+		}
 	}
 
 	private async removeWorktree(
 		context: ExtensionContext,
 		sessionId: string,
 		isQueuedCurrent: () => boolean,
-		worktreePath: string,
-	): Promise<void> {
-		const isCurrentBeforeStatus = this.isCurrentJob(
-			context,
-			sessionId,
-			isQueuedCurrent,
-		);
-		if (!isCurrentBeforeStatus) return;
-		const dirty = await this.worktree.hasUncommittedChanges();
-		const isCurrentAfterStatus = this.isCurrentJob(
-			context,
-			sessionId,
-			isQueuedCurrent,
-		);
-		if (!isCurrentAfterStatus) return;
-		let force = false;
-		const hasDirtyWorktree = dirty === true;
-		if (hasDirtyWorktree) {
-			force = await confirmDirtyWorktree(context, worktreePath);
-			const isCurrentAfterPrompt = this.isCurrentJob(
-				context,
-				sessionId,
-				isQueuedCurrent,
-			);
-			if (!isCurrentAfterPrompt) return;
-		}
+		force: boolean,
+	): Promise<boolean> {
 		const isCurrentBeforeCapability = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentBeforeCapability) return;
-		await withLoading(
-			this.eventHandler,
-			C.status.pr,
+		const shouldSkip = !isCurrentBeforeCapability;
+		if (shouldSkip) return false;
+		const result = await this.runWithLoading(
+			C.action.pr,
 			this.worktree.removeWorktree.bind(this.worktree, { force }),
 		);
+		return result === "completed";
+	}
+
+	private runWithLoading<T>(
+		action: string,
+		operation: () => Promise<T>,
+	): Promise<T> {
+		return withLoading(this.eventHandler, action, operation);
 	}
 }

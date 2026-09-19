@@ -140,11 +140,18 @@ describe("session shutdown", () => {
 
 	it("wires Todoist merge handling through Prompt Queue", async () => {
 		const confirm = vi.fn(async () => false);
+		const select = vi.fn(async () => "No");
 		const custom = vi.fn(async () => undefined);
 		const activationContext = {
 			cwd: "/repo",
 			hasUI: true,
-			ui: { confirm, custom, setFooter: vi.fn(), theme: { fg: vi.fn() } },
+			ui: {
+				confirm,
+				select,
+				custom,
+				setFooter: vi.fn(),
+				theme: { fg: vi.fn() },
+			},
 			sessionManager: { getSessionId: () => "session" },
 		} as never;
 		const pi = {
@@ -188,7 +195,8 @@ describe("session shutdown", () => {
 		});
 
 		await root.promptQueue.drain();
-		expect(confirm).toHaveBeenCalledOnce();
+		expect(select).toHaveBeenCalledOnce();
+		expect(confirm).not.toHaveBeenCalled();
 		expect(custom).not.toHaveBeenCalled();
 	});
 

@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { publishSessionNotification } from "../event-publishers.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler } from "../shared/events.ts";
@@ -8,7 +9,14 @@ import {
 	inspectProject,
 } from "../shared/project.ts";
 import type { SessionState } from "../state.ts";
-import { CLEANUP_SUCCESS, COMPLETED, EMPTY, FAILED } from "./constants.ts";
+import {
+	CLEANUP_SKIPPED_SESSION_CHANGE,
+	CLEANUP_SUCCESS,
+	COMPLETED,
+	EMPTY,
+	FAILED,
+	WARNING,
+} from "./constants.ts";
 import { publishWorktreeState } from "./event-publishers.ts";
 import {
 	cleanupWorktree,
@@ -27,7 +35,6 @@ class Worktree implements WorktreeConsumer {
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
-	private readonly changeDirectoryToRoot: ((path: string) => void) | undefined;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private uncommittedChanges = false;
@@ -41,8 +48,6 @@ class Worktree implements WorktreeConsumer {
 		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
 		this.changeDirectory =
 			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
-		this.changeDirectoryToRoot =
-			options.changeDirectoryToRoot ?? dependencies.changeDirectoryToRoot;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
@@ -140,21 +145,26 @@ class Worktree implements WorktreeConsumer {
 			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterProject) return;
 		const isNotWorktree = !project.isWorktree;
+		const projectRoot = project.root;
 		if (isNotWorktree) {
-			await this.initializeNonWorktree(ctx, sessionId, isCurrentInitialization);
+			await this.initializeNonWorktree(
+				ctx,
+				sessionId,
+				isCurrentInitialization,
+				projectRoot !== null,
+			);
 			return;
 		}
-		if (project.root === null) return;
+		if (projectRoot === null) return;
 		if (project.branch === null) return;
 		if (project.mainRoot === null) return;
-		this.changeDirectoryToRoot?.(project.mainRoot);
 		const state = await currentWorktreeState(this.exec, ctx.cwd);
 		if (state === null) return;
 		const isCurrentContextAfterState =
 			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
 		if (!isCurrentContextAfterState) return;
 		this.baseline = {
-			worktreePath: project.root,
+			worktreePath: projectRoot,
 			branch: project.branch,
 			mainRoot: project.mainRoot,
 			initialHead: state.currentHead,
@@ -162,6 +172,7 @@ class Worktree implements WorktreeConsumer {
 		};
 		this.uncommittedChanges = state.currentStatus !== EMPTY;
 		this.emitState({
+			isGitProject: true,
 			branch: project.branch,
 			isWorktree: project.isWorktree,
 			worktreeRoot: project.root,
@@ -174,6 +185,7 @@ class Worktree implements WorktreeConsumer {
 		ctx: ExtensionContext,
 		sessionId: string,
 		isCurrentInitialization: () => boolean,
+		isGitProject: boolean,
 	): Promise<void> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
 		const isCurrentAfterDirtyStatus =
@@ -182,7 +194,10 @@ class Worktree implements WorktreeConsumer {
 		const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
 		if (shouldSkipDirtyStatus) return;
 		this.uncommittedChanges = dirtyStatus;
-		this.emitState({ hasUncommittedChanges: dirtyStatus });
+		this.emitState({
+			isGitProject,
+			hasUncommittedChanges: dirtyStatus,
+		});
 	}
 
 	deactivate(): void {
@@ -205,14 +220,7 @@ class Worktree implements WorktreeConsumer {
 	async hasUncommittedChanges(): Promise<boolean | null> {
 		const context = this.context;
 		if (context === null) return null;
-		const sessionId = this.sessionState.session.activeSessionId;
-		if (sessionId === null) return null;
-		const isCurrent = this.isCurrentSession(context, sessionId);
-		if (!isCurrent) return null;
-		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
-		const isCurrentAfterInspection = this.isCurrentSession(context, sessionId);
-		if (!isCurrentAfterInspection) return null;
-		return dirtyStatus;
+		return inspectDirtyStatus(this.exec, context.cwd);
 	}
 
 	removeWorktree(options: { force: boolean }): Promise<ExitActionResult> {
@@ -236,13 +244,16 @@ class Worktree implements WorktreeConsumer {
 		worktree: WorktreeBaseline,
 		force: boolean,
 	): Promise<ExitActionResult> {
-		const isCurrentBeforeCleanup = this.isCurrentSession(context, sessionId);
-		if (!isCurrentBeforeCleanup) return FAILED;
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrentSession = this.isCurrentSession(context, sessionId);
 		const isCurrentWorktreeState = isCurrentWorktree(this.baseline, worktree);
-		const isCurrent = isCurrentSession && isCurrentWorktreeState;
-		if (!isCurrent) return FAILED;
+		if (!isCurrentWorktreeState) {
+			await publishSessionNotification(
+				this.eventHandler,
+				CLEANUP_SKIPPED_SESSION_CHANGE,
+				WARNING,
+			);
+			return FAILED;
+		}
 		const hasNoState = state === null;
 		if (hasNoState) {
 			notifyWorktree(this.context, C.worktree.statusUnavailable, "warning");
@@ -276,6 +287,8 @@ class Worktree implements WorktreeConsumer {
 			isCurrent: () =>
 				this.isCurrentSession(context, sessionId) &&
 				isCurrentWorktree(this.baseline, worktree),
+			notifySession: (message) =>
+				publishSessionNotification(this.eventHandler, message, WARNING),
 		});
 		const isCurrentAfterCleanup =
 			this.isCurrentSession(context, sessionId) &&

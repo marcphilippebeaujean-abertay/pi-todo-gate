@@ -5,7 +5,7 @@ import type { LintDiagnostic, LintRule } from "../types.ts";
 
 const EVENTS_FILE_NAME = "events.ts";
 const EVENT_FILE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/](event-consumers|event-publishers)\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/](event-consumers|event-publishers)\.ts$/;
 const RULE_ID = "event-types-outside-events" as const;
 const MESSAGE =
 	"Event payload types must live in events.ts; request and options contracts may live in internal-state.ts";

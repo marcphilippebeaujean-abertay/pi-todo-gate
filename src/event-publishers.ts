@@ -16,6 +16,14 @@ export interface ModuleStatePublisher<K extends ModuleId> {
 	): Promise<void>;
 }
 
+export function publishSessionNotification(
+	eventHandler: EventHandler,
+	message: string,
+	level: "info" | "warning",
+): Promise<void> {
+	return eventHandler.sessionNotificationEvent.emit({ message, level });
+}
+
 export function createModuleStatePublisher<K extends ModuleId>(
 	eventHandler: EventHandler,
 	moduleId: K,
@@ -41,6 +49,13 @@ export class RootEventPublisher {
 
 	publishSessionDeactivated(): Promise<void> {
 		return this.eventHandler.sessionDeactivatedEvent.emit(undefined);
+	}
+
+	publishSessionNotification(
+		message: string,
+		level: "info" | "warning",
+	): Promise<void> {
+		return publishSessionNotification(this.eventHandler, message, level);
 	}
 
 	publishPiToolRegistrationsBecameAvailable(

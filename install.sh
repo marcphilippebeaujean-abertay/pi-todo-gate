@@ -72,6 +72,7 @@ source_path="$source_dir/index.ts"
 target_path="$agent_dir/extensions/pi-todo-gate"
 legacy_file_path="$agent_dir/extensions/pi-todo-gate.ts"
 legacy_target_path="$agent_dir/extensions/pi-todo-gate"
+legacy_skills_target_path="$agent_dir/skills/pi-todo-gate"
 if [ ! -f "$source_path" ]; then
   printf 'missing extension source: %s\n' "$source_path" >&2
   exit 1
@@ -82,6 +83,9 @@ if [ -L "$legacy_file_path" ] && [ "$(readlink "$legacy_file_path")" = "$repo_di
 fi
 if [ -L "$legacy_target_path" ] && [ "$(readlink "$legacy_target_path")" = "$repo_dir/extensions/pi-todo-gate.ts" ]; then
   rm -- "$legacy_target_path"
+fi
+if [ -L "$legacy_skills_target_path" ] && [ "$(readlink "$legacy_skills_target_path")" = "$repo_dir/skills" ]; then
+  rm -- "$legacy_skills_target_path"
 fi
 if [ -e "$target_path" ] || [ -L "$target_path" ]; then
   if [ ! -L "$target_path" ] && [ "$force" = false ]; then

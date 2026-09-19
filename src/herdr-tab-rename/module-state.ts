@@ -4,11 +4,11 @@ import type {
 	ModuleStateDescriptor,
 } from "../shared/session-state.ts";
 
-export interface HerdrModuleState {
+export interface HerdrTabRenameModuleState {
 	herdrClaimReturnedSuccessfully?: string;
 }
 
-function restoreHerdrState(value: unknown): HerdrModuleState {
+function restoreHerdrState(value: unknown): HerdrTabRenameModuleState {
 	const isInvalidRecord = !isRecord(value);
 	if (isInvalidRecord) return {};
 	const marker = value.herdrClaimReturnedSuccessfully;
@@ -18,11 +18,11 @@ function restoreHerdrState(value: unknown): HerdrModuleState {
 	return hasMarker ? { herdrClaimReturnedSuccessfully: marker as string } : {};
 }
 
-export const herdrStateDescriptor: ModuleStateDescriptor<
-	"herdr",
-	HerdrModuleState
+export const herdrTabRenameStateDescriptor: ModuleStateDescriptor<
+	"herdrTabRename",
+	HerdrTabRenameModuleState
 > = {
-	id: "herdr",
+	id: "herdrTabRename",
 	createInitialState: () => ({}),
 	restore: restoreHerdrState,
 	serialize: (state): JsonValue => structuredClone(state) as JsonValue,

@@ -1,5 +1,5 @@
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import type { EventHandler, FooterUpdateEvent } from "../shared/events.ts";
+import type { EventHandler } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
 
 export function publishFooterState(
@@ -11,11 +11,4 @@ export function publishFooterState(
 		moduleState,
 		persist: false,
 	});
-}
-
-export function publishFooterUpdate(
-	eventHandler: EventHandler,
-	update: FooterUpdateEvent,
-): Promise<void> {
-	return eventHandler.footerUpdateEvent.emit(update);
 }

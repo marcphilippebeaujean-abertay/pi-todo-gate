@@ -1,14 +1,20 @@
+import { publishSessionNotification } from "../event-publishers.ts";
 import { spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { withLoading } from "../shared/events.ts";
 import { modelReference } from "../shared/pi-worker.ts";
 import { inspectProject } from "../shared/project.ts";
+import { runSessionAction } from "../shared/session-actions.ts";
 import {
 	CLAIM,
 	ERROR,
 	INVALID_RESULT,
+	TASK_CLAIM_FINISHED_SESSION_CHANGE,
+	TASK_CLAIM_SKIPPED_SESSION_CHANGE,
+	TASK_CLAIM_UNKNOWN_AFTER_SESSION_CHANGE,
 	TASK_URL,
 	UNKNOWN_ERROR,
+	WARNING,
 } from "./constants.ts";
 import {
 	createTaskClaimWorker,
@@ -171,6 +177,13 @@ export function handleTaskClaimResult(
 	notifyClaimFailure(session.context, event.result.error ?? INVALID_RESULT);
 }
 
+function resetTaskClaim(
+	operation: TodoistOperations["todoist"]["taskClaim"],
+): void {
+	operation.pending = false;
+	operation.session = undefined;
+}
+
 function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error };
 }
@@ -186,6 +199,72 @@ function resolveTaskClaimWorker(
 	);
 }
 
+async function dispatchTaskClaim(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	prompt: string,
+	sessionId: string,
+	model: string | undefined,
+	worktree: Awaited<ReturnType<typeof inspectProject>>,
+	worker: TaskClaimWorker,
+	isCurrentSession: () => boolean,
+): Promise<TaskClaimWorkerResult | undefined> {
+	const action = await runSessionAction(
+		isCurrentSession,
+		() =>
+			worker({
+				sessionId,
+				model,
+				prompt,
+				cwd: session.context.cwd,
+				projectRef: operations.projectRef,
+				prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
+				worktree,
+			}),
+		publishSessionNotification.bind(
+			null,
+			operations.eventHandler,
+			TASK_CLAIM_SKIPPED_SESSION_CHANGE,
+			WARNING,
+		),
+	);
+	const wasSkipped = !action.started;
+	if (wasSkipped) return undefined;
+	const sessionChanged = !action.currentAfterAction;
+	if (sessionChanged) {
+		await publishSessionNotification(
+			operations.eventHandler,
+			TASK_CLAIM_FINISHED_SESSION_CHANGE,
+			WARNING,
+		);
+		return undefined;
+	}
+	return action.value;
+}
+
+async function handleTaskClaimError(
+	operations: TodoistOperations,
+	session: TodoistSession,
+	sessionId: string,
+	error: unknown,
+	isCurrentSession: () => boolean,
+): Promise<void> {
+	const sessionChanged = !isCurrentSession();
+	if (sessionChanged) {
+		await publishSessionNotification(
+			operations.eventHandler,
+			TASK_CLAIM_UNKNOWN_AFTER_SESSION_CHANGE,
+			WARNING,
+		);
+		return;
+	}
+	const message = error instanceof Error ? error.message : String(error);
+	handleTaskClaimResult(operations, session, {
+		sessionId,
+		result: errorResult(sessionId, message || UNKNOWN_ERROR),
+	});
+}
+
 export async function runTaskClaim(
 	operations: TodoistOperations,
 	session: TodoistSession,
@@ -193,46 +272,43 @@ export async function runTaskClaim(
 	sessionId: string,
 	model?: string,
 ): Promise<void> {
-	const isCurrentSessionId = () =>
+	const isCurrentSession = () =>
+		operations.getSession() === session &&
 		operations.sessionState.session.activeSessionId === sessionId;
 	try {
 		const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
 		const worktree = await inspectProject(exec, session.context.cwd);
-		const isCurrentSession = operations.getSession() === session;
-		const isCurrentRootSessionId = isCurrentSessionId();
-		if (!isCurrentSession) return;
-		if (!isCurrentRootSessionId) return;
 		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
 		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
 		if (shouldSkipOrdinaryCheckout) {
-			operations.todoist.taskClaim.pending = false;
-			operations.todoist.taskClaim.session = undefined;
+			resetTaskClaim(operations.todoist.taskClaim);
 			return;
 		}
 		const worker = resolveTaskClaimWorker(operations, exec);
-		const result = await worker({
+		const result = await dispatchTaskClaim(
+			operations,
+			session,
+			prompt,
 			sessionId,
 			model,
-			prompt,
-			cwd: session.context.cwd,
-			projectRef: operations.projectRef,
-			prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
 			worktree,
-		});
-		const isCurrentResultSessionId = isCurrentSessionId();
-		if (!isCurrentResultSessionId) return;
+			worker,
+			isCurrentSession,
+		);
+		const wasSkipped = result === undefined;
+		if (wasSkipped) return;
 		handleTaskClaimResult(operations, session, {
 			sessionId: result.sessionId,
 			result,
 		});
 	} catch (error) {
-		const isCurrentErrorSessionId = isCurrentSessionId();
-		if (!isCurrentErrorSessionId) return;
-		const message = error instanceof Error ? error.message : String(error);
-		handleTaskClaimResult(operations, session, {
+		await handleTaskClaimError(
+			operations,
+			session,
 			sessionId,
-			result: errorResult(sessionId, message || UNKNOWN_ERROR),
-		});
+			error,
+			isCurrentSession,
+		);
 	}
 }
 
@@ -257,7 +333,7 @@ export function maybeAnalyzeTaskClaim(
 	if (claimAlreadyHandled) return;
 	operation.pending = true;
 	operation.session = session;
-	void withLoading(operations.eventHandler, C.status.task, () =>
+	void withLoading(operations.eventHandler, C.action.task, () =>
 		runTaskClaim(operations, session, prompt, expectedSessionId, model),
 	);
 }

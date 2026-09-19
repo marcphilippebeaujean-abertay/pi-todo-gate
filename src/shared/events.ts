@@ -76,15 +76,18 @@ export interface ClaimErrorEvent {
 	error: string;
 }
 
-export interface FooterUpdateEvent {
-	footerType: string;
-	text: string;
-	isVisible: boolean;
+export interface ActionLoadingEvent {
+	action: string;
+	isLoading: boolean;
 }
 
-export interface FooterLoadingEvent {
-	footerType: string;
-	isLoading: boolean;
+export interface FooterSessionStartEvent {
+	previousSessionFile?: string;
+}
+
+export interface SessionNotificationEvent {
+	message: string;
+	level: "info" | "warning";
 }
 
 export type ModuleStateChangedEvent = {
@@ -143,14 +146,14 @@ export interface PiToolRegistrationsBecameAvailableEvent {
 
 export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
-	footerUpdateEvent: Event<FooterUpdateEvent>;
-	footerLoadingEvent: Event<FooterLoadingEvent>;
+	actionLoadingEvent: Event<ActionLoadingEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
 	toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
 	sessionResetEvent: Event<SessionResetEvent>;
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
+	sessionNotificationEvent: Event<SessionNotificationEvent>;
 	initialPrDiscoveryEvent: Event<InitialPrDiscoveryEvent>;
 	messageEndEvent: Event<MessageEndEventPayload>;
 	beforeAgentStartEvent: Event<BeforeAgentStartEventPayload>;
@@ -159,22 +162,19 @@ export interface EventHandler {
 
 export async function withLoading<T>(
 	eventHandler: EventHandler,
-	footerType: string,
+	action: string,
 	operation: () => Promise<T>,
 	onFinally?: () => void | Promise<void>,
 ): Promise<T> {
-	await eventHandler.footerLoadingEvent.emit({
-		footerType,
-		isLoading: true,
-	});
+	await eventHandler.actionLoadingEvent.emit({ action, isLoading: true });
 	try {
 		return await operation();
 	} finally {
 		try {
 			await onFinally?.();
 		} finally {
-			await eventHandler.footerLoadingEvent.emit({
-				footerType,
+			await eventHandler.actionLoadingEvent.emit({
+				action,
 				isLoading: false,
 			});
 		}
@@ -185,8 +185,7 @@ export function createSharedEvents(): EventHandler {
 	const prMergedEvent = event<PrMergedEvent>();
 	return {
 		moduleStateChangedEvent: event<ModuleStateChangedEvent>(),
-		footerUpdateEvent: event<FooterUpdateEvent>(),
-		footerLoadingEvent: event<FooterLoadingEvent>(),
+		actionLoadingEvent: event<ActionLoadingEvent>(),
 		sessionStateChangedEvent: event<SessionStateChangedEvent>(),
 		toolResultEvent: event<{
 			event: ToolResultEvent;
@@ -196,6 +195,7 @@ export function createSharedEvents(): EventHandler {
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
+		sessionNotificationEvent: event<SessionNotificationEvent>(),
 		initialPrDiscoveryEvent: event<InitialPrDiscoveryEvent>(),
 		messageEndEvent: event<MessageEndEventPayload>(),
 		beforeAgentStartEvent: event<BeforeAgentStartEventPayload>(),

@@ -1,148 +1,53 @@
 import { describe, expect, it } from "vitest";
-import { FOOTER_HERDR_TYPE } from "../../src/footer/constants.ts";
+import { FOOTER_TASK_TYPE } from "../../src/footer/constants.ts";
 import {
-	type FooterModuleState as FooterState,
-	type FooterStatusState,
-	type FooterUpdate,
-	footerStateDescriptor,
+	type FooterModuleState,
 	parseFooterEvent,
 	restoreFooterState,
 	serializeFooterState,
 } from "../../src/footer/module-state.ts";
 
-const visible: FooterStatusState = {
-	footerType: "task",
-	isLoading: true,
-	text: "Todoist Task: work |",
-	isVisible: true,
-};
-
-const hidden: FooterStatusState = {
-	footerType: "herdr",
-	isLoading: false,
-	text: "Herdr: working |",
-	isVisible: false,
-};
-
 describe("footer state", () => {
-	it("provides common session-state descriptor", () => {
-		const state: FooterState = {
-			footers: {
-				task: {
-					footerType: "task",
-					isLoading: false,
-					text: "Task",
-					isVisible: true,
-				},
-			},
-		};
-
-		expect(footerStateDescriptor.id).toBe("footer");
+	it("parses value events without loading state", () => {
 		expect(
-			footerStateDescriptor.restore(footerStateDescriptor.serialize(state)),
-		).toEqual(state);
-	});
-});
-
-describe("footer event parsing", () => {
-	it("returns an exact live event object", () => {
-		const event: FooterUpdate = {
-			footerType: visible.footerType,
-			text: visible.text,
-			isVisible: visible.isVisible,
-		};
-		expect(parseFooterEvent({ ...event, ignored: "drop me" })).toEqual(event);
-	});
-
-	it("throws when live event contract is invalid", () => {
-		expect(() =>
 			parseFooterEvent({
-				footerType: visible.footerType,
-				text: visible.text,
-				isVisible: "true",
-			}),
-		).toThrow(TypeError);
-	});
-});
-
-describe("footer state serialization", () => {
-	it("omits visibility and serializes hidden events with null text", () => {
-		const state: FooterState = { footers: { task: visible, herdr: hidden } };
-
-		expect(serializeFooterState(state)).toEqual({
-			footers: {
-				task: {
-					footerType: "task",
-					isLoading: true,
-					text: "Todoist Task: work |",
-				},
-				herdr: {
-					footerType: "herdr",
-					isLoading: false,
-					text: null,
-				},
-			},
-		});
-	});
-
-	it("does not persist or restore active Herdr footer status", () => {
-		const state: FooterState = {
-			footers: {
-				[FOOTER_HERDR_TYPE]: {
-					footerType: FOOTER_HERDR_TYPE,
-					isLoading: true,
-					text: "Herdr: ⠋ working |",
-					isVisible: true,
-				},
-				task: visible,
-			},
-		};
-
-		const snapshot = serializeFooterState(state);
-		expect(snapshot).toEqual({
-			footers: {
-				task: {
-					footerType: "task",
-					isLoading: true,
-					text: "Todoist Task: work |",
-				},
-			},
-		});
-		expect(restoreFooterState(snapshot)).toEqual({
-			footers: { task: visible },
-		});
-	});
-
-	it("skips malformed records and derives visibility on restore", () => {
-		expect(
-			restoreFooterState({
-				footers: {
-					valid: {
-						footerType: "task",
-						text: "Task",
-					},
-					hidden: {
-						footerType: "herdr",
-						text: null,
-					},
-					badType: { footerType: 42, text: "ignored" },
-					missingText: { footerType: "missing" },
-					badText: { footerType: "bad-text", text: 42 },
-				},
+				footerType: FOOTER_TASK_TYPE,
+				currentValue: "Task",
+				isVisible: true,
 			}),
 		).toEqual({
+			footerType: FOOTER_TASK_TYPE,
+			currentValue: "Task",
+			isVisible: true,
+		});
+	});
+
+	it("does not persist transient loading", () => {
+		const state: FooterModuleState = {
 			footers: {
-				task: {
-					footerType: "task",
-					isLoading: false,
-					text: "Task",
+				[FOOTER_TASK_TYPE.id]: {
+					footerType: FOOTER_TASK_TYPE,
+					currentValue: "Task",
 					isVisible: true,
+					isLoading: true,
 				},
-				herdr: {
-					footerType: "herdr",
+			},
+		};
+		expect(serializeFooterState(state)).toEqual({
+			footers: {
+				[FOOTER_TASK_TYPE.id]: {
+					footerType: FOOTER_TASK_TYPE,
+					currentValue: "Task",
+				},
+			},
+		});
+		expect(restoreFooterState(serializeFooterState(state))).toEqual({
+			footers: {
+				[FOOTER_TASK_TYPE.id]: {
+					footerType: FOOTER_TASK_TYPE,
+					currentValue: "Task",
+					isVisible: true,
 					isLoading: false,
-					text: "",
-					isVisible: false,
 				},
 			},
 		});
