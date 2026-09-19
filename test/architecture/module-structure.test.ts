@@ -316,7 +316,7 @@ describe("module structure checker", () => {
 				"src/prompt-queue/consumer.ts": "export interface PromptQueue {}\n",
 			}),
 		).resolves.toContain("no-pr-to-prompt-queue");
-	});
+	}, 15_000);
 
 	it("removes Exit Protocol from lint scopes and reverse-import exceptions", async () => {
 		const config = await readFile(

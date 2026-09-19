@@ -804,22 +804,28 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain(
+				"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
+			),
+		);
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "try the task claim again" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() =>
+			expect(latestModuleState(h, "todoist")).toMatchObject({
+				taskRef: "44",
+				taskName: "Retry task",
+			}),
+		);
 
 		expect(h.selections).toHaveLength(0);
-		expect(worker).toHaveBeenCalledTimes(2);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
-		expect(latestModuleState(h, "todoist")).toMatchObject({
-			taskRef: "44",
-			taskName: "Retry task",
-		});
 	});
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
