@@ -14,9 +14,12 @@ import {
 	DIRECTION_FLAG,
 	FOCUS_FLAG,
 	KIND_FLAG,
+	MATCH_FLAG,
 	PANE,
 	PANE_FLAG,
+	PANE_RUN,
 	PROMPT,
+	RECENT_UNWRAPPED,
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME,
 	REVIEW_AGENT_NO_EXTENSIONS,
@@ -29,8 +32,13 @@ import {
 	REVIEW_PROMPT_MIDDLE,
 	REVIEW_PROMPT_PREFIX,
 	REVIEW_PROMPT_SUFFIX,
+	REVIEW_SHELL_READY_MARKER,
+	REVIEW_SHELL_READY_TIMEOUT,
+	SOURCE_FLAG,
 	SPLIT,
 	START,
+	TIMEOUT_FLAG,
+	WAIT_OUTPUT,
 	WARNING,
 } from "./constants.ts";
 import type { ReviewCommandDependencies } from "./internal-state.ts";
@@ -66,6 +74,29 @@ function reviewPrompt(prUrl: string, worktreePath: string): string {
 	return `${REVIEW_PROMPT_PREFIX}${prUrl}${REVIEW_PROMPT_MIDDLE}${worktreePath}${REVIEW_PROMPT_SUFFIX}`;
 }
 
+function waitForPaneShell(
+	herdrClient: NonNullable<ReviewCommandDependencies["herdrClient"]>,
+	paneId: string,
+): void {
+	herdrClient(HERDR_COMMAND, [
+		PANE,
+		PANE_RUN,
+		paneId,
+		`echo ${REVIEW_SHELL_READY_MARKER}`,
+	]);
+	herdrClient(HERDR_COMMAND, [
+		PANE,
+		WAIT_OUTPUT,
+		paneId,
+		MATCH_FLAG,
+		REVIEW_SHELL_READY_MARKER,
+		SOURCE_FLAG,
+		RECENT_UNWRAPPED,
+		TIMEOUT_FLAG,
+		REVIEW_SHELL_READY_TIMEOUT,
+	]);
+}
+
 function openReviewPane(
 	client: ReviewCommandDependencies["herdrClient"],
 	prUrl: string,
@@ -86,6 +117,7 @@ function openReviewPane(
 		FOCUS_FLAG,
 	]);
 	const paneId = paneIdFrom(splitOutput);
+	waitForPaneShell(herdrClient, paneId);
 	herdrClient(HERDR_COMMAND, [
 		AGENT,
 		START,

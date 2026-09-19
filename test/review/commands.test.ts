@@ -83,6 +83,29 @@ describe("review command", () => {
 			{
 				command: "herdr",
 				args: [
+					"pane",
+					"run",
+					"w1:p2",
+					"echo __PI_TODO_GATE_REVIEW_SHELL_READY__",
+				],
+			},
+			{
+				command: "herdr",
+				args: [
+					"pane",
+					"wait-output",
+					"w1:p2",
+					"--match",
+					"__PI_TODO_GATE_REVIEW_SHELL_READY__",
+					"--source",
+					"recent-unwrapped",
+					"--timeout",
+					"30000",
+				],
+			},
+			{
+				command: "herdr",
+				args: [
 					"agent",
 					"start",
 					"review",
