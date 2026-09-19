@@ -3,28 +3,25 @@ import type { HerdrClient } from "../../src/shared/herdr-client.ts";
 import {
 	boundHerdrClient,
 	currentPaneId,
-	setHerdrCwd,
 	tabLabel,
 } from "../../src/shared/herdr-client.ts";
 
 describe("HerdrClient", () => {
-	it("uses current cwd when invoking bound client", () => {
-		let cwd = "/first";
+	it("uses bound cwd when invoking client", () => {
 		const calls: Array<{ cwd: string; command: string; args: string[] }> = [];
 		const herdrClient: HerdrClient = boundHerdrClient(
-			() => cwd,
-			(currentCwd, command, args) => {
-				calls.push({ cwd: currentCwd, command, args });
-				return currentCwd;
+			"/repo",
+			(cwd, command, args) => {
+				calls.push({ cwd, command, args });
+				return cwd;
 			},
 		);
 
-		expect(herdrClient("herdr", ["tab", "get"])).toBe("/first");
-		cwd = "/second";
-		expect(herdrClient("herdr", ["pane", "get"])).toBe("/second");
+		expect(herdrClient("herdr", ["tab", "get"])).toBe("/repo");
+		expect(herdrClient("herdr", ["pane", "get"])).toBe("/repo");
 		expect(calls).toEqual([
-			{ cwd: "/first", command: "herdr", args: ["tab", "get"] },
-			{ cwd: "/second", command: "herdr", args: ["pane", "get"] },
+			{ cwd: "/repo", command: "herdr", args: ["tab", "get"] },
+			{ cwd: "/repo", command: "herdr", args: ["pane", "get"] },
 		]);
 	});
 
@@ -46,14 +43,6 @@ describe("HerdrClient", () => {
 			if (previousTabId === undefined) delete process.env.HERDR_TAB_ID;
 			else process.env.HERDR_TAB_ID = previousTabId;
 		}
-	});
-
-	it("sets Herdr cwd through injected directory handler", () => {
-		const changeDirectory = vi.fn();
-
-		setHerdrCwd("/repo", changeDirectory);
-
-		expect(changeDirectory).toHaveBeenCalledWith("/repo");
 	});
 
 	it("reads current pane ID from Herdr session environment", () => {

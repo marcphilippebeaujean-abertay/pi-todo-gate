@@ -21,14 +21,6 @@ export function currentPaneId(): string | undefined {
 	return paneId || undefined;
 }
 
-export function setHerdrCwd(
-	cwd: string,
-	changeDirectory?: (path: string) => void,
-): void {
-	const updateDirectory = changeDirectory ?? process.chdir;
-	updateDirectory(cwd);
-}
-
 function jsonResult<T>(output: string): T | undefined {
 	try {
 		return JSON.parse(output) as T;
@@ -61,12 +53,11 @@ export function runHerdrCommand(
 }
 
 export function boundHerdrClient(
-	cwd: string | (() => string),
+	cwd: string,
 	execute?: typeof runHerdrCommand,
 ): HerdrClient {
 	const run = execute ?? runHerdrCommand;
 	return (command, args) => {
-		const currentCwd = typeof cwd === "function" ? cwd() : cwd;
-		return run(currentCwd, command, args);
+		return run(cwd, command, args);
 	};
 }

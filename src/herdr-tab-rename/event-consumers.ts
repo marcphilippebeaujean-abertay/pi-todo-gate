@@ -110,8 +110,7 @@ class HerdrTabRenameConsumer {
 	) {
 		this.sessionCwd = process.cwd();
 		this.sessionState = options.sessionState;
-		this.herdrClient =
-			options.herdrClient ?? boundHerdrClient(() => process.cwd());
+		this.herdrClient = options.herdrClient ?? boundHerdrClient(process.cwd());
 		this.startWorker =
 			options.startBackgroundWorker ??
 			((request) =>
