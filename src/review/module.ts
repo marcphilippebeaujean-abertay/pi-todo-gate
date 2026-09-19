@@ -9,6 +9,7 @@ import "./notifications.ts";
 
 import { isInsideHerdr } from "../shared/herdr-client.ts";
 import { register } from "./commands.ts";
+import { registerReviewOnActivation } from "./event-consumers.ts";
 import type { ReviewModuleOptions } from "./internal-state.ts";
 
 export type ReviewModule = Record<never, never>;
@@ -18,6 +19,8 @@ export { reviewStateDescriptor } from "./module-state.ts";
 export function createReviewModule(options: ReviewModuleOptions): ReviewModule {
 	const isUnavailable = !isInsideHerdr();
 	if (isUnavailable) return {};
-	register(options.pi, options);
+	const shouldRegisterImmediately = !options.deferRegistration;
+	if (shouldRegisterImmediately) register(options.pi, options);
+	if (!shouldRegisterImmediately) registerReviewOnActivation(options);
 	return {};
 }

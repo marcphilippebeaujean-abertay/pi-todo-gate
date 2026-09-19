@@ -202,6 +202,8 @@ export class PrConsumer {
 			async ({ context, session, sessionId }) => {
 				const hasNoSession = session === undefined;
 				if (hasNoSession) return;
+				const isGitProject = session.project?.isGitProject !== false;
+				if (!isGitProject) return;
 				const expectedSessionId = sessionId;
 				const activeSessionId = this.sessionState.session.activeSessionId;
 				const isDifferentActiveSession = activeSessionId !== expectedSessionId;
@@ -240,6 +242,8 @@ export class PrConsumer {
 	private registerPiTools({
 		pi,
 	}: PiToolRegistrationsBecameAvailableEvent): void {
+		const isGitProject = this.sessionState.gitState.isGitProject !== false;
+		if (!isGitProject) return;
 		const alreadyRegistered = this.registrationsAvailable;
 		if (alreadyRegistered) return;
 		this.registrationsAvailable = true;
