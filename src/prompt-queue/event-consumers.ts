@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PrModule } from "../pr/module.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
@@ -22,6 +23,7 @@ export class PromptQueueConsumer {
 	private readonly pr: PrModule;
 	private readonly todoist: TodoistModule;
 	private readonly worktree: WorktreeCleanup;
+	private readonly footer: PromptQueueModuleOptions["footer"];
 	private readonly queue: PromptQueue;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
@@ -33,6 +35,7 @@ export class PromptQueueConsumer {
 		this.pr = options.pr;
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
+		this.footer = options.footer;
 		this.queue = options.queue ?? new PromptQueue();
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
@@ -110,23 +113,36 @@ export class PromptQueueConsumer {
 		const shouldCompleteTodoist = !event.taskMarkedAsCompleted;
 		const hasTask = taskRef !== undefined && prUrl !== null;
 		const shouldQueueTodoist = shouldCompleteTodoist && hasTask;
-		if (shouldQueueTodoist) {
-			const snapshot: TodoistCompletionSnapshot = {
-				taskRef,
-				taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
-				prUrl,
-				workRevision: session.workRevision,
-				sessionId,
-			};
-			void this.queue
-				.enqueue((isCurrent) =>
-					this.completeTodoist(context, snapshot, isCurrent),
-				)
-				.catch(() => undefined);
-		}
+		const todoistSnapshot = shouldQueueTodoist
+			? ({
+					taskRef,
+					taskName: this.sessionState.moduleState.todoist.taskName ?? taskRef,
+					prUrl,
+					workRevision: session.workRevision,
+					sessionId,
+				} satisfies TodoistCompletionSnapshot)
+			: undefined;
 		void this.queue
-			.enqueue((isCurrent) => this.presentExit(context, sessionId, isCurrent))
+			.enqueue((isCurrent) =>
+				this.runExitProtocol(context, sessionId, todoistSnapshot, isCurrent),
+			)
 			.catch(() => undefined);
+	}
+
+	private async runExitProtocol(
+		context: ExtensionContext,
+		sessionId: string,
+		todoistSnapshot: TodoistCompletionSnapshot | undefined,
+		isQueuedCurrent: () => boolean,
+	): Promise<void> {
+		if (todoistSnapshot !== undefined)
+			await this.completeTodoist(context, todoistSnapshot, isQueuedCurrent);
+		const cleanupCompleted = await this.presentExit(
+			context,
+			sessionId,
+			isQueuedCurrent,
+		);
+		if (cleanupCompleted) context.shutdown();
 	}
 
 	private async completeTodoist(
@@ -155,36 +171,45 @@ export class PromptQueueConsumer {
 			isQueuedCurrent,
 		);
 		if (!isCurrentBeforeCapability) return;
-		await this.todoist.completeMergedTask(snapshot);
+		try {
+			await this.runWithLoading(
+				C.status.task,
+				this.todoist.completeMergedTask.bind(this.todoist, snapshot),
+				() => this.isCurrentJob(context, snapshot.sessionId, isQueuedCurrent),
+			);
+		} catch {
+			return;
+		}
 	}
 
 	private async presentExit(
 		context: ExtensionContext,
 		sessionId: string,
 		isQueuedCurrent: () => boolean,
-	): Promise<void> {
+	): Promise<boolean> {
 		const isCurrentBeforePrompt = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
 		const canPrompt = context.hasUI && isCurrentBeforePrompt;
-		if (!canPrompt) return;
+		if (!canPrompt) return false;
 		const info = this.worktree.getWorktreeInfo();
-		if (info === null) return;
+		if (info === null) return true;
 		const dirty = await this.worktree.hasUncommittedChanges();
 		const isCurrentAfterStatus = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentAfterStatus) return;
-		const hasDirtyWorktree = dirty === true;
+		const hasUnavailableStatus = dirty === null;
+		const canContinue = isCurrentAfterStatus && !hasUnavailableStatus;
+		if (!canContinue) return false;
 		const confirmed = await confirmRemoveWorktree(
 			context,
 			info.worktreePath,
 			info.branch,
-			hasDirtyWorktree,
+			dirty,
 		);
 		const isCurrentAfterPrompt = this.isCurrentJob(
 			context,
@@ -192,8 +217,8 @@ export class PromptQueueConsumer {
 			isQueuedCurrent,
 		);
 		const shouldRemove = isCurrentAfterPrompt && confirmed;
-		if (!shouldRemove) return;
-		await this.removeWorktree(
+		if (!shouldRemove) return false;
+		return this.removeWorktree(
 			context,
 			sessionId,
 			isQueuedCurrent,
@@ -206,20 +231,22 @@ export class PromptQueueConsumer {
 		sessionId: string,
 		isQueuedCurrent: () => boolean,
 		worktreePath: string,
-	): Promise<void> {
+	): Promise<boolean> {
 		const isCurrentBeforeStatus = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentBeforeStatus) return;
+		if (!isCurrentBeforeStatus) return false;
 		const dirty = await this.worktree.hasUncommittedChanges();
 		const isCurrentAfterStatus = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentAfterStatus) return;
+		const hasUnavailableStatus = dirty === null;
+		const canContinue = isCurrentAfterStatus && !hasUnavailableStatus;
+		if (!canContinue) return false;
 		let force = false;
 		const hasDirtyWorktree = dirty === true;
 		if (hasDirtyWorktree) {
@@ -229,14 +256,33 @@ export class PromptQueueConsumer {
 				sessionId,
 				isQueuedCurrent,
 			);
-			if (!isCurrentAfterPrompt) return;
+			if (!isCurrentAfterPrompt) return false;
 		}
 		const isCurrentBeforeCapability = this.isCurrentJob(
 			context,
 			sessionId,
 			isQueuedCurrent,
 		);
-		if (!isCurrentBeforeCapability) return;
-		await this.worktree.removeWorktree({ force });
+		if (!isCurrentBeforeCapability) return false;
+		const result = await this.runWithLoading(
+			C.status.pr,
+			this.worktree.removeWorktree.bind(this.worktree, { force }),
+			() => this.isCurrentJob(context, sessionId, isQueuedCurrent),
+		);
+		return result === "completed";
+	}
+
+	private async runWithLoading<T>(
+		footerType: string,
+		operation: () => Promise<T>,
+		isCurrent: () => boolean,
+	): Promise<T> {
+		this.footer.setLoading(footerType, true);
+		try {
+			return await operation();
+		} finally {
+			const isCurrentAfterOperation = isCurrent();
+			if (isCurrentAfterOperation) this.footer.setLoading(footerType, false);
+		}
 	}
 }

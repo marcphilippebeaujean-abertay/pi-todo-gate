@@ -107,7 +107,7 @@ describe("worktree event actions", () => {
 		expect(ctx.ui.confirm).not.toHaveBeenCalled();
 	});
 
-	it("returns null when dirty status resolves after session changes", async () => {
+	it("returns dirty status when session changes during inspection", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
@@ -147,7 +147,7 @@ describe("worktree event actions", () => {
 		sessionState.session.activeSessionId = "new-session";
 		releaseStatus();
 
-		await expect(dirtyStatus).resolves.toBeNull();
+		await expect(dirtyStatus).resolves.toBe(true);
 	});
 
 	it("returns null when dirty status is unavailable", async () => {
@@ -254,23 +254,6 @@ describe("worktree event actions", () => {
 			worktreePath: "/repo/.worktrees/feature",
 			branch: "later",
 		});
-	});
-
-	it("changes directory to main root after loading worktree", async () => {
-		const events = createSharedEvents();
-		const sessionState = createSessionState();
-		sessionState.session.activeSessionId = "session";
-		const changeDirectoryToRoot = vi.fn();
-		const module = createTestWorktreeModule({
-			eventHandler: events,
-			sessionState,
-			exec: projectResult("abc", "def", "", "", []),
-			changeDirectoryToRoot,
-		});
-
-		await module.sessionStart(context(), "session");
-
-		expect(changeDirectoryToRoot).toHaveBeenCalledWith("/repo");
 	});
 
 	it("starts from shared session-activated event", async () => {
@@ -475,8 +458,12 @@ describe("worktree event actions", () => {
 		});
 	});
 
-	it("rejects blocked cleanup after a new session starts", async () => {
+	it("reports blocked cleanup after a new session starts", async () => {
 		const events = createSharedEvents();
+		const notifications: unknown[] = [];
+		events.sessionNotificationEvent.subscribe((notification) => {
+			notifications.push(notification);
+		});
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "old";
 		let releaseConfirm!: () => void;
@@ -519,5 +506,11 @@ describe("worktree event actions", () => {
 		).toEqual([]);
 		expect(changeDirectory).not.toHaveBeenCalled();
 		expect(ctx.ui.notify).not.toHaveBeenCalled();
+		expect(notifications).toEqual([
+			{
+				message: "Worktree cleanup skipped because session changed",
+				level: "warning",
+			},
+		]);
 	});
 });

@@ -76,6 +76,11 @@ export interface ClaimErrorEvent {
 	error: string;
 }
 
+export interface SessionNotificationEvent {
+	message: string;
+	level: "info" | "warning";
+}
+
 export type ModuleStateChangedEvent = {
 	[K in ModuleId]: {
 		moduleId: K;
@@ -138,6 +143,7 @@ export interface EventHandler {
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
 	prMergedEvent: Event<PrMergedEvent>;
+	sessionNotificationEvent: Event<SessionNotificationEvent>;
 	initialPrDiscoveryEvent: Event<InitialPrDiscoveryEvent>;
 	messageEndEvent: Event<MessageEndEventPayload>;
 	beforeAgentStartEvent: Event<BeforeAgentStartEventPayload>;
@@ -157,6 +163,7 @@ export function createSharedEvents(): EventHandler {
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
 		sessionDeactivatedEvent: event<SessionDeactivatedEvent>(),
 		prMergedEvent,
+		sessionNotificationEvent: event<SessionNotificationEvent>(),
 		initialPrDiscoveryEvent: event<InitialPrDiscoveryEvent>(),
 		messageEndEvent: event<MessageEndEventPayload>(),
 		beforeAgentStartEvent: event<BeforeAgentStartEventPayload>(),

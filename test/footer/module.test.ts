@@ -18,6 +18,7 @@ import { createSessionState } from "../../src/state.ts";
 type TestFooterModule = {
 	sessionStart(event: unknown, context: ExtensionContext): Promise<void>;
 	update(event: unknown): void;
+	setLoading(footerType: string, isLoading: boolean): void;
 	getState(): FooterModuleState;
 	deactivate(): void;
 };
@@ -121,6 +122,48 @@ describe("footer module", () => {
 		}
 	});
 
+	it("toggles loading while preserving current footer text", async () => {
+		const h = harness();
+		const footer = createTestFooterModule({
+			eventHandler: h.events,
+			sessionState: h.sessionState,
+		});
+		await footer.sessionStart({}, h.context());
+
+		footer.update(update);
+		footer.setLoading(update.footerType.id, true);
+		expect(footer.getState().footers[update.footerType.id]).toEqual({
+			...update,
+			isLoading: true,
+		});
+		expect(h.statusCalls.at(-1)).toEqual({
+			key: FOOTER_STATUS_KEY,
+			text: "|Todoist Task: ⠋ Fix footer|",
+		});
+
+		footer.setLoading(update.footerType.id, false);
+		expect(footer.getState().footers[update.footerType.id]).toEqual(update);
+	});
+
+	it("adds spinner frames to loading text without a spinner glyph", async () => {
+		vi.useFakeTimers();
+		try {
+			const h = harness();
+			const footer = createTestFooterModule({
+				eventHandler: h.events,
+				sessionState: h.sessionState,
+			});
+			await footer.sessionStart({}, h.context());
+
+			footer.update({ ...update, isLoading: true });
+			vi.advanceTimersByTime(FOOTER_SPINNER_INTERVAL_MS);
+
+			expect(h.statusCalls.at(-1)?.text).toBe("|Todoist Task: ⠙ Fix footer|");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("updates and synchronizes visible and hidden states", async () => {
 		const h = harness();
 		const footer = createTestFooterModule({
@@ -208,7 +251,7 @@ describe("footer module", () => {
 			persist: false,
 		});
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: true },
 			persist: false,
 		});
@@ -234,12 +277,12 @@ describe("footer module", () => {
 		await footer.sessionStart({}, h.context());
 
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: true },
 			persist: false,
 		});
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: false },
 			persist: false,
 		});

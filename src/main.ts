@@ -7,9 +7,8 @@ import { RootEventPublisher } from "./event-publishers.ts";
 import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
 import type { FooterModule } from "./footer/module.ts";
 import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
-import { createHerdrModule } from "./herdr/module.ts";
-import { herdrStateDescriptor } from "./herdr/module-state.ts";
-import { isInsideHerdr } from "./herdr/runtime.ts";
+import { createHerdrTabRenameModule } from "./herdr-tab-rename/module.ts";
+import { herdrTabRenameStateDescriptor } from "./herdr-tab-rename/module-state.ts";
 import type { PrModule } from "./pr/module.ts";
 import { createPrModule } from "./pr/module.ts";
 import { prStateDescriptor } from "./pr/module-state.ts";
@@ -17,6 +16,8 @@ import {
 	createPromptQueueModule,
 	type PromptQueueModule,
 } from "./prompt-queue/module.ts";
+import { createReviewModule } from "./review/module.ts";
+import { reviewStateDescriptor } from "./review/module-state.ts";
 import {
 	type ModuleStateDescriptors,
 	serializeSessionState,
@@ -25,6 +26,7 @@ import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
+
 import { isSubagent } from "./shared/session.ts";
 import { createSessionState } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
@@ -37,7 +39,7 @@ type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
 type TaskRefreshWorker = TodoistModuleOptions["taskRefreshWorker"];
-type HerdrSetupOptions = Parameters<typeof createHerdrModule>[1];
+type HerdrSetupOptions = Parameters<typeof createHerdrTabRenameModule>[1];
 type HerdrClient = NonNullable<HerdrSetupOptions["herdrClient"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 
@@ -81,7 +83,8 @@ export function createExtensionState(
 	const stateDescriptors: ModuleStateDescriptors = {
 		pr: prStateDescriptor,
 		todoist: todoistStateDescriptor,
-		herdr: herdrStateDescriptor,
+		review: reviewStateDescriptor,
+		herdrTabRename: herdrTabRenameStateDescriptor,
 		worktree: worktreeStateDescriptor,
 		footer: footerStateDescriptor,
 	};
@@ -100,7 +103,6 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
-		changeDirectoryToRoot: isInsideHerdr() ? process.chdir : undefined,
 	});
 	const pr = createPrModule({
 		pi,
@@ -125,6 +127,7 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
+		footer,
 	});
 	const extensionState = {
 		pi,
@@ -177,11 +180,16 @@ function startExtensions(
 		root.persistSessionState,
 	);
 	registerExtensionEventConsumers(root);
-	createHerdrModule(pi, {
+	createHerdrTabRenameModule(pi, {
 		eventHandler: extensionState.eventHandler,
 		sessionState: extensionState.sessionState,
 		herdrClient: moduleDependencies.herdrClient,
 		spawnWorker: moduleDependencies.herdrSpawnWorker,
+	});
+	createReviewModule({
+		pi,
+		sessionState: extensionState.sessionState,
+		herdrClient: moduleDependencies.herdrClient,
 	});
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }

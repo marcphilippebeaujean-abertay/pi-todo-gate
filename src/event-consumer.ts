@@ -18,6 +18,7 @@ import type {
 	EventHandler,
 	MessageEndEvent,
 	ModuleStateChangedEvent,
+	SessionNotificationEvent,
 	SessionStartEvent,
 	ToolResultEvent,
 } from "./shared/events.ts";
@@ -303,8 +304,8 @@ export function updateModuleState(
 		case "todoist":
 			state.moduleState.todoist = structuredClone(update.moduleState);
 			break;
-		case "herdr":
-			state.moduleState.herdr = structuredClone(update.moduleState);
+		case "herdrTabRename":
+			state.moduleState.herdrTabRename = structuredClone(update.moduleState);
 			break;
 		case "worktree":
 			state.moduleState.worktree = structuredClone(update.moduleState);
@@ -359,7 +360,42 @@ export function registerModuleStateConsumer(
 	return () => updateQueue;
 }
 
+function notifySession(
+	root: Root,
+	notification: SessionNotificationEvent,
+): void {
+	const session = root.session;
+	if (session === null) return;
+	try {
+		session.context.ui.notify(notification.message, notification.level);
+	} catch {
+		// Headless sessions have no user-facing UI.
+	}
+}
+
 export function registerExtensionEventConsumers(root: Root): void {
+	const pendingNotifications = new Map<string, SessionNotificationEvent[]>();
+	root.eventHandler.sessionNotificationEvent.subscribe((notification) => {
+		const activeSessionId = root.sessionState.session.activeSessionId;
+		const hasActiveSession = root.session !== null && activeSessionId !== null;
+		if (hasActiveSession) {
+			notifySession(root, notification);
+			return;
+		}
+		if (activeSessionId === null) return;
+		const pending = pendingNotifications.get(activeSessionId) ?? [];
+		pending.push(notification);
+		pendingNotifications.set(activeSessionId, pending);
+	});
+	root.eventHandler.sessionActivatedEvent.subscribe(({ sessionId }) => {
+		const pending = pendingNotifications.get(sessionId);
+		if (pending === undefined) return;
+		pendingNotifications.delete(sessionId);
+		for (const notification of pending) notifySession(root, notification);
+	});
+	root.eventHandler.sessionDeactivatedEvent.subscribe(() =>
+		pendingNotifications.clear(),
+	);
 	root.pi.on(C.event.sessionStart, handleSessionStart.bind(null, root));
 	root.pi.on(C.event.messageEnd, handleMessageEnd.bind(null, root));
 	root.pi.on(C.event.beforeAgentStart, handleBeforeAgentStart.bind(null, root));

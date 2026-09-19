@@ -26,7 +26,7 @@ function claimResult(value: unknown): ClaimWorkerResponse | undefined {
 	return { tabName, shouldMoveToNewTab };
 }
 
-export function parseClaimResult(
+export function parseRenameResult(
 	stdout: string,
 ): ClaimWorkerResponse | undefined {
 	for (const line of stdout.split(/\r?\n/).reverse()) {

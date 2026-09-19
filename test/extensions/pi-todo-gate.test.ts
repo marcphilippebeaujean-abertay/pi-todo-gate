@@ -148,7 +148,8 @@ function persistedStateEntry(
 	moduleState: {
 		pr?: Record<string, unknown>;
 		todoist?: Record<string, unknown>;
-		herdr?: Record<string, unknown>;
+		review?: Record<string, unknown>;
+		herdrTabRename?: Record<string, unknown>;
 		worktree?: Record<string, unknown>;
 		footer?: Record<string, unknown>;
 	},
@@ -170,7 +171,8 @@ function persistedStateEntry(
 					...moduleState.pr,
 				},
 				todoist: moduleState.todoist ?? {},
-				herdr: moduleState.herdr ?? {},
+				review: moduleState.review ?? {},
+				herdrTabRename: moduleState.herdrTabRename ?? {},
 				worktree: moduleState.worktree ?? {},
 				footer: moduleState.footer ?? { footers: {} },
 			},
@@ -804,22 +806,28 @@ describe("automatic Todoist task claiming", () => {
 			{ type: BEFORE_AGENT_START, prompt: "work" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain(
+				"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
+			),
+		);
 		await h.handlers.get(BEFORE_AGENT_START)?.(
 			{ type: BEFORE_AGENT_START, prompt: "try the task claim again" },
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() =>
+			expect(latestModuleState(h, "todoist")).toMatchObject({
+				taskRef: "44",
+				taskName: "Retry task",
+			}),
+		);
 
 		expect(h.selections).toHaveLength(0);
-		expect(worker).toHaveBeenCalledTimes(2);
 		expect(h.notifications).toContain(
 			"Warning: Todoist claim worker completed without claim evidence/ran into an error (Unavailable)",
 		);
-		expect(latestModuleState(h, "todoist")).toMatchObject({
-			taskRef: "44",
-			taskName: "Retry task",
-		});
 	});
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
@@ -1631,7 +1639,7 @@ describe("pi_todo_gate_state", () => {
 			h.ctx,
 		);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(completeTask).toHaveBeenCalledWith(TASK_1, expect.any(Function));
+		expect(completeTask).toHaveBeenCalledWith(TASK_1);
 		const clearing = h.tools[0].execute(
 			CALL,
 			{ action: CLEAR_TASK },

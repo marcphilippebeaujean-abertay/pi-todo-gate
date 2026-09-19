@@ -49,10 +49,16 @@ function descriptors(): {
 			},
 			serialize: (state) => structuredClone(state) as never,
 		},
-		herdr: {
-			id: "herdr",
-			createInitialState: () => structuredClone(initial.herdr),
-			restore: (value) => value as ModuleState["herdr"],
+		review: {
+			id: "review",
+			createInitialState: () => structuredClone(initial.review),
+			restore: (value) => value as ModuleState["review"],
+			serialize: (state) => structuredClone(state) as never,
+		},
+		herdrTabRename: {
+			id: "herdrTabRename",
+			createInitialState: () => structuredClone(initial.herdrTabRename),
+			restore: (value) => value as ModuleState["herdrTabRename"],
 			serialize: (state) => structuredClone(state) as never,
 		},
 		worktree: {
@@ -102,7 +108,7 @@ function snapshot(): SessionState {
 		todoistCompletionAttemptedAt: "2026-09-13T12:01:00.000Z",
 		mergePromptedPrUrl: "https://github.com/o/r/pull/42",
 	};
-	state.moduleState.herdr.herdrClaimReturnedSuccessfully = "true";
+	state.moduleState.herdrTabRename.herdrClaimReturnedSuccessfully = "true";
 	state.moduleState.worktree = {
 		initialHead: "abc",
 		initialStatus: "",
@@ -145,6 +151,24 @@ describe("session state persistence", () => {
 		});
 	});
 
+	it("migrates legacy herdr state into renamed tab-rename state", () => {
+		const source = serializeSessionState(snapshot(), descriptors());
+		const legacyHerdr = source.moduleState.herdrTabRename;
+		const { herdrTabRename: _renamed, ...otherModules } = source.moduleState;
+		const restored = restoreSessionState(
+			{
+				...source,
+				moduleState: {
+					...otherModules,
+					herdr: legacyHerdr,
+				},
+			},
+			descriptors(),
+		);
+
+		expect(restored.moduleState.herdrTabRename).toEqual(legacyHerdr);
+	});
+
 	it("falls back to initialized state when root snapshot is malformed", () => {
 		const restored = restoreSessionState(
 			{ schemaVersion: 1, moduleState: {} },
@@ -176,7 +200,9 @@ describe("session state persistence", () => {
 		expect(restored.moduleState.todoist).toEqual(
 			createSessionState().moduleState.todoist,
 		);
-		expect(restored.moduleState.herdr).toEqual(snapshot().moduleState.herdr);
+		expect(restored.moduleState.herdrTabRename).toEqual(
+			snapshot().moduleState.herdrTabRename,
+		);
 	});
 
 	it("rejects unsupported schema versions", () => {

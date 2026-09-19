@@ -68,7 +68,7 @@ export class FooterEventConsumer {
 				this.currentTaskName = event.moduleState.taskName;
 				this.refreshTaskStatus(this.currentTaskUrl, this.currentTaskName);
 				return;
-			case C.module.herdr:
+			case C.module.herdrTabRename:
 				this.refreshHerdrStatus(event.moduleState.claimInProgress === true);
 				return;
 			case C.module.footer: {
@@ -144,6 +144,14 @@ export class FooterEventConsumer {
 			this.sessionState.gitState.hasUncommittedChanges ?? false;
 		this.state = structuredClone(this.sessionState.moduleState.footer);
 		this.display.start(nextContext, this.state);
+	}
+
+	setLoading(footerType: string, isLoading: boolean): void {
+		const current = this.state.footers[footerType];
+		if (current === undefined) return;
+		const isLoadingUnchanged = current.isLoading === isLoading;
+		if (isLoadingUnchanged) return;
+		this.update({ ...current, isLoading });
 	}
 
 	update(event: FooterUpdateEvent, force?: boolean): void {

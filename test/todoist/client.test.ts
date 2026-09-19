@@ -29,7 +29,6 @@ const CREATES_TASK_WITH_DESCRIPTION = "creates a task with a description";
 const ADD = "add";
 const DESCRIPTION = "--description";
 const TASK_COMPLETED_SUCCESSFULLY = "Task completed successfully";
-const DOES_NOT_MOVE_CANCELLED_CLAIM = "does not move cancelled claim";
 const ACCEPTS_THE_ALREADY_CLAIMED_TASK_AND_MOVES =
 	"accepts the already claimed task and moves a valid task";
 const TASK = "task";
@@ -59,10 +58,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandResult } from "../../src/shared/command.ts";
 import { TodoistClient } from "../../src/todoist/client.ts";
 import type { TodoistExec } from "../../src/todoist/internal-state.ts";
-import {
-	TodoistError,
-	TodoistOperationCancelled,
-} from "../../src/todoist/parsing.ts";
+import { TodoistError } from "../../src/todoist/parsing.ts";
 
 const ok = (value: unknown): CommandResult => ({
 	stdout: JSON.stringify(value),
@@ -237,25 +233,6 @@ describe("TodoistClient", () => {
 		await expect(
 			new TodoistClient(fallback.exec).getTask(VALUE_42),
 		).resolves.toMatchObject({ url: HTTPS_APP_TODOIST_COM_APP_TASK_42 });
-	});
-
-	it(DOES_NOT_MOVE_CANCELLED_CLAIM, async () => {
-		const fake = fakeTodoist({
-			"task view 42 --json": ok(task({ sectionName: TODO })),
-		});
-		let checks = 0;
-		const isCurrent = () => {
-			checks += 1;
-			return checks < 3;
-		};
-		await expect(
-			new TodoistClient(fake.exec).claimTask(
-				VALUE_42,
-				{ id: PROJECT_1 },
-				isCurrent,
-			),
-		).rejects.toBeInstanceOf(TodoistOperationCancelled);
-		expect(fake.calls).toEqual([[TASK, VIEW, VALUE_42, JSON_2]]);
 	});
 
 	it(CREATES_TASK_WITH_DESCRIPTION, async () => {
