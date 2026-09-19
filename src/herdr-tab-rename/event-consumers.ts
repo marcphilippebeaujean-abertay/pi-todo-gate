@@ -31,7 +31,7 @@ import type {
 	ClaimWorkerHandle,
 	ClaimWorkerResponse,
 	HerdrClient,
-	HerdrTabOptions,
+	HerdrTabRenameOptions,
 	StartBackgroundWorker,
 } from "./internal-state.ts";
 import { notifyHerdrFailure } from "./notifications.ts";
@@ -76,14 +76,14 @@ function applyClaimResponse(
 	}
 }
 
-class HerdrTabClaimConsumer {
+class HerdrTabRenameConsumer {
 	private readonly herdrClient: HerdrClient;
 	private readonly startWorker: StartBackgroundWorker;
-	private readonly shouldActivate: HerdrTabOptions["shouldActivate"];
-	private readonly hasStoredClaim: HerdrTabOptions["hasClaimReturnedSuccessfully"];
-	private readonly onClaimReturnedSuccessfully: HerdrTabOptions["onClaimReturnedSuccessfully"];
+	private readonly shouldActivate: HerdrTabRenameOptions["shouldActivate"];
+	private readonly hasStoredClaim: HerdrTabRenameOptions["hasClaimReturnedSuccessfully"];
+	private readonly onClaimReturnedSuccessfully: HerdrTabRenameOptions["onClaimReturnedSuccessfully"];
 	private readonly publishClaimInProgress: NonNullable<
-		HerdrTabOptions["publishClaimInProgress"]
+		HerdrTabRenameOptions["publishClaimInProgress"]
 	>;
 	private readonly events: HerdrEvents;
 	private sessionCwd: string;
@@ -99,7 +99,11 @@ class HerdrTabClaimConsumer {
 	private paneId: string | undefined;
 	private claimContext: ExtensionContext | undefined;
 
-	constructor(pi: ExtensionAPI, options: HerdrTabOptions, events: HerdrEvents) {
+	constructor(
+		pi: ExtensionAPI,
+		options: HerdrTabRenameOptions,
+		events: HerdrEvents,
+	) {
 		this.herdrClient =
 			options.herdrClient ?? boundHerdrClient(this.sessionCwdReference);
 		this.sessionCwd = options.cwd ?? process.cwd();
@@ -253,12 +257,12 @@ class HerdrTabClaimConsumer {
 	}
 }
 
-export function installHerdrTabClaim(
+export function installHerdrTabRename(
 	pi: ExtensionAPI,
-	options?: HerdrTabOptions,
+	options?: HerdrTabRenameOptions,
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
 	const events = createHerdrEvents();
-	new HerdrTabClaimConsumer(pi, options ?? {}, events);
+	new HerdrTabRenameConsumer(pi, options ?? {}, events);
 }

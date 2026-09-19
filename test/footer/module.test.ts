@@ -206,7 +206,7 @@ describe("footer module", () => {
 			persist: false,
 		});
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: true },
 			persist: false,
 		});
@@ -232,12 +232,12 @@ describe("footer module", () => {
 		await footer.sessionStart({}, h.context());
 
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: true },
 			persist: false,
 		});
 		await h.events.moduleStateChangedEvent.emit({
-			moduleId: "herdr",
+			moduleId: "herdrTabRename",
 			moduleState: { claimInProgress: false },
 			persist: false,
 		});

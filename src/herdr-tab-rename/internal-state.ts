@@ -1,14 +1,15 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { EventHandler } from "../shared/events.ts";
+import type { HerdrClient } from "../shared/herdr-client.ts";
 import type {
 	PiWorkerProcess,
 	PiWorkerSpawner,
 } from "../shared/pi-worker-data.ts";
 import type { SessionState } from "../state.ts";
 import type { HerdrEvents } from "./events.ts";
-import type { HerdrModuleState } from "./module-state.ts";
+import type { HerdrTabRenameModuleState } from "./module-state.ts";
 
-export type HerdrState = HerdrModuleState;
+export type HerdrState = HerdrTabRenameModuleState;
 
 export interface ClaimWorkerResponseData {
 	tabName: string;
@@ -35,10 +36,6 @@ export interface ClaimWorkerOptions {
 	spawnWorker?: PiWorkerSpawner;
 }
 
-export interface CwdReference {
-	current: string;
-}
-
 export interface ClaimWorkerHandle {
 	cancel(): void;
 }
@@ -46,19 +43,19 @@ export interface ClaimWorkerHandle {
 export type WorkerProcess = PiWorkerProcess;
 export type WorkerSpawner = PiWorkerSpawner;
 
-export type HerdrClient = (command: string, args: string[]) => string;
+export type { CwdReference, HerdrClient } from "../shared/herdr-client.ts";
 export type StartBackgroundWorker = (
 	request: ClaimWorkerRequest,
 ) => ClaimWorkerHandle;
 
-export interface HerdrModuleSetupOptions {
+export interface HerdrTabRenameModuleSetupOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	herdrClient?: HerdrClient;
 	spawnWorker?: WorkerSpawner;
 }
 
-export interface HerdrTabOptions {
+export interface HerdrTabRenameOptions {
 	herdrClient?: HerdrClient;
 	cwd?: string;
 	startBackgroundWorker?: StartBackgroundWorker;

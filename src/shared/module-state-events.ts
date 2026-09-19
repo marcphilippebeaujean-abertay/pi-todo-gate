@@ -24,8 +24,13 @@ const moduleStateBuilders: ModuleStateBuilders = {
 		moduleState,
 		...options,
 	}),
-	herdr: (moduleState, options) => ({
-		moduleId: "herdr",
+	review: (moduleState, options) => ({
+		moduleId: "review",
+		moduleState,
+		...options,
+	}),
+	herdrTabRename: (moduleState, options) => ({
+		moduleId: "herdrTabRename",
 		moduleState,
 		...options,
 	}),

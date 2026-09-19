@@ -11,48 +11,48 @@ import "./notifications.ts";
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { HERDR_CLAIM_RETURNED } from "./constants.ts";
 import type {
-	HerdrModuleSetupOptions,
-	HerdrTabOptions,
+	HerdrTabRenameModuleSetupOptions,
+	HerdrTabRenameOptions,
 } from "./internal-state.ts";
 import { isInsideHerdr } from "./runtime.ts";
 
-export type HerdrModule = Record<never, never>;
+export type HerdrTabRenameModule = Record<never, never>;
 
-import { installHerdrTabClaim } from "./event-consumers.ts";
+import { installHerdrTabRename } from "./event-consumers.ts";
 
 export * from "./module-state.ts";
 
-export function createHerdrModule(
-	pi: Parameters<typeof installHerdrTabClaim>[0],
-	options: HerdrModuleSetupOptions,
-): HerdrModule {
+export function createHerdrTabRenameModule(
+	pi: Parameters<typeof installHerdrTabRename>[0],
+	options: HerdrTabRenameModuleSetupOptions,
+): HerdrTabRenameModule {
 	const isUnavailable = !isInsideHerdr();
 	if (isUnavailable) return {};
 	const statePublisher = createModuleStatePublisher(
 		options.eventHandler,
-		"herdr",
+		"herdrTabRename",
 	);
-	const tabOptions: HerdrTabOptions = {
+	const tabOptions: HerdrTabRenameOptions = {
 		herdrClient: options.herdrClient,
 		spawnWorker: options.spawnWorker,
 		publishClaimInProgress: (claimInProgress) =>
 			statePublisher.publish(
-				{ ...options.sessionState.moduleState.herdr, claimInProgress },
+				{ ...options.sessionState.moduleState.herdrTabRename, claimInProgress },
 				{ persist: false },
 			),
 		hasClaimReturnedSuccessfully: () =>
-			options.sessionState.moduleState.herdr.herdrClaimReturnedSuccessfully ===
-			HERDR_CLAIM_RETURNED,
+			options.sessionState.moduleState.herdrTabRename
+				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED,
 		onClaimReturnedSuccessfully: () =>
 			statePublisher.publish(
 				{
-					...options.sessionState.moduleState.herdr,
+					...options.sessionState.moduleState.herdrTabRename,
 					claimInProgress: false,
 					herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
 				},
 				{ persist: true },
 			),
 	};
-	installHerdrTabClaim(pi, tabOptions);
+	installHerdrTabRename(pi, tabOptions);
 	return {};
 }

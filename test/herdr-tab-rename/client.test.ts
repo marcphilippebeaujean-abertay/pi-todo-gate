@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { HerdrClient } from "../../src/herdr/internal-state.ts";
-import { boundHerdrClient } from "../../src/herdr/runtime.ts";
+import type { HerdrClient } from "../../src/shared/herdr-client.ts";
+import { boundHerdrClient } from "../../src/shared/herdr-client.ts";
 
 describe("HerdrClient", () => {
 	it("uses current cwd when invoking bound client", () => {

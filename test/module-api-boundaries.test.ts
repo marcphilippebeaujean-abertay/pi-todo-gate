@@ -55,7 +55,14 @@ describe("module API boundaries", () => {
 	});
 
 	it("does not wildcard-export implementation facets", async () => {
-		const entrypoints = ["pr", "todoist", "herdr", "footer", "worktree"];
+		const entrypoints = [
+			"pr",
+			"todoist",
+			"herdr-tab-rename",
+			"review",
+			"footer",
+			"worktree",
+		];
 		const forbidden =
 			/export \* from "\.\/(commands|git|parsing|runtime|notifications|user-prompts|claim-worker-result|events|footer-rendering)\.ts"/;
 		for (const entrypoint of entrypoints) {

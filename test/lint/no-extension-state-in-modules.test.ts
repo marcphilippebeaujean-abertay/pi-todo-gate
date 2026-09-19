@@ -61,7 +61,14 @@ describe(RULE_ID, () => {
 	});
 
 	it("allows SessionState imports from every scoped module", async () => {
-		for (const directory of ["pr", "todoist", "herdr", "worktree", "footer"]) {
+		for (const directory of [
+			"pr",
+			"todoist",
+			"herdr-tab-rename",
+			"review",
+			"worktree",
+			"footer",
+		]) {
 			const diagnostics = await lintModule(
 				`import type { SessionState } from "../state.ts";\n`,
 				directory,

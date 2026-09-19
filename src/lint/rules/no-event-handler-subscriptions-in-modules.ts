@@ -3,9 +3,9 @@ import { diagnostic } from "../diagnostic.ts";
 import type { LintRule } from "../types.ts";
 
 const SCOPED_MODULE_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/][^\\/]+\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/][^\\/]+\.ts$/;
 const EVENT_CONSUMERS_PATH =
-	/[\\/]src[\\/](pr|todoist|herdr|worktree|prompt-queue|footer)[\\/]event-consumers\.ts$/;
+	/[\\/]src[\\/](pr|todoist|herdr-tab-rename|review|worktree|prompt-queue|footer)[\\/]event-consumers\.ts$/;
 const RULE_ID = "no-event-handler-subscriptions-in-modules" as const;
 const MESSAGE = "EventHandler subscriptions must live in event-consumers.ts";
 
