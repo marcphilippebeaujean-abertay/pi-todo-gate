@@ -69,7 +69,7 @@ function setup() {
 	const currentSession = session(ctx);
 	const pr = { mergeActivePr: vi.fn(async () => true) };
 	const todoist = {
-		resolveSessionProject: vi.fn(async () => null),
+		resolveConfiguredProject: vi.fn(async () => null),
 		completeMergedTask: vi.fn(async () => "completed" as const),
 	};
 	const worktree = {
