@@ -33,6 +33,7 @@ export function createHerdrTabRenameModule(
 	);
 	const tabOptions: HerdrTabRenameOptions = {
 		herdrClient: options.herdrClient,
+		sessionState: options.sessionState,
 		spawnWorker: options.spawnWorker,
 		publishClaimInProgress: (claimInProgress) =>
 			statePublisher.publish(

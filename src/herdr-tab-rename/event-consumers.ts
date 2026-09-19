@@ -90,8 +90,8 @@ class HerdrTabRenameConsumer {
 		HerdrTabRenameOptions["publishClaimInProgress"]
 	>;
 	private readonly events: HerdrEvents;
+	private readonly sessionState: HerdrTabRenameOptions["sessionState"];
 	private sessionCwd: string;
-	private readonly sessionCwdReference = { current: process.cwd() };
 	private worker: ClaimWorkerHandle | undefined;
 	private herdrAvailable = false;
 	private hasValidatedClaim = false;
@@ -108,14 +108,18 @@ class HerdrTabRenameConsumer {
 		options: HerdrTabRenameOptions,
 		events: HerdrEvents,
 	) {
+		this.sessionCwd = process.cwd();
+		this.sessionState = options.sessionState;
 		this.herdrClient =
-			options.herdrClient ?? boundHerdrClient(this.sessionCwdReference);
-		this.sessionCwd = options.cwd ?? process.cwd();
-		this.sessionCwdReference.current = this.sessionCwd;
+			options.herdrClient ?? boundHerdrClient(() => process.cwd());
 		this.startWorker =
 			options.startBackgroundWorker ??
 			((request) =>
-				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
+				defaultStartWorker(
+					this.sessionState?.gitState.worktreeRoot ?? this.sessionCwd,
+					options.spawnWorker,
+					request,
+				));
 		this.shouldActivate = options.shouldActivate;
 		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
 		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
@@ -134,7 +138,6 @@ class HerdrTabRenameConsumer {
 		this.worker = undefined;
 		this.claimContext = undefined;
 		this.sessionCwd = ctx.cwd;
-		this.sessionCwdReference.current = this.sessionCwd;
 		this.herdrAvailable = isInsideHerdr();
 		const storedClaim = this.shouldHaveStoredClaim(ctx);
 		this.hasClaimReturnedSuccessfully = storedClaim;

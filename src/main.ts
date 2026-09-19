@@ -26,7 +26,7 @@ import type { Exec } from "./shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "./shared/constants.ts";
 import type { EventHandler } from "./shared/events.ts";
 import { createEventHandler } from "./shared/events.ts";
-import { isInsideHerdr } from "./shared/herdr-client.ts";
+import { isInsideHerdr, setHerdrCwd } from "./shared/herdr-client.ts";
 import { isSubagent } from "./shared/session.ts";
 import { createSessionState } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
@@ -103,7 +103,6 @@ export function createExtensionState(
 		eventHandler,
 		sessionState,
 		exec: moduleDependencies.exec,
-		changeDirectoryToRoot: isInsideHerdr() ? process.chdir : undefined,
 	});
 	const pr = createPrModule({
 		pi,
@@ -161,6 +160,19 @@ export function createExtensionState(
 	return Object.assign(extensionState, { root });
 }
 
+function registerHerdrCwdReset(
+	eventHandler: EventHandler,
+	sessionState: import("./state.ts").SessionState,
+): void {
+	if (!isInsideHerdr()) return;
+	eventHandler.sessionActivatedEvent.subscribe(() => {
+		const mainRoot = sessionState.gitState.mainRoot;
+		const isWorktree = sessionState.gitState.isWorktree === true;
+		if (!isWorktree || !mainRoot) return;
+		setHerdrCwd(mainRoot);
+	});
+}
+
 function startExtensions(
 	pi: ExtensionAPI,
 	dependencies: ExtensionDependencies,
@@ -191,6 +203,10 @@ function startExtensions(
 		sessionState: extensionState.sessionState,
 		herdrClient: moduleDependencies.herdrClient,
 	});
+	registerHerdrCwdReset(
+		extensionState.eventHandler,
+		extensionState.sessionState,
+	);
 	void root.publisher.publishPiToolRegistrationsBecameAvailable({ pi });
 }
 

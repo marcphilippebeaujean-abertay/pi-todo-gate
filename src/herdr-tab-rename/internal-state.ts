@@ -43,7 +43,7 @@ export interface ClaimWorkerHandle {
 export type WorkerProcess = PiWorkerProcess;
 export type WorkerSpawner = PiWorkerSpawner;
 
-export type { CwdReference, HerdrClient } from "../shared/herdr-client.ts";
+export type { HerdrClient } from "../shared/herdr-client.ts";
 export type StartBackgroundWorker = (
 	request: ClaimWorkerRequest,
 ) => ClaimWorkerHandle;
@@ -57,7 +57,7 @@ export interface HerdrTabRenameModuleSetupOptions {
 
 export interface HerdrTabRenameOptions {
 	herdrClient?: HerdrClient;
-	cwd?: string;
+	sessionState?: SessionState;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
 	shouldActivate?: (ctx: ExtensionContext) => boolean;

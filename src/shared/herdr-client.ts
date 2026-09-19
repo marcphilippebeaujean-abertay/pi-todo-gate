@@ -10,10 +10,6 @@ export const HERDR_TAB_ID = "HERDR_TAB_ID";
 export const HERDR_PANE_ID = "HERDR_PANE_ID";
 const TAB_GET_COMMAND = ["tab", "get"] as const;
 
-export interface CwdReference {
-	current: string;
-}
-
 export type HerdrClient = (command: string, args: string[]) => string;
 
 export function isInsideHerdr(): boolean {
@@ -23,6 +19,14 @@ export function isInsideHerdr(): boolean {
 export function currentPaneId(): string | undefined {
 	const paneId = process.env[HERDR_PANE_ID]?.trim();
 	return paneId || undefined;
+}
+
+export function setHerdrCwd(
+	cwd: string,
+	changeDirectory?: (path: string) => void,
+): void {
+	const updateDirectory = changeDirectory ?? process.chdir;
+	updateDirectory(cwd);
 }
 
 function jsonResult<T>(output: string): T | undefined {
@@ -57,17 +61,12 @@ export function runHerdrCommand(
 }
 
 export function boundHerdrClient(
-	cwd: string | (() => string) | CwdReference,
+	cwd: string | (() => string),
 	execute?: typeof runHerdrCommand,
 ): HerdrClient {
 	const run = execute ?? runHerdrCommand;
 	return (command, args) => {
-		const currentCwd =
-			typeof cwd === "function"
-				? cwd()
-				: typeof cwd === "string"
-					? cwd
-					: cwd.current;
+		const currentCwd = typeof cwd === "function" ? cwd() : cwd;
 		return run(currentCwd, command, args);
 	};
 }
