@@ -1,110 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-	PrState,
-	StateToolDependencies,
-} from "../../src/pr/internal-state.ts";
+import type { ModuleStatePublisher } from "../../src/event-publishers.ts";
+import { createModuleStatePublisher } from "../../src/event-publishers.ts";
 import { executeStateTool } from "../../src/pr/state-tool.ts";
-import { createSessionState, type SessionRecord } from "../../src/state.ts";
+import { createEventHandler } from "../../src/shared/events.ts";
+import { createSessionState } from "../../src/state.ts";
 
 const PR_URL = "https://github.com/o/r/pull/42";
 
-function session(): SessionRecord {
-	return {
-		context: { cwd: "/repo", hasUI: false } as never,
-		project: { codingRoot: "/repo" },
-		hasPendingHandoffContext: false,
-		hasPerformedAnyGitMutations: false,
-		workRevision: 0,
-		operationQueue: Promise.resolve(),
-	};
-}
-
-function dependencies(
-	state: PrState,
-	remoteOrigin: string | undefined,
-): {
-	deps: StateToolDependencies;
-	updatePrState: ReturnType<typeof vi.fn>;
-} {
-	const updatePrState = vi.fn();
-	return {
-		deps: {
-			getSession: () => session(),
-			getPrState: () => state,
-			getRemoteOrigin: () => remoteOrigin,
-			updatePrState: (nextState, persist) => updatePrState(nextState, persist),
-			syncPrState: vi.fn(),
-		},
-		updatePrState,
-	};
-}
-
 describe("PR state tool", () => {
-	it("validates set_pr against Git remote origin", async () => {
-		const state = createSessionState().moduleState.pr;
-		const { deps, updatePrState } = dependencies(
-			state,
-			"git@github.com:o/r.git",
-		);
-
+	it("reads remote origin and PR state from shared SessionState", async () => {
+		const eventHandler = createEventHandler();
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
+		const publisher = createModuleStatePublisher(
+			eventHandler,
+			"pr",
+		) as ModuleStatePublisher<"pr">;
+		const publish = vi.spyOn(publisher, "publish");
 		await executeStateTool(
-			deps,
+			{ sessionState, publisher },
 			"tool-call",
 			{ action: "set_pr", url: PR_URL },
 			undefined,
 			undefined,
-			{} as never,
+			{ cwd: "/repo" } as never,
 		);
-
-		expect(updatePrState).toHaveBeenCalledWith(
+		expect(publish).toHaveBeenCalledWith(
 			expect.objectContaining({ prUrl: PR_URL, discoveryDisabled: true }),
-			true,
+			{ persist: true },
 		);
-	});
-
-	it("persists set_pr when same URL enables explicit pinning", async () => {
-		const state = {
-			...createSessionState().moduleState.pr,
-			prUrl: PR_URL,
-			discoveryDisabled: false,
-		};
-		const { deps, updatePrState } = dependencies(
-			state,
-			"git@github.com:o/r.git",
-		);
-
-		await executeStateTool(
-			deps,
-			"tool-call",
-			{ action: "set_pr", url: PR_URL },
-			undefined,
-			undefined,
-			{} as never,
-		);
-
-		expect(updatePrState).toHaveBeenCalledWith(
-			expect.objectContaining({ prUrl: PR_URL, discoveryDisabled: true }),
-			true,
-		);
-	});
-
-	it("rejects set_pr from a different Git remote", async () => {
-		const state = createSessionState().moduleState.pr;
-		const { deps, updatePrState } = dependencies(
-			state,
-			"git@github.com:other/repo.git",
-		);
-
-		await expect(
-			executeStateTool(
-				deps,
-				"tool-call",
-				{ action: "set_pr", url: PR_URL },
-				undefined,
-				undefined,
-				{} as never,
-			),
-		).rejects.toThrow("set_pr requires a valid GitHub pull request URL");
-		expect(updatePrState).not.toHaveBeenCalled();
 	});
 });

@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { ModuleStatePublisher } from "../event-publishers.ts";
 import type { Exec } from "../shared/command.ts";
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
@@ -22,15 +23,8 @@ export type StateToolParams =
 	| { action: "clear_all"; url?: string };
 
 export interface StateToolDependencies {
-	getSession: () => PrSession | null;
-	getPrState: () => PrState;
-	getRemoteOrigin: () => string | undefined;
-	updatePrState: (state: PrState, persist: boolean) => Promise<void> | void;
-	syncPrState?: (session: PrSession) => Promise<void> | void;
-}
-
-export interface PrModuleDependencies {
-	exec?: Exec;
+	sessionState: SessionState;
+	publisher: ModuleStatePublisher<"pr">;
 }
 
 export interface PrModuleOptions {
@@ -38,8 +32,6 @@ export interface PrModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	exec?: Exec;
-	/** @deprecated pass exec directly. */
-	dependencies?: PrModuleDependencies;
 }
 
 export interface OpenPrInfo {
@@ -47,18 +39,6 @@ export interface OpenPrInfo {
 	state: "OPEN" | "CLOSED" | "MERGED" | "UNKNOWN";
 }
 export interface MergedPr extends MergedPrState {}
-export interface PrSessionIdentity {
-	workRevision: number;
-	prUrl: string | undefined;
-	discoveryDisabled: boolean;
-	sessionId: string;
-}
-
-export interface OriginRequest {
-	sessionId: string | null;
-	session?: PrSession;
-	identity?: PrSessionIdentity;
-}
 
 export interface ParsedMerge {
 	kind: "git" | "gh";

@@ -60,6 +60,12 @@ const FUNCTION_TYPE = "function";
 
 type Root = RootComposition;
 
+function projectHasRemoteOrigin(
+	projectInfo: Awaited<ReturnType<typeof inspectProject>>,
+): boolean {
+	return projectInfo.remoteOrigin !== null;
+}
+
 export interface StateUpdateEpoch {
 	value: number;
 }
@@ -154,14 +160,26 @@ async function resolveSessionCapabilities(
 	const project = await resolveConfiguredProject(root, ctx.cwd);
 	const isCurrentAfterTodoist = isCurrentSession(root, sessionId);
 	if (!isCurrentAfterTodoist) return null;
-	const projectInfo = await inspectProject(
-		root.dependencies.exec ?? spawnExec,
-		ctx.cwd,
-	);
+	const exec = root.dependencies.exec ?? spawnExec;
+	let projectInfo = await inspectProject(exec, ctx.cwd);
+	let originAttempts = 1;
+	while (!projectHasRemoteOrigin(projectInfo) && originAttempts < 3) {
+		const retry = await inspectProject(exec, ctx.cwd);
+		if (projectHasRemoteOrigin(retry)) projectInfo = retry;
+		originAttempts += 1;
+	}
 	const isCurrentAfterGit = isCurrentSession(root, sessionId);
 	if (!isCurrentAfterGit) return null;
-	const isGitProject =
-		projectInfo.root !== null || projectInfo.remoteOrigin !== null;
+	const hasProjectRoot = projectInfo.root !== null;
+	const hasRemoteOrigin = projectHasRemoteOrigin(projectInfo);
+	const isGitProject = hasProjectRoot || hasRemoteOrigin;
+	const resolvedGitState = root.sessionState.gitState;
+	resolvedGitState.isWorktree = projectInfo.isWorktree;
+	resolvedGitState.branch = projectInfo.branch;
+	resolvedGitState.worktreeRoot = projectInfo.root;
+	resolvedGitState.mainRoot = projectInfo.mainRoot;
+	if (projectInfo.remoteOrigin !== null)
+		resolvedGitState.remoteOrigin = projectInfo.remoteOrigin;
 	const sessionProject: SessionProject = project ?? {
 		codingRoot: ctx.cwd,
 		triggersOnlyOnWorktree: true,
@@ -183,6 +201,7 @@ async function activateConfigured(
 	session: SessionRecord;
 	branch: readonly unknown[];
 	hasPendingHandoffContext: boolean;
+	hasResolvedRemoteOrigin: boolean;
 } | null> {
 	const branch = ctx.sessionManager.getBranch();
 	const persisted = latestPersistedSessionState(branch);
@@ -199,11 +218,18 @@ async function activateConfigured(
 	);
 	if (!isCurrentSession(root, sessionId)) return null;
 	const state = inherited.state;
+	const resolvedRemoteOrigin = root.sessionState.gitState.remoteOrigin;
+	const hasResolvedRemoteOrigin =
+		resolvedRemoteOrigin !== undefined &&
+		resolvedRemoteOrigin !== state.gitState.remoteOrigin;
 	root.sessionState.session = {
 		...state.session,
 		activeSessionId: ctx.sessionManager.getSessionId(),
 	};
-	root.sessionState.gitState = state.gitState;
+	root.sessionState.gitState = {
+		...state.gitState,
+		...root.sessionState.gitState,
+	};
 	root.sessionState.moduleState = state.moduleState;
 	const hasPendingHandoffContext = inherited.hasPendingHandoffContext;
 	const session: SessionRecord = {
@@ -224,7 +250,25 @@ async function activateConfigured(
 		sessionId,
 	});
 	if (!isCurrentSession(root, sessionId)) return null;
-	return { session, branch, hasPendingHandoffContext };
+	return {
+		session,
+		branch,
+		hasPendingHandoffContext,
+		hasResolvedRemoteOrigin,
+	};
+}
+
+async function persistResolvedRemoteOrigin(
+	root: Root,
+	activated: {
+		hasPendingHandoffContext: boolean;
+		hasResolvedRemoteOrigin: boolean;
+	},
+): Promise<void> {
+	const shouldPersist =
+		activated.hasResolvedRemoteOrigin && !activated.hasPendingHandoffContext;
+	if (!shouldPersist) return;
+	await root.persistSessionState(root.sessionState);
 }
 
 async function persistInheritedState(
@@ -272,9 +316,14 @@ export async function handleSessionStart(
 		capabilities,
 	);
 	if (activated === null || !isCurrentSession(root, sessionId)) return;
-	const { branch, hasPendingHandoffContext } = activated;
+	const { branch, hasPendingHandoffContext, hasResolvedRemoteOrigin } =
+		activated;
 	const gitProject = capabilities.isGitProject === true;
 	await root.stateUpdatesDrained();
+	await persistResolvedRemoteOrigin(root, {
+		hasPendingHandoffContext,
+		hasResolvedRemoteOrigin,
+	});
 	if (!isCurrentSession(root, sessionId)) return;
 	const inheritedStateReady = await persistInheritedState(
 		root,
@@ -448,7 +497,11 @@ export function registerExtensionEventConsumers(root: Root): void {
 	root.pi.on(
 		C.event.toolResult,
 		(event: ToolResultEvent, context: ExtensionContext) =>
-			root.eventHandler.toolResultEvent.emit({ event, context }),
+			root.eventHandler.toolResultEvent.emit({
+				event,
+				context,
+				session: root.session ?? undefined,
+			}),
 	);
 	root.pi.on(C.event.sessionShutdown, handleSessionShutdown.bind(null, root));
 }

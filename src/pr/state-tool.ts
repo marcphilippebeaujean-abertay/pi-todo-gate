@@ -9,7 +9,6 @@ import { Type } from "typebox";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import { extensionResult } from "../shared/extension-message.ts";
 import type {
-	PrSession,
 	PrState,
 	StateToolDependencies,
 	StateToolParams,
@@ -22,58 +21,46 @@ export const stateParameters = Type.Object({
 });
 
 function statusAction(
-	session: PrSession,
 	state: PrState,
+	ctx: ExtensionContext,
 ): AgentToolResult<undefined> {
 	return extensionResult(
 		JSON.stringify({
 			...state,
-			codingRoot: session.project.codingRoot,
+			codingRoot: ctx.cwd,
 		}),
 	);
 }
 
 async function setPrAction(
 	dependencies: StateToolDependencies,
-	session: PrSession,
 	params: StateToolParams,
 ): Promise<AgentToolResult<undefined>> {
-	const currentState = dependencies.getPrState();
+	const state = dependencies.sessionState;
+	const current = state.moduleState.pr;
 	const url = githubPrUrl(
 		params.url ?? "",
-		dependencies.getRemoteOrigin() ?? null,
+		state.gitState.remoteOrigin ?? null,
 	);
 	if (url === null) throw new Error(C.message.invalidPr);
-	const nextDiscoveryDisabled = true;
-	const prChanged = currentState.prUrl !== url;
-	const discoveryFlagChanged =
-		currentState.discoveryDisabled !== nextDiscoveryDisabled;
 	const nextState: PrState = {
-		...currentState,
+		...current,
 		prUrl: url,
-		discoveryDisabled: nextDiscoveryDisabled,
+		discoveryDisabled: true,
 	};
-	await dependencies.updatePrState(
-		nextState,
-		prChanged || discoveryFlagChanged,
-	);
-	await dependencies.syncPrState?.(session);
+	await dependencies.publisher.publish(nextState, { persist: true });
 	return extensionResult(`Pinned PR ${url}`);
 }
 
 async function clearPrState(
 	dependencies: StateToolDependencies,
-	session: PrSession,
 	message: string,
 ): Promise<AgentToolResult<undefined>> {
-	const currentState = dependencies.getPrState();
-	const nextState: PrState = {
-		...currentState,
-		prUrl: undefined,
-		discoveryDisabled: true,
-	};
-	await dependencies.updatePrState(nextState, true);
-	await dependencies.syncPrState?.(session);
+	const current = dependencies.sessionState.moduleState.pr;
+	await dependencies.publisher.publish(
+		{ ...current, prUrl: undefined, discoveryDisabled: true },
+		{ persist: true },
+	);
 	return extensionResult(message);
 }
 
@@ -83,20 +70,19 @@ export async function executeStateTool(
 	params: StateToolParams,
 	_signal: AbortSignal | undefined,
 	_onUpdate: AgentToolUpdateCallback<undefined> | undefined,
-	_ctx: ExtensionContext,
+	ctx: ExtensionContext,
 ): Promise<AgentToolResult<undefined>> {
-	const session = dependencies.getSession?.();
-	const hasSession = session !== undefined && session !== null;
-	if (!hasSession) throw new Error(C.message.inactive);
+	if (dependencies.sessionState.session.activeSessionId === null)
+		throw new Error(C.message.inactive);
 	switch (params.action) {
 		case C.action.status:
-			return statusAction(session, dependencies.getPrState());
+			return statusAction(dependencies.sessionState.moduleState.pr, ctx);
 		case C.action.setPr:
-			return await setPrAction(dependencies, session, params);
+			return await setPrAction(dependencies, params);
 		case C.action.clearPr:
-			return await clearPrState(dependencies, session, C.message.prCleared);
+			return await clearPrState(dependencies, C.message.prCleared);
 		default:
-			return await clearPrState(dependencies, session, C.message.stateCleared);
+			return await clearPrState(dependencies, C.message.stateCleared);
 	}
 }
 

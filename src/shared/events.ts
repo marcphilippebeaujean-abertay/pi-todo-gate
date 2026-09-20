@@ -144,7 +144,11 @@ export interface EventHandler {
 	moduleStateChangedEvent: Event<ModuleStateChangedEvent>;
 	actionLoadingEvent: Event<ActionLoadingEvent>;
 	sessionStateChangedEvent: Event<SessionStateChangedEvent>;
-	toolResultEvent: Event<{ event: ToolResultEvent; context: ExtensionContext }>;
+	toolResultEvent: Event<{
+		event: ToolResultEvent;
+		context: ExtensionContext;
+		session?: SessionRecord;
+	}>;
 	sessionResetEvent: Event<SessionResetEvent>;
 	sessionActivatedEvent: Event<SessionActivatedEvent>;
 	sessionDeactivatedEvent: Event<SessionDeactivatedEvent>;
@@ -186,6 +190,7 @@ export function createSharedEvents(): EventHandler {
 		toolResultEvent: event<{
 			event: ToolResultEvent;
 			context: ExtensionContext;
+			session?: SessionRecord;
 		}>(),
 		sessionResetEvent: event<SessionResetEvent>(),
 		sessionActivatedEvent: event<SessionActivatedEvent>(),
