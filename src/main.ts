@@ -206,6 +206,7 @@ async function resolveConfiguredSessionProject(
 	if (resolved === null) return null;
 	return {
 		codingRoot: resolved.codingRoot,
+		todoistProjectRef: resolved.todoistProjectRef,
 		triggersOnlyOnWorktree: resolved.triggersOnlyOnWorktree,
 	};
 }

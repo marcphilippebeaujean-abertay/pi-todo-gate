@@ -149,34 +149,23 @@ class TodoistModuleImpl implements TodoistModule {
 		session: import("../shared/session-state.ts").SessionRecord,
 		sessionId: string,
 	): Promise<void> {
-		const hasPendingProject = this.pendingProjects.has(session.context.cwd);
-		const resolved = hasPendingProject
-			? (this.pendingProjects.get(session.context.cwd) ?? null)
-			: await this.resolveTodoistProject(session.context.cwd);
-		this.pendingProjects.delete(session.context.cwd);
 		const activeSessionId = this.options.sessionState.session.activeSessionId;
 		const hasCurrentSessionId = activeSessionId === sessionId;
 		const isCurrentSession = hasCurrentSessionId;
-		const canActivate = this.canActivateSession(
-			session,
-			resolved,
-			isCurrentSession,
-		);
+		const canActivate = this.canActivateSession(session, isCurrentSession);
 		if (!canActivate) return;
-		if (resolved === null) return;
 		this.resetTaskClaim();
 		this.currentSession = session;
-		this.currentProjectRef = resolved.todoistProjectRef;
+		this.currentProjectRef = session.project.todoistProjectRef ?? "";
 		await this.syncSessionState(session);
 	}
 
 	private canActivateSession(
 		session: TodoistSession,
-		resolved: ResolvedProject | null,
 		isCurrentSession: boolean,
 	): boolean {
-		const hasResolvedProject = resolved !== null;
-		if (!hasResolvedProject) return false;
+		const hasProjectRef = session.project.todoistProjectRef !== undefined;
+		if (!hasProjectRef) return false;
 		const isTodoistProject = session.project?.isTodoistProject !== false;
 		if (!isTodoistProject) return false;
 		return isCurrentSession;
@@ -191,7 +180,12 @@ class TodoistModuleImpl implements TodoistModule {
 		const isCurrentSession = hasCurrentSession && hasCurrentSessionId;
 		if (!isCurrentSession) return;
 		await this.publishState.publish(
-			this.options.sessionState.moduleState.todoist,
+			{
+				...this.options.sessionState.moduleState.todoist,
+				todoistProjectRef:
+					session.project?.todoistProjectRef ??
+					this.options.sessionState.moduleState.todoist.todoistProjectRef,
+			},
 			{ persist: false },
 		);
 	}

@@ -129,10 +129,12 @@ describe("Todoist module ownership", () => {
 		const newContext = { cwd: "/new" } as never;
 		const oldSession = {
 			context: oldContext,
+			project: { codingRoot: "/old", todoistProjectRef: "project" },
 			sessionId: "old",
 		} as unknown as TodoistSession;
 		const newSession = {
 			context: newContext,
+			project: { codingRoot: "/new", todoistProjectRef: "project" },
 			sessionId: "new",
 		} as unknown as TodoistSession;
 		sessionState.session.activeSessionId = "old";
@@ -190,10 +192,12 @@ describe("Todoist module ownership", () => {
 		const newContext = { cwd: "/new", hasUI: false } as never;
 		const oldSession = {
 			context: oldContext,
+			project: { codingRoot: "/old", todoistProjectRef: "project" },
 			sessionId: "old",
 		} as unknown as TodoistSession;
 		const newSession = {
 			context: newContext,
+			project: { codingRoot: "/new", todoistProjectRef: "project" },
 			sessionId: "new",
 		} as unknown as TodoistSession;
 		sessionState.session.activeSessionId = "old";
@@ -232,10 +236,12 @@ describe("Todoist module ownership", () => {
 		const newContext = { cwd: "/new", hasUI: false } as never;
 		const oldSession = {
 			context: oldContext,
+			project: { codingRoot: "/old", todoistProjectRef: "project" },
 			sessionId: "old",
 		} as unknown as TodoistSession;
 		const newSession = {
 			context: newContext,
+			project: { codingRoot: "/new", todoistProjectRef: "project" },
 			sessionId: "new",
 		} as unknown as TodoistSession;
 		sessionState.session.activeSessionId = "old";
@@ -298,7 +304,7 @@ describe("Todoist module ownership", () => {
 		sessionState.session.activeSessionId = "session";
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
@@ -357,7 +363,11 @@ describe("Todoist module ownership", () => {
 		sessionState.session.activeSessionId = "session";
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo", triggersOnlyOnWorktree: true },
+			project: {
+				codingRoot: "/repo",
+				todoistProjectRef: "project",
+				triggersOnlyOnWorktree: true,
+			},
 			hasPendingHandoffContext: false,
 			hasPerformedAnyGitMutations: false,
 			workRevision: 0,
@@ -396,6 +406,43 @@ describe("Todoist module ownership", () => {
 });
 
 describe("Todoist module projection", () => {
+	it("publishes resolved project reference from session capability", async () => {
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const sessionState = createSessionState();
+		sessionState.session.activeSessionId = "session";
+		createTodoistModuleFactory({
+			eventHandler: events,
+			sessionState,
+		});
+		const session = {
+			context: { cwd: "/repo", hasUI: false },
+			project: {
+				codingRoot: "/repo",
+				isTodoistProject: true,
+				todoistProjectRef: "Pi Extensions",
+			},
+		} as unknown as TodoistSession;
+
+		await events.sessionActivatedEvent.emit({
+			context: session.context,
+			sessionId: "session",
+			session,
+		});
+
+		expect(updates).toContainEqual(
+			expect.objectContaining({
+				moduleId: "todoist",
+				moduleState: expect.objectContaining({
+					todoistProjectRef: "Pi Extensions",
+				}),
+			}),
+		);
+	});
+
 	it("publishes task state under Todoist ownership", async () => {
 		const events = createSharedEvents();
 		const updates: unknown[] = [];
@@ -455,7 +502,7 @@ describe("Todoist module integration", () => {
 				hasUI: true,
 				ui: { confirm, notify: vi.fn() },
 			},
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			workRevision: 0,
 			sessionId: "session",
 			operationQueue: Promise.resolve(),
@@ -495,7 +542,7 @@ describe("Todoist module integration", () => {
 		});
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			workRevision: 0,
 			sessionId: "session",
 			operationQueue: Promise.resolve(),
@@ -540,7 +587,7 @@ describe("Todoist module integration", () => {
 				hasUI: true,
 				ui: { confirm: vi.fn(async () => true), notify: vi.fn() },
 			},
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			workRevision: 0,
 			sessionId: "session",
 			operationQueue: Promise.resolve(),
@@ -571,7 +618,7 @@ describe("Todoist task identity", () => {
 		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
 		const session = {
 			context: { cwd: "/repo", hasUI: false },
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			workRevision: 0,
 			sessionId: "session",
 			operationQueue: Promise.resolve(),
@@ -628,7 +675,7 @@ describe("Todoist task identity", () => {
 		sessionState.session.activeSessionId = "session";
 		const session = {
 			context: { cwd: "/repo" },
-			project: { codingRoot: "/repo" },
+			project: { codingRoot: "/repo", todoistProjectRef: "project" },
 			sessionId: "session",
 			workRevision: 0,
 		} as unknown as TodoistSession;

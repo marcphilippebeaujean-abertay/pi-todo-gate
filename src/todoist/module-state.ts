@@ -5,6 +5,7 @@ import type {
 } from "../shared/session-state.ts";
 
 export interface TodoistModuleState {
+	todoistProjectRef?: string;
 	taskRef?: string;
 	taskName?: string;
 	taskDescription?: string;
@@ -17,6 +18,7 @@ function restoreTodoistState(value: unknown): TodoistModuleState {
 	const isInvalidRecord = !isRecord(value);
 	if (isInvalidRecord) return {};
 	const keys = [
+		"todoistProjectRef",
 		"taskRef",
 		"taskName",
 		"taskDescription",
