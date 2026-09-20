@@ -142,7 +142,7 @@ describe("review command", () => {
 		const fixture = setup();
 		await fixture.handler("", context());
 
-		expect(fixture.sleep).toHaveBeenCalledWith(5000);
+		expect(fixture.sleep).toHaveBeenCalledWith(3000);
 	});
 
 	it("falls back to command context directory without a worktree", async () => {
