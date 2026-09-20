@@ -20,7 +20,6 @@ import {
 	NO_FOCUS_FLAG,
 	PANE_MOVE_ARGS,
 	SESSION_SHUTDOWN_EVENT,
-	SESSION_START_EVENT,
 	TAB_CLAIM_ACTION_FAILED,
 	TAB_CLAIM_FAILED,
 	TAB_CLAIM_INSTRUCTIONS,
@@ -90,9 +89,6 @@ class HerdrTabRenameConsumer {
 	private readonly eventHandler: HerdrTabRenameOptions["eventHandler"];
 	private readonly sessionState: HerdrTabRenameOptions["sessionState"];
 	private readonly workers = new Set<ClaimWorkerHandle>();
-	private initialLabel: string | undefined;
-	private tabId: string | undefined;
-	private paneId: string | undefined;
 
 	constructor(pi: ExtensionAPI, options: HerdrTabRenameOptions) {
 		this.herdrClient = options.herdrClient ?? boundHerdrClient(process.cwd());
@@ -104,24 +100,26 @@ class HerdrTabRenameConsumer {
 				? (cwd, request) =>
 						defaultStartWorker(cwd, options.spawnWorker, request)
 				: (_cwd, request) => startBackgroundWorker(request);
-		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
 		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
 	}
 
-	private sessionStart(_event: unknown, _ctx: ExtensionContext): void {
-		this.initialLabel = undefined;
-		this.tabId = undefined;
-		this.paneId = undefined;
-		const isAvailable = isInsideHerdr();
-		if (!isAvailable) return;
-		this.tabId = process.env.HERDR_TAB_ID;
-		this.paneId = process.env.HERDR_PANE_ID;
+	private validationInputs(): {
+		initialLabel: string | undefined;
+		tabId: string | undefined;
+		paneId: string | undefined;
+	} {
+		let initialLabel: string | undefined;
 		try {
-			this.initialLabel = tabLabel(this.herdrClient);
+			initialLabel = tabLabel(this.herdrClient);
 		} catch {
-			this.initialLabel = undefined;
+			initialLabel = undefined;
 		}
+		return {
+			initialLabel,
+			tabId: process.env.HERDR_TAB_ID,
+			paneId: process.env.HERDR_PANE_ID,
+		};
 	}
 
 	private beforeAgentStart(
@@ -135,13 +133,14 @@ class HerdrTabRenameConsumer {
 		const shouldSkip = isUnavailable || hasStoredClaim;
 		if (shouldSkip) return;
 		const events = createHerdrEvents();
+		const validationInputs = this.validationInputs();
 		let worker: ClaimWorkerHandle | undefined;
 		const releaseWorker = (): void => {
 			if (worker !== undefined) this.workers.delete(worker);
 		};
 		events.claimCompletedEvent.subscribe((result) => {
 			releaseWorker();
-			return this.completeClaim(result);
+			return this.completeClaim(result, validationInputs);
 		});
 		events.claimFailedEvent.subscribe((failure) => {
 			releaseWorker();
@@ -165,13 +164,20 @@ class HerdrTabRenameConsumer {
 		}
 	}
 
-	private async completeClaim(event: ClaimCompletedEvent): Promise<void> {
+	private async completeClaim(
+		event: ClaimCompletedEvent,
+		validationInputs: {
+			initialLabel: string | undefined;
+			tabId: string | undefined;
+			paneId: string | undefined;
+		},
+	): Promise<void> {
 		try {
 			try {
 				applyClaimResponse(
 					this.herdrClient,
-					this.tabId,
-					this.paneId,
+					validationInputs.tabId,
+					validationInputs.paneId,
 					event.result,
 				);
 			} catch (error) {
@@ -184,8 +190,8 @@ class HerdrTabRenameConsumer {
 			}
 			const isValidated = hasValidatedTabClaim(
 				this.herdrClient,
-				this.initialLabel,
-				this.paneId,
+				validationInputs.initialLabel,
+				validationInputs.paneId,
 				event.result,
 			);
 			if (!isValidated) {
@@ -219,9 +225,6 @@ class HerdrTabRenameConsumer {
 	private sessionShutdown(): void {
 		for (const worker of this.workers) worker.cancel();
 		this.workers.clear();
-		this.initialLabel = undefined;
-		this.tabId = undefined;
-		this.paneId = undefined;
 	}
 }
 
