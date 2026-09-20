@@ -68,10 +68,6 @@ export async function currentWorktreeState(
 	}
 }
 
-function errorDetail(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function failureMessage(
 	result: { stderr: string; code: number },
 	fallback: string,
@@ -149,17 +145,6 @@ export async function cleanupWorktree(
 	force: boolean,
 	options: CleanupOptions,
 ): Promise<ExitActionResult> {
-	try {
-		const directoryChange = await runCleanupMutation(
-			options,
-			() => options.changeDirectory(worktree.mainRoot),
-			CLEANUP_SKIPPED_SESSION_CHANGE,
-		);
-		const wasDirectoryChangeSkipped = !directoryChange.started;
-		if (wasDirectoryChangeSkipped) return FAILED;
-	} catch (error) {
-		return cleanupFailure(options, errorDetail(error));
-	}
 	const removeArgs: string[] = [...REMOVE_ARGS];
 	const shouldForce = force;
 	if (shouldForce) removeArgs.push(FORCE_ARG);

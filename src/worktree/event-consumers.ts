@@ -34,7 +34,6 @@ class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
-	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private baseline: WorktreeBaseline | null = null;
 	private uncommittedChanges = false;
@@ -46,8 +45,6 @@ class Worktree implements WorktreeConsumer {
 		this.sessionState = options.sessionState;
 		const dependencies = options.dependencies ?? {};
 		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
-		this.changeDirectory =
-			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
@@ -273,7 +270,6 @@ class Worktree implements WorktreeConsumer {
 		const cleanupState = { value: false };
 		const result = await cleanupWorktree(worktree, force, {
 			exec: this.exec,
-			changeDirectory: this.changeDirectory,
 			notify: notifyWorktree.bind(null, context),
 			worktreeRemoved: cleanupState,
 			isCurrent: () =>
