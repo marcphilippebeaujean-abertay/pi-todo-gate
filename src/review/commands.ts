@@ -24,6 +24,7 @@ import {
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME_PREFIX,
 	REVIEW_AGENT_NO_EXTENSIONS,
+	REVIEW_AGENT_WAIT_TIMEOUT,
 	REVIEW_COMMAND,
 	REVIEW_DESCRIPTION,
 	REVIEW_FAILED,
@@ -39,6 +40,7 @@ import {
 	SPLIT,
 	START,
 	TIMEOUT_FLAG,
+	WAIT,
 	WAIT_OUTPUT,
 	WARNING,
 } from "./constants.ts";
@@ -103,6 +105,34 @@ function waitForPaneShell(
 	]);
 }
 
+function startReviewAgent(
+	herdrClient: NonNullable<ReviewCommandDependencies["herdrClient"]>,
+	agentName: string,
+	paneId: string,
+): void {
+	try {
+		herdrClient(HERDR_COMMAND, [
+			AGENT,
+			START,
+			agentName,
+			KIND_FLAG,
+			REVIEW_AGENT_KIND,
+			PANE_FLAG,
+			paneId,
+			ARGUMENT_SEPARATOR,
+			REVIEW_AGENT_NO_EXTENSIONS,
+		]);
+	} catch {
+		herdrClient(HERDR_COMMAND, [
+			AGENT,
+			WAIT,
+			agentName,
+			TIMEOUT_FLAG,
+			REVIEW_AGENT_WAIT_TIMEOUT,
+		]);
+	}
+}
+
 function openReviewPane(
 	client: ReviewCommandDependencies["herdrClient"],
 	prUrl: string,
@@ -125,17 +155,7 @@ function openReviewPane(
 	const paneId = paneIdFrom(splitOutput);
 	waitForPaneShell(herdrClient, paneId);
 	const agentName = reviewAgentName();
-	herdrClient(HERDR_COMMAND, [
-		AGENT,
-		START,
-		agentName,
-		KIND_FLAG,
-		REVIEW_AGENT_KIND,
-		PANE_FLAG,
-		paneId,
-		ARGUMENT_SEPARATOR,
-		REVIEW_AGENT_NO_EXTENSIONS,
-	]);
+	startReviewAgent(herdrClient, agentName, paneId);
 	herdrClient(HERDR_COMMAND, [
 		AGENT,
 		PROMPT,

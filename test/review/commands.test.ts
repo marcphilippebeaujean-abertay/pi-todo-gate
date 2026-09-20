@@ -18,7 +18,7 @@ function context(): ExtensionCommandContext {
 	} as unknown as ExtensionCommandContext;
 }
 
-function setup(): {
+function setup(failAgentStart = false): {
 	dependencies: ReviewCommandDependencies;
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 	calls: Array<{ command: string; args: string[] }>;
@@ -31,6 +31,8 @@ function setup(): {
 	const calls: Array<{ command: string; args: string[] }> = [];
 	const herdrClient = vi.fn((command: string, args: string[]) => {
 		calls.push({ command, args });
+		if (failAgentStart && args[0] === "agent" && args[1] === "start")
+			throw new Error("agent_not_ready");
 		if (args[0] === "pane" && args[1] === "split")
 			return JSON.stringify({ result: { pane: { pane_id: "w1:p2" } } });
 		return "{}";
@@ -131,6 +133,27 @@ describe("review command", () => {
 				expect.stringContaining(
 					"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
 				),
+			],
+		});
+	});
+
+	it("waits for Pi after Herdr reports startup not ready", async () => {
+		const fixture = setup(true);
+		await fixture.handler("", context());
+
+		const agentName = fixture.calls[3]?.args[2];
+		expect(fixture.calls).toHaveLength(6);
+		expect(fixture.calls[4]).toEqual({
+			command: "herdr",
+			args: ["agent", "wait", agentName, "--timeout", "120000"],
+		});
+		expect(fixture.calls[5]).toEqual({
+			command: "herdr",
+			args: [
+				"agent",
+				"prompt",
+				agentName,
+				expect.stringContaining("Review PR"),
 			],
 		});
 	});
