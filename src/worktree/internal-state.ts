@@ -1,12 +1,10 @@
 import type { EventHandler } from "../shared/events.ts";
 import type { SessionState } from "../state.ts";
 
-export interface WorktreeBaseline {
+export interface WorktreeCleanupTarget {
 	worktreePath: string;
 	branch: string;
 	mainRoot: string;
-	initialHead: string;
-	initialStatus: string;
 }
 
 export interface WorktreeCurrentState {
@@ -14,18 +12,11 @@ export interface WorktreeCurrentState {
 	currentStatus: string;
 }
 
-export interface WorktreeModuleDependencies {
-	exec?: import("../shared/command.ts").Exec;
-	changeDirectory?: (path: string) => void;
-}
-
 export interface WorktreeModuleOptions {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	exec?: import("../shared/command.ts").Exec;
 	changeDirectory?: (path: string) => void;
-	/** @deprecated pass module dependencies directly. */
-	dependencies?: WorktreeModuleDependencies;
 }
 
 export interface WorktreeConsumer {
