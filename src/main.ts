@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { RootComposition } from "./event-consumer.ts";
 import {
 	registerExtensionEventConsumers,
 	registerModuleStateConsumer,
@@ -66,10 +67,6 @@ interface ExtensionState {
 	worktree: WorktreeModule | null;
 }
 
-interface CreateExtensionStateOptions {
-	lazyModules?: boolean;
-}
-
 interface ModuleSetupDependencies {
 	loadConfig?: (path?: string) => Promise<unknown>;
 	exec?: Exec;
@@ -80,12 +77,10 @@ interface ModuleSetupDependencies {
 	herdrSpawnWorker?: HerdrWorkerSpawner;
 }
 
-export function createExtensionState(
+function createExtensionStateCore(
 	pi: ExtensionAPI,
 	dependencies?: ExtensionDependencies,
-	options?: CreateExtensionStateOptions,
 ): ExtensionState {
-	const stateOptions = options ?? {};
 	const providedDependencies = dependencies ?? {};
 	const moduleDependencies: ModuleSetupDependencies = providedDependencies;
 	const eventHandler = createEventHandler();
@@ -109,42 +104,10 @@ export function createExtensionState(
 		eventHandler,
 		getSessionState: () => sessionState,
 	});
-	const worktree = stateOptions.lazyModules
-		? null
-		: new WorktreeModule({
-				eventHandler,
-				sessionState,
-				exec: moduleDependencies.exec,
-			});
-	const pr = stateOptions.lazyModules
-		? null
-		: new PrModule({
-				pi,
-				eventHandler,
-				sessionState,
-				exec: moduleDependencies.exec,
-			});
-	const todoist = stateOptions.lazyModules
-		? null
-		: new TodoistModule({
-				pi,
-				eventHandler,
-				sessionState,
-				exec: moduleDependencies.exec,
-				taskClaimWorker: moduleDependencies.taskClaimWorker,
-				taskRefreshWorker: moduleDependencies.taskRefreshWorker,
-				createTodoistClient: moduleDependencies.createTodoistClient,
-			});
-	const promptQueue = stateOptions.lazyModules
-		? null
-		: new PromptQueueModule({
-				pi,
-				eventHandler,
-				sessionState,
-				pr,
-				todoist,
-				worktree,
-			});
+	const worktree: WorktreeModule | null = null;
+	const pr: PrModule | null = null;
+	const todoist: TodoistModule | null = null;
+	const promptQueue: PromptQueueModule | null = null;
 	const extensionState = {
 		pi,
 		sessionState,
@@ -155,7 +118,7 @@ export function createExtensionState(
 		todoist,
 		worktree,
 	} as ExtensionState;
-	const root = {
+	const root: RootComposition = {
 		pi,
 		dependencies: {
 			openSession: providedDependencies.openSession,
@@ -171,7 +134,7 @@ export function createExtensionState(
 		pr,
 		todoist,
 		worktree,
-		installModules: () => undefined,
+		installModules: (_project) => undefined,
 		session: null,
 		publisher: new RootEventPublisher(eventHandler),
 		stateUpdateEpoch,
@@ -179,7 +142,78 @@ export function createExtensionState(
 		stateDescriptors,
 		persistSessionState,
 	};
+	root.installModules = (project: SessionProject) => {
+		const isGitProject = project.isGitProject === true;
+		const isTodoistProject = project.isTodoistProject === true;
+		const worktree =
+			root.worktree ??
+			(isGitProject
+				? new WorktreeModule({
+						eventHandler,
+						sessionState,
+						exec: moduleDependencies.exec,
+					})
+				: null);
+		const pr =
+			root.pr ??
+			(isGitProject
+				? new PrModule({
+						pi,
+						eventHandler,
+						sessionState,
+						exec: moduleDependencies.exec,
+					})
+				: null);
+		const todoist =
+			root.todoist ??
+			(isTodoistProject
+				? new TodoistModule({
+						pi,
+						eventHandler,
+						sessionState,
+						exec: moduleDependencies.exec,
+						taskClaimWorker: moduleDependencies.taskClaimWorker,
+						taskRefreshWorker: moduleDependencies.taskRefreshWorker,
+						createTodoistClient: moduleDependencies.createTodoistClient,
+					})
+				: null);
+		extensionState.pr = pr;
+		extensionState.todoist = todoist;
+		extensionState.worktree = worktree;
+		root.pr = pr;
+		root.todoist = todoist;
+		root.worktree = worktree;
+		if (extensionState.promptQueue === null) {
+			extensionState.promptQueue = new PromptQueueModule({
+				pi,
+				eventHandler,
+				sessionState,
+				pr,
+				todoist,
+				worktree,
+			});
+			root.promptQueue = extensionState.promptQueue;
+		}
+	};
 	return Object.assign(extensionState, { root });
+}
+
+export function createExtensionState(
+	pi: ExtensionAPI,
+	dependencies?: ExtensionDependencies,
+): ExtensionState {
+	const state = createExtensionStateCore(pi, dependencies);
+	const root = (
+		state as ExtensionState & {
+			root: Parameters<typeof registerExtensionEventConsumers>[0];
+		}
+	).root;
+	root.installModules({
+		codingRoot: "",
+		isGitProject: true,
+		isTodoistProject: true,
+	});
+	return state;
 }
 
 function todoistProjectMapping(value: unknown): TodoistProjectMapping {
@@ -228,15 +262,11 @@ function startExtensions(
 	const resolveConfiguredProject =
 		dependencies.resolveConfiguredProject ??
 		resolveConfiguredSessionProject.bind(null, moduleDependencies);
-	const extensionState = createExtensionState(
-		pi,
-		{
-			...dependencies,
-			...moduleDependencies,
-			resolveConfiguredProject,
-		},
-		{ lazyModules: true },
-	);
+	const extensionState = createExtensionStateCore(pi, {
+		...dependencies,
+		...moduleDependencies,
+		resolveConfiguredProject,
+	});
 	extensionState.eventHandler.sessionResetEvent.subscribe(() => {
 		hasCachedConfig = false;
 		cachedConfig = undefined;
@@ -255,60 +285,11 @@ function startExtensions(
 	);
 	registerExtensionEventConsumers(root);
 	let reviewRegistered = false;
+	const installModules = root.installModules;
 	root.installModules = (project: SessionProject) => {
-		const isGitProject = project.isGitProject === true;
-		const isTodoistProject = project.isTodoistProject === true;
-		const worktree =
-			root.worktree ??
-			(isGitProject
-				? new WorktreeModule({
-						eventHandler: extensionState.eventHandler,
-						sessionState: extensionState.sessionState,
-						exec: moduleDependencies.exec,
-					})
-				: null);
-		const pr =
-			root.pr ??
-			(isGitProject
-				? new PrModule({
-						pi,
-						eventHandler: extensionState.eventHandler,
-						sessionState: extensionState.sessionState,
-						exec: moduleDependencies.exec,
-					})
-				: null);
-		const todoist =
-			root.todoist ??
-			(isTodoistProject
-				? new TodoistModule({
-						pi,
-						eventHandler: extensionState.eventHandler,
-						sessionState: extensionState.sessionState,
-						exec: moduleDependencies.exec,
-						taskClaimWorker: moduleDependencies.taskClaimWorker,
-						taskRefreshWorker: moduleDependencies.taskRefreshWorker,
-						createTodoistClient: moduleDependencies.createTodoistClient,
-					})
-				: null);
-		extensionState.pr = pr;
-		extensionState.todoist = todoist;
-		extensionState.worktree = worktree;
-		root.pr = pr;
-		root.todoist = todoist;
-		root.worktree = worktree;
-		if (extensionState.promptQueue === null) {
-			extensionState.promptQueue = new PromptQueueModule({
-				pi,
-				eventHandler: extensionState.eventHandler,
-				sessionState: extensionState.sessionState,
-				pr,
-				todoist,
-				worktree,
-			});
-			root.promptQueue = extensionState.promptQueue;
-		}
+		installModules(project);
 		if (reviewRegistered) return;
-		if (!isGitProject) return;
+		if (project.isGitProject !== true) return;
 		if (!isInsideHerdr()) return;
 		reviewRegistered = true;
 		new ReviewModule({
