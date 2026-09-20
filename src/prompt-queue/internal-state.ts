@@ -28,7 +28,7 @@ type PrModule = Pick<PrModuleClass, "mergeActivePr">;
 type TodoistModule = Pick<TodoistModuleClass, "completeMergedTask">;
 type WorktreeModule = Pick<
 	WorktreeModuleClass,
-	"getWorktreeInfo" | "hasUncommittedChanges" | "removeWorktree"
+	"hasUncommittedChanges" | "removeWorktree"
 >;
 
 export interface CommandDependencies {

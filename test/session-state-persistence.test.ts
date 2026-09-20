@@ -110,10 +110,6 @@ function snapshot(): SessionState {
 		mergePromptedPrUrl: "https://github.com/o/r/pull/42",
 	};
 	state.moduleState.herdrTabRename.herdrClaimReturnedSuccessfully = "true";
-	state.moduleState.worktree = {
-		initialHead: "abc",
-		initialStatus: "",
-	};
 	state.moduleState.footer.footers[FOOTER_TASK_TYPE.id] = {
 		footerType: FOOTER_TASK_TYPE,
 		isLoading: false,

@@ -9,21 +9,29 @@ import { worktreeStateDescriptor } from "../../src/worktree/module-state.ts";
 type TestWorktreeModule = {
 	sessionStart(context: ExtensionContext, sessionId?: string): Promise<void>;
 	deactivate(): void;
-	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
 	hasUncommittedChanges(): Promise<boolean | null>;
 	removeWorktree(options: { force: boolean }): Promise<unknown>;
 };
 
 const createTestWorktreeModule = (
 	options: ConstructorParameters<typeof WorktreeModule>[0],
-): TestWorktreeModule =>
-	new WorktreeModule({
+): TestWorktreeModule => {
+	options.eventHandler.moduleStateChangedEvent.subscribe((update) => {
+		if (update.gitStatePatch !== undefined) {
+			options.sessionState.gitState = {
+				...options.sessionState.gitState,
+				...update.gitStatePatch,
+			};
+		}
+	});
+	return new WorktreeModule({
 		...options,
 		changeDirectory:
 			options.changeDirectory ??
 			options.dependencies?.changeDirectory ??
 			vi.fn(),
 	}) as unknown as TestWorktreeModule;
+};
 
 function ok(stdout: string): CommandResult {
 	return { stdout, stderr: "", code: 0 };
@@ -76,7 +84,7 @@ function context(cwd = "/repo/.worktrees/feature") {
 
 describe("worktree state", () => {
 	it("provides common session-state descriptor", () => {
-		const state = { initialHead: "abc", initialStatus: "" };
+		const state = {};
 		expect(worktreeStateDescriptor.id).toBe("worktree");
 		expect(
 			worktreeStateDescriptor.restore(worktreeStateDescriptor.serialize(state)),
@@ -250,10 +258,7 @@ describe("worktree event actions", () => {
 		releaseFirstInspection();
 		await firstStart;
 
-		expect(module.getWorktreeInfo()).toEqual({
-			worktreePath: "/repo/.worktrees/feature",
-			branch: "earlier",
-		});
+		expect(sessionState.gitState.branch).toBe("earlier");
 	});
 
 	it("publishes Git worktree state", async () => {
@@ -290,7 +295,7 @@ describe("worktree event actions", () => {
 		}> = [];
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
-		const module = createTestWorktreeModule({
+		createTestWorktreeModule({
 			eventHandler: events,
 			sessionState,
 			exec: projectResult("abc", "def", "", "", commands),
@@ -301,9 +306,9 @@ describe("worktree event actions", () => {
 			sessionId: "session",
 		});
 
-		expect(module.getWorktreeInfo()).toEqual({
-			worktreePath: "/repo/.worktrees/feature",
+		expect(sessionState.gitState).toMatchObject({
 			branch: "feature",
+			worktreeRoot: "/repo/.worktrees/feature",
 		});
 	});
 
@@ -321,9 +326,9 @@ describe("worktree event actions", () => {
 		await module.sessionStart(ctx, "new");
 		await module.sessionStart(ctx, "old");
 
-		expect(module.getWorktreeInfo()).toEqual({
-			worktreePath: "/repo/.worktrees/feature",
+		expect(sessionState.gitState).toMatchObject({
 			branch: "feature",
+			worktreeRoot: "/repo/.worktrees/feature",
 		});
 	});
 
@@ -478,7 +483,7 @@ describe("worktree event actions", () => {
 		});
 	});
 
-	it("reports blocked cleanup after a new session starts", async () => {
+	it("does not report stale-session cleanup suppression", async () => {
 		const events = createSharedEvents();
 		const notifications: unknown[] = [];
 		events.sessionNotificationEvent.subscribe((notification) => {
@@ -516,7 +521,10 @@ describe("worktree event actions", () => {
 		releaseConfirm();
 
 		expect(await cleanup).toBe("failed");
-		expect(module.getWorktreeInfo()).not.toBeNull();
+		expect(sessionState.gitState).toMatchObject({
+			branch: "feature",
+			worktreeRoot: "/repo/.worktrees/feature",
+		});
 		expect(
 			commands.filter(
 				({ args }) =>
@@ -526,11 +534,6 @@ describe("worktree event actions", () => {
 		).toEqual([]);
 		expect(changeDirectory).not.toHaveBeenCalled();
 		expect(ctx.ui.notify).not.toHaveBeenCalled();
-		expect(notifications).toEqual([
-			{
-				message: "Worktree cleanup skipped because session changed",
-				level: "warning",
-			},
-		]);
+		expect(notifications).toEqual([]);
 	});
 });

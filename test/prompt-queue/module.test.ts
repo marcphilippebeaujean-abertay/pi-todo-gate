@@ -65,6 +65,12 @@ function setup(includeModules = true) {
 	const eventHandler = createSharedEvents();
 	const sessionState = createSessionState();
 	sessionState.session.activeSessionId = sessionId;
+	sessionState.gitState = {
+		branch: "feature",
+		isWorktree: true,
+		worktreeRoot: "/repo/.worktrees/feature",
+		mainRoot: "/repo",
+	};
 	const ctx = context();
 	const currentSession = session(ctx);
 	const pr = { mergeActivePr: vi.fn(async () => true) };
@@ -72,10 +78,6 @@ function setup(includeModules = true) {
 		completeMergedTask: vi.fn(async () => "completed" as const),
 	};
 	const worktree = {
-		getWorktreeInfo: vi.fn(() => ({
-			worktreePath: "/repo/.worktrees/feature",
-			branch: "feature",
-		})),
 		hasUncommittedChanges: vi.fn(async (): Promise<boolean | null> => false),
 		removeWorktree: vi.fn(
 			async (): Promise<"completed" | "failed"> => "completed",
@@ -352,7 +354,10 @@ Worktree has uncommitted changes. Deleting it will permanently remove that work.
 
 	it("confirms Todoist completion alone when worktree is already absent", async () => {
 		const state = setup();
-		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
+		state.sessionState.gitState.isWorktree = false;
+		state.sessionState.gitState.branch = null;
+		state.sessionState.gitState.worktreeRoot = null;
+		state.sessionState.gitState.mainRoot = null;
 		state.sessionState.moduleState.todoist.taskRef = "42";
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
@@ -389,7 +394,10 @@ Mark Todoist task "42" complete?`,
 
 	it("shuts down without prompting when no exit actions remain", async () => {
 		const state = setup();
-		state.worktree.getWorktreeInfo.mockReturnValue(null as never);
+		state.sessionState.gitState.isWorktree = false;
+		state.sessionState.gitState.branch = null;
+		state.sessionState.gitState.worktreeRoot = null;
+		state.sessionState.gitState.mainRoot = null;
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",

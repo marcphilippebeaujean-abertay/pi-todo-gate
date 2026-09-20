@@ -208,6 +208,18 @@ export class PromptQueueConsumer {
 		return this.removeWorktree(context, sessionId, isQueuedCurrent, force);
 	}
 
+	private worktreeFromState(): ExitProtocolState["worktree"] {
+		if (this.worktree === null) return null;
+		const { branch, isWorktree, worktreeRoot } = this.sessionState.gitState;
+		const hasWorktree = isWorktree === true;
+		if (!hasWorktree) return null;
+		const hasBranch = typeof branch === "string";
+		if (!hasBranch) return null;
+		const hasWorktreeRoot = typeof worktreeRoot === "string";
+		if (!hasWorktreeRoot) return null;
+		return { worktreePath: worktreeRoot, branch };
+	}
+
 	private async prepareExitProtocol(
 		context: ExtensionContext,
 		sessionId: string,
@@ -220,10 +232,7 @@ export class PromptQueueConsumer {
 		);
 		const canReadStatus = context.hasUI && isCurrentBeforeStatus;
 		if (!canReadStatus) return null;
-		const hasWorktreeModule = this.worktree !== null;
-		const worktree = hasWorktreeModule
-			? (this.worktree?.getWorktreeInfo() ?? null)
-			: null;
+		const worktree = this.worktreeFromState();
 		const hasWorktree = worktree !== null;
 		const dirty = hasWorktree
 			? ((await this.worktree?.hasUncommittedChanges()) ?? null)

@@ -20,7 +20,6 @@ const pr: PrModule = {} as PrModule;
 void pr.mergeActivePr;
 
 const cleanup: WorktreeModule = {} as WorktreeModule;
-void cleanup.getWorktreeInfo;
 void cleanup.hasUncommittedChanges;
 void cleanup.removeWorktree;
 
