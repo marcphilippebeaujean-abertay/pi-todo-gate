@@ -69,7 +69,6 @@ function setup() {
 	const currentSession = session(ctx);
 	const pr = { mergeActivePr: vi.fn(async () => true) };
 	const todoist = {
-		resolveConfiguredProject: vi.fn(async () => null),
 		completeMergedTask: vi.fn(async () => "completed" as const),
 	};
 	const worktree = {
@@ -172,13 +171,16 @@ describe("Prompt Queue orchestration", () => {
 		});
 		await (state.module as { drain?: () => Promise<void> }).drain?.();
 
-		expect(state.todoist.completeMergedTask).toHaveBeenCalledWith({
-			taskRef: "42",
-			taskName: "Task",
-			prUrl: "https://github.com/o/r/pull/1",
-			workRevision: 3,
-			sessionId,
-		});
+		expect(state.todoist.completeMergedTask).toHaveBeenCalledWith(
+			{
+				taskRef: "42",
+				taskName: "Task",
+				prUrl: "https://github.com/o/r/pull/1",
+				workRevision: 3,
+				sessionId,
+			},
+			state.ctx,
+		);
 		expect(state.worktree.removeWorktree).toHaveBeenCalledWith({
 			force: false,
 		});
