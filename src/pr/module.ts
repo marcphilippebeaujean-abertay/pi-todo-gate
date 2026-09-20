@@ -1,3 +1,4 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import "./commands.ts";
 import "./constants.ts";
 import "./events.ts";
@@ -12,9 +13,9 @@ import type { PrModuleOptions } from "./internal-state.ts";
 
 export * from "./module-state.ts";
 export interface PrModule {
-	mergeActivePr(): Promise<boolean>;
+	mergeActivePr(context: ExtensionContext): Promise<boolean>;
 }
 
 export function createPrModule(options: PrModuleOptions): PrModule {
-	return new PrConsumer(options) as PrModule;
+	return new PrConsumer(options) as unknown as PrModule;
 }

@@ -57,7 +57,7 @@ async function runMerge(
 			const isCurrentBeforeCapability =
 				isCurrent() && dependencies.isCurrent(context);
 			if (!isCurrentBeforeCapability) return;
-			await pr.mergeActivePr();
+			await pr.mergeActivePr(context);
 		})
 		.catch(() => undefined);
 }
