@@ -67,7 +67,7 @@ describe("PR state-driven architecture", () => {
 			{
 				state: expect.objectContaining({
 					prUrl: PR_42,
-					discoveryDisabled: true,
+					discoveryDisabled: false,
 				}),
 				options: { persist: true },
 			},

@@ -46,7 +46,7 @@ async function setPrAction(
 	const nextState: PrState = {
 		...current,
 		prUrl: url,
-		discoveryDisabled: true,
+		discoveryDisabled: false,
 	};
 	await dependencies.publisher.publish(nextState, { persist: true });
 	return extensionResult(`Pinned PR ${url}`);

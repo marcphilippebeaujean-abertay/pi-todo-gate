@@ -27,7 +27,7 @@ describe("PR state tool", () => {
 			{ cwd: "/repo" } as never,
 		);
 		expect(publish).toHaveBeenCalledWith(
-			expect.objectContaining({ prUrl: PR_URL, discoveryDisabled: true }),
+			expect.objectContaining({ prUrl: PR_URL, discoveryDisabled: false }),
 			{ persist: true },
 		);
 	});

@@ -38,9 +38,11 @@ const BASH = "bash";
 const WARNS_ON_EVERY_PROMPT_ONLY_WHEN_NO =
 	"warns on every prompt only when no task is active";
 const WORK = "work";
-const DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES =
-	"discovers the first PR URL and ignores later URLs";
+const DISCOVERS_THE_FIRST_PR_URL_AND_REPLACES_IT_WITH_LATER_URL =
+	"discovers the first PR URL and replaces it with later URL";
 const HTTPS_GITHUB_COM_O_R_PULL_1 = "https://github.com/o/r/pull/1";
+const HTTPS_GITHUB_COM_OWNER_REPO_PULL_1 =
+	"https://github.com/owner/repo/pull/1";
 const REMOTE_ORIGIN = "https://github.com/owner/repo.git";
 const SETS_REMOTE_ORIGIN_IN_SESSION_STATE =
 	"sets the project remote origin in session state on startup";
@@ -976,7 +978,7 @@ describe("hidden lifecycle context", () => {
 		expect(second).toBeUndefined();
 	});
 
-	it(DISCOVERS_THE_FIRST_PR_URL_AND_IGNORES, async () => {
+	it(DISCOVERS_THE_FIRST_PR_URL_AND_REPLACES_IT_WITH_LATER_URL, async () => {
 		const h = harness(CONFIGURED_PROJECT);
 		const exec = vi.fn(async (command: string, args: string[]) => {
 			const key = [command, ...args].join(" ");
@@ -1016,17 +1018,41 @@ describe("hidden lifecycle context", () => {
 		expect(snapshotDataAt(h, 1).moduleState).toMatchObject({
 			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_3 },
 		});
+		await h.tools[0]?.execute(
+			CALL,
+			{ action: SET_PR, url: HTTPS_GITHUB_COM_OWNER_REPO_PULL_1 },
+			undefined,
+			undefined,
+			h.ctx,
+		);
+		expect(snapshotDataAt(h, 2).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_OWNER_REPO_PULL_1 },
+		});
 		await h.handlers.get(MESSAGE_END)?.(
 			{
 				type: MESSAGE_END,
 				message: {
 					role: ASSISTANT,
-					content: HTTPS_GITHUB_COM_O_R_PULL_3,
+					content: HTTPS_GITHUB_COM_O_R_PULL_42,
 				},
 			},
 			h.ctx,
 		);
-		expect(h.appended).toHaveLength(2);
+		expect(h.appended).toHaveLength(4);
+		expect(snapshotDataAt(h, 3).moduleState).toMatchObject({
+			pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_42_2 },
+		});
+		await h.handlers.get(MESSAGE_END)?.(
+			{
+				type: MESSAGE_END,
+				message: {
+					role: ASSISTANT,
+					content: HTTPS_GITHUB_COM_O_R_PULL_42,
+				},
+			},
+			h.ctx,
+		);
+		expect(h.appended).toHaveLength(4);
 	});
 
 	it(DISCOVERY_RETRIES_ORIGIN_BEFORE_SCANNING_PR_LINKS, async () => {
