@@ -11,13 +11,7 @@ import { FooterEventConsumer } from "./event-consumers.ts";
 import type { FooterModuleOptions } from "./internal-state.ts";
 
 export class FooterModule {
-	private readonly consumer: FooterEventConsumer;
-
 	constructor(options: FooterModuleOptions) {
-		this.consumer = new FooterEventConsumer(options);
-	}
-
-	getState() {
-		return this.consumer.getState();
+		new FooterEventConsumer(options);
 	}
 }

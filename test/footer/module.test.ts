@@ -18,17 +18,28 @@ function context(): ExtensionContext {
 	} as unknown as ExtensionContext;
 }
 
-function publicState(footer: FooterModule) {
-	return footer.getState();
+function observeFooterState(
+	events: ReturnType<typeof createSharedEvents>,
+	sessionState: ReturnType<typeof createSessionState>,
+): void {
+	events.moduleStateChangedEvent.subscribe((update) => {
+		if (update.moduleId !== C.module.footer) return;
+		sessionState.moduleState.footer = update.moduleState;
+	});
+}
+
+function publicState(sessionState: ReturnType<typeof createSessionState>) {
+	return sessionState.moduleState.footer;
 }
 
 describe("footer module", () => {
 	it("projects PR and Todoist values for Git projects", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
+		observeFooterState(events, sessionState);
 		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		sessionState.moduleState.todoist.taskName = "Fix task";
-		const footer = new FooterModule({
+		new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});
@@ -40,7 +51,7 @@ describe("footer module", () => {
 			session: { project: { isGitProject: true } } as never,
 		});
 
-		const state = publicState(footer);
+		const state = publicState(sessionState);
 		expect(state.footers[FOOTER_PR_TYPE.id]).toMatchObject({ isVisible: true });
 		expect(state.footers[FOOTER_TASK_TYPE.id]).toMatchObject({
 			isVisible: true,
@@ -50,7 +61,8 @@ describe("footer module", () => {
 	it("hides PR and Todoist outside Git projects", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		const footer = new FooterModule({
+		observeFooterState(events, sessionState);
+		new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});
@@ -60,14 +72,19 @@ describe("footer module", () => {
 			sessionId: "session",
 		});
 
-		expect(publicState(footer).footers).not.toHaveProperty(FOOTER_PR_TYPE.id);
-		expect(publicState(footer).footers).not.toHaveProperty(FOOTER_TASK_TYPE.id);
+		expect(publicState(sessionState).footers).not.toHaveProperty(
+			FOOTER_PR_TYPE.id,
+		);
+		expect(publicState(sessionState).footers).not.toHaveProperty(
+			FOOTER_TASK_TYPE.id,
+		);
 	});
 
 	it("shows Herdr only while rename action is loading", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		const footer = new FooterModule({
+		observeFooterState(events, sessionState);
+		new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});
@@ -82,7 +99,9 @@ describe("footer module", () => {
 			action: C.action.herdrTabRename,
 			isLoading: true,
 		});
-		expect(publicState(footer).footers[FOOTER_HERDR_TYPE.id]).toMatchObject({
+		expect(
+			publicState(sessionState).footers[FOOTER_HERDR_TYPE.id],
+		).toMatchObject({
 			isVisible: true,
 			isLoading: true,
 		});
@@ -90,7 +109,7 @@ describe("footer module", () => {
 			action: C.action.herdrTabRename,
 			isLoading: false,
 		});
-		expect(publicState(footer).footers).not.toHaveProperty(
+		expect(publicState(sessionState).footers).not.toHaveProperty(
 			FOOTER_HERDR_TYPE.id,
 		);
 	});
