@@ -1,4 +1,3 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { EventHandler } from "../shared/events.ts";
 import type { HerdrClient } from "../shared/herdr-client.ts";
 import type {
@@ -56,12 +55,9 @@ export interface HerdrTabRenameModuleSetupOptions {
 }
 
 export interface HerdrTabRenameOptions {
+	eventHandler: EventHandler;
+	sessionState: SessionState;
 	herdrClient?: HerdrClient;
-	sessionState?: SessionState;
 	startBackgroundWorker?: StartBackgroundWorker;
 	spawnWorker?: WorkerSpawner;
-	shouldActivate?: (ctx: ExtensionContext) => boolean;
-	withLoading?: (operation: () => Promise<void>) => Promise<void>;
-	hasClaimReturnedSuccessfully?: (ctx: ExtensionContext) => boolean;
-	onClaimReturnedSuccessfully?: (ctx: ExtensionContext) => void | Promise<void>;
 }
