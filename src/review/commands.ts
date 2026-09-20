@@ -24,7 +24,7 @@ import {
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME_PREFIX,
 	REVIEW_AGENT_NO_EXTENSIONS,
-	REVIEW_AGENT_WAIT_TIMEOUT,
+	REVIEW_AGENT_START_ATTEMPTS,
 	REVIEW_COMMAND,
 	REVIEW_DESCRIPTION,
 	REVIEW_FAILED,
@@ -40,7 +40,6 @@ import {
 	SPLIT,
 	START,
 	TIMEOUT_FLAG,
-	WAIT,
 	WAIT_OUTPUT,
 	WARNING,
 } from "./constants.ts";
@@ -110,26 +109,24 @@ function startReviewAgent(
 	agentName: string,
 	paneId: string,
 ): void {
-	try {
-		herdrClient(HERDR_COMMAND, [
-			AGENT,
-			START,
-			agentName,
-			KIND_FLAG,
-			REVIEW_AGENT_KIND,
-			PANE_FLAG,
-			paneId,
-			ARGUMENT_SEPARATOR,
-			REVIEW_AGENT_NO_EXTENSIONS,
-		]);
-	} catch {
-		herdrClient(HERDR_COMMAND, [
-			AGENT,
-			WAIT,
-			agentName,
-			TIMEOUT_FLAG,
-			REVIEW_AGENT_WAIT_TIMEOUT,
-		]);
+	for (let attempt = 0; attempt < REVIEW_AGENT_START_ATTEMPTS; attempt += 1) {
+		try {
+			herdrClient(HERDR_COMMAND, [
+				AGENT,
+				START,
+				agentName,
+				KIND_FLAG,
+				REVIEW_AGENT_KIND,
+				PANE_FLAG,
+				paneId,
+				ARGUMENT_SEPARATOR,
+				REVIEW_AGENT_NO_EXTENSIONS,
+			]);
+			return;
+		} catch (error) {
+			const isLastAttempt = attempt === REVIEW_AGENT_START_ATTEMPTS - 1;
+			if (isLastAttempt) throw error;
+		}
 	}
 }
 
