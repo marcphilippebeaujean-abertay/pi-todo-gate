@@ -24,7 +24,7 @@ import {
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME_PREFIX,
 	REVIEW_AGENT_NO_EXTENSIONS,
-	REVIEW_AGENT_START_ATTEMPTS,
+	REVIEW_AGENT_START_DELAY_MS,
 	REVIEW_COMMAND,
 	REVIEW_DESCRIPTION,
 	REVIEW_FAILED,
@@ -49,6 +49,10 @@ function notify(context: ExtensionCommandContext, message: string): void {
 	const hasNoUI = !context.hasUI;
 	if (hasNoUI) return;
 	context.ui.notify(message, WARNING);
+}
+
+function sleep(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function paneIdFrom(output: string): string {
@@ -109,32 +113,25 @@ function startReviewAgent(
 	agentName: string,
 	paneId: string,
 ): void {
-	for (let attempt = 0; attempt < REVIEW_AGENT_START_ATTEMPTS; attempt += 1) {
-		try {
-			herdrClient(HERDR_COMMAND, [
-				AGENT,
-				START,
-				agentName,
-				KIND_FLAG,
-				REVIEW_AGENT_KIND,
-				PANE_FLAG,
-				paneId,
-				ARGUMENT_SEPARATOR,
-				REVIEW_AGENT_NO_EXTENSIONS,
-			]);
-			return;
-		} catch (error) {
-			const isLastAttempt = attempt === REVIEW_AGENT_START_ATTEMPTS - 1;
-			if (isLastAttempt) throw error;
-		}
-	}
+	herdrClient(HERDR_COMMAND, [
+		AGENT,
+		START,
+		agentName,
+		KIND_FLAG,
+		REVIEW_AGENT_KIND,
+		PANE_FLAG,
+		paneId,
+		ARGUMENT_SEPARATOR,
+		REVIEW_AGENT_NO_EXTENSIONS,
+	]);
 }
 
-function openReviewPane(
+async function openReviewPane(
 	client: ReviewCommandDependencies["herdrClient"],
+	sleep: (milliseconds: number) => Promise<void>,
 	prUrl: string,
 	worktreePath: string,
-): void {
+): Promise<void> {
 	const herdrClient = client ?? boundHerdrClient(worktreePath);
 	const sourcePaneId = currentPaneId();
 	const hasSourcePaneId = sourcePaneId !== undefined;
@@ -151,6 +148,7 @@ function openReviewPane(
 	]);
 	const paneId = paneIdFrom(splitOutput);
 	waitForPaneShell(herdrClient, paneId);
+	await sleep(REVIEW_AGENT_START_DELAY_MS);
 	const agentName = reviewAgentName();
 	startReviewAgent(herdrClient, agentName, paneId);
 	herdrClient(HERDR_COMMAND, [
@@ -174,7 +172,12 @@ async function runReview(
 	const worktreePath =
 		dependencies.sessionState.gitState.worktreeRoot ?? context.cwd;
 	try {
-		openReviewPane(dependencies.herdrClient, prUrl, worktreePath);
+		await openReviewPane(
+			dependencies.herdrClient,
+			dependencies.sleep ?? sleep,
+			prUrl,
+			worktreePath,
+		);
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		notify(context, `${REVIEW_FAILED}${detail}`);

@@ -18,37 +18,31 @@ function context(): ExtensionCommandContext {
 	} as unknown as ExtensionCommandContext;
 }
 
-function setup(agentStartFailures = 0): {
+function setup(): {
 	dependencies: ReviewCommandDependencies;
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 	calls: Array<{ command: string; args: string[] }>;
 	notify: ReturnType<typeof vi.fn>;
+	sleep: ReturnType<typeof vi.fn>;
 } {
 	process.env.HERDR_PANE_ID = "w1:p1";
 	const sessionState = createSessionState();
 	sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/42";
 	sessionState.gitState.worktreeRoot = worktreePath;
 	const calls: Array<{ command: string; args: string[] }> = [];
-	let remainingAgentStartFailures = agentStartFailures;
 	const herdrClient = vi.fn((command: string, args: string[]) => {
 		calls.push({ command, args });
-		if (
-			remainingAgentStartFailures > 0 &&
-			args[0] === "agent" &&
-			args[1] === "start"
-		) {
-			remainingAgentStartFailures -= 1;
-			throw new Error("agent_not_ready");
-		}
 		if (args[0] === "pane" && args[1] === "split")
 			return JSON.stringify({ result: { pane: { pane_id: "w1:p2" } } });
 		return "{}";
 	});
 	const notify = vi.fn();
+	const sleep = vi.fn(async (_milliseconds: number) => {});
 	const dependencies = {
 		pi: undefined,
 		sessionState,
 		herdrClient,
+		sleep,
 	} as unknown as ReviewCommandDependencies;
 	const commands = new Map<
 		string,
@@ -63,7 +57,7 @@ function setup(agentStartFailures = 0): {
 	);
 	const handler = commands.get("tg_review")?.handler;
 	if (handler === undefined) throw new Error("review command missing");
-	return { dependencies, handler, calls, notify };
+	return { dependencies, handler, calls, notify, sleep };
 }
 
 afterEach(() => {
@@ -144,35 +138,11 @@ describe("review command", () => {
 		});
 	});
 
-	it("retries Pi after Herdr reports startup not ready", async () => {
-		const fixture = setup(1);
+	it("waits before starting Pi after shell readiness", async () => {
+		const fixture = setup();
 		await fixture.handler("", context());
 
-		const agentName = fixture.calls[3]?.args[2];
-		expect(fixture.calls).toHaveLength(6);
-		expect(fixture.calls[4]).toEqual({
-			command: "herdr",
-			args: [
-				"agent",
-				"start",
-				agentName,
-				"--kind",
-				"pi",
-				"--pane",
-				"w1:p2",
-				"--",
-				"--no-extensions",
-			],
-		});
-		expect(fixture.calls[5]).toEqual({
-			command: "herdr",
-			args: [
-				"agent",
-				"prompt",
-				agentName,
-				expect.stringContaining("Review PR"),
-			],
-		});
+		expect(fixture.sleep).toHaveBeenCalledWith(5000);
 	});
 
 	it("falls back to command context directory without a worktree", async () => {
