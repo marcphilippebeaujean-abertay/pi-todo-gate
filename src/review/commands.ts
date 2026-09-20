@@ -16,6 +16,7 @@ import {
 	KIND_FLAG,
 	PANE,
 	PANE_FLAG,
+	PROMPT,
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME_PREFIX,
 	REVIEW_AGENT_NO_EXTENSIONS,
@@ -89,16 +90,22 @@ function openReviewPane(
 		FOCUS_FLAG,
 	]);
 	const paneId = paneIdFrom(splitOutput);
+	const agentName = reviewAgentName(paneId);
 	herdrClient(HERDR_COMMAND, [
 		AGENT,
 		START,
-		reviewAgentName(paneId),
+		agentName,
 		KIND_FLAG,
 		REVIEW_AGENT_KIND,
 		PANE_FLAG,
 		paneId,
 		ARGUMENT_SEPARATOR,
 		REVIEW_AGENT_NO_EXTENSIONS,
+	]);
+	herdrClient(HERDR_COMMAND, [
+		AGENT,
+		PROMPT,
+		agentName,
 		reviewPrompt(prUrl, worktreePath),
 	]);
 }

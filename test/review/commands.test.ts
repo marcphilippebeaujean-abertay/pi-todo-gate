@@ -92,6 +92,14 @@ describe("review command", () => {
 					"w1:p2",
 					"--",
 					"--no-extensions",
+				],
+			},
+			{
+				command: "herdr",
+				args: [
+					"agent",
+					"prompt",
+					"review-w1-p2",
 					expect.stringContaining(
 						"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
 					),

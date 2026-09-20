@@ -18,6 +18,7 @@ export const CWD_FLAG = "--cwd";
 export const FOCUS_FLAG = "--focus";
 export const AGENT = "agent";
 export const START = "start";
+export const PROMPT = "prompt";
 export const KIND_FLAG = "--kind";
 export const PANE_FLAG = "--pane";
 export const ARGUMENT_SEPARATOR = "--";

@@ -907,10 +907,11 @@ describe("automatic Todoist task claiming", () => {
 			},
 			h.ctx,
 		);
-		await new Promise((resolve) => setTimeout(resolve, 100));
-		expect(worker).toHaveBeenCalledTimes(1);
-		expect(h.notifications).toContain(
-			"Warning: Todoist claim worker completed without claim evidence/ran into an error (not used)",
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() =>
+			expect(h.notifications).toContain(
+				"Warning: Todoist claim worker completed without claim evidence/ran into an error (not used)",
+			),
 		);
 	});
 });
