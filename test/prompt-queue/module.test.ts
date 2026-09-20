@@ -61,7 +61,7 @@ function pi(): ExtensionAPI & {
 	};
 }
 
-function setup() {
+function setup(includeModules = true) {
 	const eventHandler = createSharedEvents();
 	const sessionState = createSessionState();
 	sessionState.session.activeSessionId = sessionId;
@@ -82,15 +82,13 @@ function setup() {
 		),
 	};
 	const api = pi();
-	const queue = new PromptQueue();
 	const module = new PromptQueueModule({
 		pi: api,
 		eventHandler,
 		sessionState,
-		pr,
-		todoist,
-		worktree,
-		queue,
+		pr: includeModules ? pr : null,
+		todoist: includeModules ? todoist : null,
+		worktree: includeModules ? worktree : null,
 	});
 	return {
 		api,
@@ -101,7 +99,6 @@ function setup() {
 		pr,
 		todoist,
 		worktree,
-		queue,
 		module,
 	};
 }
@@ -302,7 +299,7 @@ Worktree has uncommitted changes. Deleting it will permanently remove that work.
 		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
 			pi: state.api,
 		});
-		const enqueue = vi.spyOn(state.queue, "enqueue");
+		const enqueue = vi.spyOn(PromptQueue.prototype, "enqueue");
 		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
 
 		expect(enqueue).toHaveBeenCalledOnce();
@@ -375,8 +372,7 @@ Mark Todoist task "42" complete?`,
 	});
 
 	it("skips unavailable capabilities in exit protocol", async () => {
-		const state = setup();
-		state.module.setModules({ pr: null, todoist: null, worktree: null });
+		const state = setup(false);
 		await activate(state);
 		await state.eventHandler.prMergedEvent.emit({
 			prUrl: "https://github.com/o/r/pull/1",

@@ -41,7 +41,7 @@ export interface RootComposition {
 	pi: ExtensionAPI;
 	dependencies: RootDependencies;
 	eventHandler: EventHandler;
-	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule;
+	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule | null;
 	sessionState: SessionState;
 	footer: FooterModuleType;
 	pr: PrModule | null;

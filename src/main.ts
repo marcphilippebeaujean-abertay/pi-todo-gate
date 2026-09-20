@@ -58,7 +58,7 @@ export interface ExtensionDependencies extends BaseExtensionDependencies {
 interface ExtensionState {
 	pi: ExtensionAPI;
 	sessionState: import("./state.ts").SessionState;
-	promptQueue: PromptQueueModule;
+	promptQueue: PromptQueueModule | null;
 	eventHandler: EventHandler;
 	footer: FooterModule;
 	pr: PrModule | null;
@@ -135,14 +135,16 @@ export function createExtensionState(
 				taskRefreshWorker: moduleDependencies.taskRefreshWorker,
 				createTodoistClient: moduleDependencies.createTodoistClient,
 			});
-	const promptQueue = new PromptQueueModule({
-		pi,
-		eventHandler,
-		sessionState,
-		pr,
-		todoist,
-		worktree,
-	});
+	const promptQueue = stateOptions.lazyModules
+		? null
+		: new PromptQueueModule({
+				pi,
+				eventHandler,
+				sessionState,
+				pr,
+				todoist,
+				worktree,
+			});
 	const extensionState = {
 		pi,
 		sessionState,
@@ -294,7 +296,17 @@ function startExtensions(
 		root.pr = pr;
 		root.todoist = todoist;
 		root.worktree = worktree;
-		extensionState.promptQueue.setModules({ pr, todoist, worktree });
+		if (extensionState.promptQueue === null) {
+			extensionState.promptQueue = new PromptQueueModule({
+				pi,
+				eventHandler: extensionState.eventHandler,
+				sessionState: extensionState.sessionState,
+				pr,
+				todoist,
+				worktree,
+			});
+			root.promptQueue = extensionState.promptQueue;
+		}
 		if (reviewRegistered) return;
 		if (!isGitProject) return;
 		if (!isInsideHerdr()) return;

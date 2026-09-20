@@ -49,13 +49,6 @@ export interface PromptQueueModuleOptions {
 	pr: PrModule | null;
 	todoist: TodoistModule | null;
 	worktree: WorktreeModule | null;
-	queue?: PromptQueue;
-}
-
-export interface PromptQueueModules {
-	pr: PrModule | null;
-	todoist: TodoistModule | null;
-	worktree: WorktreeModule | null;
 }
 
 export type TodoistCompletionSnapshot = Parameters<

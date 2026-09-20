@@ -47,6 +47,20 @@ describe("module API boundaries", () => {
 		expect(cleanup).toBeDefined();
 	});
 
+	it("keeps Prompt Queue ownership inside module", async () => {
+		const [moduleSource, stateSource] = await Promise.all([
+			readFile("src/prompt-queue/module.ts", "utf8"),
+			readFile("src/prompt-queue/internal-state.ts", "utf8"),
+		]);
+		expect(moduleSource).not.toContain("setModules");
+		expect(moduleSource).toContain("new PromptQueue()");
+		const options = stateSource.slice(
+			stateSource.indexOf("export interface PromptQueueModuleOptions"),
+		);
+		expect(options.slice(0, options.indexOf("\n}"))).not.toMatch(/queue\??:/);
+		expect(stateSource).not.toContain("PromptQueueModules");
+	});
+
 	it("exports only main module classes", async () => {
 		const entrypoints = [
 			"pr",

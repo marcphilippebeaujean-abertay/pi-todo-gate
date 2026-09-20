@@ -7,10 +7,9 @@ import type { SessionState } from "../state.ts";
 import type {
 	ExitProtocolState,
 	PromptQueueModuleOptions,
-	PromptQueueModules,
 	TodoistCompletionSnapshot,
 } from "./internal-state.ts";
-import { PromptQueue } from "./queue.ts";
+import type { PromptQueue } from "./queue.ts";
 import { confirmExitProtocol } from "./user-prompts.ts";
 
 export class PromptQueueConsumer {
@@ -24,13 +23,13 @@ export class PromptQueueConsumer {
 	private session: SessionRecord | null = null;
 	private sessionId: string | null = null;
 
-	constructor(options: PromptQueueModuleOptions) {
+	constructor(options: PromptQueueModuleOptions, queue: PromptQueue) {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
 		this.pr = options.pr;
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
-		this.queue = options.queue ?? new PromptQueue();
+		this.queue = queue;
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
 			if (session === undefined) return;
@@ -50,12 +49,6 @@ export class PromptQueueConsumer {
 		this.eventHandler.prMergedEvent.subscribe((event) =>
 			this.onPrMerged(event),
 		);
-	}
-
-	setModules(modules: PromptQueueModules): void {
-		this.pr = modules.pr;
-		this.todoist = modules.todoist;
-		this.worktree = modules.worktree;
 	}
 
 	drain(): Promise<void> {
