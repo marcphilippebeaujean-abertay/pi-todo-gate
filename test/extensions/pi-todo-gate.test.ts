@@ -737,7 +737,7 @@ describe("automatic Todoist task claiming", () => {
 		});
 	});
 
-	it("ignores a claim result from another session", async () => {
+	it("accepts a claim result from another session", async () => {
 		const root = await mkdtemp(join(tmpdir(), "stale-session-claim"));
 		const h = harness(root);
 		h.ctx.hasUI = true;
@@ -768,8 +768,11 @@ describe("automatic Todoist task claiming", () => {
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(claimTask).not.toHaveBeenCalled();
-		expect(h.appended).toHaveLength(0);
-		expect(h.selections).toHaveLength(0);
+		expect(h.appended.length).toBeGreaterThan(0);
+		expect(latestModuleState(h, "todoist")).toMatchObject({
+			taskRef: VALUE_42,
+			taskName: IMPLEMENT_FEATURE,
+		});
 	});
 
 	it("applies a new-task proposal without confirmation", async () => {

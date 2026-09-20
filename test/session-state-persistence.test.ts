@@ -102,6 +102,7 @@ function snapshot(): SessionState {
 		],
 	};
 	state.moduleState.todoist = {
+		todoistProjectRef: "Pi Extensions",
 		taskRef: "42",
 		taskName: "Task",
 		taskUrl: "https://todoist.com/app/task/42",

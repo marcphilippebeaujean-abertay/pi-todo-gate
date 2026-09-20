@@ -18,6 +18,7 @@ export interface ModuleStateDescriptor<K extends string, State> {
 
 export interface SessionProject {
 	codingRoot: string;
+	todoistProjectRef?: string;
 	triggersOnlyOnWorktree?: boolean;
 	isTodoistProject?: boolean;
 	isGitProject?: boolean;
