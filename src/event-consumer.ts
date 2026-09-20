@@ -142,7 +142,6 @@ async function resolveConfiguredProject(
 ): Promise<SessionProject | null> {
 	const configuredResolver = root.dependencies.resolveConfiguredProject;
 	if (configuredResolver !== undefined) return configuredResolver(cwd);
-	if (root.todoist !== null) return root.todoist.resolveConfiguredProject(cwd);
 	return null;
 }
 

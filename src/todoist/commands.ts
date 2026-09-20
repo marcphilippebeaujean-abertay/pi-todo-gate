@@ -2,11 +2,15 @@ import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
-import { spawnExec } from "../shared/command.ts";
+import {
+	createModuleStatePublisher,
+	type ModuleStatePublisher,
+} from "../event-publishers.ts";
+import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
-import { withLoading } from "../shared/events.ts";
+import { type EventHandler, withLoading } from "../shared/events.ts";
 import { inspectProject } from "../shared/project.ts";
-import { enqueueSessionOperation } from "../shared/session-operations.ts";
+import type { SessionState } from "../state.ts";
 import {
 	COMMAND_DESCRIPTION_DROP,
 	COMMAND_DESCRIPTION_REFRESH,
@@ -24,10 +28,10 @@ import {
 import { createTaskRefreshWorker } from "./event-publishers.ts";
 import type {
 	SelectedTaskContext,
+	TaskRefreshWorker,
 	TaskRefreshWorkerInput,
 	TaskRefreshWorkerResult,
-	TodoistOperations,
-	TodoistState,
+	TodoistModuleState,
 } from "./internal-state.ts";
 
 function notify(
@@ -40,44 +44,19 @@ function notify(
 	ctx.ui.notify(message, level);
 }
 
-function isCurrentTask(
-	operations: TodoistOperations,
-	taskContext: SelectedTaskContext,
-): boolean {
-	const { session, sessionId, taskRef, workRevision } = taskContext;
-	const isCurrentSession = operations.getSession() === session;
-	const isCurrentSessionId =
-		operations.sessionState.session.activeSessionId === sessionId;
-	const isCurrentTaskRef =
-		operations.sessionState.moduleState.todoist.taskRef === taskRef;
-	const isCurrentWorkRevision = session.workRevision === workRevision;
-	return [
-		isCurrentSession,
-		isCurrentSessionId,
-		isCurrentTaskRef,
-		isCurrentWorkRevision,
-	].every(Boolean);
-}
-
 function getSelectedTaskContext(
-	operations: TodoistOperations,
+	sessionState: SessionState,
 ): SelectedTaskContext | undefined {
-	const session = operations.getSession();
-	const sessionId = operations.sessionState.session.activeSessionId;
-	const taskRef = operations.sessionState.moduleState.todoist.taskRef;
-	const workRevision = session?.workRevision;
-	const hasSession = session !== null;
-	if (!hasSession) return undefined;
-	const hasSessionId = sessionId !== null;
-	if (!hasSessionId) return undefined;
-	const hasTaskRef = taskRef !== undefined;
-	if (!hasTaskRef) return undefined;
-	const hasWorkRevision = workRevision !== undefined;
-	if (!hasWorkRevision) return undefined;
-	return { session, sessionId, taskRef, workRevision };
+	const sessionId = sessionState.session.activeSessionId;
+	const taskRef = sessionState.moduleState.todoist.taskRef;
+	const hasNoSession = sessionId === null;
+	const hasNoTask = taskRef === undefined;
+	const hasNoSelection = hasNoSession || hasNoTask;
+	if (hasNoSelection) return undefined;
+	return { sessionId, taskRef };
 }
 
-function clearSelectedTask(state: TodoistState): TodoistState {
+function clearSelectedTask(state: TodoistModuleState): TodoistModuleState {
 	return {
 		...state,
 		taskRef: undefined,
@@ -87,40 +66,36 @@ function clearSelectedTask(state: TodoistState): TodoistState {
 	};
 }
 
-function currentProjectRef(operations: TodoistOperations): string {
-	return operations.getProjectRef();
-}
-
 function refreshInput(
-	operations: TodoistOperations,
+	sessionState: SessionState,
+	ctx: ExtensionCommandContext,
 	taskContext: SelectedTaskContext,
 	worktree: Awaited<ReturnType<typeof inspectProject>>,
 ): TaskRefreshWorkerInput {
-	const { sessionId, session, taskRef } = taskContext;
-	const state = operations.sessionState.moduleState.todoist;
+	const state = sessionState.moduleState.todoist;
 	return {
-		sessionId,
-		cwd: session.context.cwd,
-		taskRef,
-		taskName: state.taskName ?? taskRef,
+		sessionId: taskContext.sessionId,
+		cwd: ctx.cwd,
+		taskRef: taskContext.taskRef,
+		taskName: state.taskName ?? taskContext.taskRef,
 		taskDescription: state.taskDescription ?? NO_TASK_DESCRIPTION,
-		projectRef: currentProjectRef(operations),
-		prRef: operations.sessionState.moduleState.pr.prUrl ?? null,
+		projectRef: state.todoistProjectRef ?? "",
+		prRef: sessionState.moduleState.pr.prUrl ?? null,
 		worktree,
 	};
 }
 
 function applyRefreshResult(
-	state: TodoistState,
+	state: TodoistModuleState,
 	result: TaskRefreshWorkerResult,
-): TodoistState {
-	const nextState: TodoistState = {
+): TodoistModuleState {
+	const nextState: TodoistModuleState = {
 		...state,
 		taskName: result.newTaskName ?? state.taskName,
 		taskDescription: result.newTaskDescription ?? state.taskDescription,
 	};
-	const hasCompletedTask = result.hasCompletedTask;
-	if (!hasCompletedTask) return nextState;
+	const hasNotCompletedTask = !result.hasCompletedTask;
+	if (hasNotCompletedTask) return nextState;
 	return {
 		...clearSelectedTask(nextState),
 		todoistCompletionAttemptedAt: new Date().toISOString(),
@@ -128,58 +103,67 @@ function applyRefreshResult(
 }
 
 async function requestRefreshResult(
-	operations: TodoistOperations,
+	sessionState: SessionState,
 	ctx: ExtensionCommandContext,
 	taskContext: SelectedTaskContext,
-): Promise<TaskRefreshWorkerResult | undefined> {
-	const exec = operations.exec ?? operations.dependencies?.exec ?? spawnExec;
-	const worktree = await inspectProject(exec, ctx.cwd);
-	const worker =
-		operations.taskRefreshWorker ??
-		operations.dependencies?.taskRefreshWorker ??
-		createTaskRefreshWorker(exec);
-	const result = await worker(refreshInput(operations, taskContext, worktree));
-	const isCurrentAfterWorker = isCurrentTask(operations, taskContext);
-	return isCurrentAfterWorker ? result : undefined;
+	taskRefreshWorker: TaskRefreshWorker | undefined,
+	exec: Exec | undefined,
+): Promise<TaskRefreshWorkerResult> {
+	const run = exec ?? spawnExec;
+	const worktree = await inspectProject(run, ctx.cwd);
+	const worker = taskRefreshWorker ?? createTaskRefreshWorker(run);
+	return worker(refreshInput(sessionState, ctx, taskContext, worktree));
 }
 
 async function refreshTaskNow(
-	operations: TodoistOperations,
+	sessionState: SessionState,
+	publisher: ModuleStatePublisher<"todoist">,
 	ctx: ExtensionCommandContext,
 	taskContext: SelectedTaskContext,
+	taskRefreshWorker: TaskRefreshWorker | undefined,
+	exec: Exec | undefined,
 ): Promise<void> {
-	const result = await requestRefreshResult(operations, ctx, taskContext);
-	const shouldIgnoreResult = result === undefined;
-	if (shouldIgnoreResult) return;
-	const isCurrentBeforePersist = isCurrentTask(operations, taskContext);
-	if (!isCurrentBeforePersist) return;
-	const nextState = applyRefreshResult(
-		operations.sessionState.moduleState.todoist,
-		result,
+	const result = await requestRefreshResult(
+		sessionState,
+		ctx,
+		taskContext,
+		taskRefreshWorker,
+		exec,
 	);
-	await operations.updateTodoistState(nextState, { persist: true });
-	const hasCompletedTask = result.hasCompletedTask;
-	const message = hasCompletedTask
+	await publisher.publish(
+		applyRefreshResult(sessionState.moduleState.todoist, result),
+		{ persist: true },
+	);
+	const taskCompleted = result.hasCompletedTask;
+	const message = taskCompleted
 		? TODOIST_TASK_COMPLETED
 		: TODOIST_TASK_REFRESHED;
 	notify(ctx, message, INFO);
 }
 
 async function runRefreshTask(
-	operations: TodoistOperations,
+	sessionState: SessionState,
+	eventHandler: EventHandler,
+	publisher: ModuleStatePublisher<"todoist">,
 	ctx: ExtensionCommandContext,
+	taskRefreshWorker: TaskRefreshWorker | undefined,
+	exec: Exec | undefined,
 ): Promise<void> {
-	const selectedTask = getSelectedTaskContext(operations);
+	const selectedTask = getSelectedTaskContext(sessionState);
 	const hasNoSelectedTask = selectedTask === undefined;
 	if (hasNoSelectedTask) {
 		notify(ctx, TODOIST_TASK_NOT_SELECTED, WARNING);
 		return;
 	}
 	try {
-		await withLoading(operations.eventHandler, C.action.task, () =>
-			enqueueSessionOperation(
-				selectedTask.session,
-				refreshTaskNow.bind(null, operations, ctx, selectedTask),
+		await withLoading(eventHandler, C.action.task, () =>
+			refreshTaskNow(
+				sessionState,
+				publisher,
+				ctx,
+				selectedTask,
+				taskRefreshWorker,
+				exec,
 			),
 		);
 	} catch (error) {
@@ -189,38 +173,45 @@ async function runRefreshTask(
 }
 
 async function runDropTask(
-	operations: TodoistOperations,
+	sessionState: SessionState,
+	publisher: ModuleStatePublisher<"todoist">,
 	ctx: ExtensionCommandContext,
 ): Promise<void> {
-	const selectedTask = getSelectedTaskContext(operations);
+	const selectedTask = getSelectedTaskContext(sessionState);
 	const hasNoSelectedTask = selectedTask === undefined;
 	if (hasNoSelectedTask) {
 		notify(ctx, TODOIST_TASK_NOT_SELECTED, WARNING);
 		return;
 	}
-	await enqueueSessionOperation(selectedTask.session, async () => {
-		const isCurrent = isCurrentTask(operations, selectedTask);
-		const shouldSkip = !isCurrent;
-		if (shouldSkip) return;
-		await operations.updateTodoistState(
-			clearSelectedTask(operations.sessionState.moduleState.todoist),
-			{ persist: true },
-		);
-		notify(ctx, TODOIST_TASK_DROPPED, INFO);
+	await publisher.publish(clearSelectedTask(sessionState.moduleState.todoist), {
+		persist: true,
 	});
+	notify(ctx, TODOIST_TASK_DROPPED, INFO);
 }
 
 export function register(
 	pi: ExtensionAPI,
-	operations: TodoistOperations,
+	sessionState: SessionState,
+	eventHandler: EventHandler,
+	taskRefreshWorker?: TaskRefreshWorker,
+	exec?: Exec,
 ): void {
 	if (typeof pi.registerCommand !== "function") return;
+	const publisher = createModuleStatePublisher(eventHandler, "todoist");
 	pi.registerCommand(REFRESH_TASK_COMMAND, {
 		description: COMMAND_DESCRIPTION_REFRESH,
-		handler: (_args, ctx) => runRefreshTask(operations, ctx),
+		handler: (_args, ctx) =>
+			runRefreshTask(
+				sessionState,
+				eventHandler,
+				publisher,
+				ctx,
+				taskRefreshWorker,
+				exec,
+			),
 	});
 	pi.registerCommand(DROP_TASK_COMMAND, {
 		description: COMMAND_DESCRIPTION_DROP,
-		handler: (_args, ctx) => runDropTask(operations, ctx),
+		handler: (_args, ctx) => runDropTask(sessionState, publisher, ctx),
 	});
 }

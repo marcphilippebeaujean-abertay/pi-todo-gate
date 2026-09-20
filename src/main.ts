@@ -137,7 +137,6 @@ export function createExtensionState(
 				eventHandler,
 				sessionState,
 				exec: moduleDependencies.exec,
-				loadConfig: moduleDependencies.loadConfig,
 				taskClaimWorker: moduleDependencies.taskClaimWorker,
 				taskRefreshWorker: moduleDependencies.taskRefreshWorker,
 				createTodoistClient: moduleDependencies.createTodoistClient,
@@ -165,7 +164,9 @@ export function createExtensionState(
 		dependencies: {
 			openSession: providedDependencies.openSession,
 			exec: providedDependencies.exec,
-			resolveConfiguredProject: providedDependencies.resolveConfiguredProject,
+			resolveConfiguredProject:
+				providedDependencies.resolveConfiguredProject ??
+				resolveConfiguredSessionProject.bind(null, moduleDependencies),
 		},
 		eventHandler,
 		promptQueue,
@@ -288,7 +289,6 @@ function startExtensions(
 						eventHandler: extensionState.eventHandler,
 						sessionState: extensionState.sessionState,
 						exec: moduleDependencies.exec,
-						loadConfig: moduleDependencies.loadConfig,
 						taskClaimWorker: moduleDependencies.taskClaimWorker,
 						taskRefreshWorker: moduleDependencies.taskRefreshWorker,
 						createTodoistClient: moduleDependencies.createTodoistClient,

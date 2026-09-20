@@ -223,8 +223,7 @@ export class PromptQueueConsumer {
 		isQueuedCurrent: () => boolean,
 	): Promise<boolean> {
 		const hasTodoistTask = todoistSnapshot !== undefined;
-		if (hasTodoistTask)
-			await this.completeTodoist(context, todoistSnapshot, isQueuedCurrent);
+		if (hasTodoistTask) await this.completeTodoist(context, todoistSnapshot);
 		if (!canRemoveWorktree) return state.worktree === null;
 		const force = state.dirty === true;
 		return this.removeWorktree(context, sessionId, isQueuedCurrent, force);
@@ -262,22 +261,14 @@ export class PromptQueueConsumer {
 	private async completeTodoist(
 		context: ExtensionContext,
 		snapshot: TodoistCompletionSnapshot,
-		isQueuedCurrent: () => boolean,
 	): Promise<void> {
-		const isCurrentBeforeCapability = this.isCurrentJob(
-			context,
-			snapshot.sessionId,
-			isQueuedCurrent,
-		);
-		const shouldSkip = !isCurrentBeforeCapability;
-		if (shouldSkip) return;
 		const todoist = this.todoist;
 		const hasTodoistModule = todoist !== null;
 		if (!hasTodoistModule) return;
 		try {
 			await this.runWithLoading(
 				C.action.task,
-				todoist.completeMergedTask.bind(todoist, snapshot),
+				todoist.completeMergedTask.bind(todoist, snapshot, context),
 			);
 		} catch {
 			// Continue cleanup even when Todoist completion fails.

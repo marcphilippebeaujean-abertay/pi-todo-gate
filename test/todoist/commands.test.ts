@@ -6,10 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { register } from "../../src/todoist/commands.ts";
-import type {
-	TodoistOperations,
-	TodoistSession,
-} from "../../src/todoist/internal-state.ts";
+import type { TaskRefreshWorkerResult } from "../../src/todoist/internal-state.ts";
 
 const cwd = "/repo";
 
@@ -21,48 +18,16 @@ function context(): ExtensionCommandContext {
 	} as unknown as ExtensionCommandContext;
 }
 
-function runtime(): {
-	operations: TodoistOperations;
-	sessionState: ReturnType<typeof createSessionState>;
-	worker: ReturnType<typeof vi.fn>;
-	update: ReturnType<typeof vi.fn>;
-} {
-	const sessionState = createSessionState();
-	sessionState.session.activeSessionId = "session";
-	sessionState.moduleState.todoist = {
-		taskRef: "task-1",
-		taskName: "Old task",
-		taskDescription: "Old details",
-	};
-	const session = {
-		context: { cwd, hasUI: true },
-		project: { codingRoot: cwd },
-		workRevision: 0,
-		sessionId: "session",
-		operationQueue: Promise.resolve(),
-	} as unknown as TodoistSession;
-	const worker = vi.fn(async () => ({
+function commandHandlers(
+	sessionState: ReturnType<typeof createSessionState>,
+	events = createSharedEvents(),
+	worker: (
+		input: Parameters<NonNullable<Parameters<typeof register>[3]>>[0],
+	) => Promise<TaskRefreshWorkerResult> = async () => ({
 		newTaskDescription: "New details",
 		newTaskName: "New task",
 		hasCompletedTask: false,
-	}));
-	const update = vi.fn(async () => undefined);
-	const operations = {
-		sessionState,
-		getSession: () => session,
-		getProjectRef: () => "Project",
-		eventHandler: createSharedEvents(),
-		todoist: { taskClaim: { pending: false, completed: false } },
-		updateTodoistState: update,
-		completeMergedTask: undefined,
-		dependencies: {},
-		taskRefreshWorker: worker,
-	} as unknown as TodoistOperations;
-	return { operations, sessionState, worker, update };
-}
-
-function commandHandlers(
-	runtime: TodoistOperations,
+	}),
 ): Map<
 	string,
 	{ handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }
@@ -73,24 +38,50 @@ function commandHandlers(
 			registerCommand: (name: string, command: unknown) =>
 				commands.set(name, command),
 		} as unknown as ExtensionAPI,
-		runtime,
+		sessionState,
+		events,
+		worker,
 	);
 	return commands;
 }
 
+function state() {
+	const sessionState = createSessionState();
+	sessionState.session.activeSessionId = "session";
+	sessionState.moduleState.todoist = {
+		todoistProjectRef: "Project",
+		taskRef: "task-1",
+		taskName: "Old task",
+		taskDescription: "Old details",
+	};
+	return sessionState;
+}
+
 describe("Todoist task commands", () => {
 	it("registers refresh and explicit drop commands", () => {
-		const { operations } = runtime();
-		expect([...commandHandlers(operations).keys()]).toEqual([
+		const sessionState = state();
+		expect([...commandHandlers(sessionState).keys()]).toEqual([
 			"tg_refresh_task",
 			"tg_drop_task",
 		]);
 	});
 
-	it("refreshes task using current project reference", async () => {
-		const { operations, worker, update } = runtime();
-		operations.getProjectRef = () => "Current project";
-		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
+	it("refreshes task using project reference from shared state", async () => {
+		const sessionState = state();
+		const worker = vi.fn(async () => ({
+			newTaskDescription: "New details",
+			newTaskName: "New task",
+			hasCompletedTask: false,
+		}));
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const handler = commandHandlers(sessionState, events, worker).get(
+			"tg_refresh_task",
+		)?.handler;
+
 		await handler?.("", context());
 
 		expect(worker).toHaveBeenCalledWith(
@@ -98,22 +89,30 @@ describe("Todoist task commands", () => {
 				taskRef: "task-1",
 				taskName: "Old task",
 				taskDescription: "Old details",
-				projectRef: "Current project",
+				projectRef: "Project",
 			}),
 		);
-		expect(update).toHaveBeenCalledWith(
+		expect(updates).toContainEqual(
 			expect.objectContaining({
-				taskRef: "task-1",
-				taskName: "New task",
-				taskDescription: "New details",
+				moduleId: "todoist",
+				moduleState: expect.objectContaining({
+					taskRef: "task-1",
+					taskName: "New task",
+					taskDescription: "New details",
+				}),
+				persist: true,
 			}),
-			expect.objectContaining({ persist: true }),
 		);
 	});
 
-	it("ignores refresh result after selected task changes", async () => {
-		const { operations, sessionState, worker, update } = runtime();
-		worker.mockImplementation(async () => {
+	it("applies result to current state after selected task changes", async () => {
+		const sessionState = state();
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const worker = vi.fn(async () => {
 			sessionState.moduleState.todoist.taskRef = "task-2";
 			return {
 				newTaskDescription: "Stale details",
@@ -121,48 +120,118 @@ describe("Todoist task commands", () => {
 				hasCompletedTask: false,
 			};
 		});
-		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
+		const handler = commandHandlers(sessionState, events, worker).get(
+			"tg_refresh_task",
+		)?.handler;
+
 		await handler?.("", context());
 
-		expect(update).not.toHaveBeenCalled();
+		expect(updates).toContainEqual(
+			expect.objectContaining({
+				moduleState: expect.objectContaining({
+					taskRef: "task-2",
+					taskName: "Stale task",
+				}),
+			}),
+		);
+	});
+
+	it("uses last returned overlapping refresh result", async () => {
+		const sessionState = state();
+		const events = createSharedEvents();
+		const updates: Array<{ taskName?: string }> = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			if (update.moduleId === "todoist") updates.push(update.moduleState);
+		});
+		let releaseFirst!: (result: TaskRefreshWorkerResult) => void;
+		let releaseSecond!: (result: TaskRefreshWorkerResult) => void;
+		const first = new Promise<TaskRefreshWorkerResult>((resolve) => {
+			releaseFirst = resolve;
+		});
+		const second = new Promise<TaskRefreshWorkerResult>((resolve) => {
+			releaseSecond = resolve;
+		});
+		const worker = vi
+			.fn()
+			.mockReturnValueOnce(first)
+			.mockReturnValueOnce(second);
+		const handler = commandHandlers(sessionState, events, worker).get(
+			"tg_refresh_task",
+		)?.handler;
+
+		const firstCall = handler?.("", context());
+		const secondCall = handler?.("", context());
+		releaseSecond({
+			newTaskDescription: "Second details",
+			newTaskName: "Second task",
+			hasCompletedTask: false,
+		});
+		await secondCall;
+		releaseFirst({
+			newTaskDescription: "First details",
+			newTaskName: "First task",
+			hasCompletedTask: false,
+		});
+		await firstCall;
+
+		expect(updates.map(({ taskName }) => taskName)).toEqual([
+			"Second task",
+			"First task",
+		]);
+		expect(sessionState.moduleState.todoist.taskName).toBe("Old task");
 	});
 
 	it("completes and clears selected task", async () => {
-		const { operations, worker, update } = runtime();
-		worker.mockResolvedValue({
+		const sessionState = state();
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const worker = vi.fn(async () => ({
 			newTaskDescription: null,
 			newTaskName: null,
 			hasCompletedTask: true,
-		});
-		const handler = commandHandlers(operations).get("tg_refresh_task")?.handler;
+		}));
+		const handler = commandHandlers(sessionState, events, worker).get(
+			"tg_refresh_task",
+		)?.handler;
+
 		await handler?.("", context());
 
-		expect(update).toHaveBeenCalledWith(
+		expect(updates).toContainEqual(
 			expect.objectContaining({
-				taskRef: undefined,
-				taskName: undefined,
-				taskDescription: undefined,
-				taskUrl: undefined,
-				todoistCompletionAttemptedAt: expect.any(String),
+				moduleState: expect.objectContaining({
+					taskRef: undefined,
+					taskName: undefined,
+					taskDescription: undefined,
+					taskUrl: undefined,
+					todoistCompletionAttemptedAt: expect.any(String),
+				}),
 			}),
-			expect.objectContaining({ persist: true }),
 		);
 	});
 
 	it("drops selected task locally without running worker", async () => {
-		const { operations, worker, update } = runtime();
-		const handler = commandHandlers(operations).get("tg_drop_task")?.handler;
+		const sessionState = state();
+		const events = createSharedEvents();
+		const updates: unknown[] = [];
+		events.moduleStateChangedEvent.subscribe((update) => {
+			updates.push(update);
+		});
+		const worker = vi.fn();
+		const handler = commandHandlers(sessionState, events, worker).get(
+			"tg_drop_task",
+		)?.handler;
+
 		await handler?.("", context());
 
 		expect(worker).not.toHaveBeenCalled();
-		expect(update).toHaveBeenCalledWith(
+		expect(updates).toContainEqual(
 			expect.objectContaining({
-				taskRef: undefined,
-				taskName: undefined,
-				taskDescription: undefined,
-				taskUrl: undefined,
+				moduleState: expect.objectContaining({ taskRef: undefined }),
+				persist: true,
 			}),
-			expect.objectContaining({ persist: true }),
 		);
 	});
 });
