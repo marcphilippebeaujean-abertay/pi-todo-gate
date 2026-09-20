@@ -29,12 +29,10 @@ import type {
 function registerTodoistSessionActivation(
 	options: TodoistLifecycleConsumerOptions,
 ): void {
-	options.eventHandler.sessionActivatedEvent.subscribe(
-		({ session, sessionId }) => {
-			if (session === undefined) return;
-			return options.activateSession(session, sessionId);
-		},
-	);
+	options.eventHandler.sessionActivatedEvent.subscribe(({ session }) => {
+		if (session === undefined) return;
+		return options.activateSession(session);
+	});
 }
 
 export function registerTodoistLifecycleConsumers(

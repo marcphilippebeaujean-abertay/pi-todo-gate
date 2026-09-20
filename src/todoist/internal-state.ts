@@ -143,10 +143,7 @@ export interface TodoistLifecycleConsumerOptions {
 	sessionState: SessionState;
 	taskClaimWorker?: TaskClaimWorker;
 	exec?: Exec;
-	activateSession: (
-		session: TodoistSession,
-		sessionId: string,
-	) => Promise<void>;
+	activateSession: (session: TodoistSession) => Promise<void>;
 	registerCommands: (pi: ExtensionAPI) => void;
 }
 
