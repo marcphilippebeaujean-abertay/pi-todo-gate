@@ -22,7 +22,7 @@ import {
 } from "./constants.ts";
 import type {
 	CleanupOptions,
-	WorktreeBaseline,
+	WorktreeCleanupTarget,
 	WorktreeCurrentState,
 } from "./internal-state.ts";
 
@@ -100,7 +100,7 @@ function runCleanupMutation<T>(
 }
 
 async function removeWorktreeNow(
-	worktree: WorktreeBaseline,
+	worktree: WorktreeCleanupTarget,
 	removeArgs: string[],
 	options: CleanupOptions,
 ): Promise<CommandResult | null> {
@@ -123,7 +123,7 @@ async function removeWorktreeNow(
 }
 
 async function deleteBranchNow(
-	worktree: WorktreeBaseline,
+	worktree: WorktreeCleanupTarget,
 	options: CleanupOptions,
 ): Promise<CommandResult | null> {
 	const branchDeletion = await runCleanupMutation(
@@ -145,7 +145,7 @@ async function deleteBranchNow(
 }
 
 export async function cleanupWorktree(
-	worktree: WorktreeBaseline,
+	worktree: WorktreeCleanupTarget,
 	force: boolean,
 	options: CleanupOptions,
 ): Promise<ExitActionResult> {
@@ -191,8 +191,12 @@ export async function cleanupWorktree(
 }
 
 export function isCurrentWorktree(
-	baseline: WorktreeBaseline | null,
-	worktree: WorktreeBaseline,
+	current: WorktreeCleanupTarget | null,
+	worktree: WorktreeCleanupTarget,
 ): boolean {
-	return baseline === worktree;
+	if (current === null) return false;
+	const hasSameWorktreePath = current.worktreePath === worktree.worktreePath;
+	const hasSameBranch = current.branch === worktree.branch;
+	const hasSameMainRoot = current.mainRoot === worktree.mainRoot;
+	return [hasSameWorktreePath, hasSameBranch, hasSameMainRoot].every(Boolean);
 }
