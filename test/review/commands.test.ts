@@ -23,6 +23,7 @@ function setup(): {
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 	calls: Array<{ command: string; args: string[] }>;
 	notify: ReturnType<typeof vi.fn>;
+	sleep: ReturnType<typeof vi.fn>;
 } {
 	process.env.HERDR_PANE_ID = "w1:p1";
 	const sessionState = createSessionState();
@@ -36,10 +37,12 @@ function setup(): {
 		return "{}";
 	});
 	const notify = vi.fn();
+	const sleep = vi.fn(async (_milliseconds: number) => {});
 	const dependencies = {
 		pi: undefined,
 		sessionState,
 		herdrClient,
+		sleep,
 	} as unknown as ReviewCommandDependencies;
 	const commands = new Map<
 		string,
@@ -54,7 +57,7 @@ function setup(): {
 	);
 	const handler = commands.get("tg_review")?.handler;
 	if (handler === undefined) throw new Error("review command missing");
-	return { dependencies, handler, calls, notify };
+	return { dependencies, handler, calls, notify, sleep };
 }
 
 afterEach(() => {
@@ -66,7 +69,8 @@ describe("review command", () => {
 		const fixture = setup();
 		await fixture.handler("", context());
 
-		expect(fixture.calls).toEqual([
+		expect(fixture.calls).toHaveLength(5);
+		expect(fixture.calls.slice(0, 2)).toEqual([
 			{
 				command: "herdr",
 				args: [
@@ -83,21 +87,62 @@ describe("review command", () => {
 			{
 				command: "herdr",
 				args: [
-					"agent",
-					"start",
-					"review-w1-p2",
-					"--kind",
-					"pi",
-					"--pane",
+					"pane",
+					"run",
 					"w1:p2",
-					"--",
-					"--no-extensions",
-					expect.stringContaining(
-						"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
-					),
+					"echo __PI_TODO_GATE_REVIEW_SHELL_READY__",
 				],
 			},
 		]);
+		expect(fixture.calls[2]).toEqual({
+			command: "herdr",
+			args: [
+				"pane",
+				"wait-output",
+				"w1:p2",
+				"--match",
+				"__PI_TODO_GATE_REVIEW_SHELL_READY__",
+				"--source",
+				"recent-unwrapped",
+				"--timeout",
+				"30000",
+			],
+		});
+		const startCall = fixture.calls[3];
+		const agentName = startCall?.args[2];
+		expect(agentName).toMatch(/^review-[0-9a-f]{8}$/);
+		expect(startCall).toEqual({
+			command: "herdr",
+			args: [
+				"agent",
+				"start",
+				agentName,
+				"--kind",
+				"pi",
+				"--pane",
+				"w1:p2",
+				"--",
+				"--no-extensions",
+			],
+		});
+		expect(fixture.calls[4]).toEqual({
+			command: "herdr",
+			args: [
+				"agent",
+				"prompt",
+				agentName,
+				expect.stringContaining(
+					"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
+				),
+			],
+		});
+	});
+
+	it("waits before starting Pi after shell readiness", async () => {
+		const fixture = setup();
+		await fixture.handler("", context());
+
+		expect(fixture.sleep).toHaveBeenCalledWith(3000);
 	});
 
 	it("falls back to command context directory without a worktree", async () => {
