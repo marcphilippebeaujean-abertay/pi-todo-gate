@@ -71,6 +71,44 @@ describe("Todoist module", () => {
 		);
 	});
 
+	it("uses last returned claim result", async () => {
+		const events = createSharedEvents();
+		const sessionState = createSessionState();
+		registerModuleStateConsumer(events, sessionState);
+		const currentSession = session("Current project");
+
+		handleTaskClaimResult(sessionState, events, currentSession, {
+			sessionId: "session",
+			result: {
+				sessionId: "session",
+				action: "claim",
+				taskData: {
+					title: "Second result",
+					description: "Second details",
+					id: "task-2",
+				},
+				error: null,
+			},
+		});
+		handleTaskClaimResult(sessionState, events, currentSession, {
+			sessionId: "session",
+			result: {
+				sessionId: "session",
+				action: "claim",
+				taskData: {
+					title: "Last result",
+					description: "Last details",
+					id: "task-last",
+				},
+				error: null,
+			},
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+		expect(sessionState.moduleState.todoist.taskRef).toBe("task-last");
+		expect(sessionState.moduleState.todoist.taskName).toBe("Last result");
+	});
+
 	it("accepts claim result after session transition", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
