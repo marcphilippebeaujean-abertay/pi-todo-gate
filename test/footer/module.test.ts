@@ -5,8 +5,7 @@ import {
 	FOOTER_PR_TYPE,
 	FOOTER_TASK_TYPE,
 } from "../../src/footer/constants.ts";
-import { createFooterModule } from "../../src/footer/module.ts";
-import type { emptyFooterState } from "../../src/footer/module-state.ts";
+import { FooterModule } from "../../src/footer/module.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -19,10 +18,8 @@ function context(): ExtensionContext {
 	} as unknown as ExtensionContext;
 }
 
-function publicState(footer: ReturnType<typeof createFooterModule>) {
-	return (
-		footer as unknown as { getState: () => ReturnType<typeof emptyFooterState> }
-	).getState();
+function publicState(footer: FooterModule) {
+	return footer.getState();
 }
 
 describe("footer module", () => {
@@ -31,7 +28,7 @@ describe("footer module", () => {
 		const sessionState = createSessionState();
 		sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
 		sessionState.moduleState.todoist.taskName = "Fix task";
-		const footer = createFooterModule({
+		const footer = new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});
@@ -53,7 +50,7 @@ describe("footer module", () => {
 	it("hides PR and Todoist outside Git projects", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		const footer = createFooterModule({
+		const footer = new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});
@@ -70,7 +67,7 @@ describe("footer module", () => {
 	it("shows Herdr only while rename action is loading", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
-		const footer = createFooterModule({
+		const footer = new FooterModule({
 			eventHandler: events,
 			getSessionState: () => sessionState,
 		});

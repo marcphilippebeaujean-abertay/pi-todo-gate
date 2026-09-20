@@ -3,7 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPromptQueueModule } from "../../src/prompt-queue/module.ts";
+import { PromptQueueModule } from "../../src/prompt-queue/module.ts";
 import { PromptQueue } from "../../src/prompt-queue/queue.ts";
 import { EXTENSION_CONSTANTS as C } from "../../src/shared/constants.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
@@ -83,7 +83,7 @@ function setup() {
 	};
 	const api = pi();
 	const queue = new PromptQueue();
-	const module = createPromptQueueModule({
+	const module = new PromptQueueModule({
 		pi: api,
 		eventHandler,
 		sessionState,

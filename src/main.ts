@@ -5,18 +5,14 @@ import {
 } from "./event-consumer.ts";
 import { RootEventPublisher } from "./event-publishers.ts";
 import type { ExtensionDependencies as BaseExtensionDependencies } from "./extension-dependencies.ts";
-import type { FooterModule } from "./footer/module.ts";
-import { createFooterModule, footerStateDescriptor } from "./footer/module.ts";
-import { createHerdrTabRenameModule } from "./herdr-tab-rename/module.ts";
+import { FooterModule } from "./footer/module.ts";
+import { footerStateDescriptor } from "./footer/module-state.ts";
+import { HerdrTabRenameModule } from "./herdr-tab-rename/module.ts";
 import { herdrTabRenameStateDescriptor } from "./herdr-tab-rename/module-state.ts";
-import type { PrModule } from "./pr/module.ts";
-import { createPrModule } from "./pr/module.ts";
+import { PrModule } from "./pr/module.ts";
 import { prStateDescriptor } from "./pr/module-state.ts";
-import {
-	createPromptQueueModule,
-	type PromptQueueModule,
-} from "./prompt-queue/module.ts";
-import { createReviewModule } from "./review/module.ts";
+import { PromptQueueModule } from "./prompt-queue/module.ts";
+import { ReviewModule } from "./review/module.ts";
 import { reviewStateDescriptor } from "./review/module-state.ts";
 import {
 	type ModuleStateDescriptors,
@@ -32,8 +28,7 @@ import { isRecord } from "./shared/records.ts";
 import { isSubagent } from "./shared/session.ts";
 import type { SessionProject } from "./shared/session-state.ts";
 import { createSessionState } from "./state.ts";
-import type { TodoistModule } from "./todoist/module.ts";
-import { createTodoistModule } from "./todoist/module.ts";
+import { TodoistModule } from "./todoist/module.ts";
 import { todoistStateDescriptor } from "./todoist/module-state.ts";
 import type { TodoistProjectMapping } from "./todoist/parsing.ts";
 import {
@@ -41,15 +36,14 @@ import {
 	parseProjectEntry,
 	resolveConfiguredProject,
 } from "./todoist/parsing.ts";
-import type { WorktreeCleanup } from "./worktree/module.ts";
-import { createWorktreeModule } from "./worktree/module.ts";
+import { WorktreeModule } from "./worktree/module.ts";
 import { worktreeStateDescriptor } from "./worktree/module-state.ts";
 
-type TodoistModuleOptions = Parameters<typeof createTodoistModule>[0];
+type TodoistModuleOptions = ConstructorParameters<typeof TodoistModule>[0];
 type TodoistClientFactory = TodoistModuleOptions["createTodoistClient"];
 type TaskClaimWorker = TodoistModuleOptions["taskClaimWorker"];
 type TaskRefreshWorker = TodoistModuleOptions["taskRefreshWorker"];
-type HerdrSetupOptions = Parameters<typeof createHerdrTabRenameModule>[1];
+type HerdrSetupOptions = ConstructorParameters<typeof HerdrTabRenameModule>[1];
 type HerdrClient = NonNullable<HerdrSetupOptions["herdrClient"]>;
 type HerdrWorkerSpawner = NonNullable<HerdrSetupOptions["spawnWorker"]>;
 
@@ -69,7 +63,7 @@ interface ExtensionState {
 	footer: FooterModule;
 	pr: PrModule | null;
 	todoist: TodoistModule | null;
-	worktree: WorktreeCleanup | null;
+	worktree: WorktreeModule | null;
 }
 
 interface CreateExtensionStateOptions {
@@ -111,20 +105,20 @@ export function createExtensionState(
 		);
 	};
 	const stateUpdateEpoch = { value: 0 };
-	const footer = createFooterModule({
+	const footer = new FooterModule({
 		eventHandler,
 		getSessionState: () => sessionState,
 	});
 	const worktree = stateOptions.lazyModules
 		? null
-		: createWorktreeModule({
+		: new WorktreeModule({
 				eventHandler,
 				sessionState,
 				exec: moduleDependencies.exec,
 			});
 	const pr = stateOptions.lazyModules
 		? null
-		: createPrModule({
+		: new PrModule({
 				pi,
 				eventHandler,
 				sessionState,
@@ -132,7 +126,7 @@ export function createExtensionState(
 			});
 	const todoist = stateOptions.lazyModules
 		? null
-		: createTodoistModule({
+		: new TodoistModule({
 				pi,
 				eventHandler,
 				sessionState,
@@ -141,7 +135,7 @@ export function createExtensionState(
 				taskRefreshWorker: moduleDependencies.taskRefreshWorker,
 				createTodoistClient: moduleDependencies.createTodoistClient,
 			});
-	const promptQueue = createPromptQueueModule({
+	const promptQueue = new PromptQueueModule({
 		pi,
 		eventHandler,
 		sessionState,
@@ -265,7 +259,7 @@ function startExtensions(
 		const worktree =
 			root.worktree ??
 			(isGitProject
-				? createWorktreeModule({
+				? new WorktreeModule({
 						eventHandler: extensionState.eventHandler,
 						sessionState: extensionState.sessionState,
 						exec: moduleDependencies.exec,
@@ -274,7 +268,7 @@ function startExtensions(
 		const pr =
 			root.pr ??
 			(isGitProject
-				? createPrModule({
+				? new PrModule({
 						pi,
 						eventHandler: extensionState.eventHandler,
 						sessionState: extensionState.sessionState,
@@ -284,7 +278,7 @@ function startExtensions(
 		const todoist =
 			root.todoist ??
 			(isTodoistProject
-				? createTodoistModule({
+				? new TodoistModule({
 						pi,
 						eventHandler: extensionState.eventHandler,
 						sessionState: extensionState.sessionState,
@@ -305,14 +299,14 @@ function startExtensions(
 		if (!isGitProject) return;
 		if (!isInsideHerdr()) return;
 		reviewRegistered = true;
-		createReviewModule({
+		new ReviewModule({
 			pi,
 			sessionState: extensionState.sessionState,
 			herdrClient: moduleDependencies.herdrClient,
 		});
 	};
 	if (isInsideHerdr())
-		createHerdrTabRenameModule(pi, {
+		new HerdrTabRenameModule(pi, {
 			eventHandler: extensionState.eventHandler,
 			sessionState: extensionState.sessionState,
 			herdrClient: moduleDependencies.herdrClient,

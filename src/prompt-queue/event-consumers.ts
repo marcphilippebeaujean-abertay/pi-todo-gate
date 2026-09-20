@@ -1,18 +1,14 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PrModule } from "../pr/module.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import { withLoading } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type {
-	TodoistCompletionSnapshot,
-	TodoistModule,
-} from "../todoist/module.ts";
-import type { WorktreeCleanup } from "../worktree/module.ts";
-import type {
 	ExitProtocolState,
 	PromptQueueModuleOptions,
+	PromptQueueModules,
+	TodoistCompletionSnapshot,
 } from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
 import { confirmExitProtocol } from "./user-prompts.ts";
@@ -20,9 +16,9 @@ import { confirmExitProtocol } from "./user-prompts.ts";
 export class PromptQueueConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
-	private pr: PrModule | null;
-	private todoist: TodoistModule | null;
-	private worktree: WorktreeCleanup | null;
+	private pr: PromptQueueModuleOptions["pr"];
+	private todoist: PromptQueueModuleOptions["todoist"];
+	private worktree: PromptQueueModuleOptions["worktree"];
 	private readonly queue: PromptQueue;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
@@ -56,11 +52,7 @@ export class PromptQueueConsumer {
 		);
 	}
 
-	setModules(modules: {
-		pr: PrModule | null;
-		todoist: TodoistModule | null;
-		worktree: WorktreeCleanup | null;
-	}): void {
+	setModules(modules: PromptQueueModules): void {
 		this.pr = modules.pr;
 		this.todoist = modules.todoist;
 		this.worktree = modules.worktree;
@@ -74,7 +66,7 @@ export class PromptQueueConsumer {
 		return this.context;
 	}
 
-	getPr(): PrModule | null {
+	getPr(): PromptQueueModuleOptions["pr"] {
 		return this.pr;
 	}
 

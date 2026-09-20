@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CommandResult, Exec } from "../../src/shared/command.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
-import { createWorktreeModule } from "../../src/worktree/module.ts";
+import { WorktreeModule } from "../../src/worktree/module.ts";
 import { worktreeStateDescriptor } from "../../src/worktree/module-state.ts";
 
 type TestWorktreeModule = {
@@ -15,9 +15,9 @@ type TestWorktreeModule = {
 };
 
 const createTestWorktreeModule = (
-	options: Parameters<typeof createWorktreeModule>[0],
+	options: ConstructorParameters<typeof WorktreeModule>[0],
 ): TestWorktreeModule =>
-	createWorktreeModule({
+	new WorktreeModule({
 		...options,
 		changeDirectory:
 			options.changeDirectory ??

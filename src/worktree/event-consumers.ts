@@ -30,7 +30,7 @@ import type {
 } from "./internal-state.ts";
 import { notifyWorktree } from "./notifications.ts";
 
-class Worktree implements WorktreeConsumer {
+export class Worktree implements WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
@@ -295,10 +295,4 @@ class Worktree implements WorktreeConsumer {
 		if (cleanupCompleted) notifyWorktree(this.context, successMessage);
 		return result;
 	}
-}
-
-export function createWorktreeConsumer(
-	options: WorktreeModuleOptions,
-): WorktreeConsumer {
-	return new Worktree(options);
 }

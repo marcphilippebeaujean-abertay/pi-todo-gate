@@ -10,8 +10,14 @@ import "./footer-rendering.ts";
 import { FooterEventConsumer } from "./event-consumers.ts";
 import type { FooterModuleOptions } from "./internal-state.ts";
 
-export * from "./module-state.ts";
-export type FooterModule = Record<never, never>;
-export function createFooterModule(options: FooterModuleOptions): FooterModule {
-	return new FooterEventConsumer(options);
+export class FooterModule {
+	private readonly consumer: FooterEventConsumer;
+
+	constructor(options: FooterModuleOptions) {
+		this.consumer = new FooterEventConsumer(options);
+	}
+
+	getState() {
+		return this.consumer.getState();
+	}
 }

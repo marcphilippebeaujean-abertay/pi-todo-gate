@@ -80,7 +80,7 @@ function applyClaimResponse(
 	}
 }
 
-class HerdrTabRenameConsumer {
+export class HerdrTabRenameConsumer {
 	private readonly herdrClient: HerdrClient;
 	private readonly startWorker: StartBackgroundWorker;
 	private readonly shouldActivate: HerdrTabRenameOptions["shouldActivate"];
