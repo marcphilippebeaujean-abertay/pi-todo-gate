@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -74,8 +75,9 @@ function reviewPrompt(prUrl: string, worktreePath: string): string {
 	return `${REVIEW_PROMPT_PREFIX}${prUrl}${REVIEW_PROMPT_MIDDLE}${worktreePath}${REVIEW_PROMPT_SUFFIX}`;
 }
 
-function reviewAgentName(paneId: string): string {
-	return `${REVIEW_AGENT_NAME_PREFIX}-${paneId.replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}`;
+function reviewAgentName(): string {
+	const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
+	return `${REVIEW_AGENT_NAME_PREFIX}-${suffix}`;
 }
 
 function waitForPaneShell(
@@ -122,7 +124,7 @@ function openReviewPane(
 	]);
 	const paneId = paneIdFrom(splitOutput);
 	waitForPaneShell(herdrClient, paneId);
-	const agentName = reviewAgentName(paneId);
+	const agentName = reviewAgentName();
 	herdrClient(HERDR_COMMAND, [
 		AGENT,
 		START,

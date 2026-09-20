@@ -66,7 +66,8 @@ describe("review command", () => {
 		const fixture = setup();
 		await fixture.handler("", context());
 
-		expect(fixture.calls).toEqual([
+		expect(fixture.calls).toHaveLength(5);
+		expect(fixture.calls.slice(0, 2)).toEqual([
 			{
 				command: "herdr",
 				args: [
@@ -89,46 +90,49 @@ describe("review command", () => {
 					"echo __PI_TODO_GATE_REVIEW_SHELL_READY__",
 				],
 			},
-			{
-				command: "herdr",
-				args: [
-					"pane",
-					"wait-output",
-					"w1:p2",
-					"--match",
-					"__PI_TODO_GATE_REVIEW_SHELL_READY__",
-					"--source",
-					"recent-unwrapped",
-					"--timeout",
-					"30000",
-				],
-			},
-			{
-				command: "herdr",
-				args: [
-					"agent",
-					"start",
-					"review-w1-p2",
-					"--kind",
-					"pi",
-					"--pane",
-					"w1:p2",
-					"--",
-					"--no-extensions",
-				],
-			},
-			{
-				command: "herdr",
-				args: [
-					"agent",
-					"prompt",
-					"review-w1-p2",
-					expect.stringContaining(
-						"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
-					),
-				],
-			},
 		]);
+		expect(fixture.calls[2]).toEqual({
+			command: "herdr",
+			args: [
+				"pane",
+				"wait-output",
+				"w1:p2",
+				"--match",
+				"__PI_TODO_GATE_REVIEW_SHELL_READY__",
+				"--source",
+				"recent-unwrapped",
+				"--timeout",
+				"30000",
+			],
+		});
+		const startCall = fixture.calls[3];
+		const agentName = startCall?.args[2];
+		expect(agentName).toMatch(/^review-[0-9a-f]{8}$/);
+		expect(startCall).toEqual({
+			command: "herdr",
+			args: [
+				"agent",
+				"start",
+				agentName,
+				"--kind",
+				"pi",
+				"--pane",
+				"w1:p2",
+				"--",
+				"--no-extensions",
+			],
+		});
+		expect(fixture.calls[4]).toEqual({
+			command: "herdr",
+			args: [
+				"agent",
+				"prompt",
+				agentName,
+				expect.stringContaining(
+					"Review PR https://github.com/o/r/pull/42 code in /repo/.worktrees/feature",
+				),
+			],
+		});
 	});
 
 	it("falls back to command context directory without a worktree", async () => {
