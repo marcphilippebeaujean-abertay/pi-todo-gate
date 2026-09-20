@@ -1,3 +1,5 @@
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { EventHandler } from "../shared/events.ts";
 import { startPiWorker } from "../shared/pi-worker-runtime.ts";
 import {
 	EXPECTED_RESULT_FAILURE,
@@ -53,4 +55,14 @@ export function defaultStartWorker(
 	request: ClaimWorkerRequest,
 ): ReturnType<StartBackgroundWorker> {
 	return startClaimWorker(request, { cwd, spawnWorker });
+}
+
+export function publishHerdrLoading(
+	eventHandler: EventHandler,
+	isLoading: boolean,
+): Promise<void> {
+	return eventHandler.actionLoadingEvent.emit({
+		action: C.action.herdrTabRename,
+		isLoading,
+	});
 }

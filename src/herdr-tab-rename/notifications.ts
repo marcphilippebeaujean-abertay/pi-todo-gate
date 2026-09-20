@@ -1,10 +1,14 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { handleClaimError } from "../shared/claim-error.ts";
-import { HERDR } from "./constants.ts";
+import { publishSessionNotification } from "../event-publishers.ts";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
+import type { EventHandler } from "../shared/events.ts";
 
 export function notifyHerdrFailure(
-	context: ExtensionContext,
+	eventHandler: EventHandler,
 	error: string,
-): void {
-	handleClaimError(context, { jobType: HERDR, error });
+): Promise<void> {
+	return publishSessionNotification(
+		eventHandler,
+		`Warning: Herdr claim worker completed without claim evidence/ran into an error (${error})`,
+		C.value.warning,
+	);
 }

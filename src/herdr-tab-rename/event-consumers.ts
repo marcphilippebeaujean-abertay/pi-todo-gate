@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { createModuleStatePublisher } from "../event-publishers.ts";
 import type { BeforeAgentStartEvent } from "../shared/events.ts";
 import {
 	boundHerdrClient,
@@ -12,6 +13,7 @@ import { modelReference } from "../shared/pi-worker.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
+	HERDR_CLAIM_RETURNED,
 	HERDR_COMMAND,
 	LABEL_FLAG,
 	NEW_TAB_FLAG,
@@ -25,12 +27,11 @@ import {
 	TAB_CLAIM_START_FAILED,
 	TAB_RENAME_ARGS,
 } from "./constants.ts";
-import { defaultStartWorker } from "./event-publishers.ts";
+import { defaultStartWorker, publishHerdrLoading } from "./event-publishers.ts";
 import {
 	type ClaimCompletedEvent,
 	type ClaimFailedEvent,
 	createHerdrEvents,
-	type HerdrEvents,
 } from "./events.ts";
 import type {
 	ClaimWorkerHandle,
@@ -82,70 +83,38 @@ function applyClaimResponse(
 
 class HerdrTabRenameConsumer {
 	private readonly herdrClient: HerdrClient;
-	private readonly startWorker: StartBackgroundWorker;
-	private readonly shouldActivate: HerdrTabRenameOptions["shouldActivate"];
-	private readonly hasStoredClaim: HerdrTabRenameOptions["hasClaimReturnedSuccessfully"];
-	private readonly onClaimReturnedSuccessfully: HerdrTabRenameOptions["onClaimReturnedSuccessfully"];
-	private readonly withLoading: NonNullable<
-		HerdrTabRenameOptions["withLoading"]
-	>;
-	private readonly events: HerdrEvents;
-	private sessionCwd: string;
-	private worker: ClaimWorkerHandle | undefined;
-	private herdrAvailable = false;
-	private hasValidatedClaim = false;
-	private hasClaimReturnedSuccessfully = false;
-	private herdrBackgroundWorkerDispatched = false;
-	private herdrBackgroundWorkerReturned = false;
+	private readonly startWorker: (
+		cwd: string,
+		request: Parameters<StartBackgroundWorker>[0],
+	) => ClaimWorkerHandle;
+	private readonly eventHandler: HerdrTabRenameOptions["eventHandler"];
+	private readonly sessionState: HerdrTabRenameOptions["sessionState"];
+	private readonly workers = new Set<ClaimWorkerHandle>();
 	private initialLabel: string | undefined;
 	private tabId: string | undefined;
 	private paneId: string | undefined;
-	private claimContext: ExtensionContext | undefined;
-	private workerCompletion: Promise<void> | undefined;
-	private resolveWorkerCompletion: (() => void) | undefined;
 
-	constructor(
-		pi: ExtensionAPI,
-		options: HerdrTabRenameOptions,
-		events: HerdrEvents,
-	) {
+	constructor(pi: ExtensionAPI, options: HerdrTabRenameOptions) {
 		this.herdrClient = options.herdrClient ?? boundHerdrClient(process.cwd());
-		this.sessionCwd = process.cwd();
+		this.eventHandler = options.eventHandler;
+		this.sessionState = options.sessionState;
+		const startBackgroundWorker = options.startBackgroundWorker;
 		this.startWorker =
-			options.startBackgroundWorker ??
-			((request) =>
-				defaultStartWorker(this.sessionCwd, options.spawnWorker, request));
-		this.shouldActivate = options.shouldActivate;
-		this.hasStoredClaim = options.hasClaimReturnedSuccessfully;
-		this.onClaimReturnedSuccessfully = options.onClaimReturnedSuccessfully;
-		this.withLoading =
-			options.withLoading ?? (async (operation) => operation());
-		this.events = events;
-		this.events.claimCompletedEvent.subscribe(this.completeClaim.bind(this));
-		this.events.claimFailedEvent.subscribe(this.failClaim.bind(this));
+			startBackgroundWorker === undefined
+				? (cwd, request) =>
+						defaultStartWorker(cwd, options.spawnWorker, request)
+				: (_cwd, request) => startBackgroundWorker(request);
 		pi.on(SESSION_START_EVENT, this.sessionStart.bind(this));
 		pi.on(BEFORE_AGENT_START_EVENT, this.beforeAgentStart.bind(this));
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
 	}
 
-	private sessionStart(_event: unknown, ctx: ExtensionContext): void {
-		this.worker?.cancel();
-		this.resolveWorkerCompletion?.();
-		this.worker = undefined;
-		this.claimContext = undefined;
-		this.workerCompletion = undefined;
-		this.resolveWorkerCompletion = undefined;
-		this.sessionCwd = ctx.cwd;
-		this.herdrAvailable = isInsideHerdr();
-		const storedClaim = this.shouldHaveStoredClaim(ctx);
-		this.hasClaimReturnedSuccessfully = storedClaim;
-		this.hasValidatedClaim = storedClaim;
+	private sessionStart(_event: unknown, _ctx: ExtensionContext): void {
 		this.initialLabel = undefined;
 		this.tabId = undefined;
 		this.paneId = undefined;
-		const isDisabled = !(this.shouldActivate?.(ctx) ?? true);
-		const shouldSkip = !this.herdrAvailable || isDisabled;
-		if (shouldSkip) return;
+		const isAvailable = isInsideHerdr();
+		if (!isAvailable) return;
 		this.tabId = process.env.HERDR_TAB_ID;
 		this.paneId = process.env.HERDR_PANE_ID;
 		try {
@@ -155,40 +124,41 @@ class HerdrTabRenameConsumer {
 		}
 	}
 
-	private shouldHaveStoredClaim(ctx: ExtensionContext): boolean {
-		const storedClaim = this.hasStoredClaim?.(ctx);
-		return storedClaim ?? this.hasClaimReturnedSuccessfully;
-	}
-
 	private beforeAgentStart(
 		event: BeforeAgentStartEvent,
 		ctx: ExtensionContext,
 	): void {
-		const isUnavailable = !this.herdrAvailable;
-		const isClaimed =
-			this.hasValidatedClaim || this.hasClaimReturnedSuccessfully;
-		const isWorkerDispatched = this.herdrBackgroundWorkerDispatched;
-		const isWorkerReturned = this.herdrBackgroundWorkerReturned;
-		const isUnavailableOrClaimed = isUnavailable || isClaimed;
-		const isWorkerDone = isWorkerDispatched || isWorkerReturned;
-		const shouldSkip = isUnavailableOrClaimed || isWorkerDone;
+		const isUnavailable = !isInsideHerdr();
+		const hasStoredClaim =
+			this.sessionState.moduleState.herdrTabRename
+				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED;
+		const shouldSkip = isUnavailable || hasStoredClaim;
 		if (shouldSkip) return;
-		this.herdrBackgroundWorkerDispatched = true;
-		this.claimContext = ctx;
-		this.workerCompletion = new Promise<void>((resolve) => {
-			this.resolveWorkerCompletion = resolve;
+		const events = createHerdrEvents();
+		let worker: ClaimWorkerHandle | undefined;
+		const releaseWorker = (): void => {
+			if (worker !== undefined) this.workers.delete(worker);
+		};
+		events.claimCompletedEvent.subscribe((result) => {
+			releaseWorker();
+			return this.completeClaim(result);
 		});
-		void this.withLoading(() => this.workerCompletion as Promise<void>);
+		events.claimFailedEvent.subscribe((failure) => {
+			releaseWorker();
+			return this.failClaim(failure);
+		});
+		void publishHerdrLoading(this.eventHandler, true);
 		try {
-			this.worker = this.startWorker({
+			worker = this.startWorker(ctx.cwd, {
 				prompt: event.prompt ?? "",
 				instructions: TAB_CLAIM_INSTRUCTIONS,
 				model: modelReference(ctx.model),
-				events: this.events,
+				events,
 			});
+			this.workers.add(worker);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
-			this.failClaim({
+			void this.failClaim({
 				message: `${TAB_CLAIM_START_FAILED}${detail}`,
 				workerFailed: true,
 			});
@@ -196,16 +166,6 @@ class HerdrTabRenameConsumer {
 	}
 
 	private async completeClaim(event: ClaimCompletedEvent): Promise<void> {
-		const isWorkerDispatched = this.herdrBackgroundWorkerDispatched;
-		const isWorkerReturned = this.herdrBackgroundWorkerReturned;
-		const shouldIgnoreResult = !isWorkerDispatched || isWorkerReturned;
-		if (shouldIgnoreResult) return;
-		const context = this.claimContext;
-		const hasClaimContext = context !== undefined;
-		if (!hasClaimContext) return;
-		this.herdrBackgroundWorkerReturned = true;
-		this.worker = undefined;
-		this.claimContext = undefined;
 		try {
 			try {
 				applyClaimResponse(
@@ -216,7 +176,10 @@ class HerdrTabRenameConsumer {
 				);
 			} catch (error) {
 				const detail = error instanceof Error ? error.message : String(error);
-				notifyHerdrFailure(context, `${TAB_CLAIM_ACTION_FAILED}: ${detail}`);
+				await notifyHerdrFailure(
+					this.eventHandler,
+					`${TAB_CLAIM_ACTION_FAILED}: ${detail}`,
+				);
 				return;
 			}
 			const isValidated = hasValidatedTabClaim(
@@ -225,60 +188,48 @@ class HerdrTabRenameConsumer {
 				this.paneId,
 				event.result,
 			);
-			if (isValidated) {
-				this.hasValidatedClaim = true;
-				this.hasClaimReturnedSuccessfully = true;
-				const markerUpdate = this.onClaimReturnedSuccessfully?.(context);
-				if (markerUpdate instanceof Promise) await markerUpdate;
+			if (!isValidated) {
+				await notifyHerdrFailure(this.eventHandler, TAB_CLAIM_FAILED);
 				return;
 			}
-			notifyHerdrFailure(context, TAB_CLAIM_FAILED);
+			const publisher = createModuleStatePublisher(
+				this.eventHandler,
+				"herdrTabRename",
+			);
+			await publisher.publish(
+				{
+					...this.sessionState.moduleState.herdrTabRename,
+					herdrClaimReturnedSuccessfully: HERDR_CLAIM_RETURNED,
+				},
+				{ persist: true },
+			);
 		} finally {
-			this.finishWorker();
+			await publishHerdrLoading(this.eventHandler, false);
 		}
 	}
 
-	private failClaim(event: ClaimFailedEvent): void {
-		const isWorkerDispatched = this.herdrBackgroundWorkerDispatched;
-		const isWorkerReturned = this.herdrBackgroundWorkerReturned;
-		const shouldIgnoreResult = !isWorkerDispatched || isWorkerReturned;
-		if (shouldIgnoreResult) return;
-		const context = this.claimContext;
-		const hasClaimContext = context !== undefined;
-		if (!hasClaimContext) return;
-		this.herdrBackgroundWorkerReturned = true;
-		this.worker = undefined;
-		this.claimContext = undefined;
-		this.finishWorker();
-		notifyHerdrFailure(context, event.message);
-	}
-
-	private finishWorker(): void {
-		const resolve = this.resolveWorkerCompletion;
-		this.resolveWorkerCompletion = undefined;
-		this.workerCompletion = undefined;
-		resolve?.();
+	private async failClaim(event: ClaimFailedEvent): Promise<void> {
+		try {
+			await notifyHerdrFailure(this.eventHandler, event.message);
+		} finally {
+			await publishHerdrLoading(this.eventHandler, false);
+		}
 	}
 
 	private sessionShutdown(): void {
-		this.worker?.cancel();
-		this.finishWorker();
-		this.worker = undefined;
-		this.claimContext = undefined;
-		this.hasValidatedClaim = false;
-		this.hasClaimReturnedSuccessfully = false;
-		this.herdrBackgroundWorkerDispatched = false;
-		this.herdrBackgroundWorkerReturned = false;
-		this.herdrAvailable = false;
+		for (const worker of this.workers) worker.cancel();
+		this.workers.clear();
+		this.initialLabel = undefined;
+		this.tabId = undefined;
+		this.paneId = undefined;
 	}
 }
 
 export function installHerdrTabRename(
 	pi: ExtensionAPI,
-	options?: HerdrTabRenameOptions,
+	options: HerdrTabRenameOptions,
 ): void {
 	const shouldSkip = isSubagent();
 	if (shouldSkip) return;
-	const events = createHerdrEvents();
-	new HerdrTabRenameConsumer(pi, options ?? {}, events);
+	new HerdrTabRenameConsumer(pi, options);
 }
