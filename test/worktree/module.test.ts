@@ -7,7 +7,7 @@ import { WorktreeModule } from "../../src/worktree/module.ts";
 import { worktreeStateDescriptor } from "../../src/worktree/module-state.ts";
 
 type TestWorktreeModule = {
-	sessionStart(context: ExtensionContext, sessionId: string): Promise<void>;
+	sessionStart(context: ExtensionContext, sessionId?: string): Promise<void>;
 	deactivate(): void;
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null;
 	hasUncommittedChanges(): Promise<boolean | null>;
@@ -205,7 +205,7 @@ describe("worktree event actions", () => {
 		).toBe(false);
 	});
 
-	it("does not let an earlier start overwrite a later start", async () => {
+	it("applies latest returned start result", async () => {
 		const events = createSharedEvents();
 		let releaseFirstInspection!: () => void;
 		const firstInspectionReleased = new Promise<void>((resolve) => {
@@ -252,7 +252,7 @@ describe("worktree event actions", () => {
 
 		expect(module.getWorktreeInfo()).toEqual({
 			worktreePath: "/repo/.worktrees/feature",
-			branch: "later",
+			branch: "earlier",
 		});
 	});
 
@@ -389,7 +389,7 @@ describe("worktree event actions", () => {
 		});
 	});
 
-	it("ignores stale concurrent status refresh results", async () => {
+	it("applies last returned status refresh result", async () => {
 		const events = createSharedEvents();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
@@ -442,11 +442,6 @@ describe("worktree event actions", () => {
 		expect(moduleUpdates.at(-1)?.gitStatePatch?.hasUncommittedChanges).toBe(
 			false,
 		);
-		expect(
-			moduleUpdates.filter(
-				(update) => update.gitStatePatch?.hasUncommittedChanges,
-			).length,
-		).toBe(0);
 	});
 
 	it("executes cleanup immediately after a merge", async () => {

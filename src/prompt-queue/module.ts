@@ -24,7 +24,6 @@ export class PromptQueueModule {
 			eventHandler: options.eventHandler,
 			sessionState: options.sessionState,
 			pr: options.pr,
-			getPr: this.consumer.getPr.bind(this.consumer),
 			queue,
 			getContext: this.consumer.getContext.bind(this.consumer),
 			isCurrent: this.consumer.isCurrentContext.bind(this.consumer),

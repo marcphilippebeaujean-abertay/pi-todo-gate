@@ -36,7 +36,6 @@ export interface CommandDependencies {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	pr: PrModule | null;
-	getPr?: () => PrModule | null;
 	queue: PromptQueue;
 	getContext: () => ExtensionContext | null;
 	isCurrent: (context: ExtensionContext) => boolean;

@@ -16,11 +16,8 @@ export class WorktreeModule {
 		this.consumer = new Worktree(options);
 	}
 
-	private sessionStart(
-		context: Parameters<Worktree["sessionStart"]>[0],
-		sessionId: string,
-	) {
-		return this.consumer.sessionStart(context, sessionId);
+	private sessionStart(context: Parameters<Worktree["sessionStart"]>[0]) {
+		return this.consumer.sessionStart(context);
 	}
 
 	private deactivate(): void {

@@ -53,12 +53,18 @@ describe("module API boundaries", () => {
 			readFile("src/prompt-queue/internal-state.ts", "utf8"),
 		]);
 		expect(moduleSource).not.toContain("setModules");
+		expect(moduleSource).not.toContain("getPr:");
 		expect(moduleSource).toContain("new PromptQueue()");
 		const options = stateSource.slice(
 			stateSource.indexOf("export interface PromptQueueModuleOptions"),
 		);
 		expect(options.slice(0, options.indexOf("\n}"))).not.toMatch(/queue\??:/);
 		expect(stateSource).not.toContain("PromptQueueModules");
+		const commandSource = await readFile(
+			"src/prompt-queue/commands.ts",
+			"utf8",
+		);
+		expect(commandSource).not.toContain("dependencies.getPr");
 	});
 
 	it("exports only main module classes", async () => {

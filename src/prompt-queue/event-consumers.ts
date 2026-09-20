@@ -15,7 +15,6 @@ import { confirmExitProtocol } from "./user-prompts.ts";
 export class PromptQueueConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
-	private pr: PromptQueueModuleOptions["pr"];
 	private todoist: PromptQueueModuleOptions["todoist"];
 	private worktree: PromptQueueModuleOptions["worktree"];
 	private readonly queue: PromptQueue;
@@ -26,7 +25,6 @@ export class PromptQueueConsumer {
 	constructor(options: PromptQueueModuleOptions, queue: PromptQueue) {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		this.pr = options.pr;
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
 		this.queue = queue;
@@ -57,10 +55,6 @@ export class PromptQueueConsumer {
 
 	getContext(): ExtensionContext | null {
 		return this.context;
-	}
-
-	getPr(): PromptQueueModuleOptions["pr"] {
-		return this.pr;
 	}
 
 	isCurrentContext(context: ExtensionContext): boolean {
