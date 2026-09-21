@@ -66,7 +66,7 @@ async function persistCandidate(
 		? {
 				...current,
 				prUrl: url,
-				discoveryDisabled: true,
+				discoveryDisabled: false,
 				discoveryTestedUrls: nextTestedUrls,
 			}
 		: { ...current, discoveryTestedUrls: nextTestedUrls };
@@ -176,9 +176,7 @@ export class PrConsumer {
 	persistPrIfAvailable(text: string): Promise<void> {
 		const current = this.state;
 		const discoveryDisabled = current.discoveryDisabled;
-		const hasPinnedPr = current.prUrl !== undefined;
-		const shouldSkipDiscovery = discoveryDisabled || hasPinnedPr;
-		if (shouldSkipDiscovery) return Promise.resolve();
+		if (discoveryDisabled) return Promise.resolve();
 		const remoteOrigin = this.sessionState.gitState.remoteOrigin;
 		const hasRemoteOrigin = remoteOrigin !== undefined;
 		if (!hasRemoteOrigin) return Promise.resolve();
