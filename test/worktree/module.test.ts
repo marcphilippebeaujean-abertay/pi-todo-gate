@@ -24,13 +24,7 @@ const createTestWorktreeModule = (
 			};
 		}
 	});
-	return new WorktreeModule({
-		...options,
-		changeDirectory:
-			options.changeDirectory ??
-			options.dependencies?.changeDirectory ??
-			vi.fn(),
-	}) as unknown as TestWorktreeModule;
+	return new WorktreeModule(options) as unknown as TestWorktreeModule;
 };
 
 function ok(stdout: string): CommandResult {
@@ -453,7 +447,7 @@ describe("worktree event actions", () => {
 		const events = createSharedEvents();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
-		const changeDirectory = vi.fn();
+		const initialCwd = process.cwd();
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
 		const ctx = context();
@@ -462,7 +456,6 @@ describe("worktree event actions", () => {
 			sessionState,
 			dependencies: {
 				exec: projectResult("abc", "abc", "", " M dirty\\n", commands),
-				changeDirectory,
 			},
 		});
 		await module.sessionStart(ctx, "session");
@@ -470,7 +463,7 @@ describe("worktree event actions", () => {
 			"completed",
 		);
 		expect(ctx.ui.confirm).not.toHaveBeenCalled();
-		expect(changeDirectory).toHaveBeenCalledWith("/repo");
+		expect(process.cwd()).toBe(initialCwd);
 		expect(commands.at(-2)).toEqual({
 			command: "git",
 			args: ["worktree", "remove", "--force", "/repo/.worktrees/feature"],
@@ -498,7 +491,6 @@ describe("worktree event actions", () => {
 		const ctx = context();
 		const commands: Array<{ command: string; args: string[]; cwd?: string }> =
 			[];
-		const changeDirectory = vi.fn();
 		const confirm = vi.fn(async () => {
 			await confirmBlocked;
 			return true;
@@ -509,7 +501,6 @@ describe("worktree event actions", () => {
 			sessionState,
 			dependencies: {
 				exec: projectResult("abc", "abc", "", " M dirty\\n", commands),
-				changeDirectory,
 			},
 		});
 		await module.sessionStart(ctx, "old");
@@ -517,7 +508,6 @@ describe("worktree event actions", () => {
 		await Promise.resolve();
 		sessionState.session.activeSessionId = "new";
 		await module.sessionStart(ctx, "new");
-		changeDirectory.mockClear();
 		releaseConfirm();
 
 		expect(await cleanup).toBe("failed");
@@ -532,7 +522,6 @@ describe("worktree event actions", () => {
 					(args[0] === "branch" && args[1] === "-D"),
 			),
 		).toEqual([]);
-		expect(changeDirectory).not.toHaveBeenCalled();
 		expect(ctx.ui.notify).not.toHaveBeenCalled();
 		expect(notifications).toEqual([]);
 	});

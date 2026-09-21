@@ -49,10 +49,6 @@ export async function currentWorktreeStatus(
 	}
 }
 
-function errorDetail(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function failureMessage(
 	result: { stderr: string; code: number },
 	fallback: string,
@@ -124,11 +120,6 @@ export async function cleanupWorktree(
 	const hasChanges = status !== EMPTY;
 	const shouldRejectDirtyCleanup = hasChanges && !force;
 	if (shouldRejectDirtyCleanup) return FAILED;
-	try {
-		options.changeDirectory(mainRoot);
-	} catch (error) {
-		return cleanupFailure(options, errorDetail(error));
-	}
 	const removeArgs: string[] = [...REMOVE_ARGS];
 	const shouldForceRemoval = force;
 	if (shouldForceRemoval) removeArgs.push(FORCE_ARG);

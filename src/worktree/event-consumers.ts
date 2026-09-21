@@ -18,7 +18,6 @@ export class WorktreeConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
 	private readonly exec: Exec;
-	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
 	private uncommittedChanges = false;
 
@@ -27,8 +26,6 @@ export class WorktreeConsumer {
 		this.sessionState = options.sessionState;
 		const dependencies = options.dependencies ?? {};
 		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
-		this.changeDirectory =
-			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
@@ -131,7 +128,6 @@ export class WorktreeConsumer {
 	): Promise<ExitActionResult> {
 		return cleanupWorktree(this.sessionState, force, {
 			exec: this.exec,
-			changeDirectory: this.changeDirectory,
 			notify: notifyWorktree.bind(null, context),
 		});
 	}
