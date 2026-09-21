@@ -194,7 +194,9 @@ describe("session shutdown", () => {
 			sessionId: "session",
 		});
 
-		await root.promptQueue.drain();
+		const promptQueue = root.promptQueue;
+		if (promptQueue === null) throw new Error("Prompt Queue not installed");
+		await promptQueue.drain();
 		expect(select).toHaveBeenCalledOnce();
 		expect(confirm).not.toHaveBeenCalled();
 		expect(custom).not.toHaveBeenCalled();

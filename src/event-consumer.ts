@@ -35,18 +35,18 @@ import {
 	type SessionState,
 } from "./state.ts";
 import type { TodoistModule } from "./todoist/module.ts";
-import type { WorktreeCleanup } from "./worktree/module.ts";
+import type { WorktreeModule } from "./worktree/module.ts";
 
 export interface RootComposition {
 	pi: ExtensionAPI;
 	dependencies: RootDependencies;
 	eventHandler: EventHandler;
-	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule;
+	promptQueue: import("./prompt-queue/module.ts").PromptQueueModule | null;
 	sessionState: SessionState;
 	footer: FooterModuleType;
 	pr: PrModule | null;
 	todoist: TodoistModule | null;
-	worktree: WorktreeCleanup | null;
+	worktree: WorktreeModule | null;
 	installModules: (project: SessionProject) => void;
 	session: SessionRecord | null;
 	publisher: RootEventPublisher;
