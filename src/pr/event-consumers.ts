@@ -173,7 +173,7 @@ export class PrConsumer {
 		return this.sessionState.gitState.worktreeRoot ?? process.cwd();
 	}
 
-	private persistPrIfAvailable(text: string): Promise<void> {
+	persistPrIfAvailable(text: string): Promise<void> {
 		const current = this.state;
 		const discoveryDisabled = current.discoveryDisabled;
 		const hasPinnedPr = current.prUrl !== undefined;

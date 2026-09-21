@@ -7,6 +7,7 @@ import { eventTypesLocation } from "./rules/event-types-location.ts";
 import { eventTypesOutsideEvents } from "./rules/event-types-outside-events.ts";
 import { functionLength } from "./rules/function-length.ts";
 import { functionsPerFile } from "./rules/functions-per-file.ts";
+import { moduleClassExport } from "./rules/module-class-export.ts";
 import { moduleStateContract } from "./rules/module-state-contract.ts";
 import { namedIfCondition } from "./rules/named-if-condition.ts";
 import { nestedFunctionDepth } from "./rules/nested-function-depth.ts";
@@ -32,6 +33,7 @@ export { formatLintDiagnostic } from "./diagnostic.ts";
 export type { LintDiagnostic, LintRuleId } from "./types.ts";
 
 const RULES: readonly LintRule[] = [
+	moduleClassExport,
 	commandsOnlyRegister,
 	commandsRequireTgPrefix,
 	noWorkerConsumerCallbacks,

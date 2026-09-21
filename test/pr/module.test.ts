@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
-import { createPrModule } from "../../src/pr/module.ts";
+import { PrModule } from "../../src/pr/module.ts";
 import { prStateDescriptor } from "../../src/pr/module-state.ts";
 import {
 	firstUnmergedGithubPrUrl,
@@ -65,7 +65,7 @@ describe("PR module state", () => {
 			if (args[0] === "gh") await blocked;
 			return result(JSON.stringify({ url: PR_42 }));
 		});
-		const module = createPrModule({
+		const module = new PrModule({
 			eventHandler: events,
 			sessionState,
 			exec,
@@ -99,7 +99,7 @@ describe("PR module state", () => {
 			if (calls === 2) await second;
 			return result(JSON.stringify({ url }));
 		});
-		const module = createPrModule({
+		const module = new PrModule({
 			eventHandler: events,
 			sessionState,
 			exec,
@@ -124,7 +124,7 @@ describe("PR module state", () => {
 		sessionState.session.activeSessionId = "session";
 		sessionState.gitState.remoteOrigin = "git@github.com:o/r.git";
 		const exec = vi.fn(async () => result(JSON.stringify({ url: PR_42 })));
-		const module = createPrModule({
+		const module = new PrModule({
 			eventHandler: events,
 			sessionState,
 			exec,

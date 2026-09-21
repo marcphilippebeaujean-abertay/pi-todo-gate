@@ -32,7 +32,7 @@ async function runMerge(
 		notifyNoUi(context);
 		return;
 	}
-	const pr = dependencies.getPr?.() ?? dependencies.pr;
+	const pr = dependencies.pr;
 	const hasPrModule = pr !== null;
 	if (!hasPrModule) {
 		notifyInactive(context);

@@ -428,7 +428,6 @@ describe("working tree status", () => {
 		});
 
 		await start(h, { "/configured": MERGE_TD }, { exec });
-		await new Promise((resolve) => setTimeout(resolve, 10));
 		await h.handlers.get(TOOL_RESULT)?.(
 			{
 				type: TOOL_RESULT,
@@ -438,6 +437,7 @@ describe("working tree status", () => {
 			},
 			h.ctx,
 		);
+		await vi.waitFor(() => expect(h.selections).not.toHaveLength(0));
 
 		expect(h.selections).toContainEqual({
 			title:

@@ -8,7 +8,7 @@ import type {
 	HerdrClient,
 	StartBackgroundWorker,
 } from "../../src/herdr-tab-rename/internal-state.ts";
-import { createHerdrTabRenameModule } from "../../src/herdr-tab-rename/module.ts";
+import { HerdrTabRenameModule } from "../../src/herdr-tab-rename/module.ts";
 import { herdrTabRenameStateDescriptor } from "../../src/herdr-tab-rename/module-state.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
@@ -183,7 +183,7 @@ describe("Herdr module availability and state", () => {
 		delete process.env.HERDR_ENV;
 		const pi = fakePi();
 		const sessionState = createSessionState();
-		createHerdrTabRenameModule(pi as unknown as ExtensionAPI, {
+		new HerdrTabRenameModule(pi as unknown as ExtensionAPI, {
 			eventHandler: createSharedEvents(),
 			sessionState,
 		});
