@@ -24,7 +24,7 @@ import {
 	isCurrentWorktree,
 } from "./git.ts";
 import type {
-	WorktreeBaseline,
+	WorktreeCleanupTarget,
 	WorktreeConsumer,
 	WorktreeModuleOptions,
 } from "./internal-state.ts";
@@ -36,18 +36,12 @@ class Worktree implements WorktreeConsumer {
 	private readonly exec: Exec;
 	private readonly changeDirectory: (path: string) => void;
 	private context: ExtensionContext | null = null;
-	private baseline: WorktreeBaseline | null = null;
-	private uncommittedChanges = false;
-	private refreshSequence = 0;
-	private initializationSequence = 0;
 
 	constructor(options: WorktreeModuleOptions) {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		const dependencies = options.dependencies ?? {};
-		this.exec = options.exec ?? dependencies.exec ?? spawnExec;
-		this.changeDirectory =
-			options.changeDirectory ?? dependencies.changeDirectory ?? process.chdir;
+		this.exec = options.exec ?? spawnExec;
+		this.changeDirectory = options.changeDirectory ?? process.chdir;
 		this.eventHandler.toolResultEvent.subscribe(({ event, context }) =>
 			this.consumeToolResult(event, context),
 		);
@@ -66,147 +60,84 @@ class Worktree implements WorktreeConsumer {
 		const isCurrentActivation =
 			this.sessionState.session.activeSessionId === expectedSessionId;
 		if (!isCurrentActivation) return;
-		this.refreshSequence += 1;
-		const initializationSequence = ++this.initializationSequence;
 		this.context = nextContext;
-		this.baseline = null;
-		await this.initializeSession(
-			nextContext,
-			expectedSessionId,
-			initializationSequence,
-		);
-	}
-
-	private isCurrentSession(ctx: ExtensionContext, sessionId: string): boolean {
-		const isCurrentContext = this.context === ctx;
-		const activeSessionId = this.sessionState.session.activeSessionId;
-		const hasCurrentSessionId = activeSessionId === sessionId;
-		return isCurrentContext && hasCurrentSessionId;
+		await this.initializeSession(nextContext);
 	}
 
 	private async consumeToolResult(
 		event: { toolName: string; isError: boolean },
 		context: ExtensionContext,
 	): Promise<void> {
-		const isCurrentContext = this.context === context;
 		const isError = event.isError;
-		const shouldSkipResult = !isCurrentContext || isError;
-		if (shouldSkipResult) return;
-		const toolName = event.toolName;
-		const isEditTool = toolName === C.tool.edit;
-		const isWriteTool = toolName === C.tool.write;
-		const isFileMutation = isEditTool || isWriteTool;
-		const isBashTool = toolName === C.tool.bash;
-		const shouldRefresh = isFileMutation || isBashTool;
-		const shouldSkipRefresh = !shouldRefresh;
-		if (shouldSkipRefresh) return;
-		const expectedSessionId = this.sessionState.session.activeSessionId;
-		if (expectedSessionId === null) return;
-		const sequence = ++this.refreshSequence;
-		await this.refreshStatus(context, expectedSessionId, sequence);
-	}
-
-	private emitState(gitStatePatch?: Partial<SessionState["gitState"]>): void {
-		const moduleState =
-			this.baseline === null
-				? {}
-				: {
-						initialHead: this.baseline.initialHead,
-						initialStatus: this.baseline.initialStatus,
-					};
-		void publishWorktreeState(this.eventHandler, moduleState, gitStatePatch);
-	}
-
-	private async refreshStatus(
-		context: ExtensionContext,
-		sessionId: string,
-		sequence: number,
-	): Promise<void> {
-		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
-		const isCurrent = this.isCurrentSession(context, sessionId);
-		const hasStatus = dirtyStatus !== null;
-		const isCurrentAndHasStatus = isCurrent && hasStatus;
-		const isLatestRequest = sequence === this.refreshSequence;
-		const shouldSkipStatus = !isCurrentAndHasStatus || !isLatestRequest;
-		if (shouldSkipStatus) return;
-		this.uncommittedChanges = dirtyStatus;
-		this.emitState({ hasUncommittedChanges: this.uncommittedChanges });
-	}
-
-	private async initializeSession(
-		ctx: ExtensionContext,
-		sessionId: string,
-		initializationSequence: number,
-	): Promise<void> {
-		const isCurrentInitialization = () =>
-			initializationSequence === this.initializationSequence;
-		const project = await inspectProject(this.exec, ctx.cwd);
-		const isCurrentContextAfterProject =
-			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
-		if (!isCurrentContextAfterProject) return;
-		const isNotWorktree = !project.isWorktree;
-		const projectRoot = project.root;
-		if (isNotWorktree) {
-			await this.initializeNonWorktree(ctx, sessionId, isCurrentInitialization);
-			return;
+		if (isError) return;
+		switch (event.toolName) {
+			case C.tool.edit:
+			case C.tool.write:
+			case C.tool.bash:
+				await this.refreshStatus(context);
+				return;
+			default:
+				return;
 		}
-		if (projectRoot === null) return;
-		if (project.branch === null) return;
-		if (project.mainRoot === null) return;
-		const state = await currentWorktreeState(this.exec, ctx.cwd);
-		if (state === null) return;
-		const isCurrentContextAfterState =
-			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
-		if (!isCurrentContextAfterState) return;
-		this.baseline = {
-			worktreePath: projectRoot,
-			branch: project.branch,
-			mainRoot: project.mainRoot,
-			initialHead: state.currentHead,
-			initialStatus: state.currentStatus,
-		};
-		this.uncommittedChanges = state.currentStatus !== EMPTY;
-		this.emitState({
-			branch: project.branch,
-			isWorktree: project.isWorktree,
-			worktreeRoot: project.root,
-			mainRoot: project.mainRoot,
-			hasUncommittedChanges: this.uncommittedChanges,
-		});
 	}
 
-	private async initializeNonWorktree(
-		ctx: ExtensionContext,
-		sessionId: string,
-		isCurrentInitialization: () => boolean,
+	private publishState(
+		moduleState: SessionState["moduleState"]["worktree"],
+		gitStatePatch?: Partial<SessionState["gitState"]>,
 	): Promise<void> {
-		const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
-		const isCurrentAfterDirtyStatus =
-			isCurrentInitialization() && this.isCurrentSession(ctx, sessionId);
-		const hasStatus = dirtyStatus !== null;
-		const shouldSkipDirtyStatus = !isCurrentAfterDirtyStatus || !hasStatus;
-		if (shouldSkipDirtyStatus) return;
-		this.uncommittedChanges = dirtyStatus;
-		this.emitState({
+		return publishWorktreeState(this.eventHandler, moduleState, gitStatePatch);
+	}
+
+	private async refreshStatus(context: ExtensionContext): Promise<void> {
+		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
+		if (dirtyStatus === null) return;
+		await this.publishState(this.sessionState.moduleState.worktree, {
 			hasUncommittedChanges: dirtyStatus,
 		});
 	}
 
+	private async initializeSession(ctx: ExtensionContext): Promise<void> {
+		const project = await inspectProject(this.exec, ctx.cwd);
+		const isNotWorktree = !project.isWorktree;
+		if (isNotWorktree) {
+			const dirtyStatus = await inspectDirtyStatus(this.exec, ctx.cwd);
+			if (dirtyStatus === null) return;
+			await this.publishState(this.sessionState.moduleState.worktree, {
+				hasUncommittedChanges: dirtyStatus,
+			});
+			return;
+		}
+		if (project.root === null) return;
+		if (project.branch === null) return;
+		if (project.mainRoot === null) return;
+		const state = await currentWorktreeState(this.exec, ctx.cwd);
+		if (state === null) return;
+		const moduleState = {
+			...this.sessionState.moduleState.worktree,
+			initialHead: state.currentHead,
+			initialStatus: state.currentStatus,
+		};
+		await this.publishState(moduleState, {
+			branch: project.branch,
+			isWorktree: project.isWorktree,
+			worktreeRoot: project.root,
+			mainRoot: project.mainRoot,
+			hasUncommittedChanges: state.currentStatus !== EMPTY,
+		});
+	}
+
 	deactivate(): void {
-		this.refreshSequence += 1;
-		this.initializationSequence += 1;
 		this.context = null;
-		this.baseline = null;
-		this.uncommittedChanges = false;
-		void publishWorktreeState(this.eventHandler, {}, {});
+		void this.publishState({}, {});
 	}
 
 	getWorktreeInfo(): { worktreePath: string; branch: string } | null {
-		if (this.baseline === null) return null;
-		return {
-			worktreePath: this.baseline.worktreePath,
-			branch: this.baseline.branch,
-		};
+		const worktreePath = this.sessionState.gitState.worktreeRoot;
+		const branch = this.sessionState.gitState.branch;
+		const hasWorktreeInfo =
+			typeof worktreePath === "string" && typeof branch === "string";
+		if (!hasWorktreeInfo) return null;
+		return { worktreePath, branch };
 	}
 
 	async hasUncommittedChanges(): Promise<boolean | null> {
@@ -218,26 +149,24 @@ class Worktree implements WorktreeConsumer {
 	removeWorktree(options: { force: boolean }): Promise<ExitActionResult> {
 		const context = this.context;
 		if (context === null) return Promise.resolve(FAILED);
-		const worktree = this.baseline;
+		const worktree = currentWorktreeTarget(this.sessionState);
 		if (worktree === null) return Promise.resolve(FAILED);
-		const expectedSessionId = this.sessionState.session.activeSessionId;
-		if (expectedSessionId === null) return Promise.resolve(FAILED);
-		return this.executeCleanup(
-			context,
-			expectedSessionId,
-			worktree,
-			options.force,
-		);
+		const sessionId = this.sessionState.session.activeSessionId;
+		if (sessionId === null) return Promise.resolve(FAILED);
+		return this.executeCleanup(context, sessionId, worktree, options.force);
 	}
 
 	private async executeCleanup(
 		context: ExtensionContext,
 		sessionId: string,
-		worktree: WorktreeBaseline,
+		worktree: WorktreeCleanupTarget,
 		force: boolean,
 	): Promise<ExitActionResult> {
 		const state = await currentWorktreeState(this.exec, worktree.worktreePath);
-		const isCurrentWorktreeState = isCurrentWorktree(this.baseline, worktree);
+		const isCurrentWorktreeState = isCurrentWorktree(
+			currentWorktreeTarget(this.sessionState),
+			worktree,
+		);
 		if (!isCurrentWorktreeState) {
 			await publishSessionNotification(
 				this.eventHandler,
@@ -246,9 +175,8 @@ class Worktree implements WorktreeConsumer {
 			);
 			return FAILED;
 		}
-		const hasNoState = state === null;
-		if (hasNoState) {
-			notifyWorktree(this.context, C.worktree.statusUnavailable, "warning");
+		if (state === null) {
+			notifyWorktree(context, C.worktree.statusUnavailable, "warning");
 			return FAILED;
 		}
 		const hasChanges = state.currentStatus !== EMPTY;
@@ -266,7 +194,7 @@ class Worktree implements WorktreeConsumer {
 	private async cleanupNow(
 		context: ExtensionContext,
 		sessionId: string,
-		worktree: WorktreeBaseline,
+		worktree: WorktreeCleanupTarget,
 		force: boolean,
 		successMessage: string,
 	): Promise<ExitActionResult> {
@@ -277,24 +205,49 @@ class Worktree implements WorktreeConsumer {
 			notify: notifyWorktree.bind(null, context),
 			worktreeRemoved: cleanupState,
 			isCurrent: () =>
-				this.isCurrentSession(context, sessionId) &&
-				isCurrentWorktree(this.baseline, worktree),
+				this.sessionState.session.activeSessionId === sessionId &&
+				isCurrentWorktree(currentWorktreeTarget(this.sessionState), worktree),
 			notifySession: (message) =>
 				publishSessionNotification(this.eventHandler, message, WARNING),
 		});
 		const isCurrentAfterCleanup =
-			this.isCurrentSession(context, sessionId) &&
-			isCurrentWorktree(this.baseline, worktree);
+			this.sessionState.session.activeSessionId === sessionId &&
+			isCurrentWorktree(currentWorktreeTarget(this.sessionState), worktree);
 		if (!isCurrentAfterCleanup) return FAILED;
 		const worktreeWasRemoved = cleanupState.value;
 		if (worktreeWasRemoved) {
-			this.baseline = null;
-			this.emitState();
+			await this.publishState(
+				{},
+				{
+					branch: null,
+					isWorktree: false,
+					worktreeRoot: null,
+					mainRoot: null,
+					hasUncommittedChanges: false,
+				},
+			);
 		}
 		const cleanupCompleted = result === COMPLETED;
-		if (cleanupCompleted) notifyWorktree(this.context, successMessage);
+		if (cleanupCompleted) notifyWorktree(context, successMessage);
 		return result;
 	}
+}
+
+function currentWorktreeTarget(
+	sessionState: SessionState,
+): WorktreeCleanupTarget | null {
+	const { worktreeRoot, branch, mainRoot } = sessionState.gitState;
+	const hasWorktreePath = typeof worktreeRoot === "string";
+	const hasBranch = typeof branch === "string";
+	const hasMainRoot = typeof mainRoot === "string";
+	if (!hasWorktreePath) return null;
+	if (!hasBranch) return null;
+	if (!hasMainRoot) return null;
+	return {
+		worktreePath: worktreeRoot as string,
+		branch: branch as string,
+		mainRoot: mainRoot as string,
+	};
 }
 
 export function createWorktreeConsumer(
