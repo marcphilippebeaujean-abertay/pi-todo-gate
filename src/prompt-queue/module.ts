@@ -10,31 +10,31 @@ import "./module-state.ts";
 import "./queue.ts";
 import { register } from "./commands.ts";
 import { PromptQueueConsumer } from "./event-consumers.ts";
-import type {
-	PromptQueueModule,
-	PromptQueueModuleOptions,
-} from "./internal-state.ts";
+import type { PromptQueueModuleOptions } from "./internal-state.ts";
 import { PromptQueue } from "./queue.ts";
 
-export type {
-	PromptQueueModule,
-	PromptQueueModuleOptions,
-} from "./internal-state.ts";
+export class PromptQueueModule {
+	private readonly consumer: PromptQueueConsumer;
 
-export function createPromptQueueModule(
-	options: PromptQueueModuleOptions,
-): PromptQueueModule {
-	const queue = options.queue ?? new PromptQueue();
-	const consumer = new PromptQueueConsumer({ ...options, queue });
-	register({
-		pi: options.pi,
-		eventHandler: options.eventHandler,
-		sessionState: options.sessionState,
-		pr: options.pr,
-		getPr: consumer.getPr.bind(consumer),
-		queue,
-		getContext: consumer.getContext.bind(consumer),
-		isCurrent: consumer.isCurrentContext.bind(consumer),
-	});
-	return consumer;
+	constructor(options: PromptQueueModuleOptions) {
+		const queue = new PromptQueue();
+		this.consumer = new PromptQueueConsumer(options, queue);
+		register({
+			pi: options.pi,
+			eventHandler: options.eventHandler,
+			sessionState: options.sessionState,
+			pr: options.pr,
+			queue,
+			getContext: this.consumer.getContext.bind(this.consumer),
+			isCurrent: this.consumer.isCurrentContext.bind(this.consumer),
+		});
+	}
+
+	drain(): Promise<void> {
+		return this.consumer.drain();
+	}
+
+	getContext() {
+		return this.consumer.getContext();
+	}
 }

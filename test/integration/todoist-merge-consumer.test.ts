@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
-import { createTodoistModule } from "../../src/todoist/module.ts";
+import { TodoistModule } from "../../src/todoist/module.ts";
 
 const context = {
 	cwd: "/repo",
@@ -32,7 +32,7 @@ describe("Todoist completion capability", () => {
 			updates.push(update);
 		});
 		const completeTask = vi.fn(async () => undefined);
-		const module = createTodoistModule({
+		const module = new TodoistModule({
 			createTodoistClient: () => ({ completeTask }),
 			eventHandler,
 			sessionState,
@@ -58,7 +58,7 @@ describe("Todoist completion capability", () => {
 		const completeTask = vi.fn(async () => {
 			throw new Error("unavailable");
 		});
-		const module = createTodoistModule({
+		const module = new TodoistModule({
 			createTodoistClient: () => ({ completeTask }),
 			eventHandler,
 			sessionState,

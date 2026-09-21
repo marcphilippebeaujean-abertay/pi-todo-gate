@@ -4,7 +4,7 @@ import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 import { handleTaskClaimResult } from "../../src/todoist/event-consumers.ts";
 import type { TodoistSession } from "../../src/todoist/internal-state.ts";
-import { createTodoistModule } from "../../src/todoist/module.ts";
+import { TodoistModule } from "../../src/todoist/module.ts";
 
 function session(projectRef = "project", cwd = "/repo"): TodoistSession {
 	return {
@@ -26,7 +26,7 @@ describe("Todoist module", () => {
 	it("registers Todoist commands once when tools become available", async () => {
 		const events = createSharedEvents();
 		const registerCommand = vi.fn();
-		createTodoistModule({
+		new TodoistModule({
 			eventHandler: events,
 			sessionState: createSessionState(),
 		});
@@ -52,7 +52,7 @@ describe("Todoist module", () => {
 		events.moduleStateChangedEvent.subscribe((update) => {
 			updates.push(update);
 		});
-		createTodoistModule({ eventHandler: events, sessionState });
+		new TodoistModule({ eventHandler: events, sessionState });
 		const currentSession = session("Pi Extensions");
 
 		await events.sessionActivatedEvent.emit({

@@ -1,40 +1,33 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PrModule } from "../pr/module.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import type { EventHandler, PrMergedEvent } from "../shared/events.ts";
 import { withLoading } from "../shared/events.ts";
 import type { SessionRecord } from "../shared/session-state.ts";
 import type { SessionState } from "../state.ts";
 import type {
-	TodoistCompletionSnapshot,
-	TodoistModule,
-} from "../todoist/module.ts";
-import type { WorktreeCleanup } from "../worktree/module.ts";
-import type {
 	ExitProtocolState,
 	PromptQueueModuleOptions,
+	TodoistCompletionSnapshot,
 } from "./internal-state.ts";
-import { PromptQueue } from "./queue.ts";
+import type { PromptQueue } from "./queue.ts";
 import { confirmExitProtocol } from "./user-prompts.ts";
 
 export class PromptQueueConsumer {
 	private readonly eventHandler: EventHandler;
 	private readonly sessionState: SessionState;
-	private pr: PrModule | null;
-	private todoist: TodoistModule | null;
-	private worktree: WorktreeCleanup | null;
+	private todoist: PromptQueueModuleOptions["todoist"];
+	private worktree: PromptQueueModuleOptions["worktree"];
 	private readonly queue: PromptQueue;
 	private context: ExtensionContext | null = null;
 	private session: SessionRecord | null = null;
 	private sessionId: string | null = null;
 
-	constructor(options: PromptQueueModuleOptions) {
+	constructor(options: PromptQueueModuleOptions, queue: PromptQueue) {
 		this.eventHandler = options.eventHandler;
 		this.sessionState = options.sessionState;
-		this.pr = options.pr;
 		this.todoist = options.todoist;
 		this.worktree = options.worktree;
-		this.queue = options.queue ?? new PromptQueue();
+		this.queue = queue;
 		this.eventHandler.sessionActivatedEvent.subscribe((event) => {
 			const session = event.session;
 			if (session === undefined) return;
@@ -56,26 +49,12 @@ export class PromptQueueConsumer {
 		);
 	}
 
-	setModules(modules: {
-		pr: PrModule | null;
-		todoist: TodoistModule | null;
-		worktree: WorktreeCleanup | null;
-	}): void {
-		this.pr = modules.pr;
-		this.todoist = modules.todoist;
-		this.worktree = modules.worktree;
-	}
-
 	drain(): Promise<void> {
 		return this.queue.drain();
 	}
 
 	getContext(): ExtensionContext | null {
 		return this.context;
-	}
-
-	getPr(): PrModule | null {
-		return this.pr;
 	}
 
 	isCurrentContext(context: ExtensionContext): boolean {
@@ -229,6 +208,18 @@ export class PromptQueueConsumer {
 		return this.removeWorktree(context, sessionId, isQueuedCurrent, force);
 	}
 
+	private worktreeFromState(): ExitProtocolState["worktree"] {
+		if (this.worktree === null) return null;
+		const { branch, isWorktree, worktreeRoot } = this.sessionState.gitState;
+		const hasWorktree = isWorktree === true;
+		if (!hasWorktree) return null;
+		const hasBranch = typeof branch === "string";
+		if (!hasBranch) return null;
+		const hasWorktreeRoot = typeof worktreeRoot === "string";
+		if (!hasWorktreeRoot) return null;
+		return { worktreePath: worktreeRoot, branch };
+	}
+
 	private async prepareExitProtocol(
 		context: ExtensionContext,
 		sessionId: string,
@@ -241,10 +232,7 @@ export class PromptQueueConsumer {
 		);
 		const canReadStatus = context.hasUI && isCurrentBeforeStatus;
 		if (!canReadStatus) return null;
-		const hasWorktreeModule = this.worktree !== null;
-		const worktree = hasWorktreeModule
-			? (this.worktree?.getWorktreeInfo() ?? null)
-			: null;
+		const worktree = this.worktreeFromState();
 		const hasWorktree = worktree !== null;
 		const dirty = hasWorktree
 			? ((await this.worktree?.hasUncommittedChanges()) ?? null)

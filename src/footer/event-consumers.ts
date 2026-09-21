@@ -24,7 +24,6 @@ export class FooterEventConsumer {
 	private context: Pick<ExtensionContext, "ui" | "sessionManager"> | null =
 		null;
 	private isGitProject = false;
-	private state = emptyFooterState();
 	private readonly loading = new Set<string>();
 	private readonly footerDisplay = new FooterDisplay();
 
@@ -63,16 +62,16 @@ export class FooterEventConsumer {
 		force?: boolean,
 	): void {
 		const next = this.deriveState(sessionState);
-		const unchanged = JSON.stringify(this.state) === JSON.stringify(next);
+		const unchanged =
+			JSON.stringify(sessionState.moduleState.footer) === JSON.stringify(next);
 		const shouldForce = force ?? false;
 		const shouldSkip = unchanged && !shouldForce;
 		if (shouldSkip) return;
-		this.state = next;
 		const currentContext = this.context;
 		const shouldSkipProjection = currentContext === null;
 		if (shouldSkipProjection) return;
-		this.footerDisplay.start(currentContext, this.state);
-		void publishFooterState(this.eventHandler, this.state);
+		this.footerDisplay.start(currentContext, next);
+		void publishFooterState(this.eventHandler, next);
 	}
 
 	private deriveState(
@@ -130,14 +129,10 @@ export class FooterEventConsumer {
 		};
 	}
 
-	getState(): FooterModuleState {
-		return structuredClone(this.state);
-	}
-
 	deactivate(): void {
 		this.loading.clear();
 		this.footerDisplay.deactivate();
 		this.context = null;
-		this.state = emptyFooterState();
+		void publishFooterState(this.eventHandler, emptyFooterState());
 	}
 }

@@ -1,3 +1,4 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createModuleStatePublisher } from "../event-publishers.ts";
 import { type Exec, spawnExec } from "../shared/command.ts";
 import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
@@ -5,6 +6,8 @@ import { withLoading } from "../shared/events.ts";
 import { modelReference } from "../shared/pi-worker.ts";
 import { inspectProject } from "../shared/project.ts";
 import type { SessionState } from "../state.ts";
+import { register as registerTodoistCommands } from "./commands.ts";
+import { completeMergedTask } from "./completion.ts";
 import {
 	CLAIM,
 	ERROR,
@@ -22,9 +25,63 @@ import type {
 	ClaimTaskData,
 	TaskClaimWorker,
 	TaskClaimWorkerResult,
+	TodoistCompletionSnapshot,
 	TodoistLifecycleConsumerOptions,
+	TodoistModuleOptions,
 	TodoistSession,
 } from "./internal-state.ts";
+
+export class TodoistConsumer {
+	private readonly options: TodoistModuleOptions;
+	private readonly publishState;
+
+	constructor(options: TodoistModuleOptions) {
+		this.options = options;
+		this.publishState = createModuleStatePublisher(
+			options.eventHandler,
+			C.module.todoist,
+		);
+		registerTodoistLifecycleConsumers({
+			eventHandler: options.eventHandler,
+			sessionState: options.sessionState,
+			taskClaimWorker: options.taskClaimWorker,
+			exec: options.exec,
+			activateSession: this.activateSession.bind(this),
+			registerCommands: (pi) =>
+				registerTodoistCommands(
+					pi,
+					options.sessionState,
+					options.eventHandler,
+					options.taskRefreshWorker,
+					options.exec,
+				),
+		});
+	}
+
+	private async activateSession(session: TodoistSession): Promise<void> {
+		await this.publishState.publish(
+			{
+				...this.options.sessionState.moduleState.todoist,
+				todoistProjectRef: session.project.todoistProjectRef,
+			},
+			{ persist: false },
+		);
+	}
+
+	completeMergedTask(
+		snapshot: TodoistCompletionSnapshot,
+		context: ExtensionContext,
+	): Promise<import("../shared/exit-actions.ts").ExitActionResult> {
+		return completeMergedTask(
+			this.options.sessionState,
+			this.options.eventHandler,
+			context,
+			snapshot,
+			this.options.exec,
+			this.options.createTodoistClient,
+		);
+	}
+}
 
 function registerTodoistSessionActivation(
 	options: TodoistLifecycleConsumerOptions,
@@ -94,7 +151,7 @@ export function handleTaskClaimResult(
 		return;
 	}
 	const current = sessionState.moduleState.todoist;
-	const publisher = createModuleStatePublisher(eventHandler, "todoist");
+	const publisher = createModuleStatePublisher(eventHandler, C.module.todoist);
 	void publisher.publish(
 		{
 			...current,

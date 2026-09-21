@@ -11,11 +11,18 @@ import "./state-tool.ts";
 import { PrConsumer } from "./event-consumers.ts";
 import type { PrModuleOptions } from "./internal-state.ts";
 
-export * from "./module-state.ts";
-export interface PrModule {
-	mergeActivePr(context: ExtensionContext): Promise<boolean>;
-}
+export class PrModule {
+	private readonly consumer: PrConsumer;
 
-export function createPrModule(options: PrModuleOptions): PrModule {
-	return new PrConsumer(options) as unknown as PrModule;
+	constructor(options: PrModuleOptions) {
+		this.consumer = new PrConsumer(options);
+	}
+
+	private persistPrIfAvailable(text: string): Promise<void> {
+		return this.consumer.persistPrIfAvailable(text);
+	}
+
+	mergeActivePr(context: ExtensionContext): Promise<boolean> {
+		return this.consumer.mergeActivePr(context);
+	}
 }

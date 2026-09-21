@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
 import { createModuleStatePublisher } from "../../src/event-publishers.ts";
 import { handlePrToolResult } from "../../src/pr/event-consumers.ts";
-import { createPrModule } from "../../src/pr/module.ts";
+import { PrModule } from "../../src/pr/module.ts";
 import { executeStateTool } from "../../src/pr/state-tool.ts";
 import type { Exec } from "../../src/shared/command.ts";
 import { createEventHandler } from "../../src/shared/events.ts";
@@ -89,7 +89,7 @@ describe("PR state-driven architecture", () => {
 			if (args[0] === "pr") await blocked;
 			return commandResult(JSON.stringify({ url: PR_42 }));
 		});
-		const module = createPrModule({
+		const module = new PrModule({
 			eventHandler,
 			sessionState,
 			exec,
@@ -128,7 +128,7 @@ describe("PR state-driven architecture", () => {
 			if (calls === 2) await second;
 			return commandResult(JSON.stringify({ url }));
 		});
-		const module = createPrModule({
+		const module = new PrModule({
 			eventHandler,
 			sessionState,
 			exec,

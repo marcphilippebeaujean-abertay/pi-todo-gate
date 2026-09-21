@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReviewModule } from "../../src/review/module.ts";
+import { ReviewModule } from "../../src/review/module.ts";
 import { createSessionState } from "../../src/state.ts";
 
 const previousEnvironment = process.env.HERDR_ENV;
@@ -15,7 +15,7 @@ describe("review module", () => {
 		delete process.env.HERDR_ENV;
 		const registerCommand = vi.fn();
 
-		createReviewModule({
+		new ReviewModule({
 			pi: { registerCommand } as unknown as ExtensionAPI,
 			sessionState: createSessionState(),
 		});
@@ -27,7 +27,7 @@ describe("review module", () => {
 		process.env.HERDR_ENV = "1";
 		const registerCommand = vi.fn();
 
-		createReviewModule({
+		new ReviewModule({
 			pi: { registerCommand } as unknown as ExtensionAPI,
 			sessionState: createSessionState(),
 		});

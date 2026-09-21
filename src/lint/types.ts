@@ -1,6 +1,7 @@
 import type ts from "typescript";
 import type { LintConfig } from "./state.ts";
 export type LintRuleId =
+	| "module-class-export"
 	| "commands-only-register"
 	| "commands-require-tg-prefix"
 	| "no-worker-consumer-callbacks"
