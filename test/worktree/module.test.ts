@@ -98,10 +98,11 @@ describe("worktree event actions", () => {
 		const sessionState = createSessionState();
 		sessionState.session.activeSessionId = "session";
 		const ctx = context();
+		let dirty = false;
 		const exec: Exec = async (command, args) => {
 			const key = [command, ...args].join(" ");
 			if (key === "git status --porcelain=v1 --untracked-files=all")
-				return ok(" M dirty\\n");
+				return ok(dirty ? " M dirty\\n" : "");
 			return ok("");
 		};
 		const module = createTestWorktreeModule({
@@ -110,8 +111,10 @@ describe("worktree event actions", () => {
 			dependencies: { exec },
 		});
 		await module.sessionStart(ctx, "session");
+		dirty = true;
 
 		await expect(module.hasUncommittedChanges()).resolves.toBe(true);
+		expect(sessionState.gitState.hasUncommittedChanges).toBe(true);
 		expect(ctx.ui.confirm).not.toHaveBeenCalled();
 	});
 

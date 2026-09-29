@@ -15,6 +15,54 @@ export function register(dependencies: CommandDependencies): void {
 	});
 }
 
+async function confirmCurrentMerge(
+	dependencies: CommandDependencies,
+	context: ExtensionCommandContext,
+	prUrl: string,
+	isCurrent: () => boolean,
+): Promise<boolean | null> {
+	const worktree = dependencies.worktree;
+	const hasWorktreeModule = worktree !== null;
+	if (hasWorktreeModule) {
+		const status = await worktree.hasUncommittedChanges();
+		if (status === null) return null;
+	}
+	const isCurrentAfterStatus = isCurrent() && dependencies.isCurrent(context);
+	if (!isCurrentAfterStatus) return null;
+	const worktreeRoot = dependencies.sessionState.gitState.worktreeRoot;
+	const hasWorktreeRoot = typeof worktreeRoot === "string";
+	return confirmMerge(context, prUrl, {
+		worktreePath: hasWorktreeRoot ? worktreeRoot : undefined,
+		hasUncommittedChanges:
+			dependencies.sessionState.gitState.hasUncommittedChanges === true,
+	});
+}
+
+async function runQueuedMerge(
+	dependencies: CommandDependencies,
+	context: ExtensionCommandContext,
+	prUrl: string,
+	isCurrent: () => boolean,
+	pr: NonNullable<CommandDependencies["pr"]>,
+): Promise<void> {
+	const isCurrentBeforePrompt = isCurrent() && dependencies.isCurrent(context);
+	if (!isCurrentBeforePrompt) return;
+	const confirmed = await confirmCurrentMerge(
+		dependencies,
+		context,
+		prUrl,
+		isCurrent,
+	);
+	if (confirmed === null) return;
+	const isCurrentAfterPrompt = isCurrent() && dependencies.isCurrent(context);
+	const shouldMerge = isCurrentAfterPrompt && confirmed;
+	if (!shouldMerge) return;
+	const isCurrentBeforeCapability =
+		isCurrent() && dependencies.isCurrent(context);
+	if (!isCurrentBeforeCapability) return;
+	await pr.mergeActivePr(context);
+}
+
 async function runMerge(
 	dependencies: CommandDependencies,
 	context: ExtensionCommandContext,
@@ -45,19 +93,8 @@ async function runMerge(
 		return;
 	}
 	await dependencies.queue
-		.enqueue(async (isCurrent) => {
-			const isCurrentBeforePrompt =
-				isCurrent() && dependencies.isCurrent(context);
-			if (!isCurrentBeforePrompt) return;
-			const confirmed = await confirmMerge(context, prUrl);
-			const isCurrentAfterPrompt =
-				isCurrent() && dependencies.isCurrent(context);
-			const shouldMerge = isCurrentAfterPrompt && confirmed;
-			if (!shouldMerge) return;
-			const isCurrentBeforeCapability =
-				isCurrent() && dependencies.isCurrent(context);
-			if (!isCurrentBeforeCapability) return;
-			await pr.mergeActivePr(context);
-		})
+		.enqueue((isCurrent) =>
+			runQueuedMerge(dependencies, context, prUrl, isCurrent, pr),
+		)
 		.catch(() => undefined);
 }

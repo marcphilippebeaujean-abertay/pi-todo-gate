@@ -66,12 +66,21 @@ export class WorktreeConsumer {
 		void publishWorktreeState(this.eventHandler, {}, gitStatePatch);
 	}
 
-	private async refreshStatus(context: ExtensionContext): Promise<void> {
+	private async refreshStatus(
+		context: ExtensionContext,
+	): Promise<boolean | null> {
 		const dirtyStatus = await inspectDirtyStatus(this.exec, context.cwd);
 		const hasStatus = dirtyStatus !== null;
-		if (!hasStatus) return;
+		if (!hasStatus) return null;
 		this.uncommittedChanges = dirtyStatus;
-		this.emitState({ hasUncommittedChanges: this.uncommittedChanges });
+		await publishWorktreeState(
+			this.eventHandler,
+			{},
+			{
+				hasUncommittedChanges: this.uncommittedChanges,
+			},
+		);
+		return dirtyStatus;
 	}
 
 	private async initializeSession(ctx: ExtensionContext): Promise<void> {
@@ -116,7 +125,7 @@ export class WorktreeConsumer {
 	async hasUncommittedChanges(): Promise<boolean | null> {
 		const context = this.context;
 		if (context === null) return null;
-		return inspectDirtyStatus(this.exec, context.cwd);
+		return this.refreshStatus(context);
 	}
 
 	removeWorktree(options: { force: boolean }): Promise<ExitActionResult> {
