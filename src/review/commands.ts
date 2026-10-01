@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -14,11 +15,16 @@ import {
 	DIRECTION_FLAG,
 	FOCUS_FLAG,
 	KIND_FLAG,
+	MATCH_FLAG,
 	PANE,
 	PANE_FLAG,
+	PANE_RUN,
+	PROMPT,
+	RECENT_UNWRAPPED,
 	REVIEW_AGENT_KIND,
 	REVIEW_AGENT_NAME_PREFIX,
 	REVIEW_AGENT_NO_EXTENSIONS,
+	REVIEW_AGENT_START_DELAY_MS,
 	REVIEW_COMMAND,
 	REVIEW_DESCRIPTION,
 	REVIEW_FAILED,
@@ -28,8 +34,13 @@ import {
 	REVIEW_PROMPT_MIDDLE,
 	REVIEW_PROMPT_PREFIX,
 	REVIEW_PROMPT_SUFFIX,
+	REVIEW_SHELL_READY_MARKER,
+	REVIEW_SHELL_READY_TIMEOUT,
+	SOURCE_FLAG,
 	SPLIT,
 	START,
+	TIMEOUT_FLAG,
+	WAIT_OUTPUT,
 	WARNING,
 } from "./constants.ts";
 import type { ReviewCommandDependencies } from "./internal-state.ts";
@@ -38,6 +49,10 @@ function notify(context: ExtensionCommandContext, message: string): void {
 	const hasNoUI = !context.hasUI;
 	if (hasNoUI) return;
 	context.ui.notify(message, WARNING);
+}
+
+function sleep(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function paneIdFrom(output: string): string {
@@ -65,15 +80,58 @@ function reviewPrompt(prUrl: string, worktreePath: string): string {
 	return `${REVIEW_PROMPT_PREFIX}${prUrl}${REVIEW_PROMPT_MIDDLE}${worktreePath}${REVIEW_PROMPT_SUFFIX}`;
 }
 
-function reviewAgentName(paneId: string): string {
-	return `${REVIEW_AGENT_NAME_PREFIX}-${paneId.replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}`;
+function reviewAgentName(): string {
+	const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
+	return `${REVIEW_AGENT_NAME_PREFIX}-${suffix}`;
 }
 
-function openReviewPane(
+function waitForPaneShell(
+	herdrClient: NonNullable<ReviewCommandDependencies["herdrClient"]>,
+	paneId: string,
+): void {
+	herdrClient(HERDR_COMMAND, [
+		PANE,
+		PANE_RUN,
+		paneId,
+		`echo ${REVIEW_SHELL_READY_MARKER}`,
+	]);
+	herdrClient(HERDR_COMMAND, [
+		PANE,
+		WAIT_OUTPUT,
+		paneId,
+		MATCH_FLAG,
+		REVIEW_SHELL_READY_MARKER,
+		SOURCE_FLAG,
+		RECENT_UNWRAPPED,
+		TIMEOUT_FLAG,
+		REVIEW_SHELL_READY_TIMEOUT,
+	]);
+}
+
+function startReviewAgent(
+	herdrClient: NonNullable<ReviewCommandDependencies["herdrClient"]>,
+	agentName: string,
+	paneId: string,
+): void {
+	herdrClient(HERDR_COMMAND, [
+		AGENT,
+		START,
+		agentName,
+		KIND_FLAG,
+		REVIEW_AGENT_KIND,
+		PANE_FLAG,
+		paneId,
+		ARGUMENT_SEPARATOR,
+		REVIEW_AGENT_NO_EXTENSIONS,
+	]);
+}
+
+async function openReviewPane(
 	client: ReviewCommandDependencies["herdrClient"],
+	sleep: (milliseconds: number) => Promise<void>,
 	prUrl: string,
 	worktreePath: string,
-): void {
+): Promise<void> {
 	const herdrClient = client ?? boundHerdrClient(worktreePath);
 	const sourcePaneId = currentPaneId();
 	const hasSourcePaneId = sourcePaneId !== undefined;
@@ -89,16 +147,14 @@ function openReviewPane(
 		FOCUS_FLAG,
 	]);
 	const paneId = paneIdFrom(splitOutput);
+	waitForPaneShell(herdrClient, paneId);
+	await sleep(REVIEW_AGENT_START_DELAY_MS);
+	const agentName = reviewAgentName();
+	startReviewAgent(herdrClient, agentName, paneId);
 	herdrClient(HERDR_COMMAND, [
 		AGENT,
-		START,
-		reviewAgentName(paneId),
-		KIND_FLAG,
-		REVIEW_AGENT_KIND,
-		PANE_FLAG,
-		paneId,
-		ARGUMENT_SEPARATOR,
-		REVIEW_AGENT_NO_EXTENSIONS,
+		PROMPT,
+		agentName,
 		reviewPrompt(prUrl, worktreePath),
 	]);
 }
@@ -116,7 +172,12 @@ async function runReview(
 	const worktreePath =
 		dependencies.sessionState.gitState.worktreeRoot ?? context.cwd;
 	try {
-		openReviewPane(dependencies.herdrClient, prUrl, worktreePath);
+		await openReviewPane(
+			dependencies.herdrClient,
+			dependencies.sleep ?? sleep,
+			prUrl,
+			worktreePath,
+		);
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		notify(context, `${REVIEW_FAILED}${detail}`);

@@ -8,6 +8,7 @@ import type { SessionState } from "../state.ts";
 export interface ReviewCommandDependencies {
 	sessionState: SessionState;
 	herdrClient?: HerdrClient;
+	sleep?: (milliseconds: number) => Promise<void>;
 }
 
 export interface ReviewModuleOptions extends ReviewCommandDependencies {
