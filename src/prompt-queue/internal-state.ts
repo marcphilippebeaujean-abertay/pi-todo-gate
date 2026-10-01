@@ -12,6 +12,11 @@ import type { PromptQueue } from "./queue.ts";
 
 export type PromptTask<T> = (isCurrent: () => boolean) => Promise<T> | T;
 
+export interface MergePrompt {
+	worktreePath?: string;
+	hasUncommittedChanges: boolean;
+}
+
 export interface ExitProtocolPrompt {
 	taskName?: string;
 	worktreePath?: string;
@@ -36,6 +41,7 @@ export interface CommandDependencies {
 	eventHandler: EventHandler;
 	sessionState: SessionState;
 	pr: PrModule | null;
+	worktree: WorktreeModule | null;
 	queue: PromptQueue;
 	getContext: () => ExtensionContext | null;
 	isCurrent: (context: ExtensionContext) => boolean;

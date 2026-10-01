@@ -1,23 +1,41 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_CONSTANTS as C } from "../shared/constants.ts";
 import {
 	DIRTY_CONFIRM_PREFIX,
 	DIRTY_INFO_SUFFIX,
 	EXIT_PROTOCOL_TITLE,
 	MERGE_CONFIRM_MESSAGE,
 	MERGE_CONFIRM_TITLE_PREFIX,
+	MERGE_DIRTY_INFO_SUFFIX,
+	MERGE_DIRTY_WARNING,
 	PROMPT_NO,
 	PROMPT_YES,
 } from "./constants.ts";
-import type { ExitProtocolPrompt } from "./internal-state.ts";
+import type { ExitProtocolPrompt, MergePrompt } from "./internal-state.ts";
 
-export function confirmMerge(
+export async function confirmMerge(
 	context: ExtensionContext,
 	prUrl: string,
+	prompt: MergePrompt,
 ): Promise<boolean> {
-	return context.ui.confirm(
-		`${MERGE_CONFIRM_TITLE_PREFIX}${prUrl}?`,
-		MERGE_CONFIRM_MESSAGE,
+	const hasUncommittedChanges = prompt.hasUncommittedChanges;
+	const shouldUseStandardConfirmation = !hasUncommittedChanges;
+	if (shouldUseStandardConfirmation)
+		return context.ui.confirm(
+			`${MERGE_CONFIRM_TITLE_PREFIX}${prUrl}?`,
+			MERGE_CONFIRM_MESSAGE,
+		);
+	const worktreePath = prompt.worktreePath;
+	if (worktreePath !== undefined)
+		context.ui.notify(
+			`${DIRTY_CONFIRM_PREFIX}${worktreePath}${MERGE_DIRTY_INFO_SUFFIX}`,
+			C.value.warning,
+		);
+	const answer = await context.ui.select(
+		`${MERGE_CONFIRM_TITLE_PREFIX}${prUrl}?\n${MERGE_DIRTY_WARNING}`,
+		[PROMPT_NO, PROMPT_YES],
 	);
+	return answer === PROMPT_YES;
 }
 
 export async function confirmExitProtocol(
@@ -48,7 +66,7 @@ export async function confirmExitProtocol(
 	if (shouldNotifyDirtyWorktree)
 		context.ui.notify(
 			`${DIRTY_CONFIRM_PREFIX}${worktreePath}${DIRTY_INFO_SUFFIX}`,
-			"warning",
+			C.value.warning,
 		);
 	const options = hasUncommittedChanges
 		? [PROMPT_NO, PROMPT_YES]

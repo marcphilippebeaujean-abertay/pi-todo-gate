@@ -129,6 +129,32 @@ describe("Prompt Queue orchestration", () => {
 		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
 	});
 
+	it("warns before merging when the worktree has uncommitted changes", async () => {
+		const state = setup();
+		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
+		state.worktree.hasUncommittedChanges.mockImplementation(async () => {
+			state.sessionState.gitState.hasUncommittedChanges = true;
+			return false;
+		});
+		(state.ctx.ui.select as ReturnType<typeof vi.fn>).mockResolvedValue("Yes");
+		await activate(state);
+		await state.eventHandler.piToolRegistrationsBecameAvailableEvent.emit({
+			pi: state.api,
+		});
+		await state.api.commands.get("tg_merge")?.handler("", state.ctx);
+
+		expect(state.ctx.ui.notify).toHaveBeenCalledWith(
+			"Worktree /repo/.worktrees/feature has uncommitted work. Merging may overwrite or conflict with that work.",
+			"warning",
+		);
+		expect(state.ctx.ui.select).toHaveBeenCalledWith(
+			`Merge PR https://github.com/o/r/pull/1?\nWorktree has uncommitted changes. Merging may overwrite or conflict with that work.`,
+			["No", "Yes"],
+		);
+		expect(state.ctx.ui.confirm).not.toHaveBeenCalled();
+		expect(state.pr.mergeActivePr).toHaveBeenCalledOnce();
+	});
+
 	it("accepts fresh command context for active session", async () => {
 		const state = setup();
 		state.sessionState.moduleState.pr.prUrl = "https://github.com/o/r/pull/1";
