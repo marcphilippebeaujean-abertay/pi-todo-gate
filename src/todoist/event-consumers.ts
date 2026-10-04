@@ -166,6 +166,15 @@ export function handleTaskClaimResult(
 	notifyTaskAssigned(session.context);
 }
 
+function hasWorktreeOrPr(
+	sessionState: SessionState,
+	isWorktree: boolean,
+): boolean {
+	const prUrl = sessionState.moduleState.pr.prUrl;
+	const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
+	return isWorktree || hasPr;
+}
+
 function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error };
 }
@@ -182,10 +191,8 @@ export async function runTaskClaim(
 	try {
 		const run = exec ?? spawnExec;
 		const worktree = await inspectProject(run, session.context.cwd);
-		const prUrl = sessionState.moduleState.pr.prUrl;
-		const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
-		const hasNoWorktreeOrPr = !worktree.isWorktree && !hasPr;
-		if (hasNoWorktreeOrPr) return;
+		const canClaimTask = hasWorktreeOrPr(sessionState, worktree.isWorktree);
+		if (!canClaimTask) return;
 		const worker = taskClaimWorker ?? createTaskClaimWorker(run);
 		const result = await worker({
 			sessionId: sessionState.session.activeSessionId ?? "",
@@ -222,10 +229,8 @@ export function maybeAnalyzeTaskClaim(
 	exec?: Exec,
 ): void {
 	const isWorktree = sessionState.gitState.isWorktree === true;
-	const prUrl = sessionState.moduleState.pr.prUrl;
-	const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
-	const hasNoWorktreeOrPr = !isWorktree && !hasPr;
-	if (hasNoWorktreeOrPr) return;
+	const canClaimTask = hasWorktreeOrPr(sessionState, isWorktree);
+	if (!canClaimTask) return;
 	void withLoading(eventHandler, C.action.task, () =>
 		runTaskClaim(
 			sessionState,
