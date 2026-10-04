@@ -166,6 +166,17 @@ export function handleTaskClaimResult(
 	notifyTaskAssigned(session.context);
 }
 
+function hasWorktreeOrPr(
+	sessionState: SessionState,
+	inspectedIsWorktree?: boolean,
+): boolean {
+	const isWorktree =
+		inspectedIsWorktree ?? sessionState.gitState.isWorktree === true;
+	const prUrl = sessionState.moduleState.pr.prUrl;
+	const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
+	return isWorktree || hasPr;
+}
+
 function errorResult(sessionId: string, error: string): TaskClaimWorkerResult {
 	return { sessionId, action: ERROR, taskData: null, error };
 }
@@ -182,9 +193,8 @@ export async function runTaskClaim(
 	try {
 		const run = exec ?? spawnExec;
 		const worktree = await inspectProject(run, session.context.cwd);
-		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
-		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
-		if (shouldSkipOrdinaryCheckout) return;
+		const canClaimTask = hasWorktreeOrPr(sessionState, worktree.isWorktree);
+		if (!canClaimTask) return;
 		const worker = taskClaimWorker ?? createTaskClaimWorker(run);
 		const result = await worker({
 			sessionId: sessionState.session.activeSessionId ?? "",
@@ -220,6 +230,8 @@ export function maybeAnalyzeTaskClaim(
 	taskClaimWorker?: TaskClaimWorker,
 	exec?: Exec,
 ): void {
+	const canClaimTask = hasWorktreeOrPr(sessionState);
+	if (!canClaimTask) return;
 	void withLoading(eventHandler, C.action.task, () =>
 		runTaskClaim(
 			sessionState,
