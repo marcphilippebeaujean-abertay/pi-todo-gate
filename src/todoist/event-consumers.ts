@@ -168,8 +168,10 @@ export function handleTaskClaimResult(
 
 function hasWorktreeOrPr(
 	sessionState: SessionState,
-	isWorktree: boolean,
+	inspectedIsWorktree?: boolean,
 ): boolean {
+	const isWorktree =
+		inspectedIsWorktree ?? sessionState.gitState.isWorktree === true;
 	const prUrl = sessionState.moduleState.pr.prUrl;
 	const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
 	return isWorktree || hasPr;
@@ -228,8 +230,7 @@ export function maybeAnalyzeTaskClaim(
 	taskClaimWorker?: TaskClaimWorker,
 	exec?: Exec,
 ): void {
-	const isWorktree = sessionState.gitState.isWorktree === true;
-	const canClaimTask = hasWorktreeOrPr(sessionState, isWorktree);
+	const canClaimTask = hasWorktreeOrPr(sessionState);
 	if (!canClaimTask) return;
 	void withLoading(eventHandler, C.action.task, () =>
 		runTaskClaim(
