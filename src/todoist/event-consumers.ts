@@ -182,9 +182,10 @@ export async function runTaskClaim(
 	try {
 		const run = exec ?? spawnExec;
 		const worktree = await inspectProject(run, session.context.cwd);
-		const requiresWorktree = session.project.triggersOnlyOnWorktree === true;
-		const shouldSkipOrdinaryCheckout = requiresWorktree && !worktree.isWorktree;
-		if (shouldSkipOrdinaryCheckout) return;
+		const prUrl = sessionState.moduleState.pr.prUrl;
+		const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
+		const hasNoWorktreeOrPr = !worktree.isWorktree && !hasPr;
+		if (hasNoWorktreeOrPr) return;
 		const worker = taskClaimWorker ?? createTaskClaimWorker(run);
 		const result = await worker({
 			sessionId: sessionState.session.activeSessionId ?? "",
@@ -220,6 +221,11 @@ export function maybeAnalyzeTaskClaim(
 	taskClaimWorker?: TaskClaimWorker,
 	exec?: Exec,
 ): void {
+	const isWorktree = sessionState.gitState.isWorktree === true;
+	const prUrl = sessionState.moduleState.pr.prUrl;
+	const hasPr = typeof prUrl === "string" && prUrl.trim() !== "";
+	const hasNoWorktreeOrPr = !isWorktree && !hasPr;
+	if (hasNoWorktreeOrPr) return;
 	void withLoading(eventHandler, C.action.task, () =>
 		runTaskClaim(
 			sessionState,

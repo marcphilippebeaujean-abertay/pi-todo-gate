@@ -574,6 +574,80 @@ describe("lazy activation", () => {
 });
 
 describe("automatic Todoist task claiming", () => {
+	it("does not dispatch from main checkout even when config allows it", async () => {
+		const h = harness(CONFIGURED_PROJECT);
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: TODOIST_UNAVAILABLE,
+		}));
+		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: WORK },
+			h.ctx,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
+	it("does not dispatch before first prompt even with an active PR", async () => {
+		const h = harness(CONFIGURED_PROJECT, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: TODOIST_UNAVAILABLE,
+		}));
+		await start(h, { "/configured": MERGE_TD }, { taskClaimWorker: worker });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(worker).not.toHaveBeenCalled();
+	});
+
+	it("dispatches from a linked worktree without an active PR", async () => {
+		const root = "/configured/.worktrees/feature";
+		const h = harness(root);
+		const worker = vi.fn(async () => ({
+			sessionId: SESSION_CURRENT,
+			action: "error" as const,
+			taskData: null,
+			error: TODOIST_UNAVAILABLE,
+		}));
+		const exec = async (command: string, args: string[]) => {
+			const key = [command, ...args].join(" ");
+			switch (key) {
+				case "git rev-parse --show-toplevel":
+					return { stdout: `${root}\n`, stderr: EMPTY_STRING, code: 0 };
+				case "git branch --show-current":
+					return { stdout: "feature\n", stderr: EMPTY_STRING, code: 0 };
+				case "git worktree list --porcelain":
+					return {
+						stdout: `worktree /configured\nHEAD abc\nbranch refs/heads/main\n\nworktree ${root}\nHEAD def\nbranch refs/heads/feature\n`,
+						stderr: EMPTY_STRING,
+						code: 0,
+					};
+				default:
+					return { stdout: EMPTY_STRING, stderr: EMPTY_STRING, code: 0 };
+			}
+		};
+		await start(
+			h,
+			{ "/configured": MERGE_TD },
+			{ exec, taskClaimWorker: worker },
+		);
+		await h.handlers.get(BEFORE_AGENT_START)?.(
+			{ type: BEFORE_AGENT_START, prompt: WORK },
+			h.ctx,
+		);
+		await vi.waitFor(() => expect(worker).toHaveBeenCalledOnce());
+	});
+
 	it(
 		INVALIDATES_THE_OLD_SESSION_BEFORE_AWAITING_NEW_CONFIGURATION,
 		async () => {
@@ -617,7 +691,11 @@ describe("automatic Todoist task claiming", () => {
 	);
 
 	it("does not restart a pending claim after a new-session shutdown", async () => {
-		const h = harness(CONFIGURED_PROJECT);
+		const h = harness(CONFIGURED_PROJECT, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		const resolveClaims: Array<
 			(value: {
 				sessionId: string;
@@ -688,7 +766,11 @@ describe("automatic Todoist task claiming", () => {
 	});
 	it("applies an existing-task proposal without confirmation", async () => {
 		const root = await mkdtemp(join(tmpdir(), "claim-confirm"));
-		const h = harness(root);
+		const h = harness(root, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		h.ctx.hasUI = true;
 		const claimTask = vi.fn(async () => ({
 			id: VALUE_42,
@@ -741,7 +823,11 @@ describe("automatic Todoist task claiming", () => {
 
 	it("accepts a claim result from another session", async () => {
 		const root = await mkdtemp(join(tmpdir(), "stale-session-claim"));
-		const h = harness(root);
+		const h = harness(root, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		h.ctx.hasUI = true;
 		const claimTask = vi.fn();
 		const client = {
@@ -779,7 +865,11 @@ describe("automatic Todoist task claiming", () => {
 
 	it("applies a new-task proposal without confirmation", async () => {
 		const root = await mkdtemp(join(tmpdir(), "create-confirm"));
-		const h = harness(root);
+		const h = harness(root, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		h.ctx.hasUI = true;
 		const createTask = vi.fn(async () => ({
 			id: "43",
@@ -823,7 +913,11 @@ describe("automatic Todoist task claiming", () => {
 
 	it("raises a warning after an error result", async () => {
 		const root = await mkdtemp(join(tmpdir(), "retry-confirm"));
-		const h = harness(root);
+		const h = harness(root, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		h.ctx.hasUI = true;
 		const worker = vi
 			.fn()
@@ -889,7 +983,11 @@ describe("automatic Todoist task claiming", () => {
 
 	it("does not infer or mutate a task from the missing-task warning", async () => {
 		const root = await mkdtemp(join(tmpdir(), "no-inference"));
-		const h = harness(root);
+		const h = harness(root, [
+			persistedStateEntry({
+				pr: { prUrl: HTTPS_GITHUB_COM_O_R_PULL_1 },
+			}),
+		]);
 		h.ctx.hasUI = false;
 		const worker = vi.fn(async () => ({
 			sessionId: SESSION_CURRENT,
