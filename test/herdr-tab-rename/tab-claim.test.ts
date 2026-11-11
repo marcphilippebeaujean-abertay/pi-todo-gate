@@ -1,7 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { registerModuleStateConsumer } from "../../src/event-consumer.ts";
-import { TAB_CLAIM_INSTRUCTIONS } from "../../src/herdr-tab-rename/constants.ts";
+import {
+	CLAIM_PROMPT_CONTEXT_HEADER,
+	TAB_CLAIM_INSTRUCTIONS,
+} from "../../src/herdr-tab-rename/constants.ts";
 import { installHerdrTabRename } from "../../src/herdr-tab-rename/event-consumers.ts";
 import type {
 	ClaimWorkerRequest,
@@ -10,6 +13,7 @@ import type {
 } from "../../src/herdr-tab-rename/internal-state.ts";
 import { HerdrTabRenameModule } from "../../src/herdr-tab-rename/module.ts";
 import { herdrTabRenameStateDescriptor } from "../../src/herdr-tab-rename/module-state.ts";
+import { hasValidatedTabClaim } from "../../src/herdr-tab-rename/tab-validation.ts";
 import { createSharedEvents } from "../../src/shared/events.ts";
 import { createSessionState } from "../../src/state.ts";
 
@@ -55,7 +59,7 @@ function herdrEnvironment(): () => void {
 	};
 }
 
-function ordinaryRunner(label = "probe"): HerdrClient {
+function ordinaryRunner(label = "7"): HerdrClient {
 	return (command, args) => {
 		if (command === "herdr" && args.join(" ") === "tab get w1:t1")
 			return JSON.stringify({ result: { tab: { label } } });
@@ -247,6 +251,45 @@ describe("state-driven background Herdr tab claim", () => {
 		}
 	});
 
+	it("skips dispatch when the current tab label already describes the work", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup(ordinaryRunner("dialog-editor"));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "claim");
+			expect(state.start).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
+
+	it("dispatches while the current tab label is still the default number", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup(ordinaryRunner("7"));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "claim");
+			expect(state.start).toHaveBeenCalledOnce();
+		} finally {
+			restore();
+		}
+	});
+
+	it("frames the parent prompt as context instead of a task to perform", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup();
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "refactor the payment service");
+			const prompt = state.requests[0]?.prompt ?? "";
+			expect(prompt).toContain(CLAIM_PROMPT_CONTEXT_HEADER);
+			expect(prompt).toContain("refactor the payment service");
+			expect(prompt).not.toBe("refactor the payment service");
+		} finally {
+			restore();
+		}
+	});
+
 	it("publishes loading and notification separately from durable state", async () => {
 		const restore = herdrEnvironment();
 		try {
@@ -304,6 +347,39 @@ describe("state-driven background Herdr tab claim", () => {
 			expect(
 				commands.filter((command) => command.includes("tab rename")).at(-1),
 			).toBe("herdr tab rename w1:t1 first-label");
+		} finally {
+			restore();
+		}
+	});
+
+	it("keeps a worker failure silent once the tab label already describes the work", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup(actionRunner({ tabId: "w1:t1", label: "7" }, []));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "claim");
+			state.sessionState.moduleState.herdrTabRename = {};
+			await emitFailure(state.requests[0] as ClaimWorkerRequest);
+
+			expect(state.notifications).toHaveLength(1);
+		} finally {
+			restore();
+		}
+	});
+
+	it("suppresses a worker failure once the tab label already describes the work", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const tabState = { tabId: "w1:t1", label: "7" };
+			const state = setup(actionRunner(tabState, []));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "claim");
+			tabState.label = "renamed-by-hand";
+
+			await emitFailure(state.requests[0] as ClaimWorkerRequest);
+
+			expect(state.sessionState.moduleState.herdrTabRename).toEqual({});
+			expect(state.notifications).toEqual([]);
 		} finally {
 			restore();
 		}
@@ -458,30 +534,18 @@ describe("state-driven background Herdr tab claim", () => {
 		}
 	});
 
-	it("accepts null when current tab already has descriptive label", async () => {
-		const restore = herdrEnvironment();
-		try {
-			const commands: string[] = [];
-			const state = setup(
-				actionRunner({ tabId: "w1:t1", label: "dialog-editor" }, commands),
-			);
-			await sessionStart(state.pi);
-			await beforeAgentStart(state.pi, "already named");
-			await state.requests[0]?.events.claimCompletedEvent.emit({
-				result: null,
-			});
-			expect(commands.some((command) => command.includes("tab rename"))).toBe(
-				false,
-			);
-			expect(commands.some((command) => command.includes("pane move"))).toBe(
-				false,
-			);
-			expect(state.sessionState.moduleState.herdrTabRename).toEqual({
-				herdrClaimReturnedSuccessfully: "true",
-			});
-		} finally {
-			restore();
-		}
+	it("treats a null claim as valid only for an already descriptive label", () => {
+		expect(
+			hasValidatedTabClaim(
+				ordinaryRunner("dialog-editor"),
+				"dialog-editor",
+				"w1:p1",
+				null,
+			),
+		).toBe(true);
+		expect(hasValidatedTabClaim(ordinaryRunner("7"), "7", "w1:p1", null)).toBe(
+			false,
+		);
 	});
 
 	it("keeps validation failure out of durable state", async () => {
