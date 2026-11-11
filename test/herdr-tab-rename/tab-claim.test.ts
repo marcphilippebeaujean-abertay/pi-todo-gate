@@ -309,6 +309,43 @@ describe("state-driven background Herdr tab claim", () => {
 		}
 	});
 
+	it("keeps a failing overlapping worker silent once the claim succeeded", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup(actionRunner({ tabId: "w1:t1", label: "7" }, []));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "first task");
+			await beforeAgentStart(state.pi, "second task");
+			await emitClaim(state.requests[0] as ClaimWorkerRequest, "first-label");
+			expect(state.sessionState.moduleState.herdrTabRename).toEqual({
+				herdrClaimReturnedSuccessfully: "true",
+			});
+
+			await emitFailure(state.requests[1] as ClaimWorkerRequest);
+
+			expect(state.notifications).toEqual([]);
+		} finally {
+			restore();
+		}
+	});
+
+	it("keeps a failing overlapping validation silent once the claim succeeded", async () => {
+		const restore = herdrEnvironment();
+		try {
+			const state = setup(actionRunner({ tabId: "w1:t1", label: "7" }, []));
+			await sessionStart(state.pi);
+			await beforeAgentStart(state.pi, "first task");
+			await beforeAgentStart(state.pi, "second task");
+			await emitClaim(state.requests[0] as ClaimWorkerRequest, "first-label");
+
+			await emitClaim(state.requests[1] as ClaimWorkerRequest, "7");
+
+			expect(state.notifications).toEqual([]);
+		} finally {
+			restore();
+		}
+	});
+
 	it("retries after worker failure because failure is not durable dispatch state", async () => {
 		const restore = herdrEnvironment();
 		try {

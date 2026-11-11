@@ -164,6 +164,23 @@ export class HerdrTabRenameConsumer {
 		}
 	}
 
+	private claimHasSettled(): boolean {
+		const hasSettledClaim =
+			this.sessionState.moduleState.herdrTabRename
+				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED;
+		return hasSettledClaim;
+	}
+
+	/**
+	 * Overlapping workers are expected and the last returned result wins, so a worker
+	 * that loses the race must not report failure after the claim already landed.
+	 */
+	private async notifyUnsettledClaimFailure(message: string): Promise<void> {
+		const hasSettledClaim = this.claimHasSettled();
+		if (hasSettledClaim) return;
+		await notifyHerdrFailure(this.eventHandler, message);
+	}
+
 	private async completeClaim(
 		event: ClaimCompletedEvent,
 		validationInputs: {
@@ -182,8 +199,7 @@ export class HerdrTabRenameConsumer {
 				);
 			} catch (error) {
 				const detail = error instanceof Error ? error.message : String(error);
-				await notifyHerdrFailure(
-					this.eventHandler,
+				await this.notifyUnsettledClaimFailure(
 					`${TAB_CLAIM_ACTION_FAILED}: ${detail}`,
 				);
 				return;
@@ -195,7 +211,7 @@ export class HerdrTabRenameConsumer {
 				event.result,
 			);
 			if (!isValidated) {
-				await notifyHerdrFailure(this.eventHandler, TAB_CLAIM_FAILED);
+				await this.notifyUnsettledClaimFailure(TAB_CLAIM_FAILED);
 				return;
 			}
 			const publisher = createModuleStatePublisher(
@@ -216,7 +232,7 @@ export class HerdrTabRenameConsumer {
 
 	private async failClaim(event: ClaimFailedEvent): Promise<void> {
 		try {
-			await notifyHerdrFailure(this.eventHandler, event.message);
+			await this.notifyUnsettledClaimFailure(event.message);
 		} finally {
 			await publishHerdrLoading(this.eventHandler, false);
 		}
