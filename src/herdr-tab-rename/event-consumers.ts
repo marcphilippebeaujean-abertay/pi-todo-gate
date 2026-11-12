@@ -13,6 +13,7 @@ import { modelReference } from "../shared/pi-worker.ts";
 import { isSubagent } from "../shared/session.ts";
 import {
 	BEFORE_AGENT_START_EVENT,
+	CLAIM_PROMPT_CONTEXT_HEADER,
 	HERDR_CLAIM_RETURNED,
 	HERDR_COMMAND,
 	LABEL_FLAG,
@@ -40,7 +41,11 @@ import type {
 	StartBackgroundWorker,
 } from "./internal-state.ts";
 import { notifyHerdrFailure } from "./notifications.ts";
-import { hasValidatedTabClaim } from "./tab-validation.ts";
+import { hasValidatedTabClaim, labelIsDescriptive } from "./tab-validation.ts";
+
+function claimWorkerPrompt(parentPrompt: string): string {
+	return `${CLAIM_PROMPT_CONTEXT_HEADER}\n\n${parentPrompt}`;
+}
 
 function currentId(value: string | undefined, subject: "pane" | "tab"): string {
 	const hasValue = value !== undefined;
@@ -104,19 +109,21 @@ export class HerdrTabRenameConsumer {
 		pi.on(SESSION_SHUTDOWN_EVENT, this.sessionShutdown.bind(this));
 	}
 
+	private observedTabLabel(): string | undefined {
+		try {
+			return tabLabel(this.herdrClient);
+		} catch {
+			return undefined;
+		}
+	}
+
 	private validationInputs(): {
 		initialLabel: string | undefined;
 		tabId: string | undefined;
 		paneId: string | undefined;
 	} {
-		let initialLabel: string | undefined;
-		try {
-			initialLabel = tabLabel(this.herdrClient);
-		} catch {
-			initialLabel = undefined;
-		}
 		return {
-			initialLabel,
+			initialLabel: this.observedTabLabel(),
 			tabId: process.env.HERDR_TAB_ID,
 			paneId: process.env.HERDR_PANE_ID,
 		};
@@ -127,13 +134,17 @@ export class HerdrTabRenameConsumer {
 		ctx: ExtensionContext,
 	): void {
 		const isUnavailable = !isInsideHerdr();
+		if (isUnavailable) return;
 		const hasStoredClaim =
 			this.sessionState.moduleState.herdrTabRename
 				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED;
-		const shouldSkip = isUnavailable || hasStoredClaim;
-		if (shouldSkip) return;
-		const events = createHerdrEvents();
+		if (hasStoredClaim) return;
 		const validationInputs = this.validationInputs();
+		// The gate exists to replace a default numeric tab label with a concrete one, so a
+		// tab that already carries a descriptive label has nothing left to claim.
+		const alreadyLabelled = labelIsDescriptive(validationInputs.initialLabel);
+		if (alreadyLabelled) return;
+		const events = createHerdrEvents();
 		let worker: ClaimWorkerHandle | undefined;
 		const releaseWorker = (): void => {
 			if (worker !== undefined) this.workers.delete(worker);
@@ -149,7 +160,7 @@ export class HerdrTabRenameConsumer {
 		void publishHerdrLoading(this.eventHandler, true);
 		try {
 			worker = this.startWorker(ctx.cwd, {
-				prompt: event.prompt ?? "",
+				prompt: claimWorkerPrompt(event.prompt ?? ""),
 				instructions: TAB_CLAIM_INSTRUCTIONS,
 				model: modelReference(ctx.model),
 				events,
@@ -162,6 +173,29 @@ export class HerdrTabRenameConsumer {
 				workerFailed: true,
 			});
 		}
+	}
+
+	private claimHasSettled(): boolean {
+		const hasSettledClaim =
+			this.sessionState.moduleState.herdrTabRename
+				.herdrClaimReturnedSuccessfully === HERDR_CLAIM_RETURNED;
+		return hasSettledClaim;
+	}
+
+	private claimConditionMet(): boolean {
+		const hasSettledClaim = this.claimHasSettled();
+		if (hasSettledClaim) return true;
+		return labelIsDescriptive(this.observedTabLabel());
+	}
+
+	/**
+	 * Overlapping workers are expected and the last returned result wins. A worker that
+	 * loses the race stays silent once the tab already carries the label the gate wanted.
+	 */
+	private async notifyUnsettledClaimFailure(message: string): Promise<void> {
+		const isConditionMet = this.claimConditionMet();
+		if (isConditionMet) return;
+		await notifyHerdrFailure(this.eventHandler, message);
 	}
 
 	private async completeClaim(
@@ -182,8 +216,7 @@ export class HerdrTabRenameConsumer {
 				);
 			} catch (error) {
 				const detail = error instanceof Error ? error.message : String(error);
-				await notifyHerdrFailure(
-					this.eventHandler,
+				await this.notifyUnsettledClaimFailure(
 					`${TAB_CLAIM_ACTION_FAILED}: ${detail}`,
 				);
 				return;
@@ -195,7 +228,7 @@ export class HerdrTabRenameConsumer {
 				event.result,
 			);
 			if (!isValidated) {
-				await notifyHerdrFailure(this.eventHandler, TAB_CLAIM_FAILED);
+				await this.notifyUnsettledClaimFailure(TAB_CLAIM_FAILED);
 				return;
 			}
 			const publisher = createModuleStatePublisher(
@@ -216,7 +249,7 @@ export class HerdrTabRenameConsumer {
 
 	private async failClaim(event: ClaimFailedEvent): Promise<void> {
 		try {
-			await notifyHerdrFailure(this.eventHandler, event.message);
+			await this.notifyUnsettledClaimFailure(event.message);
 		} finally {
 			await publishHerdrLoading(this.eventHandler, false);
 		}

@@ -13,7 +13,7 @@ export function tabNameIsParseableAsInt(label: string | undefined): boolean {
 	return value.length > 0 && NUMERIC_LABEL.test(value);
 }
 
-function labelIsDescriptive(label: string | undefined | null): boolean {
+export function labelIsDescriptive(label: string | undefined | null): boolean {
 	const hasNoLabel = !label;
 	if (hasNoLabel) return false;
 	const value = label.trim();
